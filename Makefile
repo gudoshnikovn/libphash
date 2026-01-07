@@ -14,6 +14,7 @@ SRCS = $(SRC_DIR)/core.c \
        $(HASH_DIR)/ahash.c \
        $(HASH_DIR)/dhash.c \
        $(HASH_DIR)/phash.c \
+       $(HASH_DIR)/bmh.c \
        $(HASH_DIR)/common.c
 
 OBJS = $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
