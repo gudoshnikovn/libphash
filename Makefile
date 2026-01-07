@@ -17,6 +17,7 @@ SRCS = $(SRC_DIR)/core.c \
        $(HASH_DIR)/phash.c \
        $(HASH_DIR)/bmh.c \
        $(HASH_DIR)/color_hash.c \
+       $(HASH_DIR)/radial.c \
        $(HASH_DIR)/common.c
 
 # Map .c paths to .o paths

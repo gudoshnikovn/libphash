@@ -145,6 +145,14 @@ PH_API PH_NODISCARD ph_error_t ph_compute_color_hash(ph_context_t *ctx,
                                                      ph_digest_t *out_digest);
 
 /**
+ * @brief Computes the Radial Variance Hash (RVH).
+ * Resistant to rotation. Uses 40 projections (angles).
+ * @param out_digest Should be initialized with 320 bits (40 bytes).
+ */
+PH_API PH_NODISCARD ph_error_t ph_compute_radial_hash(ph_context_t *ctx,
+                                                      ph_digest_t *out_digest);
+
+/**
  * @brief Calculates the Hamming distance between two 64-bit hashes.
  * @return Number of differing bits (0-64). 0 means identical hashes.
  */
