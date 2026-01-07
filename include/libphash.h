@@ -130,6 +130,21 @@ PH_API PH_NODISCARD ph_error_t ph_compute_phash(ph_context_t *ctx,
                                                 uint64_t *out_hash);
 
 /**
+ * @brief Block Mean Hash (BMH).
+ * Typically uses a 16x16 grid (256 bits).
+ */
+PH_API PH_NODISCARD ph_error_t ph_compute_bmh(ph_context_t *ctx,
+                                              ph_digest_t *out_digest);
+
+/**
+ * @brief Computes Color Moment Hash.
+ * Analyzes the distribution of color channels (R, G, B).
+ * Useful for distinguishing images that appear identical in grayscale.
+ */
+PH_API PH_NODISCARD ph_error_t ph_compute_color_hash(ph_context_t *ctx,
+                                                     ph_digest_t *out_digest);
+
+/**
  * @brief Calculates the Hamming distance between two 64-bit hashes.
  * @return Number of differing bits (0-64). 0 means identical hashes.
  */
@@ -154,18 +169,18 @@ PH_API ph_error_t ph_digest_create(size_t bits, ph_digest_t **out_digest);
 PH_API void ph_digest_free(ph_digest_t *digest);
 
 /**
- * @brief Block Mean Hash (BMH).
- * Typically uses a 16x16 grid (256 bits).
- */
-PH_API PH_NODISCARD ph_error_t ph_compute_bmh(ph_context_t *ctx,
-                                              ph_digest_t *out_digest);
-
-/**
  * @brief Calculates the Hamming distance between two arbitrary length digests.
  * @return Number of differing bits, or -1 if the digest lengths do not match.
  */
 PH_API int ph_hamming_distance_digest(const ph_digest_t *a,
                                       const ph_digest_t *b);
+
+/**
+ * @brief Calculates the Euclidean distance (L2 norm) between digests.
+ * Recommended for Color Moment Hash comparison.
+ * @return The distance as a double, or -1.0 if digest lengths do not match.
+ */
+PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b);
 
 #ifdef __cplusplus
 }

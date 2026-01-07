@@ -1,4 +1,5 @@
 #include "../internal.h"
+#include <math.h>
 #include <stdint.h>
 
 PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2) {
@@ -44,4 +45,17 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a,
   }
 
   return total_distance;
+}
+
+PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b) {
+  if (!a || !b || a->bits != b->bits)
+    return -1.0;
+
+  double sum = 0;
+  size_t byte_count = (a->bits + 7) / 8;
+  for (size_t i = 0; i < byte_count; i++) {
+    double diff = (double)a->data[i] - (double)b->data[i];
+    sum += diff * diff;
+  }
+  return sqrt(sum);
 }
