@@ -1,0 +1,25 @@
+# Object files and libraries
+*.o
+*.a
+*.so
+*.dylib
+*.dll
+obj/
+
+# Executables (Tests)
+test_*
+!tests/test_*.c
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Build artifacts
+dist/
+build/
+
+# Test images (if generated)
+tests/output_*.jpeg
