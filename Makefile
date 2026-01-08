@@ -2,7 +2,6 @@ CC = gcc
 CFLAGS = -I./include -O3 -Wall -Wextra -fPIC
 LDFLAGS = -lm
 
-# Detect Architecture for SIMD
 UNAME_M := $(shell uname -m)
 ifeq ($(UNAME_M),x86_64)
     CFLAGS += -msse4.2
@@ -16,6 +15,7 @@ OBJ_DIR = obj
 SRC_DIR = src
 HASH_DIR = $(SRC_DIR)/hashes
 TEST_DIR = tests
+INC_DIR = include
 
 SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(HASH_DIR)/*.c)
 OBJS = $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
@@ -25,7 +25,9 @@ TEST_BINS = $(TEST_SRCS:$(TEST_DIR)/%.c=%)
 
 all: $(LIB_NAME) $(TEST_BINS)
 
-# Debug target with AddressSanitizer
+format:
+	find $(SRC_DIR) $(TEST_DIR) $(INC_DIR) -name "*.c" -o -name "*.h" | xargs clang-format -i
+
 debug: CFLAGS = -I./include -g -O0 -fsanitize=address,undefined -Wall -Wextra -fPIC
 debug: clean all
 
@@ -45,3 +47,5 @@ test: $(TEST_BINS)
 
 clean:
 	rm -rf $(OBJ_DIR) *.a test_*
+
+.PHONY: all debug test clean format

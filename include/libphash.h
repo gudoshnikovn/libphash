@@ -54,12 +54,12 @@ extern "C" {
 // --- Error Codes ---
 
 typedef enum {
-  PH_SUCCESS = 0,
-  PH_ERR_ALLOCATION_FAILED = -1,
-  PH_ERR_DECODE_FAILED = -2,
-  PH_ERR_INVALID_ARGUMENT = -3,
-  PH_ERR_NOT_IMPLEMENTED = -4,
-  PH_ERR_EMPTY_IMAGE = -5,
+    PH_SUCCESS = 0,
+    PH_ERR_ALLOCATION_FAILED = -1,
+    PH_ERR_DECODE_FAILED = -2,
+    PH_ERR_INVALID_ARGUMENT = -3,
+    PH_ERR_NOT_IMPLEMENTED = -4,
+    PH_ERR_EMPTY_IMAGE = -5,
 } ph_error_t;
 
 // --- Types ---
@@ -77,9 +77,9 @@ typedef struct ph_context ph_context_t;
  * It does not own any heap memory.
  */
 typedef struct {
-  uint8_t data[PH_DIGEST_MAX_BYTES]; ///< The raw hash bytes.
-  uint8_t size;                      ///< Number of valid bytes in 'data'.
-  uint8_t reserved[7];               ///< Padding for 64-bit alignment.
+    uint8_t data[PH_DIGEST_MAX_BYTES]; ///< The raw hash bytes.
+    uint8_t size;                      ///< Number of valid bytes in 'data'.
+    uint8_t reserved[7];               ///< Padding for 64-bit alignment.
 } ph_digest_t;
 
 // --- Lifecycle & Configuration ---
@@ -119,8 +119,7 @@ PH_API void ph_context_set_gamma(ph_context_t *ctx, float gamma);
  * @param ctx The context.
  * @param filepath Path to the image file.
  */
-PH_API PH_NODISCARD ph_error_t ph_load_from_file(ph_context_t *ctx,
-                                                 const char *filepath);
+PH_API PH_NODISCARD ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath);
 
 /**
  * @brief Loads an image from a memory buffer.
@@ -128,48 +127,38 @@ PH_API PH_NODISCARD ph_error_t ph_load_from_file(ph_context_t *ctx,
  * @param buffer Pointer to the raw file data (e.g., JPEG bytes).
  * @param length Size of the buffer.
  */
-PH_API PH_NODISCARD ph_error_t ph_load_from_memory(ph_context_t *ctx,
-                                                   const uint8_t *buffer,
+PH_API PH_NODISCARD ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer,
                                                    size_t length);
 
 // --- uint64_t Hash Algorithms ---
 
-PH_API PH_NODISCARD ph_error_t ph_compute_ahash(ph_context_t *ctx,
-                                                uint64_t *out_hash);
-PH_API PH_NODISCARD ph_error_t ph_compute_dhash(ph_context_t *ctx,
-                                                uint64_t *out_hash);
-PH_API PH_NODISCARD ph_error_t ph_compute_phash(ph_context_t *ctx,
-                                                uint64_t *out_hash);
-PH_API PH_NODISCARD ph_error_t ph_compute_whash(ph_context_t *ctx,
-                                                uint64_t *out_hash);
-PH_API PH_NODISCARD ph_error_t ph_compute_mhash(ph_context_t *ctx,
-                                                uint64_t *out_hash);
+PH_API PH_NODISCARD ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash);
+PH_API PH_NODISCARD ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out_hash);
+PH_API PH_NODISCARD ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash);
+PH_API PH_NODISCARD ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash);
+PH_API PH_NODISCARD ph_error_t ph_compute_mhash(ph_context_t *ctx, uint64_t *out_hash);
 
 // --- Digest Hash Algorithms ---
 
 /**
  * @brief Computes Block Mean Hash (BMH). Returns a 256-bit (32-byte) digest.
  */
-PH_API PH_NODISCARD ph_error_t ph_compute_bmh(ph_context_t *ctx,
-                                              ph_digest_t *out_digest);
+PH_API PH_NODISCARD ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest);
 
 /**
  * @brief Computes Color Hash. Returns a digest representing color distribution.
  */
-PH_API PH_NODISCARD ph_error_t ph_compute_color_hash(ph_context_t *ctx,
-                                                     ph_digest_t *out_digest);
+PH_API PH_NODISCARD ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_digest);
 
 /**
  * @brief Computes Radial Hash. Robust against rotation. Uses context Gamma.
  */
-PH_API PH_NODISCARD ph_error_t ph_compute_radial_hash(ph_context_t *ctx,
-                                                      ph_digest_t *out_digest);
+PH_API PH_NODISCARD ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_digest);
 
 // --- Comparison Functions ---
 
 PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
-PH_API int ph_hamming_distance_digest(const ph_digest_t *a,
-                                      const ph_digest_t *b);
+PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b);
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b);
 
 #ifdef __cplusplus
