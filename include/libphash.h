@@ -48,6 +48,11 @@ extern "C" {
 #endif
 
 /**
+ * @brief Returns the library version string (e.g., "1.2.0").
+ */
+PH_API const char *ph_version(void);
+
+/**
  * @section Types and Errors
  */
 
@@ -153,10 +158,17 @@ PH_API PH_NODISCARD ph_error_t ph_compute_radial_hash(ph_context_t *ctx,
                                                       ph_digest_t *out_digest);
 
 /**
- * @brief Computes the Wavelet Hash (wHash).
- * Uses Haar Wavelets. Very robust to local image modifications.
+ * @brief Computes the Wavelet Hash (wHash) using Haar Wavelets.
+ * Excellent for local feature persistence.
  */
 PH_API PH_NODISCARD ph_error_t ph_compute_whash(ph_context_t *ctx,
+                                                uint64_t *out_hash);
+
+/**
+ * @brief Computes the Marr-Hildreth Hash (mHash).
+ * Based on edge detection. Very resistant to brightness/contrast changes.
+ */
+PH_API PH_NODISCARD ph_error_t ph_compute_mhash(ph_context_t *ctx,
                                                 uint64_t *out_hash);
 
 /**
