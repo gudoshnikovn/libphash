@@ -1,16 +1,20 @@
 #include "../internal.h"
 #include <math.h>
 #include <stdlib.h>
+#include <string.h>
 
 PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx,
                                         ph_digest_t *out_digest) {
-  if (!ctx || !ctx->is_loaded || !out_digest || out_digest->bits < 72) {
+  if (!ctx || !ctx->is_loaded || !out_digest) {
     return PH_ERR_INVALID_ARGUMENT;
   }
 
-  /* * We calculate 3 color moments for 3 channels (R, G, B) = 9 values total.
-   * Each value is stored as 1 byte (8 bits * 9 = 72 bits minimum required).
+  /* We calculate 3 color moments for 3 channels (R, G, B) = 9 values total.
+   * Each value is stored as 1 byte (9 bytes required).
    */
+  memset(out_digest, 0, sizeof(ph_digest_t));
+  out_digest->size = 9; // Set the actual size in bytes.
+
   double mean[3] = {0}, std_dev[3] = {0}, skew[3] = {0};
   int num_pixels = ctx->width * ctx->height;
 
