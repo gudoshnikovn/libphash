@@ -28,17 +28,26 @@ PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     if (!ctx)
         return PH_ERR_ALLOCATION_FAILED;
 
-    // Initialize default gamma (2.2)
+    init_dct_matrix();
+
+    ctx->data = NULL;
+    ctx->gray_data = NULL;
+    ctx->width = 0;
+    ctx->height = 0;
+    ctx->channels = 0;
+    ctx->is_loaded = 0;
+
     ph_context_set_gamma(ctx, 2.2f);
 
     *out_ctx = ctx;
     return PH_SUCCESS;
 }
-
 PH_API void ph_free(ph_context_t *ctx) {
     if (ctx) {
         if (ctx->data)
             stbi_image_free(ctx->data);
+        if (ctx->gray_data)
+            free(ctx->gray_data);
         free(ctx);
     }
 }
