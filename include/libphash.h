@@ -161,6 +161,7 @@ PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
 PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b);
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b);
 
+void init_dct_matrix(void);
 #ifdef __cplusplus
 }
 #endif
