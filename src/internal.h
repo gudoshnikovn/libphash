@@ -8,8 +8,8 @@
  * Internal Image Processing Helpers
  */
 
-/* Converts RGB/RGBA to Grayscale */
-void ph_to_grayscale(const uint8_t *src, int w, int h, int channels, uint8_t *dst);
+/* Converts RGB/RGBA to Grayscale with custom weights */
+void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, int channels, uint8_t *dst);
 
 /* Resizes a grayscale image using box sampling (averaging) */
 void ph_resize_box(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh);
@@ -76,7 +76,22 @@ struct ph_context {
     int channels;
     int is_loaded;
 
+    /* Configuration */
+    float gamma;
     uint8_t gamma_lut[256];
+
+    int gray_r, gray_g, gray_b;
+
+    /* pHash params */
+    int phash_dct_size;
+    int phash_reduction_size;
+
+    /* Radial params */
+    int radial_projections;
+    int radial_samples;
+
+    /* Block params (BMH, mHash) */
+    int block_size;
 
     /* Tier 3: Memory Reuse */
     uint8_t *scratchpad;

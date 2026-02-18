@@ -112,6 +112,34 @@ PH_API void ph_free(ph_context_t *ctx);
  */
 PH_API void ph_context_set_gamma(ph_context_t *ctx, float gamma);
 
+/**
+ * @brief Sets custom RGB-to-Grayscale weights.
+ *
+ * Input values are automatically normalized to sum to 128 for optimized internal processing.
+ * Default is PH_GRAY_R=38, PH_GRAY_G=75, PH_GRAY_B=15.
+ */
+PH_API void ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, int b);
+
+/**
+ * @brief Sets pHash parameters.
+ * @param dct_size Size of the DCT matrix (default 32).
+ * @param reduction_size Size of the low-frequency coefficients to keep (default 8).
+ */
+PH_API void ph_context_set_phash_params(ph_context_t *ctx, int dct_size, int reduction_size);
+
+/**
+ * @brief Sets Radial Hash parameters.
+ * @param projections Number of angular projections (default 40).
+ * @param samples Number of radial samples (default 128).
+ */
+PH_API void ph_context_set_radial_params(ph_context_t *ctx, int projections, int samples);
+
+/**
+ * @brief Sets Block-based hash parameters (BMH/mHash).
+ * @param block_size Resolution of the grid (default 16).
+ */
+PH_API void ph_context_set_block_params(ph_context_t *ctx, int block_size);
+
 // --- Loading ---
 
 /**

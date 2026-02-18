@@ -29,6 +29,17 @@ Official and community-supported wrappers:
 - **Cross-Platform**: Compatible with GCC, Clang, and MSVC.
 
 
+## Configuration & Tuning
+
+libphash allows fine-tuning algorithms for specific use cases via the context API. Note that changing these values will result in hashes that are **not comparable** to those generated with default settings.
+
+| Function | Default | Description |
+| :--- | :--- | :--- |
+| `ph_context_set_gamma` | 2.2 | Adjusts brightness normalization. |
+| `ph_context_set_gray_weights` | 38,75,15 | Custom RGB-to-Grayscale proportions. |
+| `ph_context_set_phash_params` | 32, 8 | DCT size and reduction size. |
+| `ph_context_set_radial_params` | 40, 128 | Projection count and radial samples. |
+| `ph_context_set_block_params` | 16 | Grid resolution for BMH and mHash. |
 
 ## Architecture
 

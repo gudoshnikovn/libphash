@@ -29,7 +29,7 @@ PH_API ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash) {
     if (!full_gray)
         return PH_ERR_ALLOCATION_FAILED;
 
-    ph_to_grayscale(ctx->data, ctx->width, ctx->height, ctx->channels, full_gray);
+    ph_to_grayscale(ctx, ctx->data, ctx->width, ctx->height, ctx->channels, full_gray);
     ph_resize_box(full_gray, ctx->width, ctx->height, hash_input, PH_CORE_HASH_SIZE, PH_CORE_HASH_SIZE);
 
     float d[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
