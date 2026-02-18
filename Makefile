@@ -46,6 +46,10 @@ test: $(TEST_BINS)
 	@echo "ALL TESTS PASSED"
 
 clean:
-	rm -rf $(OBJ_DIR) *.a test_*
+	rm -rf $(OBJ_DIR) *.a test_* benchmark
 
-.PHONY: all debug test clean format
+benchmark: tests/benchmark.c $(LIB_NAME)
+	$(CC) $(CFLAGS) $< $(LIB_NAME) -o benchmark $(LDFLAGS)
+	./benchmark
+
+.PHONY: all debug test clean format benchmark

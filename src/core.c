@@ -5,7 +5,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "../vendor/stb_image.h"
 
-PH_API const char *ph_version(void) { return "1.4.0"; }
+PH_API const char *ph_version(void) { return "1.5.0"; }
 
 PH_API void ph_context_set_gamma(ph_context_t *ctx, float gamma) {
     if (!ctx || gamma <= PH_GAMMA_EPSILON)
@@ -48,8 +48,24 @@ PH_API void ph_free(ph_context_t *ctx) {
             stbi_image_free(ctx->data);
         if (ctx->gray_data)
             free(ctx->gray_data);
+        if (ctx->scratchpad)
+            free(ctx->scratchpad);
         free(ctx);
     }
+}
+
+uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size) {
+    if (!ctx || size == 0)
+        return NULL;
+
+    if (ctx->scratchpad_size < size) {
+        uint8_t *new_ptr = (uint8_t *)realloc(ctx->scratchpad, size);
+        if (!new_ptr)
+            return NULL;
+        ctx->scratchpad = new_ptr;
+        ctx->scratchpad_size = size;
+    }
+    return ctx->scratchpad;
 }
 
 PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
