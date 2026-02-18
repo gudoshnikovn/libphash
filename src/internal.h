@@ -15,7 +15,7 @@ void ph_to_grayscale(const uint8_t *src, int w, int h, int channels, uint8_t *ds
 void ph_resize_box(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh);
 
 /* Applies a 3x3 Gaussian Blur to reduce noise */
-void ph_apply_gaussian_blur(const uint8_t *src, int w, int h, uint8_t *dst);
+void ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst);
 
 /* Applies Gamma Correction (gamma=2.2) to normalize brightness */
 void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h);
@@ -77,6 +77,14 @@ struct ph_context {
     int is_loaded;
 
     uint8_t gamma_lut[256];
+
+    /* Tier 3: Memory Reuse */
+    uint8_t *scratchpad;
+    size_t scratchpad_size;
 };
+
+/* Ensures the context's scratchpad is at least 'size' bytes. 
+ * Returns NULL on failure, pointer to buffer on success. */
+uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size);
 
 #endif /* INTERNAL_H */

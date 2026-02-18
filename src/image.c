@@ -4,6 +4,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(__ARM_NEON)
+#include <arm_neon.h>
+#elif defined(__SSE4_1__)
+#include <smmintrin.h>
+#endif
+
 uint8_t *ph_get_gray(ph_context_t *ctx) {
     if (!ctx->gray_data && ctx->data) {
         if (!PH_SAFE_ALLOC_SIZE(ctx->width, ctx->height)) {
@@ -21,7 +27,44 @@ void ph_to_grayscale(const uint8_t *src, int w, int h, int channels, uint8_t *ds
     int num_pixels = w * h;
     const uint8_t *s = src;
     uint8_t *d = dst;
-    for (int i = 0; i < num_pixels; i++) {
+    int i = 0;
+
+#if defined(__ARM_NEON)
+    if (channels == 3) {
+        uint8x8_t r_weight = vdup_n_u8(PH_GRAY_R);
+        uint8x8_t g_weight = vdup_n_u8(PH_GRAY_G);
+        uint8x8_t b_weight = vdup_n_u8(PH_GRAY_B);
+
+        for (; i <= num_pixels - 8; i += 8) {
+            uint8x8x3_t rgb = vld3_u8(s);
+            uint16x8_t gray = vmull_u8(rgb.val[0], r_weight);
+            gray = vmlal_u8(gray, rgb.val[1], g_weight);
+            gray = vmlal_u8(gray, rgb.val[2], b_weight);
+            uint8x8_t res = vshrn_n_u16(gray, 7);
+            vst1_u8(d, res);
+            s += 3 * 8;
+            d += 8;
+        }
+    } else if (channels == 4) {
+        uint8x8_t r_weight = vdup_n_u8(PH_GRAY_R);
+        uint8x8_t g_weight = vdup_n_u8(PH_GRAY_G);
+        uint8x8_t b_weight = vdup_n_u8(PH_GRAY_B);
+
+        for (; i <= num_pixels - 8; i += 8) {
+            uint8x8x4_t rgba = vld4_u8(s);
+            uint16x8_t gray = vmull_u8(rgba.val[0], r_weight);
+            gray = vmlal_u8(gray, rgba.val[1], g_weight);
+            gray = vmlal_u8(gray, rgba.val[2], b_weight);
+            uint8x8_t res = vshrn_n_u16(gray, 7);
+            vst1_u8(d, res);
+            s += 4 * 8;
+            d += 8;
+        }
+    }
+#endif
+
+    /* Fallback for remaining pixels or other architectures */
+    for (; i < num_pixels; i++) {
         uint32_t r = s[0];
         uint32_t g = s[1];
         uint32_t b = s[2];
@@ -30,21 +73,25 @@ void ph_to_grayscale(const uint8_t *src, int w, int h, int channels, uint8_t *ds
     }
 }
 void ph_resize_bilinear(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh) {
-    double x_ratio = (dw > 1) ? (double)(sw - 1) / (dw - 1) : 0;
-    double y_ratio = (dh > 1) ? (double)(sh - 1) / (dh - 1) : 0;
+    if (dw <= 0 || dh <= 0) return;
+
+    /* 16.16 fixed point for ratios and positions */
+    uint32_t x_ratio = (dw > 1) ? ((uint32_t)(sw - 1) << 16) / (dw - 1) : 0;
+    uint32_t y_ratio = (dh > 1) ? ((uint32_t)(sh - 1) << 16) / (dh - 1) : 0;
 
     for (int i = 0; i < dh; i++) {
-        for (int j = 0; j < dw; j++) {
-            double x_pos = x_ratio * j;
-            double y_pos = y_ratio * i;
-            int x = (int)x_pos;
-            int y = (int)y_pos;
+        uint32_t y_pos = i * y_ratio;
+        uint16_t y = (uint16_t)(y_pos >> 16);
+        uint16_t y_diff = (y_pos >> 8) & 0xFF; // 8-bit fraction
+        uint16_t y_inv = 256 - y_diff;
 
-            double x_diff = x_pos - x;
-            double y_diff = y_pos - y;
+        for (int j = 0; j < dw; j++) {
+            uint32_t x_pos = j * x_ratio;
+            uint16_t x = (uint16_t)(x_pos >> 16);
+            uint16_t x_diff = (x_pos >> 8) & 0xFF; // 8-bit fraction
+            uint16_t x_inv = 256 - x_diff;
 
             int index = y * sw + x;
-
             int next_x = (x < sw - 1) ? 1 : 0;
             int next_y = (y < sh - 1) ? sw : 0;
 
@@ -53,29 +100,42 @@ void ph_resize_bilinear(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw
             uint8_t c = src[index + next_y];
             uint8_t d = src[index + next_y + next_x];
 
-            dst[i * dw + j] =
-                (uint8_t)(a * (1 - x_diff) * (1 - y_diff) + b * (x_diff) * (1 - y_diff) +
-                          c * (y_diff) * (1 - x_diff) + d * (x_diff * y_diff));
+            /* (a * (1-x_d)(1-y_d) + b * x_d(1-y_d) + c * y_d(1-x_d) + d * x_d*y_d) */
+            uint32_t val = (uint32_t)a * x_inv * y_inv +
+                           (uint32_t)b * x_diff * y_inv +
+                           (uint32_t)c * y_diff * x_inv +
+                           (uint32_t)d * x_diff * y_diff;
+
+            dst[i * dw + j] = (uint8_t)(val >> 16);
         }
     }
 }
 void ph_resize_box(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh) {
-    double x_ratio = (double)sw / dw;
-    double y_ratio = (double)sh / dh;
+    if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) return;
+
+    /* 16.16 fixed point for ratios */
+    uint32_t x_ratio = ((uint32_t)sw << 16) / dw;
+    uint32_t y_ratio = ((uint32_t)sh << 16) / dh;
 
     for (int dy = 0; dy < dh; dy++) {
+        uint32_t sy_start = (dy * y_ratio) >> 16;
+        uint32_t sy_end = ((dy + 1) * y_ratio) >> 16;
+        if (sy_end > (uint32_t)sh) sy_end = sh;
+        if (sy_start >= sy_end && sy_start < (uint32_t)sh) sy_end = sy_start + 1;
+
         for (int dx = 0; dx < dw; dx++) {
-            int sx_start = (int)(dx * x_ratio);
-            int sy_start = (int)(dy * y_ratio);
-            int sx_end = (int)((dx + 1) * x_ratio);
-            int sy_end = (int)((dy + 1) * y_ratio);
+            uint32_t sx_start = (dx * x_ratio) >> 16;
+            uint32_t sx_end = ((dx + 1) * x_ratio) >> 16;
+            if (sx_end > (uint32_t)sw) sx_end = sw;
+            if (sx_start >= sx_end && sx_start < (uint32_t)sw) sx_end = sx_start + 1;
 
             uint32_t sum = 0;
-            int count = 0;
+            uint32_t count = 0;
 
-            for (int y = sy_start; y < sy_end && y < sh; y++) {
-                for (int x = sx_start; x < sx_end && x < sw; x++) {
-                    sum += src[y * sw + x];
+            for (uint32_t y = sy_start; y < sy_end; y++) {
+                const uint8_t *row = &src[y * sw];
+                for (uint32_t x = sx_start; x < sx_end; x++) {
+                    sum += row[x];
                     count++;
                 }
             }
@@ -84,24 +144,37 @@ void ph_resize_box(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int
     }
 }
 
-void ph_apply_gaussian_blur(const uint8_t *src, int w, int h, uint8_t *dst) {
-    static const int kernel[3][3] = {
-        {PH_GAUSS_K00, PH_GAUSS_K01, PH_GAUSS_K02},
-        {PH_GAUSS_K10, PH_GAUSS_K11, PH_GAUSS_K12},
-        {PH_GAUSS_K20, PH_GAUSS_K21, PH_GAUSS_K22}
-    };
-    memcpy(dst, src, w * h);
+void ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst) {
+    if (!ctx || w < 3 || h < 3) {
+        if (dst != src)
+            memcpy(dst, src, w * h);
+        return;
+    }
 
-    for (int y = 1; y < h - 1; y++) {
+    uint8_t *temp = ph_get_scratchpad(ctx, w * h);
+    if (!temp) {
+        if (dst != src)
+            memcpy(dst, src, w * h);
+        return;
+    }
+
+    /* Horizontal pass: Kernel [1 2 1], divide by 4 */
+    for (int y = 0; y < h; y++) {
+        temp[y * w] = src[y * w];
+        temp[y * w + w - 1] = src[y * w + w - 1];
         for (int x = 1; x < w - 1; x++) {
-            int sum = 0;
-            for (int ky = -1; ky <= 1; ky++) {
-                for (int kx = -1; kx <= 1; kx++) {
-                    int px = src[(y + ky) * w + (x + kx)];
-                    sum += px * kernel[ky + 1][kx + 1];
-                }
-            }
-            dst[y * w + x] = (uint8_t)(sum >> PH_GAUSS_SHIFT);
+            uint32_t val = src[y * w + (x - 1)] + (src[y * w + x] << 1) + src[y * w + (x + 1)];
+            temp[y * w + x] = (uint8_t)(val >> 2);
+        }
+    }
+
+    /* Vertical pass: Kernel [1 2 1], divide by 4 */
+    for (int x = 0; x < w; x++) {
+        dst[x] = temp[x];
+        dst[(h - 1) * w + x] = temp[(h - 1) * w + x];
+        for (int y = 1; y < h - 1; y++) {
+            uint32_t val = temp[(y - 1) * w + x] + (temp[y * w + x] << 1) + temp[(y + 1) * w + x];
+            dst[y * w + x] = (uint8_t)(val >> 2);
         }
     }
 }

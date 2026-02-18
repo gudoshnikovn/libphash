@@ -34,21 +34,21 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     memset(out_digest, 0, sizeof(ph_digest_t));
     out_digest->size = PH_RADIAL_PROJECTIONS;
 
-    size_t img_size = ctx->width * ctx->height;
+    size_t img_size = (size_t)ctx->width * ctx->height;
     if (!PH_SAFE_ALLOC_SIZE(ctx->width, ctx->height))
         return PH_ERR_ALLOCATION_FAILED;
 
-    uint8_t *gray = malloc(img_size);
-    uint8_t *blurred = malloc(img_size);
-
-    if (!gray || !blurred) {
-        free(gray);
-        free(blurred);
+    /* Use scratchpad for both gray and blurred temporary buffers.
+     * We need 2 * img_size bytes. */
+    uint8_t *scratch = ph_get_scratchpad(ctx, img_size * 2);
+    if (!scratch)
         return PH_ERR_ALLOCATION_FAILED;
-    }
+
+    uint8_t *gray = scratch;
+    uint8_t *blurred = scratch + img_size;
 
     ph_to_grayscale(ctx->data, ctx->width, ctx->height, ctx->channels, gray);
-    ph_apply_gaussian_blur(gray, ctx->width, ctx->height, blurred);
+    ph_apply_gaussian_blur(ctx, gray, ctx->width, ctx->height, blurred);
 
     ph_apply_gamma(ctx, blurred, ctx->width, ctx->height);
 
@@ -98,7 +98,5 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
         }
     }
 
-    free(gray);
-    free(blurred);
     return PH_SUCCESS;
 }
