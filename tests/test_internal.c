@@ -6,7 +6,7 @@
 void test_grayscale_conversion() {
     uint8_t rgb[] = {255, 0, 0, 0, 255, 0};
     uint8_t gray[2];
-    ph_to_grayscale(rgb, 2, 1, 3, gray);
+    ph_to_grayscale(NULL, rgb, 2, 1, 3, gray);
     if (gray[0] == 0 || gray[1] == 0) {
         fprintf(stderr, "Grayscale conversion produced black pixels\n");
         exit(1);

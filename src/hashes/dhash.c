@@ -6,10 +6,12 @@ PH_API ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out_hash) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 
-    uint8_t *gray_full = ph_get_gray(ctx);
+    size_t gray_size = (size_t)ctx->width * ctx->height;
+    uint8_t *gray_full = ph_get_scratchpad(ctx, gray_size);
     if (!gray_full) {
         return PH_ERR_ALLOCATION_FAILED;
     }
+    ph_to_grayscale(ctx, ctx->data, ctx->width, ctx->height, ctx->channels, gray_full);
 
     uint8_t hash_input[(PH_CORE_HASH_SIZE + 1) * PH_CORE_HASH_SIZE];
     ph_resize_bilinear(gray_full, ctx->width, ctx->height, hash_input, PH_CORE_HASH_SIZE + 1,

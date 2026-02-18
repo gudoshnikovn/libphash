@@ -17,23 +17,27 @@ uint8_t *ph_get_gray(ph_context_t *ctx) {
         }
         ctx->gray_data = malloc(ctx->width * ctx->height);
         if (ctx->gray_data) {
-            ph_to_grayscale(ctx->data, ctx->width, ctx->height, ctx->channels, ctx->gray_data);
+            ph_to_grayscale(ctx, ctx->data, ctx->width, ctx->height, ctx->channels, ctx->gray_data);
         }
     }
     return ctx->gray_data;
 }
 
-void ph_to_grayscale(const uint8_t *src, int w, int h, int channels, uint8_t *dst) {
+void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, int channels, uint8_t *dst) {
     int num_pixels = w * h;
     const uint8_t *s = src;
     uint8_t *d = dst;
     int i = 0;
 
+    int r_w = ctx ? ctx->gray_r : PH_GRAY_R;
+    int g_w = ctx ? ctx->gray_g : PH_GRAY_G;
+    int b_w = ctx ? ctx->gray_b : PH_GRAY_B;
+
 #if defined(__ARM_NEON)
     if (channels == 3) {
-        uint8x8_t r_weight = vdup_n_u8(PH_GRAY_R);
-        uint8x8_t g_weight = vdup_n_u8(PH_GRAY_G);
-        uint8x8_t b_weight = vdup_n_u8(PH_GRAY_B);
+        uint8x8_t r_weight = vdup_n_u8((uint8_t)r_w);
+        uint8x8_t g_weight = vdup_n_u8((uint8_t)g_w);
+        uint8x8_t b_weight = vdup_n_u8((uint8_t)b_w);
 
         for (; i <= num_pixels - 8; i += 8) {
             uint8x8x3_t rgb = vld3_u8(s);
@@ -46,9 +50,9 @@ void ph_to_grayscale(const uint8_t *src, int w, int h, int channels, uint8_t *ds
             d += 8;
         }
     } else if (channels == 4) {
-        uint8x8_t r_weight = vdup_n_u8(PH_GRAY_R);
-        uint8x8_t g_weight = vdup_n_u8(PH_GRAY_G);
-        uint8x8_t b_weight = vdup_n_u8(PH_GRAY_B);
+        uint8x8_t r_weight = vdup_n_u8((uint8_t)r_w);
+        uint8x8_t g_weight = vdup_n_u8((uint8_t)g_w);
+        uint8x8_t b_weight = vdup_n_u8((uint8_t)b_w);
 
         for (; i <= num_pixels - 8; i += 8) {
             uint8x8x4_t rgba = vld4_u8(s);
@@ -68,7 +72,7 @@ void ph_to_grayscale(const uint8_t *src, int w, int h, int channels, uint8_t *ds
         uint32_t r = s[0];
         uint32_t g = s[1];
         uint32_t b = s[2];
-        *d++ = (uint8_t)((r * PH_GRAY_R + g * PH_GRAY_G + b * PH_GRAY_B) >> 7);
+        *d++ = (uint8_t)((r * r_w + g * g_w + b * b_w) >> 7);
         s += channels;
     }
 }

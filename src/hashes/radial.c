@@ -31,23 +31,35 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     if (!ctx || !ctx->is_loaded || !out_digest)
         return PH_ERR_INVALID_ARGUMENT;
 
+    int projections = ctx->radial_projections;
+    int samples = ctx->radial_samples;
+
     memset(out_digest, 0, sizeof(ph_digest_t));
-    out_digest->size = PH_RADIAL_PROJECTIONS;
+    /* Clamp size to the max supported by ph_digest_t */
+    out_digest->size = (uint8_t)(projections > PH_DIGEST_MAX_BYTES ? PH_DIGEST_MAX_BYTES : projections);
 
     size_t img_size = (size_t)ctx->width * ctx->height;
     if (!PH_SAFE_ALLOC_SIZE(ctx->width, ctx->height))
         return PH_ERR_ALLOCATION_FAILED;
 
-    /* Use scratchpad for both gray and blurred temporary buffers.
-     * We need 2 * img_size bytes. */
-    uint8_t *scratch = ph_get_scratchpad(ctx, img_size * 2);
+    /* Use scratchpad for:
+     * 1. gray: img_size
+     * 2. blurred: img_size
+     * 3. projection_variances: projections * sizeof(double)
+     */
+    size_t sz_gray = img_size;
+    size_t sz_blur = img_size;
+    size_t sz_vars = (size_t)projections * sizeof(double);
+
+    uint8_t *scratch = ph_get_scratchpad(ctx, sz_gray + sz_blur + sz_vars);
     if (!scratch)
         return PH_ERR_ALLOCATION_FAILED;
 
     uint8_t *gray = scratch;
-    uint8_t *blurred = scratch + img_size;
+    uint8_t *blurred = scratch + sz_gray;
+    double *projection_variances = (double *)(scratch + sz_gray + sz_blur);
 
-    ph_to_grayscale(ctx->data, ctx->width, ctx->height, ctx->channels, gray);
+    ph_to_grayscale(ctx, ctx->data, ctx->width, ctx->height, ctx->channels, gray);
     ph_apply_gaussian_blur(ctx, gray, ctx->width, ctx->height, blurred);
 
     ph_apply_gamma(ctx, blurred, ctx->width, ctx->height);
@@ -56,19 +68,18 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     double centerY = ctx->height / 2.0;
     double min_side = (ctx->width < ctx->height) ? ctx->width : ctx->height;
     double max_radius = min_side / 2.0;
-    double projection_variances[PH_RADIAL_PROJECTIONS];
     double max_variance = 0.0;
 
-    for (int i = 0; i < PH_RADIAL_PROJECTIONS; i++) {
-        double theta = (i * M_PI) / PH_RADIAL_PROJECTIONS;
+    for (int i = 0; i < projections; i++) {
+        double theta = (i * M_PI) / projections;
         double cos_t = cos(theta);
         double sin_t = sin(theta);
         double sum = 0.0;
         double sum_sq = 0.0;
         int count = 0;
 
-        for (int r = -PH_RADIAL_SAMPLES / 2; r < PH_RADIAL_SAMPLES / 2; r++) {
-            double dist = (r * max_radius) / (PH_RADIAL_SAMPLES / 2.0);
+        for (int r = -samples / 2; r < samples / 2; r++) {
+            double dist = (r * max_radius) / (samples / 2.0);
             double px = centerX + dist * cos_t;
             double py = centerY + dist * sin_t;
             double val = get_pixel_bilinear(blurred, ctx->width, ctx->height, px, py);
@@ -90,7 +101,7 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     }
 
     /* Normalize and write to digest */
-    for (int i = 0; i < PH_RADIAL_PROJECTIONS; i++) {
+    for (int i = 0; i < out_digest->size; i++) {
         if (max_variance > 0.001) {
             out_digest->data[i] = (uint8_t)(sqrt(projection_variances[i] / max_variance) * 255.0);
         } else {
