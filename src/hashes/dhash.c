@@ -11,14 +11,16 @@ PH_API ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out_hash) {
         return PH_ERR_ALLOCATION_FAILED;
     }
 
-    uint8_t tiny[72];
-    ph_resize_bilinear(gray_full, ctx->width, ctx->height, tiny, 9, 8);
+    uint8_t hash_input[(PH_CORE_HASH_SIZE + 1) * PH_CORE_HASH_SIZE];
+    ph_resize_bilinear(gray_full, ctx->width, ctx->height, hash_input, PH_CORE_HASH_SIZE + 1,
+                       PH_CORE_HASH_SIZE);
 
     uint64_t hash = 0;
-    for (int row = 0; row < 8; row++) {
-        for (int col = 0; col < 8; col++) {
-            if (tiny[row * 9 + col] < tiny[row * 9 + col + 1]) {
-                hash |= (1ULL << (row * 8 + col));
+    for (int row = 0; row < PH_CORE_HASH_SIZE; row++) {
+        for (int col = 0; col < PH_CORE_HASH_SIZE; col++) {
+            if (hash_input[row * (PH_CORE_HASH_SIZE + 1) + col] <
+                hash_input[row * (PH_CORE_HASH_SIZE + 1) + col + 1]) {
+                hash |= (1ULL << (row * PH_CORE_HASH_SIZE + col));
             }
         }
     }

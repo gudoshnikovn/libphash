@@ -5,10 +5,10 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "../vendor/stb_image.h"
 
-PH_API const char *ph_version(void) { return "1.2.0"; }
+PH_API const char *ph_version(void) { return "1.4.0"; }
 
 PH_API void ph_context_set_gamma(ph_context_t *ctx, float gamma) {
-    if (!ctx || gamma <= 0.001f)
+    if (!ctx || gamma <= PH_GAMMA_EPSILON)
         return;
 
     // Precompute LUT for O(1) access during processing
@@ -37,7 +37,7 @@ PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     ctx->channels = 0;
     ctx->is_loaded = 0;
 
-    ph_context_set_gamma(ctx, 2.2f);
+    ph_context_set_gamma(ctx, PH_DEFAULT_GAMMA);
 
     *out_ctx = ctx;
     return PH_SUCCESS;
@@ -57,6 +57,10 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
         return PH_ERR_INVALID_ARGUMENT;
     if (ctx->data)
         stbi_image_free(ctx->data);
+    if (ctx->gray_data) {
+        free(ctx->gray_data);
+        ctx->gray_data = NULL;
+    }
 
     ctx->data = stbi_load(filepath, &ctx->width, &ctx->height, &ctx->channels, 0);
     if (!ctx->data)
@@ -71,6 +75,10 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
         return PH_ERR_INVALID_ARGUMENT;
     if (ctx->data)
         stbi_image_free(ctx->data);
+    if (ctx->gray_data) {
+        free(ctx->gray_data);
+        ctx->gray_data = NULL;
+    }
 
     ctx->data =
         stbi_load_from_memory(buffer, (int)length, &ctx->width, &ctx->height, &ctx->channels, 0);

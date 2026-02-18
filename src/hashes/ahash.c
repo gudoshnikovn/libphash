@@ -11,18 +11,19 @@ PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash) {
         return PH_ERR_ALLOCATION_FAILED;
     }
 
-    uint8_t tiny[64];
-    ph_resize_bilinear(gray_full, ctx->width, ctx->height, tiny, 8, 8);
+    uint8_t hash_input[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
+    ph_resize_bilinear(gray_full, ctx->width, ctx->height, hash_input, PH_CORE_HASH_SIZE, PH_CORE_HASH_SIZE);
 
     uint64_t total_sum = 0;
-    for (int i = 0; i < 64; i++) {
-        total_sum += tiny[i];
+    int num_pixels = PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE;
+    for (int i = 0; i < num_pixels; i++) {
+        total_sum += hash_input[i];
     }
-    uint8_t avg = (uint8_t)(total_sum / 64);
+    uint8_t avg = (uint8_t)(total_sum / num_pixels);
 
     uint64_t hash = 0;
-    for (int i = 0; i < 64; i++) {
-        if (tiny[i] >= avg) {
+    for (int i = 0; i < num_pixels; i++) {
+        if (hash_input[i] >= avg) {
             hash |= (1ULL << i);
         }
     }

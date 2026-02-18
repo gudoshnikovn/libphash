@@ -3,9 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define RADIAL_PROJECTIONS 40
-#define SAMPLES_PER_LINE 128
-
 /**
  * Helper: Bilinear Interpolation
  */
@@ -35,9 +32,12 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
         return PH_ERR_INVALID_ARGUMENT;
 
     memset(out_digest, 0, sizeof(ph_digest_t));
-    out_digest->size = 40;
+    out_digest->size = PH_RADIAL_PROJECTIONS;
 
     size_t img_size = ctx->width * ctx->height;
+    if (!PH_SAFE_ALLOC_SIZE(ctx->width, ctx->height))
+        return PH_ERR_ALLOCATION_FAILED;
+
     uint8_t *gray = malloc(img_size);
     uint8_t *blurred = malloc(img_size);
 
@@ -55,43 +55,44 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     double centerX = ctx->width / 2.0;
     double centerY = ctx->height / 2.0;
     double min_side = (ctx->width < ctx->height) ? ctx->width : ctx->height;
-    double maxRadius = min_side / 2.0;
-    double variances[RADIAL_PROJECTIONS];
-    double max_var = 0.0;
+    double max_radius = min_side / 2.0;
+    double projection_variances[PH_RADIAL_PROJECTIONS];
+    double max_variance = 0.0;
 
-    for (int i = 0; i < RADIAL_PROJECTIONS; i++) {
-        double theta = (i * M_PI) / RADIAL_PROJECTIONS;
+    for (int i = 0; i < PH_RADIAL_PROJECTIONS; i++) {
+        double theta = (i * M_PI) / PH_RADIAL_PROJECTIONS;
         double cos_t = cos(theta);
         double sin_t = sin(theta);
         double sum = 0.0;
-        double sumSq = 0.0;
+        double sum_sq = 0.0;
         int count = 0;
 
-        for (int r = -SAMPLES_PER_LINE / 2; r < SAMPLES_PER_LINE / 2; r++) {
-            double dist = (r * maxRadius) / (SAMPLES_PER_LINE / 2.0);
+        for (int r = -PH_RADIAL_SAMPLES / 2; r < PH_RADIAL_SAMPLES / 2; r++) {
+            double dist = (r * max_radius) / (PH_RADIAL_SAMPLES / 2.0);
             double px = centerX + dist * cos_t;
             double py = centerY + dist * sin_t;
             double val = get_pixel_bilinear(blurred, ctx->width, ctx->height, px, py);
             if (val > 0.0) {
                 sum += val;
-                sumSq += val * val;
+                sum_sq += val * val;
                 count++;
             }
         }
 
         if (count > 0) {
             double mean = sum / count;
-            variances[i] = (sumSq / count) - (mean * mean);
+            projection_variances[i] = (sum_sq / count) - (mean * mean);
         } else {
-            variances[i] = 0.0;
+            projection_variances[i] = 0.0;
         }
-        if (variances[i] > max_var)
-            max_var = variances[i];
+        if (projection_variances[i] > max_variance)
+            max_variance = projection_variances[i];
     }
 
-    for (int i = 0; i < RADIAL_PROJECTIONS; i++) {
-        if (max_var > 0.001) {
-            out_digest->data[i] = (uint8_t)(sqrt(variances[i] / max_var) * 255.0);
+    /* Normalize and write to digest */
+    for (int i = 0; i < PH_RADIAL_PROJECTIONS; i++) {
+        if (max_variance > 0.001) {
+            out_digest->data[i] = (uint8_t)(sqrt(projection_variances[i] / max_variance) * 255.0);
         } else {
             out_digest->data[i] = 0;
         }
