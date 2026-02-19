@@ -15,6 +15,10 @@ void test_color_difference() {
     ASSERT_OK(ph_create(&ctx_orig));
     ASSERT_OK(ph_create(&ctx_color));
 
+    // CHANGE: Disable grayscale loading to ensure we get color data for ColorHash
+    ph_context_set_load_grayscale(ctx_orig, 0);
+    ph_context_set_load_grayscale(ctx_color, 0);
+
     /* 1. Load original and color-shifted images */
     ASSERT_OK(ph_load_from_file(ctx_orig, "tests/photo.jpeg"));
     ASSERT_OK(ph_load_from_file(ctx_color, "tests/photo_color_changed.jpeg"));
