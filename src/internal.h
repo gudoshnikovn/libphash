@@ -9,7 +9,8 @@
  */
 
 /* Converts RGB/RGBA to Grayscale with custom weights */
-void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, int channels, uint8_t *dst);
+void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, int channels,
+                     uint8_t *dst);
 
 /* Resizes a grayscale image using box sampling (averaging) */
 void ph_resize_box(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh);
@@ -31,9 +32,9 @@ void init_dct_matrix(void);
  * Constants
  */
 #define PH_DCT_SIZE 32
-#define PH_DCT_REDUCTION_SIZE 8 // We use the top-left 8x8 coefficients
-#define PH_CORE_HASH_SIZE 8     // Standard 8x8 grid for ahash/dhash/phash
-#define PH_BLOCK_SIZE 16        // 16x16 grid for BMH and MHash
+#define PH_DCT_REDUCTION_SIZE 8     // We use the top-left 8x8 coefficients
+#define PH_CORE_HASH_SIZE 8         // Standard 8x8 grid for ahash/dhash/phash
+#define PH_BLOCK_SIZE 16            // 16x16 grid for BMH and MHash
 #define PH_HAAR_SCALE 1.41421356237 // sqrt(2) for Haar wavelet normalization
 #define PH_RADIAL_PROJECTIONS 40
 #define PH_RADIAL_SAMPLES 128
@@ -98,7 +99,7 @@ struct ph_context {
     size_t scratchpad_size;
 };
 
-/* Ensures the context's scratchpad is at least 'size' bytes. 
+/* Ensures the context's scratchpad is at least 'size' bytes.
  * Returns NULL on failure, pointer to buffer on success. */
 uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size);
 

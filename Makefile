@@ -10,6 +10,12 @@ ifeq ($(UNAME_M),arm64)
     CFLAGS += -march=armv8-a+simd
 endif
 
+# Link with libdl on Linux for dlopen
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Linux)
+    LDFLAGS += -ldl
+endif
+
 LIB_NAME = libphash.a
 OBJ_DIR = obj
 SRC_DIR = src

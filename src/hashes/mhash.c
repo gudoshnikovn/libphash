@@ -27,7 +27,7 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, uint64_t *out_hash) {
     // 2. Simple 3x3 Laplacian Kernel for edge detection
     uint64_t hash = 0;
     int bit_idx = 0;
-    
+
     /* We sample the edges. For 16x16 block, we had a 7x7 grid (step=2).
      * To fit into uint64_t, we need at most 64 bits (8x8).
      */
@@ -35,8 +35,9 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, uint64_t *out_hash) {
     for (int y = 1; y < block_size - 1 && bit_idx < 64; y += step) {
         for (int x = 1; x < block_size - 1 && bit_idx < 64; x += step) {
             int center = block_data[y * block_size + x] * 4;
-            int neighbors = block_data[(y - 1) * block_size + x] + block_data[(y + 1) * block_size + x] +
-                            block_data[y * block_size + (x - 1)] + block_data[y * block_size + (x + 1)];
+            int neighbors =
+                block_data[(y - 1) * block_size + x] + block_data[(y + 1) * block_size + x] +
+                block_data[y * block_size + (x - 1)] + block_data[y * block_size + (x + 1)];
             if (center - neighbors > 0)
                 hash |= (1ULL << bit_idx);
             bit_idx++;

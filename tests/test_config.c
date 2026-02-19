@@ -18,7 +18,7 @@ void test_config_gray_weights() {
         fprintf(stderr, "Gray weights test failed: hashes are identical\n");
         exit(1);
     }
-    
+
     ph_free(ctx);
     printf("  [PASS] Custom Gray Weights\n");
 }
