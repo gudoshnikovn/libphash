@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(libphash VERSION 1.2.0 LANGUAGES C)
+project(libphash VERSION 1.7.0 LANGUAGES C)
 
 # --- Options ---
 option(PHASH_BUILD_TESTS "Build tests" ON)
