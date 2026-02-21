@@ -97,6 +97,9 @@ struct ph_context {
     /* Tier 3: Memory Reuse */
     uint8_t *scratchpad;
     size_t scratchpad_size;
+
+    /* Optimization Flags */
+    int load_grayscale;
 };
 
 /* Ensures the context's scratchpad is at least 'size' bytes.

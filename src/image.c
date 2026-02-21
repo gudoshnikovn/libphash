@@ -34,6 +34,12 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
     int g_w = ctx ? ctx->gray_g : PH_GRAY_G;
     int b_w = ctx ? ctx->gray_b : PH_GRAY_B;
 
+    // Check for 1-channel input (already grayscale)
+    if (channels == 1) {
+        memcpy(dst, src, num_pixels);
+        return;
+    }
+
 #if defined(__ARM_NEON)
     if (channels == 3) {
         uint8x8_t r_weight = vdup_n_u8((uint8_t)r_w);

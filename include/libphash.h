@@ -140,6 +140,22 @@ PH_API void ph_context_set_radial_params(ph_context_t *ctx, int projections, int
  */
 PH_API void ph_context_set_block_params(ph_context_t *ctx, int block_size);
 
+/**
+ * @brief Controls whether images are loaded as grayscale by default.
+ * 
+ * If enabled (non-zero), `ph_load_from_file` and `ph_load_from_memory` will
+ * request single-channel data from the decoder. This is significantly faster for
+ * algorithms that don't need color (pHash, aHash, dHash, mHash, wHash, BMH, Radial).
+ * 
+ * @note Disabled by default for compatibility with ColorHash and custom weights.
+ *       Enable it (set to 1) for significant speedup if you only need grayscale hashes
+ *       (pHash, aHash, dHash, mHash, wHash, BMH, Radial).
+ * 
+ * @param ctx The context.
+ * @param enable 1 to enable grayscale loading, 0 to disable (load native channels).
+ */
+PH_API void ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
+
 // --- Loading ---
 
 /**
