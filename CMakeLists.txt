@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(libphash VERSION 1.7.0 LANGUAGES C)
+project(libphash VERSION 1.8.0 LANGUAGES C)
 
 # --- Options ---
 option(PHASH_BUILD_TESTS "Build tests" ON)
@@ -33,7 +33,11 @@ target_include_directories(phash PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(phash PRIVATE m) # Link math library
+target_link_libraries(phash PRIVATE m) # Link math library (dl is usually needed on Linux for dlopen)
+
+if(UNIX AND NOT APPLE)
+    target_link_libraries(phash PRIVATE dl)
+endif()
 
 # --- Tests ---
 if(PHASH_BUILD_TESTS)

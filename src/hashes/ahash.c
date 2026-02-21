@@ -14,7 +14,8 @@ PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash) {
     ph_to_grayscale(ctx, ctx->data, ctx->width, ctx->height, ctx->channels, gray_full);
 
     uint8_t hash_input[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
-    ph_resize_bilinear(gray_full, ctx->width, ctx->height, hash_input, PH_CORE_HASH_SIZE, PH_CORE_HASH_SIZE);
+    ph_resize_bilinear(gray_full, ctx->width, ctx->height, hash_input, PH_CORE_HASH_SIZE,
+                       PH_CORE_HASH_SIZE);
 
     uint64_t total_sum = 0;
     int num_pixels = PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE;

@@ -23,7 +23,8 @@ uint8_t *ph_get_gray(ph_context_t *ctx) {
     return ctx->gray_data;
 }
 
-void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, int channels, uint8_t *dst) {
+void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, int channels,
+                     uint8_t *dst) {
     int num_pixels = w * h;
     const uint8_t *s = src;
     uint8_t *d = dst;
@@ -83,7 +84,8 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
     }
 }
 void ph_resize_bilinear(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh) {
-    if (dw <= 0 || dh <= 0) return;
+    if (dw <= 0 || dh <= 0)
+        return;
 
     /* 16.16 fixed point for ratios and positions */
     uint32_t x_ratio = (dw > 1) ? ((uint32_t)(sw - 1) << 16) / (dw - 1) : 0;
@@ -111,17 +113,16 @@ void ph_resize_bilinear(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw
             uint8_t d = src[index + next_y + next_x];
 
             /* (a * (1-x_d)(1-y_d) + b * x_d(1-y_d) + c * y_d(1-x_d) + d * x_d*y_d) */
-            uint32_t val = (uint32_t)a * x_inv * y_inv +
-                           (uint32_t)b * x_diff * y_inv +
-                           (uint32_t)c * y_diff * x_inv +
-                           (uint32_t)d * x_diff * y_diff;
+            uint32_t val = (uint32_t)a * x_inv * y_inv + (uint32_t)b * x_diff * y_inv +
+                           (uint32_t)c * y_diff * x_inv + (uint32_t)d * x_diff * y_diff;
 
             dst[i * dw + j] = (uint8_t)(val >> 16);
         }
     }
 }
 void ph_resize_box(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh) {
-    if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) return;
+    if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0)
+        return;
 
     /* 16.16 fixed point for ratios */
     uint32_t x_ratio = ((uint32_t)sw << 16) / dw;
@@ -130,26 +131,59 @@ void ph_resize_box(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int
     for (int dy = 0; dy < dh; dy++) {
         uint32_t sy_start = (dy * y_ratio) >> 16;
         uint32_t sy_end = ((dy + 1) * y_ratio) >> 16;
-        if (sy_end > (uint32_t)sh) sy_end = sh;
-        if (sy_start >= sy_end && sy_start < (uint32_t)sh) sy_end = sy_start + 1;
+        if (sy_end > (uint32_t)sh)
+            sy_end = sh;
+        if (sy_start >= sy_end && sy_start < (uint32_t)sh)
+            sy_end = sy_start + 1;
 
         for (int dx = 0; dx < dw; dx++) {
             uint32_t sx_start = (dx * x_ratio) >> 16;
             uint32_t sx_end = ((dx + 1) * x_ratio) >> 16;
-            if (sx_end > (uint32_t)sw) sx_end = sw;
-            if (sx_start >= sx_end && sx_start < (uint32_t)sw) sx_end = sx_start + 1;
+            if (sx_end > (uint32_t)sw)
+                sx_end = sw;
+            if (sx_start >= sx_end && sx_start < (uint32_t)sw)
+                sx_end = sx_start + 1;
 
             uint32_t sum = 0;
-            uint32_t count = 0;
+            uint32_t count = (sy_end - sy_start) * (sx_end - sx_start);
+
+            if (count == 0) {
+                dst[dy * dw + dx] = 0;
+                continue;
+            }
 
             for (uint32_t y = sy_start; y < sy_end; y++) {
                 const uint8_t *row = &src[y * sw];
-                for (uint32_t x = sx_start; x < sx_end; x++) {
+                uint32_t x = sx_start;
+
+#if defined(__ARM_NEON)
+                uint32x4_t v_sum = vdupq_n_u32(0);
+
+                // Process 16 pixels at a time
+                for (; x <= sx_end - 16; x += 16) {
+                    uint8x16_t val = vld1q_u8(&row[x]);
+
+                    // u8 -> u16
+                    uint16x8_t low = vmovl_u8(vget_low_u8(val));
+                    uint16x8_t high = vmovl_u8(vget_high_u8(val));
+
+                    // u16 -> u32 accumulator
+                    v_sum = vaddw_u16(v_sum, vget_low_u16(low));
+                    v_sum = vaddw_u16(v_sum, vget_high_u16(low));
+                    v_sum = vaddw_u16(v_sum, vget_low_u16(high));
+                    v_sum = vaddw_u16(v_sum, vget_high_u16(high));
+                }
+
+                // Horizontal reduce
+                sum += vaddvq_u32(v_sum);
+#endif
+
+                // Scalar fallback / tail
+                for (; x < sx_end; x++) {
                     sum += row[x];
-                    count++;
                 }
             }
-            dst[dy * dw + dx] = (count > 0) ? (uint8_t)(sum / count) : 0;
+            dst[dy * dw + dx] = (uint8_t)(sum / count);
         }
     }
 }
@@ -167,6 +201,111 @@ void ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8
             memcpy(dst, src, w * h);
         return;
     }
+
+#if defined(__ARM_NEON)
+    // --- NEON Implementation ---
+    // Kernel: [1, 2, 1] / 4
+
+    // Horizontal Pass: src -> temp
+    for (int y = 0; y < h; y++) {
+        const uint8_t *row_src = &src[y * w];
+        uint8_t *row_dst = &temp[y * w];
+
+        // Edges (Scalar)
+        row_dst[0] = row_src[0];
+        row_dst[w - 1] = row_src[w - 1];
+
+        int x = 1;
+        // Process 16 pixels at a time
+        for (; x <= w - 1 - 16; x += 16) {
+            uint8x16_t p_left = vld1q_u8(&row_src[x - 1]);
+            uint8x16_t p_curr = vld1q_u8(&row_src[x]);
+            uint8x16_t p_right = vld1q_u8(&row_src[x + 1]);
+
+            // val = left + 2*curr + right
+            // We need 16-bit intermediate to avoid overflow before shift (max 255*4 = 1020)
+            uint16x8_t low_l = vmovl_u8(vget_low_u8(p_left));
+            uint16x8_t low_c = vmovl_u8(vget_low_u8(p_curr));
+            uint16x8_t low_r = vmovl_u8(vget_low_u8(p_right));
+
+            uint16x8_t high_l = vmovl_u8(vget_high_u8(p_left));
+            uint16x8_t high_c = vmovl_u8(vget_high_u8(p_curr));
+            uint16x8_t high_r = vmovl_u8(vget_high_u8(p_right));
+
+            // Calculate Sum
+            // Horizontal: left + 2*center + right
+            uint16x8_t sum_low = vaddq_u16(low_l, low_r);
+            sum_low = vmlaq_n_u16(sum_low, low_c, 2);
+
+            uint16x8_t sum_high = vaddq_u16(high_l, high_r);
+            sum_high = vmlaq_n_u16(sum_high, high_c, 2);
+
+            // Shift right by 2 (divide by 4) and narrow back to 8-bit
+            // vshrn_n_u16 essentially does: (val >> 2) & 0xFF
+            uint8x8_t res_low = vshrn_n_u16(sum_low, 2);
+            uint8x8_t res_high = vshrn_n_u16(sum_high, 2);
+
+            vst1q_u8(&row_dst[x], vcombine_u8(res_low, res_high));
+        }
+
+        // Cleanup tail (Scalar)
+        for (; x < w - 1; x++) {
+            uint32_t val = row_src[x - 1] + (row_src[x] << 1) + row_src[x + 1];
+            row_dst[x] = (uint8_t)(val >> 2);
+        }
+    }
+
+    // Vertical Pass: temp -> dst
+    // Kernel [1, 2, 1] / 4 across rows
+    // To vectorize, we load vectors from row-1, row, row+1
+
+    // Top Edge (copy first row)
+    memcpy(dst, temp, w);
+
+    for (int y = 1; y < h - 1; y++) {
+        const uint8_t *row_prev = &temp[(y - 1) * w];
+        const uint8_t *row_curr = &temp[y * w];
+        const uint8_t *row_next = &temp[(y + 1) * w];
+        uint8_t *row_dst = &dst[y * w];
+
+        int x = 0;
+        for (; x <= w - 16; x += 16) {
+            uint8x16_t p_prev = vld1q_u8(&row_prev[x]);
+            uint8x16_t p_curr = vld1q_u8(&row_curr[x]);
+            uint8x16_t p_next = vld1q_u8(&row_next[x]);
+
+            uint16x8_t low_p = vmovl_u8(vget_low_u8(p_prev));
+            uint16x8_t low_c = vmovl_u8(vget_low_u8(p_curr));
+            uint16x8_t low_n = vmovl_u8(vget_low_u8(p_next));
+
+            uint16x8_t high_p = vmovl_u8(vget_high_u8(p_prev));
+            uint16x8_t high_c = vmovl_u8(vget_high_u8(p_curr));
+            uint16x8_t high_n = vmovl_u8(vget_high_u8(p_next));
+
+            uint16x8_t sum_low = vaddq_u16(low_p, low_n);
+            sum_low = vmlaq_n_u16(sum_low, low_c, 2);
+
+            uint16x8_t sum_high = vaddq_u16(high_p, high_n);
+            sum_high = vmlaq_n_u16(sum_high, high_c, 2);
+
+            uint8x8_t res_low = vshrn_n_u16(sum_low, 2);
+            uint8x8_t res_high = vshrn_n_u16(sum_high, 2);
+
+            vst1q_u8(&row_dst[x], vcombine_u8(res_low, res_high));
+        }
+
+        // Cleanup tail
+        for (; x < w; x++) {
+            uint32_t val = row_prev[x] + (row_curr[x] << 1) + row_next[x];
+            row_dst[x] = (uint8_t)(val >> 2);
+        }
+    }
+
+    // Bottom Edge (copy last row)
+    memcpy(&dst[(h - 1) * w], &temp[(h - 1) * w], w);
+
+#else
+    // --- Scalar Implementation (Original Fallback) ---
 
     /* Horizontal pass: Kernel [1 2 1], divide by 4 */
     for (int y = 0; y < h; y++) {
@@ -187,6 +326,7 @@ void ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8
             dst[y * w + x] = (uint8_t)(val >> 2);
         }
     }
+#endif
 }
 
 void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h) {

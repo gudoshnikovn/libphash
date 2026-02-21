@@ -19,7 +19,7 @@ PH_API ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash) {
 
     int total_pixels = PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE;
     uint8_t hash_input[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
-    
+
     size_t gray_size = (size_t)ctx->width * ctx->height;
     if (!PH_SAFE_ALLOC_SIZE(ctx->width, ctx->height))
         return PH_ERR_ALLOCATION_FAILED;
@@ -30,7 +30,8 @@ PH_API ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash) {
         return PH_ERR_ALLOCATION_FAILED;
 
     ph_to_grayscale(ctx, ctx->data, ctx->width, ctx->height, ctx->channels, full_gray);
-    ph_resize_box(full_gray, ctx->width, ctx->height, hash_input, PH_CORE_HASH_SIZE, PH_CORE_HASH_SIZE);
+    ph_resize_box(full_gray, ctx->width, ctx->height, hash_input, PH_CORE_HASH_SIZE,
+                  PH_CORE_HASH_SIZE);
 
     float d[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
     for (int i = 0; i < total_pixels; i++)
@@ -39,7 +40,7 @@ PH_API ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash) {
     /* Horizontal passes */
     for (int i = 0; i < PH_CORE_HASH_SIZE; i++)
         haar_1d_float(&d[i * PH_CORE_HASH_SIZE], PH_CORE_HASH_SIZE);
-        
+
     /* Vertical passes */
     for (int j = 0; j < PH_CORE_HASH_SIZE; j++) {
         float col[PH_CORE_HASH_SIZE];

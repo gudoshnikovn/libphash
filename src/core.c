@@ -1,11 +1,13 @@
 #include "internal.h"
+#include "loader.h"
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "../vendor/stb_image.h"
 
-PH_API const char *ph_version(void) { return "1.7.0"; }
+PH_API const char *ph_version(void) { return "1.8.0"; }
 
 PH_API void ph_context_set_gamma(ph_context_t *ctx, float gamma) {
     if (!ctx || gamma <= PH_GAMMA_EPSILON)
@@ -135,6 +137,49 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
         ctx->gray_data = NULL;
     }
 
+    // Try High-Performance Loader first
+    FILE *f = fopen(filepath, "rb");
+    if (f) {
+        unsigned char magic[8];
+        size_t read = fread(magic, 1, 8, f);
+
+        // JPEG Check (FF D8)
+        if (read >= 2 && magic[0] == 0xFF && magic[1] == 0xD8) {
+            fclose(f);
+            if (ph_can_use_libjpeg()) {
+                int w, h, ch;
+                unsigned char *turbo_data = ph_decode_jpeg_turbo(filepath, &w, &h, &ch);
+                if (turbo_data) {
+                    ctx->data = turbo_data;
+                    ctx->width = w;
+                    ctx->height = h;
+                    ctx->channels = ch;
+                    ctx->is_loaded = 1;
+                    return PH_SUCCESS;
+                }
+            }
+        }
+        // PNG Check (89 50 4E 47 0D 0A 1A 0A)
+        else if (read == 8 && magic[0] == 0x89 && magic[1] == 0x50 && magic[2] == 0x4E &&
+                 magic[3] == 0x47 && magic[4] == 0x0D && magic[5] == 0x0A && magic[6] == 0x1A &&
+                 magic[7] == 0x0A) {
+            fclose(f);
+            if (ph_can_use_libpng()) {
+                int w, h, ch;
+                unsigned char *png_data = ph_decode_png(filepath, &w, &h, &ch);
+                if (png_data) {
+                    ctx->data = png_data;
+                    ctx->width = w;
+                    ctx->height = h;
+                    ctx->channels = ch;
+                    ctx->is_loaded = 1;
+                    return PH_SUCCESS;
+                }
+            }
+        } else {
+            fclose(f);
+        }
+    }
     int req_comp = ctx->load_grayscale ? 1 : 0;
     ctx->data = stbi_load(filepath, &ctx->width, &ctx->height, &ctx->channels, req_comp);
     if (!ctx->data)

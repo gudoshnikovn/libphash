@@ -8,13 +8,14 @@ PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_dige
         return PH_ERR_INVALID_ARGUMENT;
     }
 
-    /* We calculate color moments for RGB channels. 
+    /* We calculate color moments for RGB channels.
      * Moments are stored as bytes: [MeanR, StdDevR, SkewR, MeanG, ...]
      */
     memset(out_digest, 0, sizeof(ph_digest_t));
     out_digest->size = PH_COLOR_CHANNELS * PH_COLOR_MOMENTS;
 
-    double mean[PH_COLOR_CHANNELS] = {0}, std_dev[PH_COLOR_CHANNELS] = {0}, skew[PH_COLOR_CHANNELS] = {0};
+    double mean[PH_COLOR_CHANNELS] = {0}, std_dev[PH_COLOR_CHANNELS] = {0},
+           skew[PH_COLOR_CHANNELS] = {0};
     int num_pixels = ctx->width * ctx->height;
 
     /* Step 1: Calculate the Arithmetic Mean */
