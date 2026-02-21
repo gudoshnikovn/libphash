@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include "../include/libphash.h"
 
 // --- Runtime Loading Status ---
 typedef enum { PH_LIB_NOT_LOADED = 0, PH_LIB_LOADED, PH_LIB_FAILED } PhLibStatus;
@@ -203,8 +204,8 @@ extern PhPngFuncs g_png;
 
 // --- API ---
 void ph_load_libs(void);
-bool ph_can_use_libjpeg(void);
-bool ph_can_use_libpng(void);
+int ph_can_use_libjpeg(void);
+int ph_can_use_libpng(void);
 
 // Decodes a JPEG file using the loaded library. Returns NULL on failure.
 unsigned char *ph_decode_jpeg_turbo(const char *filepath, int *width, int *height, int *channels);

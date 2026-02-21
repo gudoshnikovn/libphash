@@ -200,18 +200,18 @@ unsigned char *ph_decode_jpeg_turbo(const char *filepath, int *width, int *heigh
     return buffer;
 }
 
-bool ph_can_use_libjpeg(void) {
+PH_API int ph_can_use_libjpeg(void) {
     if (g_jpeg_status == PH_LIB_NOT_LOADED) {
         ph_load_libs();
     }
-    return g_jpeg_status == PH_LIB_LOADED;
+    return g_jpeg_status == PH_LIB_LOADED ? 1 : 0;
 }
 
-bool ph_can_use_libpng(void) {
+PH_API int ph_can_use_libpng(void) {
     if (g_png_status == PH_LIB_NOT_LOADED) {
         ph_load_libs();
     }
-    return g_png_status == PH_LIB_LOADED;
+    return g_png_status == PH_LIB_LOADED ? 1 : 0;
 }
 
 // --- PNG Decoder Implementation ---
@@ -281,7 +281,7 @@ unsigned char *ph_decode_png(const char *filepath, int *width, int *height, int 
     if (bit_depth == 16)
         g_png.png_set_strip_16(png_ptr);
 
-    if (color_type == 0 || color_type == 0 | 2) // GRAY_ALPHA
+    if (color_type == 0 || color_type == 4) // GRAY or GRAY_ALPHA
         g_png.png_set_gray_to_rgb(png_ptr);
 
     g_png.png_read_update_info(png_ptr, info_ptr);
@@ -301,7 +301,6 @@ unsigned char *ph_decode_png(const char *filepath, int *width, int *height, int 
         return NULL;
     }
 
-    png_structp *rows = (png_structp *)malloc(sizeof(png_structp) * h);
     // png_structp is unsafe cast for rows, actually unsigned char**.
     // Let's correct locally.
     unsigned char **row_pointers = (unsigned char **)malloc(sizeof(unsigned char *) * h);

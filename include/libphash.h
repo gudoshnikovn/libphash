@@ -205,6 +205,18 @@ PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
 PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b);
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b);
 
+/**
+ * @brief Checks if libjpeg-turbo is available and loaded.
+ * @return 1 if available, 0 otherwise.
+ */
+PH_API int ph_can_use_libjpeg(void);
+
+/**
+ * @brief Checks if libpng is available and loaded.
+ * @return 1 if available, 0 otherwise.
+ */
+PH_API int ph_can_use_libpng(void);
+
 #ifdef __cplusplus
 }
 #endif
