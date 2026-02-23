@@ -62,6 +62,14 @@ typedef enum {
     PH_ERR_EMPTY_IMAGE = -5,
 } ph_error_t;
 
+/**
+ * @brief Wavelet Hash operating modes.
+ */
+typedef enum {
+    PH_WHASH_FAST = 0, ///< High-speed 8x8 median approximation (default).
+    PH_WHASH_FULL = 1, ///< Academically accurate full 2D DWT matching ImageHash.
+} ph_whash_mode_t;
+
 // --- Types ---
 
 /**
@@ -141,20 +149,43 @@ PH_API void ph_context_set_radial_params(ph_context_t *ctx, int projections, int
 PH_API void ph_context_set_block_params(ph_context_t *ctx, int block_size);
 
 /**
+ * @brief Sets the operating mode for Wavelet Hash (wHash).
+ *
+ * @param ctx The context.
+ * @param mode PH_WHASH_FAST (0) for 15x speedup, PH_WHASH_FULL (1) for maximum accuracy.
+ */
+PH_API void ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t mode);
+
+/**
  * @brief Controls whether images are loaded as grayscale by default.
- * 
+ *
  * If enabled (non-zero), `ph_load_from_file` and `ph_load_from_memory` will
  * request single-channel data from the decoder. This is significantly faster for
  * algorithms that don't need color (pHash, aHash, dHash, mHash, wHash, BMH, Radial).
- * 
+ *
  * @note Disabled by default for compatibility with ColorHash and custom weights.
  *       Enable it (set to 1) for significant speedup if you only need grayscale hashes
  *       (pHash, aHash, dHash, mHash, wHash, BMH, Radial).
- * 
+ *
  * @param ctx The context.
  * @param enable 1 to enable grayscale loading, 0 to disable (load native channels).
  */
 PH_API void ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
+
+/**
+ * @brief Returns the dimensions of the currently loaded image.
+ * @param ctx The context.
+ * @param width Output for width.
+ * @param height Output for height.
+ * @param channels Output for number of channels.
+ */
+PH_API void ph_context_get_dimensions(ph_context_t *ctx, int *width, int *height, int *channels);
+
+/**
+ * @brief Checks if an image is currently loaded in the context.
+ * @return 1 if loaded, 0 otherwise.
+ */
+PH_API int ph_is_loaded(ph_context_t *ctx);
 
 // --- Loading ---
 
@@ -181,6 +212,7 @@ PH_API PH_NODISCARD ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out
 PH_API PH_NODISCARD ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash);
 PH_API PH_NODISCARD ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash);
 PH_API PH_NODISCARD ph_error_t ph_compute_mhash(ph_context_t *ctx, uint64_t *out_hash);
+PH_API PH_NODISCARD ph_error_t ph_compute_color_hash(ph_context_t *ctx, uint64_t *out_hash);
 
 // --- Digest Hash Algorithms ---
 
@@ -190,9 +222,10 @@ PH_API PH_NODISCARD ph_error_t ph_compute_mhash(ph_context_t *ctx, uint64_t *out
 PH_API PH_NODISCARD ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest);
 
 /**
- * @brief Computes Color Hash. Returns a digest representing color distribution.
+ * @brief Computes Color Moments Hash. Returns a digest representing color distribution.
  */
-PH_API PH_NODISCARD ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_digest);
+PH_API PH_NODISCARD ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
+                                                             ph_digest_t *out_digest);
 
 /**
  * @brief Computes Radial Hash. Robust against rotation. Uses context Gamma.

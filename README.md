@@ -1,70 +1,64 @@
 # libphash
 
-A high-performance, portable C library for Perceptual Hashing. Designed for image similarity detection with zero external dependencies (except for the included `stb_image`).
+A high-performance, portable C library for Perceptual Image Hashing. 
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Language Bindings
+## Core Features
 
-Official and community-supported wrappers:
-- **Python**: [python-libphash](https://github.com/gudoshnikovn/python-libphash) (`pip install python-libphash`)
+- **Multiple Algorithms**: `aHash`, `dHash`, `pHash` (DCT), `wHash` (Wavelet), `mHash`, `BMH`, `Radial`, and `ColorHash`.
+- **High-Performance Decoders**: Bundled support for `libjpeg-turbo`, `libpng`, and `spng` with SIMD acceleration (NEON/SSE).
+- **Fast Grayscale Loading**: Native decoders can perform grayscale conversion during decompression, saving time and memory.
+- **Zero-Allocation Processing**: Uses a context-based scratchpad for internal operations.
+- **FFI-Friendly**: Clean C API with opaque pointers, optimized for Python, Rust, or Node.js.
+- **Cross-Platform**: Optimized for ARM64 (Apple Silicon, Raspberry Pi) and x86_64.
 
 ---
 
-## Features
+## 🚀 Performance Modes
 
-- **Comprehensive Algorithm Suite**:
-  - `aHash` (Average Hash): Fast, based on average pixel intensity.
-  - `dHash` (Difference Hash): Extremely fast, resistant to aspect ratio changes.
-  - `pHash` (Perceptual Hash): High precision, uses optimized Discrete Cosine Transform (DCT).
-  - `mHash` (Median Hash): Robust against non-linear image adjustments.
-  - `bmh` (Block Mean Hash): Divides image into blocks for localized analysis.
-  - `wHash` (Wavelet Hash): Frequency-based hashing using Wavelet transform (if implemented).
-- **High Performance**: 
-  - Internal **Bilinear Interpolation** for high-quality image scaling.
-  - **Lazy-loading** grayscale cache to avoid redundant conversions.
-  - Pre-computed trigonometric tables for DCT.
-- **FFI-Friendly**: Clean C API with opaque pointers, optimized for Python (ctypes/cffi), Rust, or Node.js.
-- **Thread-Safe**: No global state (optimized one-time internal initialization).
-- **Cross-Platform**: Compatible with GCC, Clang, and MSVC.
+libphash can be built in two primary configurations:
 
+| Mode | Decoders | Dependencies | Best For |
+| :--- | :--- | :--- | :--- |
+| **High Performance** (Default) | `libjpeg-turbo`, `libpng`/`spng` | Self-contained (vendor submodules) | Production, massive datasets |
+| **Minimal** | `stb_image` (fallback) | Zero | Embedded, quick scripts |
 
-## Configuration & Tuning
+---
 
-libphash allows fine-tuning algorithms for specific use cases via the context API. Note that changing these values will result in hashes that are **not comparable** to those generated with default settings.
+## 🛠 Building
 
-| Function | Default | Description |
-| :--- | :--- | :--- |
-| `ph_context_set_gamma` | 2.2 | Adjusts brightness normalization. |
-| `ph_context_set_gray_weights` | 38,75,15 | Custom RGB-to-Grayscale proportions. |
-| `ph_context_set_phash_params` | 32, 8 | DCT size and reduction size. |
-| `ph_context_set_radial_params` | 40, 128 | Projection count and radial samples. |
-| `ph_context_set_block_params` | 16 | Grid resolution for BMH and mHash. |
-
-## Architecture
-
-The library follows a strict separation between public API and internal implementation:
-- `include/libphash.h`: Public interface and error codes.
-- `src/internal.h`: Internal structures and image processing helpers.
-- `src/hashes/`: Core hash algorithm implementations.
-
-## Building
-
-To build the static library and run tests, you only need `make` and a C compiler:
-
+### Recommended (CMake)
+Recommended for managing bundled high-performance decoders.
 ```bash
-# Build the library (libphash.a)
-make
-
-# Run all tests
-make test
-
-# Clean build artifacts
-make clean
-
+mkdir build && cd build
+cmake .. -DPHASH_BUILD_TESTS=ON
+make -j$(nproc)
+ctest
 ```
 
-## Usage Example (C)
+### Portable (Makefile)
+Fast and simple for minimal builds.
+```bash
+# Default build (gcc)
+make -j8
+
+# Using specific compiler
+make CC=clang test
+```
+
+---
+
+## 📖 Documentation
+
+For detailed technical information, see the [**Technical Documentation Index**](docs/README.md).
+- [Architecture Overview](docs/architecture.md)
+- [Development Guide & Coding Standards](docs/development.md)
+- [Algorithmic Deep Dive](docs/algorithms.md)
+
+---
+
+## 💻 Usage Example
 
 ```c
 #include <libphash.h>
@@ -72,40 +66,28 @@ make clean
 
 int main() {
     ph_context_t *ctx = NULL;
-    uint64_t hash1, hash2;
+    uint64_t hash = 0;
 
     ph_create(&ctx);
     
-    // Load and compute pHash for first image
-    ph_load_from_file(ctx, "image1.jpg");
-    ph_compute_phash(ctx, &hash1);
+    // Enable fast grayscale loading (skips RGB conversion)
+    ph_context_set_load_grayscale(ctx, 1);
     
-    // Load and compute pHash for second image
-    ph_load_from_file(ctx, "image2.jpg");
-    ph_compute_phash(ctx, &hash2);
-
-    // Calculate similarity
-    int distance = ph_hamming_distance(hash1, hash2);
-    printf("Hamming Distance: %d\n", distance);
-
-    if (distance < 5) {
-        printf("Images are very similar!\n");
+    if (ph_load_from_file(ctx, "photo.jpg") == PH_SUCCESS) {
+        ph_compute_phash(ctx, &hash);
+        printf("pHash: %016llx\n", (unsigned long long)hash);
     }
 
     ph_free(ctx);
     return 0;
 }
-
 ```
 
-## FFI Integration Notes
+## Language Bindings
 
-* **Opaque Pointer**: `ph_context_t` is an opaque struct. In high-level languages, treat it as a `void*` or `uintptr_t`.
-* **Memory Management**: Always call `ph_free()` to release image data and context memory allocated on the C heap.
-* **Error Handling**: Functions return `ph_error_t` (int). `0` (PH_SUCCESS) indicates success.
+- **Python**: [python-libphash](https://github.com/gudoshnikovn/python-libphash) (`pip install python-libphash`)
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-Includes `stb_image` by Sean Barrett (Public Domain/MIT).
-
+This project is licensed under the MIT License.
+Includes `stb_image`, `libjpeg-turbo`, `libpng`, and `spng` in the `vendor/` directory.

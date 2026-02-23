@@ -10,18 +10,26 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, uint64_t *out_hash) {
     if (!PH_SAFE_ALLOC_SIZE(ctx->width, ctx->height))
         return PH_ERR_ALLOCATION_FAILED;
 
-    /* Use scratchpad for:
-     * 1. full_gray: img_size
-     * 2. block_data: block_size * block_size
-     */
-    uint8_t *scratch = ph_get_scratchpad(ctx, gray_size + (size_t)block_size * block_size);
-    if (!scratch)
-        return PH_ERR_ALLOCATION_FAILED;
+    const uint8_t *full_gray;
+    uint8_t *block_data;
+    uint8_t *scratch = NULL;
 
-    uint8_t *full_gray = scratch;
-    uint8_t *block_data = scratch + gray_size;
+    if (ctx->channels == 1) {
+        full_gray = ctx->data;
+        scratch = ph_get_scratchpad(ctx, (size_t)block_size * block_size);
+        if (!scratch)
+            return PH_ERR_ALLOCATION_FAILED;
+        block_data = scratch;
+    } else {
+        scratch = ph_get_scratchpad(ctx, gray_size + (size_t)block_size * block_size);
+        if (!scratch)
+            return PH_ERR_ALLOCATION_FAILED;
+        uint8_t *gray_buf = scratch;
+        block_data = scratch + gray_size;
+        ph_to_grayscale(ctx, ctx->data, ctx->width, ctx->height, ctx->channels, gray_buf);
+        full_gray = gray_buf;
+    }
 
-    ph_to_grayscale(ctx, ctx->data, ctx->width, ctx->height, ctx->channels, full_gray);
     ph_resize_box(full_gray, ctx->width, ctx->height, block_data, block_size, block_size);
 
     // 2. Simple 3x3 Laplacian Kernel for edge detection

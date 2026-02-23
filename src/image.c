@@ -11,6 +11,9 @@
 #endif
 
 uint8_t *ph_get_gray(ph_context_t *ctx) {
+    if (ctx->channels == 1) {
+        return (uint8_t *)ctx->data;
+    }
     if (!ctx->gray_data && ctx->data) {
         if (!PH_SAFE_ALLOC_SIZE(ctx->width, ctx->height)) {
             return NULL;
@@ -160,7 +163,7 @@ void ph_resize_box(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int
                 uint32x4_t v_sum = vdupq_n_u32(0);
 
                 // Process 16 pixels at a time
-                for (; x <= sx_end - 16; x += 16) {
+                for (; x + 16 <= sx_end; x += 16) {
                     uint8x16_t val = vld1q_u8(&row[x]);
 
                     // u8 -> u16
@@ -186,6 +189,48 @@ void ph_resize_box(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int
             dst[dy * dw + dx] = (uint8_t)(sum / count);
         }
     }
+}
+
+void ph_resize_mipmap(ph_context_t *ctx, const uint8_t *src, int sw, int sh, uint8_t *dst, int dw,
+                      int dh) {
+    if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0)
+        return;
+
+    if (sw <= dw * 2 || sh <= dh * 2) {
+        ph_resize_bilinear(src, sw, sh, dst, dw, dh);
+        return;
+    }
+
+    uint8_t *temp = ph_get_scratchpad(ctx, sw * sh);
+    if (!temp) {
+        ph_resize_box(src, sw, sh, dst, dw, dh);
+        return;
+    }
+
+    if (src != temp)
+        memcpy(temp, src, sw * sh);
+
+    int cur_w = sw;
+    int cur_h = sh;
+
+    while (cur_w > dw * 2 && cur_h > dh * 2) {
+        int next_w = cur_w / 2;
+        int next_h = cur_h / 2;
+
+        for (int y = 0; y < next_h; y++) {
+            for (int x = 0; x < next_w; x++) {
+                int p1 = temp[(y * 2) * cur_w + (x * 2)];
+                int p2 = temp[(y * 2) * cur_w + (x * 2 + 1)];
+                int p3 = temp[(y * 2 + 1) * cur_w + (x * 2)];
+                int p4 = temp[(y * 2 + 1) * cur_w + (x * 2 + 1)];
+                temp[y * next_w + x] = (p1 + p2 + p3 + p4) / 4;
+            }
+        }
+        cur_w = next_w;
+        cur_h = next_h;
+    }
+
+    ph_resize_bilinear(temp, cur_w, cur_h, dst, dw, dh);
 }
 
 void ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst) {
