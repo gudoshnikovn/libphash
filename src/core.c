@@ -4,10 +4,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifndef _WIN32
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "../vendor/stb_image.h"
 
-PH_API const char *ph_version(void) { return "1.8.1"; }
+PH_API const char *ph_version(void) { return "1.9.0"; }
 
 PH_API void ph_context_set_gamma(ph_context_t *ctx, float gamma) {
     if (!ctx || gamma <= PH_GAMMA_EPSILON)
@@ -22,6 +29,19 @@ PH_API void ph_context_set_gamma(ph_context_t *ctx, float gamma) {
         ctx->gamma_lut[i] = (uint8_t)(res > 255.0 ? 255.0 : res);
     }
 }
+
+PH_API void ph_context_get_dimensions(ph_context_t *ctx, int *width, int *height, int *channels) {
+    if (!ctx)
+        return;
+    if (width)
+        *width = ctx->width;
+    if (height)
+        *height = ctx->height;
+    if (channels)
+        *channels = ctx->channels;
+}
+
+PH_API int ph_is_loaded(ph_context_t *ctx) { return (ctx && ctx->data) ? 1 : 0; }
 
 PH_API void ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, int b) {
     if (!ctx)
@@ -68,6 +88,12 @@ PH_API void ph_context_set_load_grayscale(ph_context_t *ctx, int enable) {
     }
 }
 
+PH_API void ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t mode) {
+    if (ctx) {
+        ctx->whash_mode = mode;
+    }
+}
+
 PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     if (!out_ctx)
         return PH_ERR_INVALID_ARGUMENT;
@@ -92,6 +118,7 @@ PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     ctx->radial_projections = PH_RADIAL_PROJECTIONS;
     ctx->radial_samples = PH_RADIAL_SAMPLES;
     ctx->block_size = PH_BLOCK_SIZE;
+    ctx->whash_mode = PH_WHASH_FAST;
 
     /* Optimization Defaults: Disabled by default for compatibility */
     ctx->load_grayscale = 0;
@@ -137,49 +164,68 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
         ctx->gray_data = NULL;
     }
 
-    // Try High-Performance Loader first
-    FILE *f = fopen(filepath, "rb");
-    if (f) {
-        unsigned char magic[8];
-        size_t read = fread(magic, 1, 8, f);
+#if defined(PH_USE_TURBOJPEG) || defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
+    // mmap the file for zero-copy decoding with bundled static decoders
+    int fd = open(filepath, O_RDONLY);
+    if (fd >= 0) {
+        struct stat st;
+        if (fstat(fd, &st) == 0 && st.st_size > 8) {
+            void *mapped = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+            if (mapped != MAP_FAILED) {
+                const unsigned char *data = (const unsigned char *)mapped;
+                int decoded = 0;
 
-        // JPEG Check (FF D8)
-        if (read >= 2 && magic[0] == 0xFF && magic[1] == 0xD8) {
-            fclose(f);
-            if (ph_can_use_libjpeg()) {
-                int w, h, ch;
-                unsigned char *turbo_data = ph_decode_jpeg_turbo(filepath, &w, &h, &ch);
-                if (turbo_data) {
-                    ctx->data = turbo_data;
-                    ctx->width = w;
-                    ctx->height = h;
-                    ctx->channels = ch;
-                    ctx->is_loaded = 1;
-                    return PH_SUCCESS;
+#ifdef PH_USE_TURBOJPEG
+                // JPEG Check (FF D8)
+                if (data[0] == 0xFF && data[1] == 0xD8) {
+                    int w, h, ch;
+                    int req_comp_turbo = ctx->load_grayscale ? 1 : 0;
+                    unsigned char *turbo_data = ph_decode_jpeg_tj(data, (unsigned long)st.st_size,
+                                                                  &w, &h, &ch, req_comp_turbo);
+                    if (turbo_data) {
+                        ctx->data = turbo_data;
+                        ctx->width = w;
+                        ctx->height = h;
+                        ctx->channels = ch;
+                        ctx->is_loaded = 1;
+                        decoded = 1;
+                    }
                 }
-            }
-        }
-        // PNG Check (89 50 4E 47 0D 0A 1A 0A)
-        else if (read == 8 && magic[0] == 0x89 && magic[1] == 0x50 && magic[2] == 0x4E &&
-                 magic[3] == 0x47 && magic[4] == 0x0D && magic[5] == 0x0A && magic[6] == 0x1A &&
-                 magic[7] == 0x0A) {
-            fclose(f);
-            if (ph_can_use_libpng()) {
-                int w, h, ch;
-                unsigned char *png_data = ph_decode_png(filepath, &w, &h, &ch);
-                if (png_data) {
-                    ctx->data = png_data;
-                    ctx->width = w;
-                    ctx->height = h;
-                    ctx->channels = ch;
-                    ctx->is_loaded = 1;
-                    return PH_SUCCESS;
+#endif
+
+#if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
+                // PNG Check (89 50 4E 47 0D 0A 1A 0A)
+                if (!decoded && st.st_size >= 8 && data[0] == 0x89 && data[1] == 0x50 &&
+                    data[2] == 0x4E && data[3] == 0x47 && data[4] == 0x0D && data[5] == 0x0A &&
+                    data[6] == 0x1A && data[7] == 0x0A) {
+                    int w, h, ch;
+                    int req_comp_png = ctx->load_grayscale ? 1 : 0;
+                    unsigned char *png_data = ph_decode_png_mem(data, (unsigned long)st.st_size, &w,
+                                                                &h, &ch, req_comp_png);
+                    if (png_data) {
+                        ctx->data = png_data;
+                        ctx->width = w;
+                        ctx->height = h;
+                        ctx->channels = ch;
+                        ctx->is_loaded = 1;
+                        decoded = 1;
+                    }
                 }
+#endif
+
+                munmap(mapped, st.st_size);
+                close(fd);
+                if (decoded)
+                    return PH_SUCCESS;
+            } else {
+                close(fd);
             }
         } else {
-            fclose(f);
+            close(fd);
         }
     }
+#endif // PH_USE_TURBOJPEG || PH_USE_LIBPNG || PH_USE_SPNG
+
     int req_comp = ctx->load_grayscale ? 1 : 0;
     ctx->data = stbi_load(filepath, &ctx->width, &ctx->height, &ctx->channels, req_comp);
     if (!ctx->data)
@@ -204,9 +250,43 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
         ctx->gray_data = NULL;
     }
 
+#ifdef PH_USE_TURBOJPEG
+    if (length >= 2 && buffer[0] == 0xFF && buffer[1] == 0xD8) {
+        int w, h, ch;
+        int req_comp_turbo = ctx->load_grayscale ? 1 : 0;
+        unsigned char *turbo_data =
+            ph_decode_jpeg_tj(buffer, (unsigned long)length, &w, &h, &ch, req_comp_turbo);
+        if (turbo_data) {
+            ctx->data = turbo_data;
+            ctx->width = w;
+            ctx->height = h;
+            ctx->channels = ch;
+            ctx->is_loaded = 1;
+            return PH_SUCCESS;
+        }
+    }
+#endif
+
+#if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
+    if (length >= 8 && buffer[0] == 0x89 && buffer[1] == 0x50) {
+        int w, h, ch;
+        int req_comp_png = ctx->load_grayscale ? 1 : 0;
+        unsigned char *png_data =
+            ph_decode_png_mem(buffer, (unsigned long)length, &w, &h, &ch, req_comp_png);
+        if (png_data) {
+            ctx->data = png_data;
+            ctx->width = w;
+            ctx->height = h;
+            ctx->channels = ch;
+            ctx->is_loaded = 1;
+            return PH_SUCCESS;
+        }
+    }
+#endif
+
     int req_comp = ctx->load_grayscale ? 1 : 0;
-    ctx->data =
-        stbi_load_from_memory(buffer, (int)length, &ctx->width, &ctx->height, &ctx->channels, req_comp);
+    ctx->data = stbi_load_from_memory(buffer, (int)length, &ctx->width, &ctx->height,
+                                      &ctx->channels, req_comp);
     if (!ctx->data)
         return PH_ERR_DECODE_FAILED;
 

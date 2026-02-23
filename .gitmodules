@@ -1,0 +1,9 @@
+[submodule "vendor/libjpeg-turbo"]
+	path = vendor/libjpeg-turbo
+	url = https://github.com/libjpeg-turbo/libjpeg-turbo.git
+[submodule "vendor/libpng"]
+	path = vendor/libpng
+	url = https://github.com/pnggroup/libpng.git
+[submodule "vendor/spng"]
+	path = vendor/spng
+	url = https://github.com/randy408/libspng.git

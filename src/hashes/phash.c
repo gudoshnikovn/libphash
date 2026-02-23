@@ -107,16 +107,18 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
      */
     bool use_cache = (dct_size == 32);
 
-    size_t sz1 = (size_t)dct_size * dct_size;                             // dct_input
-    size_t sz2 = use_cache ? 0 : (sz1 * sizeof(float));                   // dct_mat (if not cached)
-    size_t sz3 = (size_t)dct_size * reduction_size * sizeof(float);       // temp_matrix
+    size_t sz0 = (size_t)dct_size * dct_size;                       // temp_input for box resize
+    size_t sz1 = (size_t)dct_size * dct_size;                       // dct_input
+    size_t sz2 = use_cache ? 0 : (sz1 * sizeof(float));             // dct_mat (if not cached)
+    size_t sz3 = (size_t)dct_size * reduction_size * sizeof(float); // temp_matrix
     size_t sz4 = (size_t)reduction_size * reduction_size * sizeof(float); // dct_out
 
-    uint8_t *scratch = ph_get_scratchpad(ctx, sz1 + sz2 + sz3 + sz4);
+    uint8_t *scratch = ph_get_scratchpad(ctx, sz0 + sz1 + sz2 + sz3 + sz4);
     if (!scratch)
         return PH_ERR_ALLOCATION_FAILED;
 
-    uint8_t *dct_input = scratch;
+    uint8_t *temp_input = scratch;
+    uint8_t *dct_input = scratch + sz0;
     float *dct_mat;
     float *temp;
     float *dct_out;
@@ -124,15 +126,35 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     if (use_cache) {
         ensure_dct_32_initialized();
         dct_mat = s_dct_matrix_32;
-        temp = (float *)(scratch + sz1);
+        temp = (float *)(scratch + sz0 + sz1);
     } else {
-        dct_mat = (float *)(scratch + sz1);
-        temp = (float *)(scratch + sz1 + sz2);
+        dct_mat = (float *)(scratch + sz0 + sz1);
+        temp = (float *)(scratch + sz0 + sz1 + sz2);
         compute_dct_coefficients(dct_mat, dct_size);
     }
     dct_out = (float *)((uint8_t *)temp + sz3); // ensure byte math for offset
 
-    ph_resize_bilinear(gray_full, ctx->width, ctx->height, dct_input, dct_size, dct_size);
+    ph_resize_box(gray_full, ctx->width, ctx->height, temp_input, dct_size, dct_size);
+
+    // Apply 3x3 Laplacian sharpening to mimic Lanczos filter edge preservation
+    int w = dct_size;
+    int h = dct_size;
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            if (x == 0 || y == 0 || x == w - 1 || y == h - 1) {
+                dct_input[y * w + x] = temp_input[y * w + x];
+            } else {
+                int val = 5 * temp_input[y * w + x] - temp_input[(y - 1) * w + x] -
+                          temp_input[(y + 1) * w + x] - temp_input[y * w + (x - 1)] -
+                          temp_input[y * w + (x + 1)];
+                if (val < 0)
+                    val = 0;
+                if (val > 255)
+                    val = 255;
+                dct_input[y * w + x] = (uint8_t)val;
+            }
+        }
+    }
 
     /* First pass: DCT of each row, but only compute first reduction_size columns */
     for (int i = 0; i < dct_size; i++) {
@@ -172,20 +194,28 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
         }
     }
 
-    float sum_dct = 0;
-    for (int i = 0; i < reduction_size; i++) {
-        for (int j = 0; j < reduction_size; j++) {
-            if (i == 0 && j == 0)
-                continue;
-            sum_dct += dct_out[i * reduction_size + j];
-        }
+    int total_elements = reduction_size * reduction_size;
+    float sorted[64]; // max reduction_size is 8, so 8x8=64
+    for (int i = 0; i < total_elements; i++) {
+        sorted[i] = dct_out[i];
     }
 
-    float avg = sum_dct / (float)(reduction_size * reduction_size - 1);
+    // Sort to find median
+    for (int i = 1; i < total_elements; i++) {
+        float key = sorted[i];
+        int j = i - 1;
+        while (j >= 0 && sorted[j] > key) {
+            sorted[j + 1] = sorted[j];
+            j--;
+        }
+        sorted[j + 1] = key;
+    }
+    float median = sorted[total_elements / 2];
+
     uint64_t hash = 0;
     for (int i = 0; i < reduction_size; i++) {
         for (int j = 0; j < reduction_size; j++) {
-            if (dct_out[i * reduction_size + j] > avg) {
+            if (dct_out[i * reduction_size + j] > median) {
                 hash |= (1ULL << (i * reduction_size + j));
             }
         }

@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
-project(libphash VERSION 1.8.0 LANGUAGES C)
+project(libphash VERSION 1.9.0 LANGUAGES C)
 
 # --- Options ---
 option(PHASH_BUILD_TESTS "Build tests" ON)
 option(PHASH_BUILD_SHARED "Build shared library" OFF)
+option(PHASH_USE_TURBOJPEG "Use bundled libjpeg-turbo for fast JPEG decoding" ON)
+option(PHASH_USE_LIBPNG "Use bundled libpng for fast PNG decoding" ON)
 
 # --- Compiler Flags ---
 if(MSVC)
@@ -33,10 +35,52 @@ target_include_directories(phash PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(phash PRIVATE m) # Link math library (dl is usually needed on Linux for dlopen)
+target_link_libraries(phash PRIVATE m)
 
 if(UNIX AND NOT APPLE)
     target_link_libraries(phash PRIVATE dl)
+endif()
+
+# --- Bundled libjpeg-turbo (TurboJPEG API) ---
+if(PHASH_USE_TURBOJPEG)
+    target_compile_definitions(phash PRIVATE PH_USE_TURBOJPEG)
+    # libjpeg-turbo doesn't like add_subdirectory, so we point to pre-built lib
+    find_library(TURBOJPEG_LIB NAMES turbojpeg turbojpeg-static
+                 PATHS ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build)
+    if(TURBOJPEG_LIB)
+        target_link_libraries(phash PRIVATE ${TURBOJPEG_LIB})
+    else()
+        message(WARNING "libturbojpeg.a not found in vendor/libjpeg-turbo/build. Please build it first.")
+    endif()
+    target_include_directories(phash PRIVATE 
+        ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build
+    )
+endif()
+
+# --- Bundled libpng ---
+if(PHASH_USE_LIBPNG)
+    target_compile_definitions(phash PRIVATE PH_USE_LIBPNG)
+    set(PNG_SHARED OFF CACHE BOOL "" FORCE)
+    set(PNG_STATIC ON CACHE BOOL "" FORCE)
+    set(PNG_TESTS OFF CACHE BOOL "" FORCE)
+    set(PNG_HARDWARE_OPTIMIZATIONS ON CACHE BOOL "" FORCE)
+    # libpng works mostly OK with add_subdirectory
+    add_subdirectory(vendor/libpng EXCLUDE_FROM_ALL)
+    target_link_libraries(phash PRIVATE png_static z)
+    target_include_directories(phash PRIVATE 
+        ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libpng
+        ${CMAKE_CURRENT_BINARY_DIR}/vendor/libpng
+    )
+endif()
+
+# --- Bundled spng ---
+if(PHASH_USE_SPNG)
+    target_compile_definitions(phash PRIVATE PH_USE_SPNG)
+    add_library(spng_static STATIC vendor/spng/spng/spng.c)
+    target_include_directories(spng_static PUBLIC vendor/spng/spng)
+    target_link_libraries(phash PRIVATE spng_static z)
+    target_include_directories(phash PRIVATE vendor/spng/spng)
 endif()
 
 # --- Tests ---
@@ -47,6 +91,10 @@ if(PHASH_BUILD_TESTS)
         get_filename_component(test_name ${test_src} NAME_WE)
         add_executable(${test_name} ${test_src})
         target_link_libraries(${test_name} PRIVATE phash)
+        target_include_directories(${test_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
         add_test(NAME ${test_name} COMMAND ${test_name})
     endforeach()
+
+    # Add benchmark as a smoke test (verifies loading and hashing works)
+    add_test(NAME benchmark_smoke COMMAND test_benchmark hash ${CMAKE_CURRENT_SOURCE_DIR}/tests/photo.jpeg 10)
 endif()

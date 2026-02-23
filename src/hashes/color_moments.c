@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_digest) {
+PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *out_digest) {
     if (!ctx || !ctx->is_loaded || !out_digest) {
         return PH_ERR_INVALID_ARGUMENT;
     }
