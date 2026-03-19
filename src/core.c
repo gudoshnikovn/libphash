@@ -163,6 +163,14 @@ uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size) {
     if (!ctx || size == 0)
         return NULL;
 
+    /* Auto-trim: if the buffer is 4x+ larger than needed, free it to prevent
+     * unbounded memory growth after processing a single large image. */
+    if (ctx->scratchpad && ctx->scratchpad_size > size * 4) {
+        free(ctx->scratchpad);
+        ctx->scratchpad = NULL;
+        ctx->scratchpad_size = 0;
+    }
+
     if (ctx->scratchpad_size < size) {
         uint8_t *new_ptr = (uint8_t *)realloc(ctx->scratchpad, size);
         if (!new_ptr)
