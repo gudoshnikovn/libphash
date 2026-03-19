@@ -382,3 +382,23 @@ void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h) {
         data[i] = ctx->gamma_lut[data[i]];
     }
 }
+void ph_apply_laplacian_3x3(const uint8_t *src, int w, int h, uint8_t *dst) {
+    if (!src || !dst || w <= 0 || h <= 0)
+        return;
+
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            if (x == 0 || y == 0 || x == w - 1 || y == h - 1) {
+                dst[y * w + x] = src[y * w + x];
+            } else {
+                int val = 5 * src[y * w + x] - src[(y - 1) * w + x] - src[(y + 1) * w + x] -
+                          src[y * w + (x - 1)] - src[y * w + (x + 1)];
+                if (val < 0)
+                    val = 0;
+                if (val > 255)
+                    val = 255;
+                dst[y * w + x] = (uint8_t)val;
+            }
+        }
+    }
+}

@@ -19,7 +19,7 @@ static void ensure_radial_initialized(void) {
     if (atomic_load(&s_radial_init))
         return;
 
-    while (atomic_flag_test_and_set(&s_radial_lock)) { /* spin */
+    while (atomic_flag_test_and_set(&s_radial_lock)) {
     }
 
     if (!atomic_load(&s_radial_init)) {

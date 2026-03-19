@@ -61,8 +61,6 @@ PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, uint64_t *out_hash) {
 
         count_colors++;
 
-        // hue_bins = numpy.linspace(0, 255, 6+1)
-        // [0, 42.5, 85, 127.5, 170, 212.5, 255]
         int hue_bin = (int)(h / 42.5f);
         if (hue_bin > 5)
             hue_bin = 5;
@@ -94,11 +92,7 @@ PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, uint64_t *out_hash) {
     int maxvalue = 1 << binbits; // 8
 
     int shift = 0;
-    // We must mimic Python `bitarray += [v // ... % 2 > 0]`
-    // ImageHash constructs array of bits. `numpy.packbits` doesn't happen.
-    // Wait, let's see how `ImageHash(bitarray.reshape((-1, binbits)))` produces the hash
-    // representation. If it's a bitarray, its integer value is `sum([bit * 2^(length - 1 - i)])` or
-    // something. Let's match the exact C integer layout:
+    // Pack bits into uint64_t hash
     for (int i = 0; i < 14; i++) {
         int v = (int)(values[i] * maxvalue);
         if (v > maxvalue - 1)

@@ -27,7 +27,7 @@ static void ensure_dct_32_initialized(void) {
         return;
 
     // Simple spinlock
-    while (atomic_flag_test_and_set(&s_dct_32_lock)) { /* spin */
+    while (atomic_flag_test_and_set(&s_dct_32_lock)) {
     }
 
     if (!atomic_load(&s_dct_32_init)) {
@@ -136,25 +136,7 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
 
     ph_resize_box(gray_full, ctx->width, ctx->height, temp_input, dct_size, dct_size);
 
-    // Apply 3x3 Laplacian sharpening to mimic Lanczos filter edge preservation
-    int w = dct_size;
-    int h = dct_size;
-    for (int y = 0; y < h; y++) {
-        for (int x = 0; x < w; x++) {
-            if (x == 0 || y == 0 || x == w - 1 || y == h - 1) {
-                dct_input[y * w + x] = temp_input[y * w + x];
-            } else {
-                int val = 5 * temp_input[y * w + x] - temp_input[(y - 1) * w + x] -
-                          temp_input[(y + 1) * w + x] - temp_input[y * w + (x - 1)] -
-                          temp_input[y * w + (x + 1)];
-                if (val < 0)
-                    val = 0;
-                if (val > 255)
-                    val = 255;
-                dct_input[y * w + x] = (uint8_t)val;
-            }
-        }
-    }
+    ph_apply_laplacian_3x3(temp_input, dct_size, dct_size, dct_input);
 
     /* First pass: DCT of each row, but only compute first reduction_size columns */
     for (int i = 0; i < dct_size; i++) {

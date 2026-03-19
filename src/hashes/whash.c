@@ -2,7 +2,8 @@
 #include <stdlib.h>
 
 static void haar_1d_float(float *data, int n) {
-    float temp[PH_CORE_HASH_SIZE]; /* Only valid for N=8 */
+    /* temp buffer size is fixed to PH_CORE_HASH_SIZE (8) */
+    float temp[PH_CORE_HASH_SIZE];
     int h = n / 2;
     float inv_haar = (float)(1.0 / PH_HAAR_SCALE);
     for (int i = 0; i < h; i++) {
@@ -126,43 +127,34 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
     int image_scale = nat_scale > PH_CORE_HASH_SIZE ? nat_scale : PH_CORE_HASH_SIZE;
 
     const uint8_t *full_gray;
-    uint8_t *scratch = NULL;
+    size_t sz_gray = (ctx->channels == 1) ? 0 : (size_t)ctx->width * ctx->height;
+    size_t sz_scaled = (size_t)image_scale * image_scale;
+    size_t sz_d = (size_t)image_scale * image_scale * sizeof(float);
+    size_t sz_temps = (size_t)image_scale * 2 * sizeof(float);
+
+    uint8_t *scratch_mem = ph_get_scratchpad(ctx, sz_gray + sz_scaled + sz_d + sz_temps);
+    if (!scratch_mem)
+        return PH_ERR_ALLOCATION_FAILED;
+
     if (ctx->channels == 1) {
         full_gray = ctx->data;
     } else {
-        scratch = ph_get_scratchpad(ctx, (size_t)ctx->width * ctx->height);
-        if (!scratch)
-            return PH_ERR_ALLOCATION_FAILED;
-        ph_to_grayscale(ctx, ctx->data, ctx->width, ctx->height, ctx->channels, scratch);
-        full_gray = scratch;
+        ph_to_grayscale(ctx, ctx->data, ctx->width, ctx->height, ctx->channels, scratch_mem);
+        full_gray = scratch_mem;
     }
 
-    uint8_t *scaled_img = (uint8_t *)malloc(image_scale * image_scale * sizeof(uint8_t));
-    if (!scaled_img)
-        return PH_ERR_ALLOCATION_FAILED;
+    uint8_t *scaled_img = scratch_mem + sz_gray;
+    float *d = (float *)(scratch_mem + sz_gray + sz_scaled);
+    float *temp_a = (float *)((uint8_t *)d + sz_d);
+    float *temp_b = temp_a + image_scale;
 
     ph_resize_bilinear(full_gray, ctx->width, ctx->height, scaled_img, image_scale, image_scale);
-
-    float *d = (float *)malloc(image_scale * image_scale * sizeof(float));
-    float *temp_a = (float *)malloc(image_scale * sizeof(float));
-    float *temp_b = (float *)malloc(image_scale * sizeof(float));
-    if (!d || !temp_a || !temp_b) {
-        free(scaled_img);
-        if (d)
-            free(d);
-        if (temp_a)
-            free(temp_a);
-        if (temp_b)
-            free(temp_b);
-        return PH_ERR_ALLOCATION_FAILED;
-    }
 
     for (int i = 0; i < image_scale; i++) {
         for (int j = 0; j < image_scale; j++) {
             d[i * image_scale + j] = (float)scaled_img[i * image_scale + j] / 255.0f;
         }
     }
-    free(scaled_img);
 
     int current_size = image_scale;
     // DWT cascade down to 8x8. We just call it on the top-left quadrant over and over.
@@ -178,9 +170,6 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
             ll_band[i * PH_CORE_HASH_SIZE + j] = d[i * image_scale + j];
         }
     }
-    free(d);
-    free(temp_a);
-    free(temp_b);
 
     int total_pixels = PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE;
 

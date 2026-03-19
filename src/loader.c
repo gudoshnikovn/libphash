@@ -3,9 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// =====================================================================
-// JPEG Decoder
-// =====================================================================
+/* --- JPEG Decoder --- */
 #ifdef PH_USE_TURBOJPEG
 
 #include "turbojpeg.h"
@@ -56,9 +54,7 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size
 PH_API int ph_can_use_libjpeg(void) { return 0; }
 #endif // PH_USE_TURBOJPEG
 
-// =====================================================================
-// PNG Decoder
-// =====================================================================
+/* --- PNG Decoder (libpng) --- */
 #ifdef PH_USE_LIBPNG
 
 #include <png.h>
@@ -176,9 +172,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
 }
 
 #elif defined(PH_USE_SPNG)
-// =====================================================================
-// PNG Decoder (spng — fast on x86, single-call API)
-// =====================================================================
+/* --- PNG Decoder (spng) --- */
 #include "spng.h"
 
 PH_API int ph_can_use_libpng(void) { return 1; }
