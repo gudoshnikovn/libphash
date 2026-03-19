@@ -63,6 +63,13 @@ typedef enum {
 } ph_error_t;
 
 /**
+ * @brief Returns a human-readable string description for an error code.
+ * @param err The error code.
+ * @return A constant string describing the error. Never returns NULL.
+ */
+PH_API const char *ph_get_error_string(ph_error_t err);
+
+/**
  * @brief Wavelet Hash operating modes.
  */
 typedef enum {

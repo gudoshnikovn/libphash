@@ -16,6 +16,25 @@
 
 PH_API const char *ph_version(void) { return "1.9.0"; }
 
+PH_API const char *ph_get_error_string(ph_error_t err) {
+    switch (err) {
+    case PH_SUCCESS:
+        return "Success";
+    case PH_ERR_ALLOCATION_FAILED:
+        return "Memory allocation failed";
+    case PH_ERR_DECODE_FAILED:
+        return "Image decoding failed";
+    case PH_ERR_INVALID_ARGUMENT:
+        return "Invalid argument";
+    case PH_ERR_NOT_IMPLEMENTED:
+        return "Not implemented";
+    case PH_ERR_EMPTY_IMAGE:
+        return "Empty image (no image loaded)";
+    default:
+        return "Unknown error";
+    }
+}
+
 PH_API void ph_context_set_gamma(ph_context_t *ctx, float gamma) {
     if (!ctx || gamma <= PH_GAMMA_EPSILON)
         return;
