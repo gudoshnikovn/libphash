@@ -35,8 +35,15 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
                                  int *height, int *channels, int req_comp);
 #endif
 
+#ifdef PH_USE_WEBP
+// --- WebP: libwebp (decodes to RGB, no native grayscale) ---
+unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long size, int *width,
+                                  int *height, int *channels, int req_comp);
+#endif
+
 // Runtime capability checks (always available)
 int ph_can_use_libjpeg(void);
 int ph_can_use_libpng(void);
+int ph_can_use_webp(void);
 
 #endif // PH_LOADER_H

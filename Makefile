@@ -12,6 +12,15 @@ ifeq ($(UNAME_M),arm64)
     CFLAGS += -march=armv8-a+simd
 endif
 
+# --- WebP Support ---
+# To use WebP in the standalone Makefile, ensure libwebp is installed and paths are set.
+# For bundled/static build, use CMake instead.
+USE_WEBP ?= 0
+ifeq ($(USE_WEBP),1)
+    CFLAGS += -DPH_USE_WEBP
+    LDFLAGS += -lwebp -lwebpdecoder
+endif
+
 # OS-specific flags
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)

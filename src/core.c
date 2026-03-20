@@ -191,7 +191,7 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
         ctx->gray_data = NULL;
     }
 
-#if defined(PH_USE_TURBOJPEG) || defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
+#if defined(PH_USE_TURBOJPEG) || defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG) || defined(PH_USE_WEBP)
     // mmap the file for zero-copy decoding with bundled static decoders
     int fd = open(filepath, O_RDONLY);
     if (fd >= 0) {
@@ -240,6 +240,26 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
                 }
 #endif
 
+#ifdef PH_USE_WEBP
+                /* WebP Check: RIFF....WEBP */
+                if (!decoded && st.st_size >= 12 && data[0] == 'R' && data[1] == 'I' &&
+                    data[2] == 'F' && data[3] == 'F' && data[8] == 'W' && data[9] == 'E' &&
+                    data[10] == 'B' && data[11] == 'P') {
+                    int w, h, ch;
+                    int req_comp_webp = ctx->load_grayscale ? 1 : 0;
+                    unsigned char *webp_data = ph_decode_webp_mem(data, (unsigned long)st.st_size,
+                                                                  &w, &h, &ch, req_comp_webp);
+                    if (webp_data) {
+                        ctx->data = webp_data;
+                        ctx->width = w;
+                        ctx->height = h;
+                        ctx->channels = ch;
+                        ctx->is_loaded = 1;
+                        decoded = 1;
+                    }
+                }
+#endif
+
                 munmap(mapped, st.st_size);
                 close(fd);
                 if (decoded)
@@ -251,7 +271,7 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
             close(fd);
         }
     }
-#endif // PH_USE_TURBOJPEG || PH_USE_LIBPNG || PH_USE_SPNG
+#endif // PH_USE_TURBOJPEG || PH_USE_LIBPNG || PH_USE_SPNG || PH_USE_WEBP
 
     int req_comp = ctx->load_grayscale ? 1 : 0;
     ctx->data = stbi_load(filepath, &ctx->width, &ctx->height, &ctx->channels, req_comp);
@@ -302,6 +322,26 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
             ph_decode_png_mem(buffer, (unsigned long)length, &w, &h, &ch, req_comp_png);
         if (png_data) {
             ctx->data = png_data;
+            ctx->width = w;
+            ctx->height = h;
+            ctx->channels = ch;
+            ctx->is_loaded = 1;
+            return PH_SUCCESS;
+        }
+    }
+#endif
+
+#ifdef PH_USE_WEBP
+    /* WebP Check: RIFF....WEBP */
+    if (length >= 12 && buffer[0] == 'R' && buffer[1] == 'I' && buffer[2] == 'F' &&
+        buffer[3] == 'F' && buffer[8] == 'W' && buffer[9] == 'E' && buffer[10] == 'B' &&
+        buffer[11] == 'P') {
+        int w, h, ch;
+        int req_comp_webp = ctx->load_grayscale ? 1 : 0;
+        unsigned char *webp_data =
+            ph_decode_webp_mem(buffer, (unsigned long)length, &w, &h, &ch, req_comp_webp);
+        if (webp_data) {
+            ctx->data = webp_data;
             ctx->width = w;
             ctx->height = h;
             ctx->channels = ch;

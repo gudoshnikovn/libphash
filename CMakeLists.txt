@@ -6,6 +6,7 @@ option(PHASH_BUILD_TESTS "Build tests" ON)
 option(PHASH_BUILD_SHARED "Build shared library" OFF)
 option(PHASH_USE_TURBOJPEG "Use bundled libjpeg-turbo for fast JPEG decoding" ON)
 option(PHASH_USE_LIBPNG "Use bundled libpng for fast PNG decoding" ON)
+option(PHASH_USE_WEBP "Use external libwebp for WebP decoding" ON)
 
 # --- Compiler Flags ---
 if(MSVC)
@@ -81,6 +82,33 @@ if(PHASH_USE_SPNG)
     target_include_directories(spng_static PUBLIC vendor/spng/spng)
     target_link_libraries(phash PRIVATE spng_static z)
     target_include_directories(phash PRIVATE vendor/spng/spng)
+endif()
+
+# --- Bundled libwebp ---
+if(PHASH_USE_WEBP)
+    target_compile_definitions(phash PRIVATE PH_USE_WEBP)
+    
+    # Configure libwebp build (minimal decoder only)
+    set(WEBP_BUILD_ANIM_UTILS OFF CACHE BOOL "" FORCE)
+    set(WEBP_BUILD_CWEBP OFF CACHE BOOL "" FORCE)
+    set(WEBP_BUILD_DWEBP OFF CACHE BOOL "" FORCE)
+    set(WEBP_BUILD_GIF2WEBP OFF CACHE BOOL "" FORCE)
+    set(WEBP_BUILD_IMG2WEBP OFF CACHE BOOL "" FORCE)
+    set(WEBP_BUILD_VWEBP OFF CACHE BOOL "" FORCE)
+    set(WEBP_BUILD_WEBPINFO OFF CACHE BOOL "" FORCE)
+    set(WEBP_BUILD_LIBWEBPMUX OFF CACHE BOOL "" FORCE)
+    set(WEBP_BUILD_WEBPMUX OFF CACHE BOOL "" FORCE)
+    set(WEBP_BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(WEBP_LINK_STATIC ON CACHE BOOL "" FORCE)
+
+    add_subdirectory(vendor/libwebp EXCLUDE_FROM_ALL)
+    
+    # We only need the decoder part for phash
+    target_link_libraries(phash PRIVATE webpdecoder)
+    target_include_directories(phash PRIVATE 
+        ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libwebp/src
+    )
 endif()
 
 # --- Tests ---

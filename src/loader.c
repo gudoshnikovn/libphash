@@ -229,3 +229,45 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
 // No PNG decoder — stb_image will handle PNG
 PH_API int ph_can_use_libpng(void) { return 0; }
 #endif // PH_USE_LIBPNG / PH_USE_SPNG
+
+/* --- WebP Decoder --- */
+#ifdef PH_USE_WEBP
+
+#include <webp/decode.h>
+
+PH_API int ph_can_use_webp(void) { return 1; }
+
+unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long size, int *width,
+                                  int *height, int *channels, int req_comp) {
+    if (!buffer || size < 12)
+        return NULL;
+
+    int w, h;
+    if (!WebPGetInfo(buffer, size, &w, &h))
+        return NULL;
+
+    /* libwebp has no native grayscale decode — always decode to RGB.
+     * Grayscale conversion is handled later by ph_to_grayscale. */
+    int out_channels = 3;
+    size_t stride = (size_t)w * out_channels;
+    size_t out_size = stride * h;
+
+    unsigned char *output = (unsigned char *)malloc(out_size);
+    if (!output)
+        return NULL;
+
+    /* Decode into our buffer so we can free() it normally */
+    if (!WebPDecodeRGBInto(buffer, size, output, out_size, (int)stride)) {
+        free(output);
+        return NULL;
+    }
+
+    *width = w;
+    *height = h;
+    *channels = out_channels;
+    return output;
+}
+
+#else
+PH_API int ph_can_use_webp(void) { return 0; }
+#endif // PH_USE_WEBP

@@ -111,6 +111,7 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 * **libjpeg-turbo**: IJG, BSD-3-Clause, zlib.
 * **libpng**: libpng License 2.0.
+* **libwebp**: WebP License (BSD 3-Clause).
 * **spng**: BSD 2-Clause License.
 * **stb_image**: Public Domain / MIT.
 

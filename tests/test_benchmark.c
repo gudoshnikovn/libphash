@@ -116,6 +116,25 @@ void benchmark_directory(const char *path, int grayscale) {
     closedir(dir);
 }
 
+void benchmark_loading(const char *img, int iterations, int grayscale) {
+    printf("\n--- Loading Performance (%s, %d iterations) ---\n", img, iterations);
+    printf("Mode: %s\n", grayscale ? "Grayscale (Fast)" : "RGB (Full)");
+
+    double start = get_time_sec();
+    for (int i = 0; i < iterations; i++) {
+        ph_context_t *ctx;
+        if (ph_create(&ctx) == PH_SUCCESS) {
+            ph_context_set_load_grayscale(ctx, grayscale);
+            (void)ph_load_from_file(ctx, img);
+            ph_free(ctx);
+        }
+    }
+    double end = get_time_sec();
+    double total = end - start;
+
+    printf("Total time: %.4fs, Avg: %.4fms/load\n", total, (total / iterations) * 1000.0);
+}
+
 /* --- Main --- */
 void print_usage(const char *prog) {
     printf("Usage: %s [command] [args]\n", prog);
@@ -123,6 +142,7 @@ void print_usage(const char *prog) {
     printf("  hash [file] [iters]   Benchmark hashing algorithms for a single image\n");
     printf("  dir  [path]           Benchmark loading performance for a directory\n");
     printf("  full [file] [iters]   Benchmark both loading and hashing\n");
+    printf("  load [file] [iters]   Benchmark loading an image\n");
 }
 
 int main(int argc, char **argv) {
@@ -177,6 +197,11 @@ int main(int argc, char **argv) {
                ((end - start) / iters) * 1000.0);
 
         ph_free(ctx);
+    } else if (strcmp(cmd, "load") == 0) {
+        const char *img = (argc > 2) ? argv[2] : "tests/photo.jpeg";
+        int iters = (argc > 3) ? atoi(argv[3]) : 100;
+        benchmark_loading(img, iters, 1); // Grayscale
+        benchmark_loading(img, iters, 0); // RGB
     } else {
         print_usage(argv[0]);
         return 1;
