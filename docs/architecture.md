@@ -6,9 +6,9 @@
 
 ### 1. Loader Subsystem (`src/loader.c`)
 Handles image decoding from files and memory buffers.
-- **Backends**: Supports `libjpeg-turbo`, `libpng`, `spng`, and fallback to `stb_image`.
-- **Zero-Copy**: Uses `mmap` where possible to minimize memory overhead.
-- **Fast Grayscale**: Decoders are configured to perform grayscale conversion during decompression if requested, avoiding a separate RGB-to-gray pass.
+- **Backends**: Unified support for `libjpeg-turbo`, `libpng`, `spng`, `libwebp`, and a minimal fallback to `stb_image`.
+- **Zero-Copy Pipeline**: Uses memory-mapping (`mmap`) where possible to avoid redundant heap allocations. External decoding libraries directly process the mapped regions into the internal format `ph_context_t`.
+- **Fast Grayscale**: Decoders are configured to perform grayscale conversion natively during decompression if requested via `ph_context_set_load_grayscale`, bypassing a secondary RGB-to-gray pass and saving both memory and CPU cycles.
 
 ### 2. Image Processing Kernels (`src/image.c`)
 Low-level primitives for image manipulation:
@@ -18,13 +18,15 @@ Low-level primitives for image manipulation:
 - **Gamma Correction**: LUT-based gamma normalization (2.2).
 
 ### 3. Hash Algorithms (`src/hashes/`)
-Divided into specific implementations:
+Divided into specific implementations corresponding to unique theoretical properties:
 - `ahash.c`: Average Hash (frequency-based).
-- `phash.c`: DCT-based hash (robust against moderate scaling/rotation).
+- `phash.c`: DCT-based perceptual hash (robust against moderate scaling/rotation).
 - `dhash.c`: Gradient-based hash (extremely fast).
-- `whash.c`: Wavelet-based (Haar) hash (multi-resolution).
-- `radial.c`: Rotationally invariant hash.
-- `color_moments.c`: Statistical color distribution.
+- `mhash.c`: Marr-Hildreth or structured block-based logical grid approach.
+- `whash.c`: Wavelet-based (DWT Haar) hash supporting fast and full-academic decompositions.
+- `bmh.c`: Block Mean Hash, producing high-resolution (256-bit) digest fingerprints.
+- `radial.c`: Rotationally invariant spatial sampling.
+- `color_moments.c`: Statistical distribution of colors for distinguishing color-unique identical geometry.
 
 ## Data Flow
 

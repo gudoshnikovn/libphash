@@ -24,18 +24,30 @@ This document explains the mathematical foundations and tuning parameters of the
     - `PH_WHASH_FAST`: Single-level decomposition.
     - `PH_WHASH_FULL`: Multi-level decomposition (more accurate, slower).
 
-## 5. ColorHash
-- **Concept**: Computes statistical moments (mean, variance) across HSV or RGB channels.
-- **Use Case**: When image content is similar but colors differ significantly (e.g., product photos).
+## 5. mHash (Marr Hash)
+- **Concept**: Configurable block-based logical grid hash utilizing `ph_context_set_block_params`.
+- **Strength**: Strikes a robust balance between structural integrity and high comparison speed.
+
+## 6. BMH (Block Mean Hash)
+- **Concept**: Divides the image into blocks (default 16x16 or configurable) and computes the mean luminance for each, yielding a highly detailed 256-bit digest (`ph_digest_t`).
+- **Use Case**: Need significantly higher entropy and low collision rates compared to standard 64-bit bounds.
+
+## 7. ColorHash & Color Moments Hash
+- **Concept**: 
+  - `ColorHash` (`ph_compute_color_hash`): Compresses color distribution into a 64-bit numerical representation limit. 
+  - `Color Moments` (`ph_compute_color_moments_hash`): Comprehensive statistical digest capturing invariant spatial color statistics.
+- **Use Case**: Detecting identical geometric shapes layered with diverse color grading (e.g., recolored product photography).
 
 ---
 
 ## Comparison Summary
 
-| Algorithm | Speed | Rotation | Noise | Scaling |
-|---|---|---|---|---|
-| aHash | ⭐⭐⭐⭐⭐ | ❌ | ⭐ | ⭐⭐⭐ |
-| dHash | ⭐⭐⭐⭐ | ❌ | ⭐⭐ | ⭐⭐⭐⭐ |
-| pHash | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ |
-| wHash | ⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ |
-| Radial | ⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ |
+| Algorithm | Speed | Rotation | Noise | Scaling | Output Format |
+|---|---|---|---|---|---|
+| aHash | ⭐⭐⭐⭐⭐ | ❌ | ⭐ | ⭐⭐⭐ | 64-bit |
+| dHash | ⭐⭐⭐⭐⭐ | ❌ | ⭐⭐ | ⭐⭐⭐⭐ | 64-bit |
+| pHash | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | 64-bit |
+| mHash | ⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | 64-bit |
+| wHash | ⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | 64-bit |
+| Radial| ⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Digest |
+| BMH   | ⭐⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | Digest (256-bit) |

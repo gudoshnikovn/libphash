@@ -14,7 +14,7 @@ A high-performance, portable C library for Perceptual Image Hashing.
 ## 🚀 Core Features
 
 * **Multiple Algorithms**: `aHash`, `dHash`, `pHash` (DCT-based), `wHash` (Wavelet), `mHash`, `BMH`, `Radial`, and `ColorHash`.
-* **High-Performance Decoders**: Built-in support for `libjpeg-turbo`, `libpng`, and `spng` with SIMD acceleration (NEON/SSE).
+* **High-Performance Decoders**: Built-in support for `libjpeg-turbo`, `libpng`, `spng`, and `libwebp` with SIMD acceleration (NEON/SSE).
 * **Fast Grayscale Loading**: Native decoders can perform grayscale conversion during decompression, significantly reducing CPU cycles and memory overhead.
 * **Zero-Allocation Processing**: Optimized context-based scratchpad for internal operations, ideal for high-load environments.
 * **FFI-Friendly**: Clean C API with opaque pointers, designed for seamless integration with Python, Rust, Node.js, and Go.
@@ -28,7 +28,7 @@ A high-performance, portable C library for Perceptual Image Hashing.
 
 | Mode | Decoders | Dependencies | Best For |
 | --- | --- | --- | --- |
-| **High Performance** (Default) | `libjpeg-turbo`, `libpng`/`spng` | Self-contained (vendor submodules) | Production, massive datasets, server-side processing |
+| **High Performance** (Default) | `libjpeg-turbo`, `libpng`/`spng`, `libwebp` | Self-contained (vendor submodules) | Production, massive datasets, server-side processing |
 | **Minimal** | `stb_image` (fallback) | Zero | Embedded systems, quick scripts, simple builds |
 
 ---
