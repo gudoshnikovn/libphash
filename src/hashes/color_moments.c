@@ -21,7 +21,8 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
     /* Step 1: Calculate the Arithmetic Mean */
     for (int i = 0; i < num_pixels; i++) {
         for (int c = 0; c < PH_COLOR_CHANNELS; c++) {
-            mean[c] += ctx->data[i * ctx->channels + c];
+            uint8_t val = (ctx->channels >= 3) ? ctx->data[i * ctx->channels + c] : ctx->data[i * ctx->channels];
+            mean[c] += val;
         }
     }
     for (int c = 0; c < PH_COLOR_CHANNELS; c++) {
@@ -31,7 +32,8 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
     /* Step 2: Calculate Standard Deviation (2nd moment) and Skewness (3rd moment) */
     for (int i = 0; i < num_pixels; i++) {
         for (int c = 0; c < PH_COLOR_CHANNELS; c++) {
-            double diff = ctx->data[i * ctx->channels + c] - mean[c];
+            uint8_t val = (ctx->channels >= 3) ? ctx->data[i * ctx->channels + c] : ctx->data[i * ctx->channels];
+            double diff = val - mean[c];
             std_dev[c] += diff * diff;
             skew[c] += diff * diff * diff;
         }

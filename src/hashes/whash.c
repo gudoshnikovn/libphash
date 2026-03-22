@@ -1,64 +1,51 @@
 #include "../internal.h"
 #include <stdlib.h>
 
-static void haar_1d_float(float *data, int n) {
-    /* temp buffer size is fixed to PH_CORE_HASH_SIZE (8) */
-    float temp[PH_CORE_HASH_SIZE];
-    int h = n / 2;
-    float inv_haar = (float)(1.0 / PH_HAAR_SCALE);
-    for (int i = 0; i < h; i++) {
-        temp[i] = (data[2 * i] + data[2 * i + 1]) * inv_haar;
-        temp[i + h] = (data[2 * i] - data[2 * i + 1]) * inv_haar;
-    }
-    for (int i = 0; i < n; i++)
-        data[i] = temp[i];
-}
+static void haar_1d_float_dyn(float *data, int n, float *temp);
 
 static ph_error_t ph_compute_whash_fast(ph_context_t *ctx, uint64_t *out_hash) {
-    int total_pixels = PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE;
-    uint8_t hash_input[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
+    int hash_size = PH_CORE_HASH_SIZE;
+    int image_scale = hash_size * 2; // 16
+    int total_pixels = hash_size * hash_size; // 64
+    uint8_t hash_input[256]; // image_scale * image_scale
 
-    size_t gray_size = (size_t)ctx->width * ctx->height;
-    if (!PH_SAFE_ALLOC_SIZE(ctx->width, ctx->height))
+    uint8_t *full_gray = ph_get_gray(ctx);
+    if (!full_gray)
         return PH_ERR_ALLOCATION_FAILED;
 
-    const uint8_t *full_gray;
-    uint8_t *scratch = NULL;
-    if (ctx->channels == 1) {
-        full_gray = ctx->data;
-    } else {
-        scratch = ph_get_scratchpad(ctx, gray_size);
-        if (!scratch)
-            return PH_ERR_ALLOCATION_FAILED;
-        ph_to_grayscale(ctx, ctx->data, ctx->width, ctx->height, ctx->channels, scratch);
-        full_gray = scratch;
-    }
+    ph_resize_box(full_gray, ctx->width, ctx->height, hash_input, image_scale, image_scale);
 
-    ph_resize_box(full_gray, ctx->width, ctx->height, hash_input, PH_CORE_HASH_SIZE,
-                  PH_CORE_HASH_SIZE);
+    float d[256];
+    for (int i = 0; i < 256; i++)
+        d[i] = (float)hash_input[i] / 255.0f;
 
-    float d[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
-    for (int i = 0; i < total_pixels; i++)
-        d[i] = (float)hash_input[i];
-
+    float temp_haar[16];
     /* Horizontal passes */
-    for (int i = 0; i < PH_CORE_HASH_SIZE; i++)
-        haar_1d_float(&d[i * PH_CORE_HASH_SIZE], PH_CORE_HASH_SIZE);
+    for (int i = 0; i < image_scale; i++)
+        haar_1d_float_dyn(&d[i * image_scale], image_scale, temp_haar);
 
     /* Vertical passes */
-    for (int j = 0; j < PH_CORE_HASH_SIZE; j++) {
-        float col[PH_CORE_HASH_SIZE];
-        for (int i = 0; i < PH_CORE_HASH_SIZE; i++)
-            col[i] = d[i * PH_CORE_HASH_SIZE + j];
-        haar_1d_float(col, PH_CORE_HASH_SIZE);
-        for (int i = 0; i < PH_CORE_HASH_SIZE; i++)
-            d[i * PH_CORE_HASH_SIZE + j] = col[i];
+    for (int j = 0; j < image_scale; j++) {
+        float col[16];
+        for (int i = 0; i < image_scale; i++)
+            col[i] = d[i * image_scale + j];
+        haar_1d_float_dyn(col, image_scale, temp_haar);
+        for (int i = 0; i < image_scale; i++)
+            d[i * image_scale + j] = col[i];
+    }
+
+    /* Extract top-left 8x8 (LL band) */
+    float ll_band[64];
+    for (int i = 0; i < hash_size; i++) {
+        for (int j = 0; j < hash_size; j++) {
+            ll_band[i * hash_size + j] = d[i * image_scale + j];
+        }
     }
 
     /* Copy to sortable array for median */
-    float sorted[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
+    float sorted[64];
     for (int i = 0; i < total_pixels; i++) {
-        sorted[i] = d[i];
+        sorted[i] = ll_band[i];
     }
 
     /* Simple insertion sort for 64 elements */
@@ -75,7 +62,7 @@ static ph_error_t ph_compute_whash_fast(ph_context_t *ctx, uint64_t *out_hash) {
 
     uint64_t hash = 0;
     for (int i = 0; i < total_pixels; i++)
-        if (d[i] > median)
+        if (ll_band[i] > median)
             hash |= (1ULL << i);
     *out_hash = hash;
     return PH_SUCCESS;
@@ -126,25 +113,20 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
     int nat_scale = 1 << log2_min;
     int image_scale = nat_scale > PH_CORE_HASH_SIZE ? nat_scale : PH_CORE_HASH_SIZE;
 
-    const uint8_t *full_gray;
-    size_t sz_gray = (ctx->channels == 1) ? 0 : (size_t)ctx->width * ctx->height;
+    uint8_t *full_gray = ph_get_gray(ctx);
+    if (!full_gray)
+        return PH_ERR_ALLOCATION_FAILED;
+
     size_t sz_scaled = (size_t)image_scale * image_scale;
     size_t sz_d = (size_t)image_scale * image_scale * sizeof(float);
     size_t sz_temps = (size_t)image_scale * 2 * sizeof(float);
 
-    uint8_t *scratch_mem = ph_get_scratchpad(ctx, sz_gray + sz_scaled + sz_d + sz_temps);
+    uint8_t *scratch_mem = ph_get_scratchpad(ctx, sz_scaled + sz_d + sz_temps);
     if (!scratch_mem)
         return PH_ERR_ALLOCATION_FAILED;
 
-    if (ctx->channels == 1) {
-        full_gray = ctx->data;
-    } else {
-        ph_to_grayscale(ctx, ctx->data, ctx->width, ctx->height, ctx->channels, scratch_mem);
-        full_gray = scratch_mem;
-    }
-
-    uint8_t *scaled_img = scratch_mem + sz_gray;
-    float *d = (float *)(scratch_mem + sz_gray + sz_scaled);
+    uint8_t *scaled_img = scratch_mem;
+    float *d = (float *)(scratch_mem + sz_scaled);
     float *temp_a = (float *)((uint8_t *)d + sz_d);
     float *temp_b = temp_a + image_scale;
 

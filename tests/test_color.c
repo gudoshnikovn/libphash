@@ -29,8 +29,8 @@ void test_color_difference() {
 
     /* 3. Compute Color Moment Hash (Color distribution) */
     // CHANGE: Pass the address of the stack-allocated structs
-    ASSERT_OK(ph_compute_color_hash(ctx_orig, &digest_orig));
-    ASSERT_OK(ph_compute_color_hash(ctx_color, &digest_color));
+    ASSERT_OK(ph_compute_color_moments_hash(ctx_orig, &digest_orig));
+    ASSERT_OK(ph_compute_color_moments_hash(ctx_color, &digest_color));
 
     /* 4. Compare results */
     int p_dist = ph_hamming_distance(phash_orig, phash_color);

@@ -107,18 +107,16 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
      */
     bool use_cache = (dct_size == 32);
 
-    size_t sz0 = (size_t)dct_size * dct_size;                       // temp_input for box resize
     size_t sz1 = (size_t)dct_size * dct_size;                       // dct_input
     size_t sz2 = use_cache ? 0 : (sz1 * sizeof(float));             // dct_mat (if not cached)
     size_t sz3 = (size_t)dct_size * reduction_size * sizeof(float); // temp_matrix
     size_t sz4 = (size_t)reduction_size * reduction_size * sizeof(float); // dct_out
 
-    uint8_t *scratch = ph_get_scratchpad(ctx, sz0 + sz1 + sz2 + sz3 + sz4);
+    uint8_t *scratch = ph_get_scratchpad(ctx, sz1 + sz2 + sz3 + sz4);
     if (!scratch)
         return PH_ERR_ALLOCATION_FAILED;
 
-    uint8_t *temp_input = scratch;
-    uint8_t *dct_input = scratch + sz0;
+    uint8_t *dct_input = scratch;
     float *dct_mat;
     float *temp;
     float *dct_out;
@@ -126,17 +124,15 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     if (use_cache) {
         ensure_dct_32_initialized();
         dct_mat = s_dct_matrix_32;
-        temp = (float *)(scratch + sz0 + sz1);
+        temp = (float *)(scratch + sz1);
     } else {
-        dct_mat = (float *)(scratch + sz0 + sz1);
-        temp = (float *)(scratch + sz0 + sz1 + sz2);
+        dct_mat = (float *)(scratch + sz1);
+        temp = (float *)(scratch + sz1 + sz2);
         compute_dct_coefficients(dct_mat, dct_size);
     }
     dct_out = (float *)((uint8_t *)temp + sz3); // ensure byte math for offset
 
-    ph_resize_box(gray_full, ctx->width, ctx->height, temp_input, dct_size, dct_size);
-
-    ph_apply_laplacian_3x3(temp_input, dct_size, dct_size, dct_input);
+    ph_resize_box(gray_full, ctx->width, ctx->height, dct_input, dct_size, dct_size);
 
     /* First pass: DCT of each row, but only compute first reduction_size columns */
     for (int i = 0; i < dct_size; i++) {

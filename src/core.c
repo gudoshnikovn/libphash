@@ -79,6 +79,11 @@ PH_API void ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, int b) 
     ctx->gray_r = (r * 128) / sum;
     ctx->gray_g = (g * 128) / sum;
     ctx->gray_b = 128 - ctx->gray_r - ctx->gray_g;
+    
+    if (ctx->gray_data) {
+        free(ctx->gray_data);
+        ctx->gray_data = NULL;
+    }
 }
 
 PH_API void ph_context_set_phash_params(ph_context_t *ctx, int dct_size, int reduction_size) {

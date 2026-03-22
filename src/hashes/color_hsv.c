@@ -100,7 +100,7 @@ PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, uint64_t *out_hash) {
 
         for (int b = 0; b < binbits; b++) {
             int m = binbits - b - 1;
-            int bit = ((v >> m) % (1 << (m + 1))) > 0 ? 1 : 0;
+            int bit = (v >> m) & 1;
             if (bit) {
                 // To pack it correctly so that bin(hash) matches sequence of bits
                 // MSB is the first bit added (i=0, b=0)

@@ -6,27 +6,15 @@ PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 
-    const uint8_t *gray_input;
-    uint8_t *scratch = NULL;
-    if (ctx->channels == 1) {
-        gray_input = ctx->data;
-    } else {
-        size_t gray_size = (size_t)ctx->width * ctx->height;
-        scratch = ph_get_scratchpad(ctx, gray_size);
-        if (!scratch) {
-            return PH_ERR_ALLOCATION_FAILED;
-        }
-        ph_to_grayscale(ctx, ctx->data, ctx->width, ctx->height, ctx->channels, scratch);
-        gray_input = scratch;
+    uint8_t *gray_input = ph_get_gray(ctx);
+    if (!gray_input) {
+        return PH_ERR_ALLOCATION_FAILED;
     }
 
     uint8_t hash_input[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
-    uint8_t temp_input[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
 
-    ph_resize_box(gray_input, ctx->width, ctx->height, temp_input, PH_CORE_HASH_SIZE,
+    ph_resize_box(gray_input, ctx->width, ctx->height, hash_input, PH_CORE_HASH_SIZE,
                   PH_CORE_HASH_SIZE);
-
-    ph_apply_laplacian_3x3(temp_input, PH_CORE_HASH_SIZE, PH_CORE_HASH_SIZE, hash_input);
 
     uint64_t total_sum = 0;
     int num_pixels = PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE;

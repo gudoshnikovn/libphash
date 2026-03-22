@@ -10,28 +10,22 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     int block_size = ctx->block_size;
     int total_pixels = block_size * block_size;
 
-    // Clear digest and set size
     memset(out_digest, 0, sizeof(ph_digest_t));
-    out_digest->size = (uint8_t)((total_pixels + 7) / 8);
-    if (out_digest->size > PH_DIGEST_MAX_BYTES)
+    int req_bytes = (total_pixels + 7) / 8;
+    if (req_bytes > PH_DIGEST_MAX_BYTES) {
         out_digest->size = PH_DIGEST_MAX_BYTES;
+    } else {
+        out_digest->size = (uint8_t)req_bytes;
+    }
 
-    size_t gray_size = (size_t)ctx->width * ctx->height;
-    if (!PH_SAFE_ALLOC_SIZE(ctx->width, ctx->height))
+    uint8_t *full_gray = ph_get_gray(ctx);
+    if (!full_gray)
         return PH_ERR_ALLOCATION_FAILED;
 
-    /* Scratchpad:
-     * 1. gray_full: img_size
-     * 2. block_data: total_pixels
-     */
-    uint8_t *scratch = ph_get_scratchpad(ctx, gray_size + total_pixels);
-    if (!scratch)
+    uint8_t *block_data = ph_get_scratchpad(ctx, total_pixels);
+    if (!block_data)
         return PH_ERR_ALLOCATION_FAILED;
 
-    uint8_t *full_gray = scratch;
-    uint8_t *block_data = scratch + gray_size;
-
-    ph_to_grayscale(ctx, ctx->data, ctx->width, ctx->height, ctx->channels, full_gray);
     ph_resize_box(full_gray, ctx->width, ctx->height, block_data, block_size, block_size);
 
     uint64_t total_sum = 0;

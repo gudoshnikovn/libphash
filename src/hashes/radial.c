@@ -45,7 +45,7 @@ static void ensure_radial_initialized(void) {
 
 static double get_pixel_bilinear(const uint8_t *img, int w, int h, double x, double y) {
     if (x < 0 || x >= w - 1 || y < 0 || y >= h - 1)
-        return 0.0;
+        return -1.0;
 
     int x1 = (int)x;
     int y1 = (int)y;
@@ -77,39 +77,23 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
         (uint8_t)(projections > PH_DIGEST_MAX_BYTES ? PH_DIGEST_MAX_BYTES : projections);
 
     size_t img_size = (size_t)ctx->width * ctx->height;
-    if (!PH_SAFE_ALLOC_SIZE(ctx->width, ctx->height))
+
+    uint8_t *gray = ph_get_gray(ctx);
+    if (!gray)
         return PH_ERR_ALLOCATION_FAILED;
 
-    /* Use scratchpad for:
-     * 1. gray: img_size
-     * 2. blurred: img_size
-     * 3. projection_variances: projections * sizeof(double)
-     */
-    size_t sz_gray = (ctx->channels == 1) ? 0 : img_size;
-    size_t sz_blur = img_size;
-    size_t sz_vars = (size_t)projections * sizeof(double);
-
-    uint8_t *scratch = ph_get_scratchpad(ctx, sz_gray + sz_blur + sz_vars);
-    if (!scratch)
+    uint8_t *blurred = malloc(img_size);
+    if (!blurred) {
         return PH_ERR_ALLOCATION_FAILED;
-
-    const uint8_t *gray;
-    uint8_t *blurred;
-    double *projection_variances;
-
-    if (ctx->channels == 1) {
-        gray = ctx->data;
-        blurred = scratch;
-        projection_variances = (double *)(scratch + sz_blur);
-    } else {
-        uint8_t *gray_buf = scratch;
-        blurred = scratch + sz_gray;
-        projection_variances = (double *)(scratch + sz_gray + sz_blur);
-        ph_to_grayscale(ctx, ctx->data, ctx->width, ctx->height, ctx->channels, gray_buf);
-        gray = gray_buf;
     }
 
-    ph_apply_gaussian_blur(ctx, (uint8_t *)gray, ctx->width, ctx->height, blurred);
+    double *projection_variances = malloc(projections * sizeof(double));
+    if (!projection_variances) {
+        free(blurred);
+        return PH_ERR_ALLOCATION_FAILED;
+    }
+
+    ph_apply_gaussian_blur(ctx, gray, ctx->width, ctx->height, blurred);
 
     ph_apply_gamma(ctx, blurred, ctx->width, ctx->height);
 
@@ -149,7 +133,7 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
             }
 
             double val = get_pixel_bilinear(blurred, ctx->width, ctx->height, px, py);
-            if (val > 0.0) {
+            if (val >= 0.0) {
                 sum += val;
                 sum_sq += val * val;
                 count++;
@@ -174,6 +158,9 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
             out_digest->data[i] = 0;
         }
     }
+
+    free(blurred);
+    free(projection_variances);
 
     return PH_SUCCESS;
 }
