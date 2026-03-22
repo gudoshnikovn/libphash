@@ -65,18 +65,18 @@ static double get_pixel_bilinear(const uint8_t *img, int w, int h, double x, dou
 }
 
 PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_digest) {
-    if (!ctx || !ctx->is_loaded || !out_digest)
+    if (!ctx || !ctx->image.is_loaded || !out_digest)
         return PH_ERR_INVALID_ARGUMENT;
 
-    int projections = ctx->radial_projections;
-    int samples = ctx->radial_samples;
+    int projections = ctx->config.radial_projections;
+    int samples = ctx->config.radial_samples;
 
     memset(out_digest, 0, sizeof(ph_digest_t));
     /* Clamp size to the max supported by ph_digest_t */
     out_digest->size =
         (uint8_t)(projections > PH_DIGEST_MAX_BYTES ? PH_DIGEST_MAX_BYTES : projections);
 
-    size_t img_size = (size_t)ctx->width * ctx->height;
+    size_t img_size = (size_t)ctx->image.width * ctx->image.height;
 
     uint8_t *gray = ph_get_gray(ctx);
     if (!gray)
@@ -93,13 +93,13 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
         return PH_ERR_ALLOCATION_FAILED;
     }
 
-    ph_apply_gaussian_blur(ctx, gray, ctx->width, ctx->height, blurred);
+    ph_apply_gaussian_blur(ctx, gray, ctx->image.width, ctx->image.height, blurred);
 
-    ph_apply_gamma(ctx, blurred, ctx->width, ctx->height);
+    ph_apply_gamma(ctx, blurred, ctx->image.width, ctx->image.height);
 
-    double centerX = ctx->width / 2.0;
-    double centerY = ctx->height / 2.0;
-    double min_side = (ctx->width < ctx->height) ? ctx->width : ctx->height;
+    double centerX = ctx->image.width / 2.0;
+    double centerY = ctx->image.height / 2.0;
+    double min_side = (ctx->image.width < ctx->image.height) ? ctx->image.width : ctx->image.height;
     double max_radius = min_side / 2.0;
     double max_variance = 0.0;
 
@@ -132,7 +132,7 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
                 py = centerY + dist * sin_t;
             }
 
-            double val = get_pixel_bilinear(blurred, ctx->width, ctx->height, px, py);
+            double val = get_pixel_bilinear(blurred, ctx->image.width, ctx->image.height, px, py);
             if (val >= 0.0) {
                 sum += val;
                 sum_sq += val * val;

@@ -17,7 +17,7 @@ void test_context_reuse_clears_gray_data() {
     ASSERT_PTR_NOT_NULL(gray1);
 
     // Fill with a marker pattern to detect stale data
-    size_t len1 = ctx->width * ctx->height;
+    size_t len1 = ctx->image.width * ctx->image.height;
     memset(gray1, 0xAB, len1);
 
     // 2. Reload same image (or different one)
@@ -33,7 +33,7 @@ void test_context_reuse_clears_gray_data() {
     // We check if at least one byte is NOT 0xAB (highly likely for a real image).
 
     int is_stale = 1;
-    size_t len2 = ctx->width * ctx->height;
+    size_t len2 = ctx->image.width * ctx->image.height;
 
     // Check a few points or verify entire buffer isn't just 0xAB
     // Since ph_to_grayscale calculates values, it's very unlikely to be 0xAB everywhere.

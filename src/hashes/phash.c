@@ -88,11 +88,11 @@ static float dot_product_f32_u8_neon(const float *f, const uint8_t *u, int n) {
 #endif
 
 PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
-    if (!ctx || !ctx->is_loaded || !out_hash)
+    if (!ctx || !ctx->image.is_loaded || !out_hash)
         return PH_ERR_INVALID_ARGUMENT;
 
-    int dct_size = ctx->phash_dct_size;
-    int reduction_size = ctx->phash_reduction_size;
+    int dct_size = ctx->config.phash_dct_size;
+    int reduction_size = ctx->config.phash_reduction_size;
 
     /* Ensure we can fit in 64-bit hash (max 8x8) */
     if (reduction_size > 8)
@@ -112,6 +112,7 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     size_t sz3 = (size_t)dct_size * reduction_size * sizeof(float); // temp_matrix
     size_t sz4 = (size_t)reduction_size * reduction_size * sizeof(float); // dct_out
 
+    size_t saved_offset = ctx->arena.offset;
     uint8_t *scratch = ph_get_scratchpad(ctx, sz1 + sz2 + sz3 + sz4);
     if (!scratch)
         return PH_ERR_ALLOCATION_FAILED;
@@ -132,7 +133,7 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     }
     dct_out = (float *)((uint8_t *)temp + sz3); // ensure byte math for offset
 
-    ph_resize_box(gray_full, ctx->width, ctx->height, dct_input, dct_size, dct_size);
+    ph_resize_box(gray_full, ctx->image.width, ctx->image.height, dct_input, dct_size, dct_size);
 
     /* First pass: DCT of each row, but only compute first reduction_size columns */
     for (int i = 0; i < dct_size; i++) {
@@ -200,5 +201,6 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     }
 
     *out_hash = hash;
+    ctx->arena.offset = saved_offset;
     return PH_SUCCESS;
 }

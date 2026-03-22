@@ -4,7 +4,7 @@
 #include <string.h>
 
 PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *out_digest) {
-    if (!ctx || !ctx->is_loaded || !out_digest) {
+    if (!ctx || !ctx->image.is_loaded || !out_digest) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 
@@ -16,12 +16,12 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
 
     double mean[PH_COLOR_CHANNELS] = {0}, std_dev[PH_COLOR_CHANNELS] = {0},
            skew[PH_COLOR_CHANNELS] = {0};
-    int num_pixels = ctx->width * ctx->height;
+    int num_pixels = ctx->image.width * ctx->image.height;
 
     /* Step 1: Calculate the Arithmetic Mean */
     for (int i = 0; i < num_pixels; i++) {
         for (int c = 0; c < PH_COLOR_CHANNELS; c++) {
-            uint8_t val = (ctx->channels >= 3) ? ctx->data[i * ctx->channels + c] : ctx->data[i * ctx->channels];
+            uint8_t val = (ctx->image.channels >= 3) ? ctx->image.raw_rgb[i * ctx->image.channels + c] : ctx->image.raw_rgb[i * ctx->image.channels];
             mean[c] += val;
         }
     }
@@ -32,7 +32,7 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
     /* Step 2: Calculate Standard Deviation (2nd moment) and Skewness (3rd moment) */
     for (int i = 0; i < num_pixels; i++) {
         for (int c = 0; c < PH_COLOR_CHANNELS; c++) {
-            uint8_t val = (ctx->channels >= 3) ? ctx->data[i * ctx->channels + c] : ctx->data[i * ctx->channels];
+            uint8_t val = (ctx->image.channels >= 3) ? ctx->image.raw_rgb[i * ctx->image.channels + c] : ctx->image.raw_rgb[i * ctx->image.channels];
             double diff = val - mean[c];
             std_dev[c] += diff * diff;
             skew[c] += diff * diff * diff;

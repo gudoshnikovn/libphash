@@ -6,19 +6,19 @@
 #define MAX3(a, b, c) ((a) > (b) ? ((a) > (c) ? (a) : (c)) : ((b) > (c) ? (b) : (c)))
 
 PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, uint64_t *out_hash) {
-    if (!ctx || !ctx->is_loaded || !out_hash) {
+    if (!ctx || !ctx->image.is_loaded || !out_hash) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 
-    int total_pixels = ctx->width * ctx->height;
+    int total_pixels = ctx->image.width * ctx->image.height;
     int count_black = 0;
     int count_gray = 0;
     int faint_counts[6] = {0};
     int bright_counts[6] = {0};
     int count_colors = 0;
 
-    const uint8_t *src = ctx->data;
-    int channels = ctx->channels;
+    const uint8_t *src = ctx->image.raw_rgb;
+    int channels = ctx->image.channels;
 
     for (int i = 0; i < total_pixels; i++) {
         float r = src[i * channels];

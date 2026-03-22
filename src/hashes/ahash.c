@@ -2,7 +2,7 @@
 #include <stdlib.h>
 
 PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash) {
-    if (!ctx || !ctx->is_loaded || !out_hash) {
+    if (!ctx || !ctx->image.is_loaded || !out_hash) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 
@@ -13,7 +13,7 @@ PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash) {
 
     uint8_t hash_input[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
 
-    ph_resize_box(gray_input, ctx->width, ctx->height, hash_input, PH_CORE_HASH_SIZE,
+    ph_resize_box(gray_input, ctx->image.width, ctx->image.height, hash_input, PH_CORE_HASH_SIZE,
                   PH_CORE_HASH_SIZE);
 
     uint64_t total_sum = 0;

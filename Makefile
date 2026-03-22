@@ -36,7 +36,9 @@ TEST_DIR = tests
 INC_DIR = include
 
 # Sources and Objects
-SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(HASH_DIR)/*.c)
+LOADER_DIR = $(SRC_DIR)/loaders
+IMAGE_DIR = $(SRC_DIR)/image
+SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(HASH_DIR)/*.c) $(wildcard $(LOADER_DIR)/*.c) $(wildcard $(IMAGE_DIR)/*.c)
 OBJS = $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
 # Tests

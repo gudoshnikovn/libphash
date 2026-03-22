@@ -13,7 +13,7 @@ static ph_error_t ph_compute_whash_fast(ph_context_t *ctx, uint64_t *out_hash) {
     if (!full_gray)
         return PH_ERR_ALLOCATION_FAILED;
 
-    ph_resize_box(full_gray, ctx->width, ctx->height, hash_input, image_scale, image_scale);
+    ph_resize_box(full_gray, ctx->image.width, ctx->image.height, hash_input, image_scale, image_scale);
 
     float d[256];
     for (int i = 0; i < 256; i++)
@@ -104,7 +104,7 @@ static void haar_2d_level(float *data, int size, int stride, float *temp_row, fl
 }
 
 static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
-    int min_dim = ctx->width < ctx->height ? ctx->width : ctx->height;
+    int min_dim = ctx->image.width < ctx->image.height ? ctx->image.width : ctx->image.height;
     int log2_min = 0;
     while ((1 << log2_min) <= min_dim)
         log2_min++;
@@ -121,6 +121,7 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
     size_t sz_d = (size_t)image_scale * image_scale * sizeof(float);
     size_t sz_temps = (size_t)image_scale * 2 * sizeof(float);
 
+    size_t saved_offset = ctx->arena.offset;
     uint8_t *scratch_mem = ph_get_scratchpad(ctx, sz_scaled + sz_d + sz_temps);
     if (!scratch_mem)
         return PH_ERR_ALLOCATION_FAILED;
@@ -130,7 +131,7 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
     float *temp_a = (float *)((uint8_t *)d + sz_d);
     float *temp_b = temp_a + image_scale;
 
-    ph_resize_bilinear(full_gray, ctx->width, ctx->height, scaled_img, image_scale, image_scale);
+    ph_resize_bilinear(full_gray, ctx->image.width, ctx->image.height, scaled_img, image_scale, image_scale);
 
     for (int i = 0; i < image_scale; i++) {
         for (int j = 0; j < image_scale; j++) {
@@ -178,14 +179,15 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
         }
     }
     *out_hash = hash;
+    ctx->arena.offset = saved_offset;
     return PH_SUCCESS;
 }
 
 PH_API ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash) {
-    if (!ctx || !ctx->is_loaded || !out_hash)
+    if (!ctx || !ctx->image.is_loaded || !out_hash)
         return PH_ERR_INVALID_ARGUMENT;
 
-    if (ctx->whash_mode == PH_WHASH_FULL) {
+    if (ctx->config.whash_mode == PH_WHASH_FULL) {
         return ph_compute_whash_full(ctx, out_hash);
     } else {
         return ph_compute_whash_fast(ctx, out_hash);

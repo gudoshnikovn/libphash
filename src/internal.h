@@ -75,37 +75,38 @@ void init_dct_matrix(void);
 
 /* Internal Context Structure */
 struct ph_context {
-    uint8_t *data;
-    uint8_t *gray_data;
-    int width;
-    int height;
-    int channels;
-    int is_loaded;
+    // Uploaded image data
+    struct {
+        uint8_t *raw_rgb;
+        uint8_t *gray_cache;
+        int width;
+        int height;
+        int channels;
+        int is_loaded;
+    } image;
 
-    /* Configuration */
-    float gamma;
-    uint8_t gamma_lut[256];
+    // User-defined configuration parameters
+    struct {
+        float gamma;
+        uint8_t gamma_lut[256];
+        int gray_r, gray_g, gray_b;
+        int load_grayscale;
+        
+        // Various tunings for hashes
+        int phash_dct_size;
+        int phash_reduction_size;
+        int radial_projections;
+        int radial_samples;
+        int block_size;
+        ph_whash_mode_t whash_mode;
+    } config;
 
-    int gray_r, gray_g, gray_b;
-
-    /* pHash params */
-    int phash_dct_size;
-    int phash_reduction_size;
-
-    /* Radial params */
-    int radial_projections;
-    int radial_samples;
-
-    /* Block params (BMH, mHash) */
-    int block_size;
-
-    /* Tier 3: Memory Reuse */
-    uint8_t *scratchpad;
-    size_t scratchpad_size;
-
-    /* Optimization Flags */
-    int load_grayscale;
-    ph_whash_mode_t whash_mode;
+    // System data of the allocator (Arena)
+    struct {
+        uint8_t *buffer;
+        size_t capacity;
+        size_t offset;
+    } arena;
 };
 
 /* Ensures the context's scratchpad is at least 'size' bytes.

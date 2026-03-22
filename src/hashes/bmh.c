@@ -3,11 +3,11 @@
 #include <string.h>
 
 PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
-    if (!ctx || !ctx->is_loaded || !out_digest) {
+    if (!ctx || !ctx->image.is_loaded || !out_digest) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 
-    int block_size = ctx->block_size;
+    int block_size = ctx->config.block_size;
     int total_pixels = block_size * block_size;
 
     memset(out_digest, 0, sizeof(ph_digest_t));
@@ -22,11 +22,12 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     if (!full_gray)
         return PH_ERR_ALLOCATION_FAILED;
 
+    size_t saved_offset = ctx->arena.offset;
     uint8_t *block_data = ph_get_scratchpad(ctx, total_pixels);
     if (!block_data)
         return PH_ERR_ALLOCATION_FAILED;
 
-    ph_resize_box(full_gray, ctx->width, ctx->height, block_data, block_size, block_size);
+    ph_resize_box(full_gray, ctx->image.width, ctx->image.height, block_data, block_size, block_size);
 
     uint64_t total_sum = 0;
     for (int i = 0; i < total_pixels; i++) {
@@ -41,5 +42,6 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
         }
     }
 
+    ctx->arena.offset = saved_offset;
     return PH_SUCCESS;
 }
