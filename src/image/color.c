@@ -19,7 +19,8 @@ uint8_t *ph_get_gray(ph_context_t *ctx) {
         }
         ctx->image.gray_cache = malloc(ctx->image.width * ctx->image.height);
         if (ctx->image.gray_cache) {
-            ph_to_grayscale(ctx, ctx->image.raw_rgb, ctx->image.width, ctx->image.height, ctx->image.channels, ctx->image.gray_cache);
+            ph_to_grayscale(ctx, ctx->image.raw_rgb, ctx->image.width, ctx->image.height,
+                            ctx->image.channels, ctx->image.gray_cache);
         }
     }
     return ctx->image.gray_cache;

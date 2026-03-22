@@ -17,7 +17,8 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, uint64_t *out_hash) {
         return PH_ERR_ALLOCATION_FAILED;
     uint8_t *block_data = scratch;
 
-    ph_resize_box(full_gray, ctx->image.width, ctx->image.height, block_data, scale_size, scale_size);
+    ph_resize_box(full_gray, ctx->image.width, ctx->image.height, block_data, scale_size,
+                  scale_size);
 
     // 2. Simple 3x3 Laplacian Kernel for edge detection
     uint64_t hash = 0;

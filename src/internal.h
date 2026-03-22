@@ -91,7 +91,7 @@ struct ph_context {
         uint8_t gamma_lut[256];
         int gray_r, gray_g, gray_b;
         int load_grayscale;
-        
+
         // Various tunings for hashes
         int phash_dct_size;
         int phash_reduction_size;

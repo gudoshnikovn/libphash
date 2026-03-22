@@ -5,9 +5,9 @@
 
 #if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
 int ph_can_read_png(const uint8_t *magic, size_t len) {
-    return (len >= 8 && magic[0] == 0x89 && magic[1] == 0x50 &&
-            magic[2] == 0x4E && magic[3] == 0x47 && magic[4] == 0x0D && magic[5] == 0x0A &&
-            magic[6] == 0x1A && magic[7] == 0x0A);
+    return (len >= 8 && magic[0] == 0x89 && magic[1] == 0x50 && magic[2] == 0x4E &&
+            magic[3] == 0x47 && magic[4] == 0x0D && magic[5] == 0x0A && magic[6] == 0x1A &&
+            magic[7] == 0x0A);
 }
 #endif
 

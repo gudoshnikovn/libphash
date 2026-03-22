@@ -5,15 +5,16 @@ static void haar_1d_float_dyn(float *data, int n, float *temp);
 
 static ph_error_t ph_compute_whash_fast(ph_context_t *ctx, uint64_t *out_hash) {
     int hash_size = PH_CORE_HASH_SIZE;
-    int image_scale = hash_size * 2; // 16
+    int image_scale = hash_size * 2;          // 16
     int total_pixels = hash_size * hash_size; // 64
-    uint8_t hash_input[256]; // image_scale * image_scale
+    uint8_t hash_input[256];                  // image_scale * image_scale
 
     uint8_t *full_gray = ph_get_gray(ctx);
     if (!full_gray)
         return PH_ERR_ALLOCATION_FAILED;
 
-    ph_resize_box(full_gray, ctx->image.width, ctx->image.height, hash_input, image_scale, image_scale);
+    ph_resize_box(full_gray, ctx->image.width, ctx->image.height, hash_input, image_scale,
+                  image_scale);
 
     float d[256];
     for (int i = 0; i < 256; i++)
@@ -131,7 +132,8 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
     float *temp_a = (float *)((uint8_t *)d + sz_d);
     float *temp_b = temp_a + image_scale;
 
-    ph_resize_bilinear(full_gray, ctx->image.width, ctx->image.height, scaled_img, image_scale, image_scale);
+    ph_resize_bilinear(full_gray, ctx->image.width, ctx->image.height, scaled_img, image_scale,
+                       image_scale);
 
     for (int i = 0; i < image_scale; i++) {
         for (int j = 0; j < image_scale; j++) {

@@ -18,20 +18,20 @@ PH_API const char *ph_version(void) { return "1.9.0"; }
 
 PH_API const char *ph_get_error_string(ph_error_t err) {
     switch (err) {
-    case PH_SUCCESS:
-        return "Success";
-    case PH_ERR_ALLOCATION_FAILED:
-        return "Memory allocation failed";
-    case PH_ERR_DECODE_FAILED:
-        return "Image decoding failed";
-    case PH_ERR_INVALID_ARGUMENT:
-        return "Invalid argument";
-    case PH_ERR_NOT_IMPLEMENTED:
-        return "Not implemented";
-    case PH_ERR_EMPTY_IMAGE:
-        return "Empty image (no image loaded)";
-    default:
-        return "Unknown error";
+        case PH_SUCCESS:
+            return "Success";
+        case PH_ERR_ALLOCATION_FAILED:
+            return "Memory allocation failed";
+        case PH_ERR_DECODE_FAILED:
+            return "Image decoding failed";
+        case PH_ERR_INVALID_ARGUMENT:
+            return "Invalid argument";
+        case PH_ERR_NOT_IMPLEMENTED:
+            return "Not implemented";
+        case PH_ERR_EMPTY_IMAGE:
+            return "Empty image (no image loaded)";
+        default:
+            return "Unknown error";
     }
 }
 
@@ -79,7 +79,7 @@ PH_API void ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, int b) 
     ctx->config.gray_r = (r * 128) / sum;
     ctx->config.gray_g = (g * 128) / sum;
     ctx->config.gray_b = 128 - ctx->config.gray_r - ctx->config.gray_g;
-    
+
     if (ctx->image.gray_cache) {
         free(ctx->image.gray_cache);
         ctx->image.gray_cache = NULL;
@@ -180,7 +180,8 @@ uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size) {
     if (ctx->arena.capacity < required) {
         // Grow by more than required to avoid frequent reallocs
         size_t new_size = required > ctx->arena.capacity * 2 ? required : ctx->arena.capacity * 2;
-        if (new_size < 1024) new_size = 1024;
+        if (new_size < 1024)
+            new_size = 1024;
 
         uint8_t *new_ptr = (uint8_t *)realloc(ctx->arena.buffer, new_size);
         if (!new_ptr)
@@ -205,7 +206,8 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
         ctx->image.gray_cache = NULL;
     }
 
-#if defined(PH_USE_TURBOJPEG) || defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG) || defined(PH_USE_WEBP)
+#if defined(PH_USE_TURBOJPEG) || defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG) ||                 \
+    defined(PH_USE_WEBP)
     // mmap the file for zero-copy decoding with bundled static decoders
     int fd = open(filepath, O_RDONLY);
     if (fd >= 0) {
@@ -216,11 +218,12 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
                 const unsigned char *data = (const unsigned char *)mapped;
                 int req_comp_opt = ctx->config.load_grayscale ? 1 : 0;
                 int w, h, ch;
-                uint8_t *decoded_data = ph_decode_buffer(data, (size_t)st.st_size, &w, &h, &ch, req_comp_opt);
-                
+                uint8_t *decoded_data =
+                    ph_decode_buffer(data, (size_t)st.st_size, &w, &h, &ch, req_comp_opt);
+
                 munmap(mapped, st.st_size);
                 close(fd);
-                
+
                 if (decoded_data) {
                     ctx->image.raw_rgb = decoded_data;
                     ctx->image.width = w;
@@ -239,7 +242,8 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
 #endif // PH_USE_TURBOJPEG || PH_USE_LIBPNG || PH_USE_SPNG || PH_USE_WEBP
 
     int req_comp = ctx->config.load_grayscale ? 1 : 0;
-    ctx->image.raw_rgb = stbi_load(filepath, &ctx->image.width, &ctx->image.height, &ctx->image.channels, req_comp);
+    ctx->image.raw_rgb =
+        stbi_load(filepath, &ctx->image.width, &ctx->image.height, &ctx->image.channels, req_comp);
     if (!ctx->image.raw_rgb)
         return PH_ERR_DECODE_FAILED;
 
@@ -263,7 +267,7 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
     }
 
     int req_comp = ctx->config.load_grayscale ? 1 : 0;
-    
+
     // Try unified decoder first
     int w, h, ch;
     uint8_t *decoded_data = ph_decode_buffer(buffer, length, &w, &h, &ch, req_comp);
@@ -276,8 +280,8 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
         return PH_SUCCESS;
     }
 
-    ctx->image.raw_rgb = stbi_load_from_memory(buffer, (int)length, &ctx->image.width, &ctx->image.height,
-                                      &ctx->image.channels, req_comp);
+    ctx->image.raw_rgb = stbi_load_from_memory(buffer, (int)length, &ctx->image.width,
+                                               &ctx->image.height, &ctx->image.channels, req_comp);
     if (!ctx->image.raw_rgb)
         return PH_ERR_DECODE_FAILED;
 

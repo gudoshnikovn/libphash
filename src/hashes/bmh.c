@@ -27,7 +27,8 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     if (!block_data)
         return PH_ERR_ALLOCATION_FAILED;
 
-    ph_resize_box(full_gray, ctx->image.width, ctx->image.height, block_data, block_size, block_size);
+    ph_resize_box(full_gray, ctx->image.width, ctx->image.height, block_data, block_size,
+                  block_size);
 
     uint64_t total_sum = 0;
     for (int i = 0; i < total_pixels; i++) {
