@@ -38,7 +38,13 @@ This document explains the mathematical foundations and tuning parameters of the
   - `Color Moments` (`ph_compute_color_moments_hash`): Comprehensive statistical digest capturing invariant spatial color statistics.
 - **Use Case**: Detecting identical geometric shapes layered with diverse color grading (e.g., recolored product photography).
 
----
+## 8. Radial Hash
+- **Concept**: Rotationally invariant spatial sampling that captures the distribution of variance along angular projections.
+- **Tuning**:
+    - `radial_projections`: Number of angular slices (default 40).
+    - `radial_samples`: Number of radial samples per projection (default 128).
+- **Strength**: Unmatched robustness against rotation (up to 360°) and flipping.
+- **Use Case**: Applications where image orientation is unpredictable (e.g., user-uploaded photos, satellite imagery).
 
 ## Comparison Summary
 

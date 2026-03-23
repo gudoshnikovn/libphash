@@ -46,6 +46,9 @@ Used for performance regression testing. Run with:
 ## Adding New Features
 
 1.  **Header**: Add the public signature to `include/libphash.h`.
-2.  **Implementation**: Add the source file to `src/` or `src/hashes/`.
-3.  **Build**: `Makefile` and `CMakeLists.txt` use wildcards, so new files are detected automatically.
-4.  **Documentation**: Update `docs/algorithms.md` and the function comments in the header (Doxygen style).
+2.  **Implementation**: 
+    - Add hash algorithms to `src/hashes/`.
+    - Add image processing kernels to `src/image/`.
+    - Add new decoders to `src/loaders/`.
+3.  **Build**: `Makefile` and `CMakeLists.txt` are configured to detect new files in these directories automatically.
+4.  **Documentation**: Update `docs/algorithms.md` or `docs/architecture.md` and the function comments in the header (Doxygen style).

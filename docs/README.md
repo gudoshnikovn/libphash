@@ -17,12 +17,12 @@ Welcome to the internal technical documentation for `libphash`. This directory c
 
 ```bash
 # Using standard Makefile
-make -j$(sysctl -n hw.ncpu)
+make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
 make test
 
 # Using CMake (recommended for cross-platform)
-mkdir build && cd build
+mkdir -p build && cd build
 cmake ..
-make -j8
+make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
 ctest
 ```
