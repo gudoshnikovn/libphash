@@ -8,7 +8,7 @@ obj/
 
 # Executables (Tests)
 test_*
-!tests/test_*.c
+!tests/**/test_*.c
 
 # IDEs and Editors
 .vscode/

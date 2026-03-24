@@ -114,7 +114,7 @@ endif()
 # --- Tests ---
 if(PHASH_BUILD_TESTS)
     enable_testing()
-    file(GLOB TEST_SOURCES "tests/src/test_*.c")
+    file(GLOB TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/tests/src/test_*.c")
     foreach(test_src ${TEST_SOURCES})
         get_filename_component(test_name ${test_src} NAME_WE)
         add_executable(${test_name} ${test_src})
