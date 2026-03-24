@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake clang libpng-dev libjpeg-dev libwebp-dev zlib1g-dev
+
+    - name: Configure CMake
+      run: cmake -B build -DPHASH_BUILD_TESTS=ON
+
+    - name: Build
+      run: cmake --build build --config Release
+
+    - name: Run Tests
+      run: cd build && ctest --output-on-failure
+
+  benchmark:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout PR branch
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        path: pr
+
+    - name: Checkout Base branch
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.base_ref }}
+        submodules: recursive
+        path: base
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake libpng-dev libjpeg-dev libwebp-dev zlib1g-dev
+
+    - name: Build Base
+      run: |
+        cd base
+        # Hack: copy the new benchmark tool from PR so it can be built with the old library
+        cp ../pr/tests/test_benchmark.c tests/test_benchmark.c
+        cmake -B build -DPHASH_BUILD_TESTS=ON
+        cmake --build build --config Release
+
+    - name: Build PR
+      run: |
+        cd pr
+        cmake -B build -DPHASH_BUILD_TESTS=ON
+        cmake --build build --config Release
+
+    - name: Run Benchmarks (Base)
+      run: |
+        cd base/build
+        ./test_benchmark --json smoke > ../../base_bench.json
+
+    - name: Run Benchmarks (PR)
+      run: |
+        cd pr/build
+        ./test_benchmark --json smoke > ../../pr_bench.json
+
+    - name: Compare Benchmarks
+      run: |
+        python3 pr/scripts/compare_benchmarks.py base_bench.json pr_bench.json > benchmark_report.md
+        cat benchmark_report.md >> $GITHUB_STEP_SUMMARY
+
+    - name: Post Performance Report
+      uses: thollander/actions-comment-pull-request@v2
+      with:
+        filePath: benchmark_report.md
+        comment_tag: performance_report

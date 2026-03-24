@@ -32,8 +32,12 @@ LIB_NAME = libphash.a
 OBJ_DIR = obj
 SRC_DIR = src
 HASH_DIR = $(SRC_DIR)/hashes
-TEST_DIR = tests
+TEST_DIR = tests/src
 INC_DIR = include
+
+# CFLAGS updates
+CFLAGS += -I./$(TEST_DIR)
+CFLAGS += -DTEST_DATA_DIR=\"$(shell pwd)/tests/data\"
 
 # Sources and Objects
 LOADER_DIR = $(SRC_DIR)/loaders
@@ -79,7 +83,7 @@ test: $(TEST_BINS)
 
 # Legacy/Standalone benchmark target (internal use)
 benchmark: test_benchmark
-	./test_benchmark hash tests/photo.jpeg 100
+	./test_benchmark hash tests/data/photo.jpeg 100
 
 clean:
 	rm -rf $(OBJ_DIR) *.a test_* benchmark

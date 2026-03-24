@@ -114,15 +114,22 @@ endif()
 # --- Tests ---
 if(PHASH_BUILD_TESTS)
     enable_testing()
-    file(GLOB TEST_SOURCES "tests/test_*.c")
+    file(GLOB TEST_SOURCES "tests/src/test_*.c")
     foreach(test_src ${TEST_SOURCES})
         get_filename_component(test_name ${test_src} NAME_WE)
         add_executable(${test_name} ${test_src})
         target_link_libraries(${test_name} PRIVATE phash)
-        target_include_directories(${test_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+        target_include_directories(${test_name} PRIVATE 
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/src
+        )
+        # Define TEST_DATA_DIR so tests can find images
+        target_compile_definitions(${test_name} PRIVATE 
+            TEST_DATA_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/data\"
+        )
         add_test(NAME ${test_name} COMMAND ${test_name})
     endforeach()
 
     # Add benchmark as a smoke test (verifies loading and hashing works)
-    add_test(NAME benchmark_smoke COMMAND test_benchmark hash ${CMAKE_CURRENT_SOURCE_DIR}/tests/photo.jpeg 10)
+    add_test(NAME benchmark_smoke COMMAND test_benchmark hash ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/photo.jpeg 10)
 endif()
