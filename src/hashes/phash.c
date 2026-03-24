@@ -112,8 +112,8 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
      */
     bool use_cache = (dct_size == 32);
 
-    size_t sz1 = (size_t)dct_size * dct_size;           // dct_input
-    size_t sz2 = use_cache ? 0 : (sz1 * sizeof(float)); // dct_mat (if not cached)
+    size_t sz1 = (size_t)dct_size * dct_size;                             // dct_input
+    size_t sz2 = use_cache ? 0 : (sz1 * sizeof(float));                   // dct_mat (if not cached)
     size_t sz3 = (size_t)reduction_size * reduction_size * sizeof(float); // dct_out
 
     size_t saved_offset = ctx->arena.offset;

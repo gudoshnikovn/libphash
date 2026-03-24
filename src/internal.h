@@ -47,12 +47,7 @@ void ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size, i
 
 uint64_t ph_median_bitpack(const float *values, int n);
 
-typedef enum {
-    PH_HSV_BLACK = 0,
-    PH_HSV_GRAY,
-    PH_HSV_FAINT,
-    PH_HSV_BRIGHT
-} ph_hsv_category_t;
+typedef enum { PH_HSV_BLACK = 0, PH_HSV_GRAY, PH_HSV_FAINT, PH_HSV_BRIGHT } ph_hsv_category_t;
 
 typedef struct {
     ph_hsv_category_t category;

@@ -89,7 +89,7 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     double centerX = (double)ctx->image.width / 2.0;
     double centerY = (double)ctx->image.height / 2.0;
     double min_side = (ctx->image.width < ctx->image.height) ? (double)ctx->image.width
-                                                            : (double)ctx->image.height;
+                                                             : (double)ctx->image.height;
     double max_radius = min_side / 2.0;
     double max_variance = 0.0;
 
@@ -98,9 +98,9 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
         double cos_t = cos(theta);
         double sin_t = sin(theta);
 
-        projection_variances[i] = ph_projection_variance(blurred, ctx->image.width, ctx->image.height,
-                                                         centerX, centerY, max_radius, cos_t,
-                                                         sin_t, samples);
+        projection_variances[i] =
+            ph_projection_variance(blurred, ctx->image.width, ctx->image.height, centerX, centerY,
+                                   max_radius, cos_t, sin_t, samples);
 
         if (projection_variances[i] > max_variance)
             max_variance = projection_variances[i];
