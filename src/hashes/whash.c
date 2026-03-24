@@ -1,12 +1,44 @@
 #include "../internal.h"
 #include <stdlib.h>
 
-static void haar_1d_float_dyn(float *data, int n, float *temp);
+void ph_haar_1d_float(float *data, int n, float *temp) {
+    int h = n / 2;
+    float inv_haar = (float)(1.0 / PH_HAAR_SCALE);
+    for (int i = 0; i < h; i++) {
+        temp[i] = (data[2 * i] + data[2 * i + 1]) * inv_haar;
+        temp[i + h] = (data[2 * i] - data[2 * i + 1]) * inv_haar;
+    }
+    for (int i = 0; i < n; i++)
+        data[i] = temp[i];
+}
+
+void ph_haar_2d_level(float *data, int size, int stride, float *temp_row, float *temp_col) {
+    /* Horizontal passes */
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
+            temp_row[j] = data[i * stride + j];
+        }
+        ph_haar_1d_float(temp_row, size, temp_col);
+        for (int j = 0; j < size; j++) {
+            data[i * stride + j] = temp_row[j];
+        }
+    }
+
+    /* Vertical passes */
+    for (int j = 0; j < size; j++) {
+        for (int i = 0; i < size; i++) {
+            temp_col[i] = data[i * stride + j];
+        }
+        ph_haar_1d_float(temp_col, size, temp_row);
+        for (int i = 0; i < size; i++) {
+            data[i * stride + j] = temp_col[i];
+        }
+    }
+}
 
 static ph_error_t ph_compute_whash_fast(ph_context_t *ctx, uint64_t *out_hash) {
     int hash_size = PH_CORE_HASH_SIZE;
     int image_scale = hash_size * 2;          // 16
-    int total_pixels = hash_size * hash_size; // 64
     uint8_t hash_input[256];                  // image_scale * image_scale
 
     uint8_t *full_gray = ph_get_gray(ctx);
@@ -23,14 +55,14 @@ static ph_error_t ph_compute_whash_fast(ph_context_t *ctx, uint64_t *out_hash) {
     float temp_haar[16];
     /* Horizontal passes */
     for (int i = 0; i < image_scale; i++)
-        haar_1d_float_dyn(&d[i * image_scale], image_scale, temp_haar);
+        ph_haar_1d_float(&d[i * image_scale], image_scale, temp_haar);
 
     /* Vertical passes */
     for (int j = 0; j < image_scale; j++) {
         float col[16];
         for (int i = 0; i < image_scale; i++)
             col[i] = d[i * image_scale + j];
-        haar_1d_float_dyn(col, image_scale, temp_haar);
+        ph_haar_1d_float(col, image_scale, temp_haar);
         for (int i = 0; i < image_scale; i++)
             d[i * image_scale + j] = col[i];
     }
@@ -43,65 +75,8 @@ static ph_error_t ph_compute_whash_fast(ph_context_t *ctx, uint64_t *out_hash) {
         }
     }
 
-    /* Copy to sortable array for median */
-    float sorted[64];
-    for (int i = 0; i < total_pixels; i++) {
-        sorted[i] = ll_band[i];
-    }
-
-    /* Simple insertion sort for 64 elements */
-    for (int i = 1; i < total_pixels; i++) {
-        float key = sorted[i];
-        int j = i - 1;
-        while (j >= 0 && sorted[j] > key) {
-            sorted[j + 1] = sorted[j];
-            j = j - 1;
-        }
-        sorted[j + 1] = key;
-    }
-    float median = sorted[total_pixels / 2];
-
-    uint64_t hash = 0;
-    for (int i = 0; i < total_pixels; i++)
-        if (ll_band[i] > median)
-            hash |= (1ULL << i);
-    *out_hash = hash;
+    *out_hash = ph_median_bitpack(ll_band, 64);
     return PH_SUCCESS;
-}
-
-static void haar_1d_float_dyn(float *data, int n, float *temp) {
-    int h = n / 2;
-    float inv_haar = (float)(1.0 / PH_HAAR_SCALE);
-    for (int i = 0; i < h; i++) {
-        temp[i] = (data[2 * i] + data[2 * i + 1]) * inv_haar;
-        temp[i + h] = (data[2 * i] - data[2 * i + 1]) * inv_haar;
-    }
-    for (int i = 0; i < n; i++)
-        data[i] = temp[i];
-}
-
-static void haar_2d_level(float *data, int size, int stride, float *temp_row, float *temp_col) {
-    /* Horizontal passes */
-    for (int i = 0; i < size; i++) {
-        for (int j = 0; j < size; j++) {
-            temp_row[j] = data[i * stride + j];
-        }
-        haar_1d_float_dyn(temp_row, size, temp_col);
-        for (int j = 0; j < size; j++) {
-            data[i * stride + j] = temp_row[j];
-        }
-    }
-
-    /* Vertical passes */
-    for (int j = 0; j < size; j++) {
-        for (int i = 0; i < size; i++) {
-            temp_col[i] = data[i * stride + j];
-        }
-        haar_1d_float_dyn(temp_col, size, temp_row);
-        for (int i = 0; i < size; i++) {
-            data[i * stride + j] = temp_col[i];
-        }
-    }
 }
 
 static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
@@ -144,7 +119,7 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
     int current_size = image_scale;
     // DWT cascade down to 8x8. We just call it on the top-left quadrant over and over.
     while (current_size > PH_CORE_HASH_SIZE) {
-        haar_2d_level(d, current_size, image_scale, temp_a, temp_b);
+        ph_haar_2d_level(d, current_size, image_scale, temp_a, temp_b);
         current_size /= 2;
     }
 
@@ -156,31 +131,7 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
         }
     }
 
-    int total_pixels = PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE;
-
-    // Sort and calculate median
-    float sorted[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
-    for (int i = 0; i < total_pixels; i++) {
-        sorted[i] = ll_band[i];
-    }
-    for (int i = 1; i < total_pixels; i++) {
-        float key = sorted[i];
-        int j = i - 1;
-        while (j >= 0 && sorted[j] > key) {
-            sorted[j + 1] = sorted[j];
-            j--;
-        }
-        sorted[j + 1] = key;
-    }
-    float median = sorted[total_pixels / 2];
-
-    uint64_t hash = 0;
-    for (int i = 0; i < total_pixels; i++) {
-        if (ll_band[i] > median) {
-            hash |= (1ULL << i);
-        }
-    }
-    *out_hash = hash;
+    *out_hash = ph_median_bitpack(ll_band, 64);
     ctx->arena.offset = saved_offset;
     return PH_SUCCESS;
 }

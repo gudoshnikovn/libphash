@@ -22,7 +22,7 @@ static float s_dct_matrix_32[32 * 32];
 static atomic_flag s_dct_32_lock = ATOMIC_FLAG_INIT;
 static atomic_bool s_dct_32_init = false;
 
-static void ensure_dct_32_initialized(void) {
+void init_dct_matrix(void) {
     if (atomic_load(&s_dct_32_init))
         return;
 
@@ -36,6 +36,11 @@ static void ensure_dct_32_initialized(void) {
     }
 
     atomic_flag_clear(&s_dct_32_lock);
+}
+
+const float *ph_get_dct_matrix_32(void) {
+    init_dct_matrix();
+    return s_dct_matrix_32;
 }
 
 // --- NEON Helpers ---
@@ -107,51 +112,63 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
      */
     bool use_cache = (dct_size == 32);
 
-    size_t sz1 = (size_t)dct_size * dct_size;                             // dct_input
-    size_t sz2 = use_cache ? 0 : (sz1 * sizeof(float));                   // dct_mat (if not cached)
-    size_t sz3 = (size_t)dct_size * reduction_size * sizeof(float);       // temp_matrix
-    size_t sz4 = (size_t)reduction_size * reduction_size * sizeof(float); // dct_out
+    size_t sz1 = (size_t)dct_size * dct_size;           // dct_input
+    size_t sz2 = use_cache ? 0 : (sz1 * sizeof(float)); // dct_mat (if not cached)
+    size_t sz3 = (size_t)reduction_size * reduction_size * sizeof(float); // dct_out
 
     size_t saved_offset = ctx->arena.offset;
-    uint8_t *scratch = ph_get_scratchpad(ctx, sz1 + sz2 + sz3 + sz4);
+    uint8_t *scratch = ph_get_scratchpad(ctx, sz1 + sz2 + sz3);
     if (!scratch)
         return PH_ERR_ALLOCATION_FAILED;
 
     uint8_t *dct_input = scratch;
     float *dct_mat;
-    float *temp;
     float *dct_out;
 
     if (use_cache) {
-        ensure_dct_32_initialized();
+        init_dct_matrix();
         dct_mat = s_dct_matrix_32;
-        temp = (float *)(scratch + sz1);
+        dct_out = (float *)(scratch + sz1);
     } else {
         dct_mat = (float *)(scratch + sz1);
-        temp = (float *)(scratch + sz1 + sz2);
+        dct_out = (float *)((uint8_t *)dct_mat + sz2);
         compute_dct_coefficients(dct_mat, dct_size);
     }
-    dct_out = (float *)((uint8_t *)temp + sz3); // ensure byte math for offset
 
     ph_resize_box(gray_full, ctx->image.width, ctx->image.height, dct_input, dct_size, dct_size);
+
+    ph_dct2_partial(dct_mat, dct_input, dct_size, reduction_size, dct_out);
+
+    *out_hash = ph_median_bitpack(dct_out, reduction_size * reduction_size);
+
+    ctx->arena.offset = saved_offset;
+    return PH_SUCCESS;
+}
+
+void ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size, int reduction_size,
+                     float *out) {
+    // Temporary matrix for first pass: dct_size rows, reduction_size columns
+    float temp[32 * 8]; // max dct_size=32, reduction_size=8
+    if (dct_size > 32 || reduction_size > 8) {
+        // Fallback for unexpected sizes (though in phash they are capped)
+        return;
+    }
 
     /* First pass: DCT of each row, but only compute first reduction_size columns */
     for (int i = 0; i < dct_size; i++) {
         for (int j = 0; j < reduction_size; j++) {
-            float sum;
-            float *coeffs = &dct_mat[j * dct_size];
-            uint8_t *in = &dct_input[i * dct_size];
+            float sum = 0;
+            const float *coeffs = &dct_mat[j * dct_size];
+            const uint8_t *in = &input[i * dct_size];
 
 #if defined(__ARM_NEON)
-            if (use_cache) { // We know N=32, aligned-ish
-                sum = dot_product_f32_u8_neon(coeffs, in, dct_size);
+            if (dct_size == 32) {
+                sum = dot_product_f32_u8_neon(coeffs, in, 32);
             } else {
-                sum = 0;
                 for (int k = 0; k < dct_size; k++)
                     sum += coeffs[k] * in[k];
             }
 #else
-            sum = 0;
             for (int k = 0; k < dct_size; k++)
                 sum += coeffs[k] * in[k];
 #endif
@@ -163,24 +180,26 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     for (int j = 0; j < reduction_size; j++) {
         for (int i = 0; i < reduction_size; i++) {
             float sum = 0;
-            // coeffs row = i, variable k
-            // temp col = j, variable k (temp is row-major: k * reduction_size + j)
-            // Strided access in temp (stride 8) makes SIMD gather expensive.
-            // Since the problem size here is small (8x8 output), scalar loop is sufficient.
-            for (int k = 0; k < dct_size; k++)
+            for (int k = 0; k < dct_size; k++) {
+                // temp col = j, variable k (temp is row-major: k * reduction_size + j)
                 sum += dct_mat[i * dct_size + k] * temp[k * reduction_size + j];
-            dct_out[i * reduction_size + j] = sum;
+            }
+            out[i * reduction_size + j] = sum;
         }
     }
+}
 
-    int total_elements = reduction_size * reduction_size;
-    float sorted[64]; // max reduction_size is 8, so 8x8=64
-    for (int i = 0; i < total_elements; i++) {
-        sorted[i] = dct_out[i];
+uint64_t ph_median_bitpack(const float *values, int n) {
+    if (n <= 0 || n > 64)
+        return 0;
+
+    float sorted[64];
+    for (int i = 0; i < n; i++) {
+        sorted[i] = values[i];
     }
 
-    // Sort to find median
-    for (int i = 1; i < total_elements; i++) {
+    // Sort to find median (insertion sort)
+    for (int i = 1; i < n; i++) {
         float key = sorted[i];
         int j = i - 1;
         while (j >= 0 && sorted[j] > key) {
@@ -189,18 +208,15 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
         }
         sorted[j + 1] = key;
     }
-    float median = sorted[total_elements / 2];
+
+    float median = sorted[n / 2];
 
     uint64_t hash = 0;
-    for (int i = 0; i < reduction_size; i++) {
-        for (int j = 0; j < reduction_size; j++) {
-            if (dct_out[i * reduction_size + j] > median) {
-                hash |= (1ULL << (i * reduction_size + j));
-            }
+    for (int i = 0; i < n; i++) {
+        if (values[i] > median) {
+            hash |= (1ULL << i);
         }
     }
 
-    *out_hash = hash;
-    ctx->arena.offset = saved_offset;
-    return PH_SUCCESS;
+    return hash;
 }
