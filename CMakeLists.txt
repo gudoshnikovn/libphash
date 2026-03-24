@@ -45,19 +45,19 @@ endif()
 
 # --- Bundled libjpeg-turbo (TurboJPEG API) ---
 if(PHASH_USE_TURBOJPEG)
-    target_compile_definitions(phash PRIVATE PH_USE_TURBOJPEG)
     # libjpeg-turbo doesn't like add_subdirectory, so we point to pre-built lib
     find_library(TURBOJPEG_LIB NAMES turbojpeg turbojpeg-static
                  PATHS ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build)
     if(TURBOJPEG_LIB)
+        target_compile_definitions(phash PRIVATE PH_USE_TURBOJPEG)
         target_link_libraries(phash PRIVATE ${TURBOJPEG_LIB})
+        target_include_directories(phash PRIVATE 
+            ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build
+        )
     else()
-        message(WARNING "libturbojpeg.a not found in vendor/libjpeg-turbo/build. Please build it first.")
+        message(WARNING "libturbojpeg.a not found in vendor/libjpeg-turbo/build. Falling back to stb_image.")
     endif()
-    target_include_directories(phash PRIVATE 
-        ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build
-    )
 endif()
 
 # --- Bundled libpng ---

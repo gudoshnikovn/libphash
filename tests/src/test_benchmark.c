@@ -80,7 +80,9 @@ void benchmark_hashing(ph_context_t *ctx, int iterations) {
 
     start = get_time_sec();
     for (int i = 0; i < radial_iters; i++) {
-        (void)ph_compute_radial_hash(ctx, &digest);
+        if (ph_compute_radial_hash(ctx, &digest) != PH_SUCCESS) {
+            /* ignore for benchmark */
+        }
     }
     end = get_time_sec();
     total = end - start;
@@ -166,7 +168,9 @@ void benchmark_loading(const char *img, int iterations, int grayscale) {
         ph_context_t *ctx;
         if (ph_create(&ctx) == PH_SUCCESS) {
             ph_context_set_load_grayscale(ctx, grayscale);
-            (void)ph_load_from_file(ctx, img);
+            if (ph_load_from_file(ctx, img) == PH_SUCCESS) {
+                /* ignore for benchmark */
+            }
             ph_free(ctx);
         }
     }
@@ -251,7 +255,9 @@ int main(int argc, char **argv) {
         for (int i = 0; i < iters; i++) {
             if (ph_load_from_file(ctx, img) == PH_SUCCESS) {
                 uint64_t hash;
-                (void)ph_compute_phash(ctx, &hash);
+                if (ph_compute_phash(ctx, &hash) == PH_SUCCESS) {
+                    /* ignore for benchmark */
+                }
             }
         }
         double end = get_time_sec();

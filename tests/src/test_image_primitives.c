@@ -13,8 +13,8 @@
  * All tests use hand-crafted pixel arrays — no image files needed.
  */
 
-#include "libphash.h"
 #include "internal.h"
+#include "libphash.h"
 #include "test_macros.h"
 #include <math.h>
 #include <stdint.h>

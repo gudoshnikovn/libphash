@@ -1,5 +1,5 @@
-#include "libphash.h"
 #include "internal.h"
+#include "libphash.h"
 #include "test_macros.h"
 #include <stdio.h>
 #include <string.h>

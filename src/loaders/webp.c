@@ -15,6 +15,7 @@ int ph_can_read_webp(const uint8_t *magic, size_t len) {
 
 unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long size, int *width,
                                   int *height, int *channels, int req_comp) {
+    (void)req_comp;
     if (!buffer || size < 12)
         return NULL;
 

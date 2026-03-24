@@ -1,5 +1,5 @@
-#include "libphash.h"
 #include "internal.h" // For access to internal fields (gray_data)
+#include "libphash.h"
 #include "test_macros.h"
 #include <string.h>
 
