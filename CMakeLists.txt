@@ -127,9 +127,9 @@ if(PHASH_BUILD_TESTS)
         target_compile_definitions(${test_name} PRIVATE 
             TEST_DATA_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/data\"
         )
-        add_test(NAME ${test_name} COMMAND ${test_name})
+        add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
     endforeach()
 
     # Add benchmark as a smoke test (verifies loading and hashing works)
-    add_test(NAME benchmark_smoke COMMAND test_benchmark hash ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/photo.jpeg 10)
+    add_test(NAME benchmark_smoke COMMAND $<TARGET_FILE:test_benchmark> hash ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/photo.jpeg 10)
 endif()

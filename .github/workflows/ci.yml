@@ -54,7 +54,11 @@ jobs:
       run: |
         cd base
         # Hack: copy the new benchmark tool from PR so it can be built with the old library
-        cp ../pr/tests/test_benchmark.c tests/test_benchmark.c
+        if [ -d "tests/src" ]; then
+          cp ../pr/tests/src/test_benchmark.c tests/src/test_benchmark.c
+        else
+          cp ../pr/tests/src/test_benchmark.c tests/test_benchmark.c
+        fi
         cmake -B build -DPHASH_BUILD_TESTS=ON
         cmake --build build --config Release
 
