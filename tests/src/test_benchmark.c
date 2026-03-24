@@ -1,5 +1,4 @@
-#include "../../include/libphash.h"
-#include "test_macros.h"
+#include "libphash.h"
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>

@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 project(libphash VERSION 1.9.0 LANGUAGES C)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # --- Options ---
 option(PHASH_BUILD_TESTS "Build tests" ON)

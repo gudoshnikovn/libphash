@@ -16,7 +16,7 @@
  *   - ph_l2_distance    (L2 on digests)
  */
 
-#include "../../include/libphash.h"
+#include "libphash.h"
 #include "test_macros.h"
 #include <stdint.h>
 #include <stdio.h>

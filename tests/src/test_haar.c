@@ -10,8 +10,8 @@
  *   - PH_HAAR_SCALE value precision
  */
 
-#include "../../include/libphash.h"
-#include "../../src/internal.h"
+#include "libphash.h"
+#include "internal.h"
 #include "test_macros.h"
 #include <math.h>
 #include <stdint.h>

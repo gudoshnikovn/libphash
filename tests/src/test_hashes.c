@@ -1,4 +1,4 @@
-#include "../../include/libphash.h"
+#include "libphash.h"
 #include "test_macros.h"
 
 void test_hamming() {

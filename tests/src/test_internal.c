@@ -6,8 +6,8 @@
  * - Extended Hamming tests: self-distance=0, full-flip=64
  */
 
-#include "../../include/libphash.h"
-#include "../../src/internal.h"
+#include "libphash.h"
+#include "internal.h"
 #include "test_macros.h"
 #include <stdint.h>
 #include <string.h>

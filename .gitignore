@@ -9,6 +9,7 @@ obj/
 # Executables (Tests)
 test_*
 !tests/**/test_*.c
+!tests/**/*.h
 
 # IDEs and Editors
 .vscode/
@@ -20,6 +21,7 @@ test_*
 # Build artifacts
 dist/
 build/
+.cache/
 
 # Test images (if generated)
 tests/output_*.jpeg
