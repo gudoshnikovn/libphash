@@ -86,6 +86,6 @@ benchmark: test_benchmark
 	./test_benchmark hash tests/data/photo.jpeg 100
 
 clean:
-	rm -rf $(OBJ_DIR) *.a test_* benchmark
+	rm -rf $(OBJ_DIR) *.a test_* benchmark build .cache
 
 .PHONY: all debug test clean format benchmark
