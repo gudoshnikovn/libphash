@@ -18,30 +18,21 @@ if(MSVC)
 else()
     add_compile_options(-Wall -Wextra -O3 -fPIC)
     
-    # Specific optimization for hashes (allow minor float reordering)
-    add_compile_options(-ffast-math)
-
     if(PHASH_OPTIMIZE_NATIVE)
         add_compile_options(-march=native)
     else()
         # Architecture specific optimizations
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
             add_compile_options(-msse4.2)
-            # Dynamically check for AVX2 support
+            # Dynamically check for AVX2 support and apply ONLY to common.c
             check_c_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
             if(COMPILER_SUPPORTS_AVX2)
-                add_compile_options(-mavx2)
+                set_source_files_properties(src/hashes/common.c PROPERTIES COMPILE_OPTIONS "-mavx2")
+                set_source_files_properties(src/hashes/color_hsv.c PROPERTIES COMPILE_OPTIONS "-ffast-math")
             endif()
         elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
             add_compile_options(-march=armv8-a+simd)
         endif()
-    endif()
-
-    # Link Time Optimization (LTO)
-    include(CheckIPOSupported)
-    check_ipo_supported(RESULT lto_supported OUTPUT error)
-    if(lto_supported)
-        set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
     endif()
 endif()
 
