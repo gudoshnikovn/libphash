@@ -98,6 +98,7 @@ clean:
 	rm -rf $(OBJ_DIR) *.a test_* benchmark build .cache docs/coverage
 	find . -name "*.gcda" -delete
 	find . -name "*.gcno" -delete
+	find . -name "*.gcov" -delete
 	rm -f tests/output_*.jpeg
 
 .PHONY: all debug test clean format benchmark coverage
