@@ -92,6 +92,71 @@ static float dot_product_f32_u8_neon(const float *f, const uint8_t *u, int n) {
 }
 #endif
 
+// --- x86 SIMD Helpers ---
+#if defined(__AVX2__)
+#include <immintrin.h>
+
+static float dot_product_f32_u8_avx2(const float *f, const uint8_t *u, int n) {
+    __m256 sum_vec = _mm256_setzero_ps();
+    int i = 0;
+    // Process 8 elements at a time
+    for (; i <= n - 8; i += 8) {
+        // Load 8 uint8_t (64 bits)
+        __m128i u8 = _mm_loadl_epi64((const __m128i*)&u[i]);
+        // Convert to 8 uint32_t
+        __m256i u32 = _mm256_cvtepu8_epi32(u8);
+        // Convert to 8 float
+        __m256 f_u = _mm256_cvtepi32_ps(u32);
+        // Load 8 floats
+        __m256 f_f = _mm256_loadu_ps(&f[i]);
+        // Multiply and accumulate
+        sum_vec = _mm256_add_ps(_mm256_mul_ps(f_f, f_u), sum_vec);
+    }
+
+    // Horizontal reduce __m256
+    float temp[8];
+    _mm256_storeu_ps(temp, sum_vec);
+    float sum = temp[0] + temp[1] + temp[2] + temp[3] + temp[4] + temp[5] + temp[6] + temp[7];
+
+    // Fallback
+    for (; i < n; i++) {
+        sum += f[i] * u[i];
+    }
+    return sum;
+}
+#elif defined(__SSE4_1__)
+#include <smmintrin.h>
+
+static float dot_product_f32_u8_sse41(const float *f, const uint8_t *u, int n) {
+    __m128 sum_vec = _mm_setzero_ps();
+    int i = 0;
+    // Process 4 elements at a time
+    for (; i <= n - 4; i += 4) {
+        // Load 4 uint8_t as 32-bit int
+        __m128i u_val = _mm_cvtsi32_si128(*(const int*)&u[i]);
+        // Convert to 4 uint32_t
+        __m128i u32 = _mm_cvtepu8_epi32(u_val);
+        // Convert to 4 float
+        __m128 f_u = _mm_cvtepi32_ps(u32);
+        // Load 4 floats
+        __m128 f_f = _mm_loadu_ps(&f[i]);
+        // Multiply and accumulate
+        sum_vec = _mm_add_ps(_mm_mul_ps(f_f, f_u), sum_vec);
+    }
+
+    // Horizontal reduce __m128
+    float temp[4];
+    _mm_storeu_ps(temp, sum_vec);
+    float sum = temp[0] + temp[1] + temp[2] + temp[3];
+
+    // Fallback
+    for (; i < n; i++) {
+        sum += f[i] * u[i];
+    }
+    return sum;
+}
+#endif
+
 PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     if (!ctx || !ctx->image.is_loaded || !out_hash)
         return PH_ERR_INVALID_ARGUMENT;
@@ -161,7 +226,21 @@ void ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size, i
             const float *coeffs = &dct_mat[j * dct_size];
             const uint8_t *in = &input[i * dct_size];
 
-#if defined(__ARM_NEON)
+#if defined(__AVX2__)
+            if (dct_size == 32) {
+                sum = dot_product_f32_u8_avx2(coeffs, in, 32);
+            } else {
+                for (int k = 0; k < dct_size; k++)
+                    sum += coeffs[k] * in[k];
+            }
+#elif defined(__SSE4_1__)
+            if (dct_size == 32) {
+                sum = dot_product_f32_u8_sse41(coeffs, in, 32);
+            } else {
+                for (int k = 0; k < dct_size; k++)
+                    sum += coeffs[k] * in[k];
+            }
+#elif defined(__ARM_NEON)
             if (dct_size == 32) {
                 sum = dot_product_f32_u8_neon(coeffs, in, 32);
             } else {

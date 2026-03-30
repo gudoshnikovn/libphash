@@ -158,8 +158,13 @@ PH_API void ph_free(ph_context_t *ctx) {
             ph_free_image(ctx->image.raw_rgb);
         if (ctx->image.gray_cache)
             free(ctx->image.gray_cache);
-        if (ctx->arena.buffer)
+        if (ctx->arena.buffer) {
+#if defined(_WIN32)
+            _aligned_free(ctx->arena.buffer);
+#else
             free(ctx->arena.buffer);
+#endif
+        }
         free(ctx);
     }
 }
@@ -170,7 +175,11 @@ uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size) {
 
     /* Auto-trim on top-level calls only to prevent unbounded memory growth */
     if (ctx->arena.offset == 0 && ctx->arena.buffer && ctx->arena.capacity > size * 4) {
+#if defined(_WIN32)
+        _aligned_free(ctx->arena.buffer);
+#else
         free(ctx->arena.buffer);
+#endif
         ctx->arena.buffer = NULL;
         ctx->arena.capacity = 0;
     }
@@ -183,9 +192,29 @@ uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size) {
         if (new_size < 1024)
             new_size = 1024;
 
-        uint8_t *new_ptr = (uint8_t *)realloc(ctx->arena.buffer, new_size);
+        // Ensure new_size is a multiple of 32 for posix_memalign
+        new_size = (new_size + 31) & ~(size_t)31;
+
+        uint8_t *new_ptr = NULL;
+#if defined(_WIN32)
+        new_ptr = (uint8_t *)_aligned_malloc(new_size, 32);
+#else
+        if (posix_memalign((void **)&new_ptr, 32, new_size) != 0) {
+            new_ptr = NULL;
+        }
+#endif
         if (!new_ptr)
             return NULL;
+
+        if (ctx->arena.buffer) {
+            // Realloc alternative for aligned memory
+            memcpy(new_ptr, ctx->arena.buffer, ctx->arena.offset);
+#if defined(_WIN32)
+            _aligned_free(ctx->arena.buffer);
+#else
+            free(ctx->arena.buffer);
+#endif
+        }
         ctx->arena.buffer = new_ptr;
         ctx->arena.capacity = new_size;
     }
@@ -215,6 +244,9 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
         if (fstat(fd, &st) == 0 && st.st_size > 8) {
             void *mapped = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
             if (mapped != MAP_FAILED) {
+#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
+                madvise(mapped, st.st_size, MADV_SEQUENTIAL);
+#endif
                 const unsigned char *data = (const unsigned char *)mapped;
                 int req_comp_opt = ctx->config.load_grayscale ? 1 : 0;
                 int w, h, ch;
