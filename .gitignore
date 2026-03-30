@@ -25,3 +25,12 @@ build/
 
 # Test images (if generated)
 tests/output_*.jpeg
+
+# Coverage and GCov data
+docs/coverage/
+*.gcda
+*.gcno
+src/*.gcda
+src/*.gcno
+src/**/*.gcda
+src/**/*.gcno

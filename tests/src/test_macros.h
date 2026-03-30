@@ -44,6 +44,15 @@
         }                                                                                          \
     } while (0)
 
+#define ASSERT_PTR_NULL(ptr)                                                                       \
+    do {                                                                                           \
+        if ((ptr) != NULL) {                                                                       \
+            fprintf(stderr, "[FAIL] %s:%d - Expected pointer '%s' to be NULL, but it's not\n",     \
+                    __FILE__, __LINE__, #ptr);                                                     \
+            exit(1);                                                                               \
+        }                                                                                          \
+    } while (0)
+
 #define ASSERT_UINT8_EQ(expected, actual)                                                          \
     do {                                                                                           \
         uint8_t _e = (uint8_t)(expected);                                                          \
@@ -74,6 +83,17 @@
         if (fabs(_e - _a) > _t) {                                                                  \
             fprintf(stderr, "[FAIL] %s:%d - Expected %.6f, got %.6f (tol %.6f)\n", __FILE__,       \
                     __LINE__, _e, _a, _t);                                                         \
+            exit(1);                                                                               \
+        }                                                                                          \
+    } while (0)
+
+#define ASSERT_STR_EQ(expected, actual)                                                            \
+    do {                                                                                           \
+        const char *_e = (expected);                                                               \
+        const char *_a = (actual);                                                                 \
+        if (strcmp(_e, _a) != 0) {                                                                 \
+            fprintf(stderr, "[FAIL] %s:%d - Expected '%s', got '%s'\n", __FILE__, __LINE__, _e,    \
+                    _a);                                                                           \
             exit(1);                                                                               \
         }                                                                                          \
     } while (0)

@@ -3,6 +3,19 @@
 #include "loaders/internal.h"
 #include <stddef.h>
 
+#ifdef PH_TESTING
+// Mock backend for testing the dispatcher loop without real libraries
+static int ph_mock_can_read(const uint8_t *magic, size_t len) {
+    if (len >= 4 && magic[0] == 0xDE && magic[1] == 0xAD) return 1;
+    return 0;
+}
+static uint8_t *ph_mock_decode(const uint8_t *data, size_t len, int *w, int *h, int *ch, int req) {
+    (void)data; (void)len; (void)req;
+    *w = 1; *h = 1; *ch = 3;
+    return malloc(3);
+}
+#endif
+
 static const ph_image_backend_t backends[] = {
 #ifdef PH_USE_TURBOJPEG
     {ph_can_read_jpeg, ph_decode_jpeg_tj},
@@ -12,6 +25,9 @@ static const ph_image_backend_t backends[] = {
 #endif
 #ifdef PH_USE_WEBP
     {ph_can_read_webp, ph_decode_webp_mem},
+#endif
+#ifdef PH_TESTING
+    {ph_mock_can_read, ph_mock_decode},
 #endif
     {NULL, NULL}};
 

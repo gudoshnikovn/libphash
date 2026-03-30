@@ -1,4 +1,4 @@
-#include "../internal.h"
+#include "internal.h"
 #include <stdlib.h>
 
 void ph_haar_1d_float(float *data, int n, float *temp) {

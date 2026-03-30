@@ -1,4 +1,4 @@
-#include "../internal.h"
+#include "internal.h"
 #include <math.h>
 #include <stddef.h> // For size_t
 #include <stdint.h>

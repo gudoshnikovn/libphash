@@ -1,4 +1,4 @@
-#include "../internal.h"
+#include "internal.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -123,6 +123,8 @@ uint64_t ph_pack_3bit_values(const double *values, int n) {
         int v = (int)(values[i] * maxvalue);
         if (v > maxvalue - 1)
             v = maxvalue - 1;
+        if (v < 0)
+            v = 0;
 
         for (int b = 0; b < binbits; b++) {
             int m = binbits - b - 1;

@@ -1,4 +1,4 @@
-#include "../internal.h"
+#include "internal.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -9,8 +9,8 @@
 #endif
 
 void ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst) {
-    if (!ctx || w < 3 || h < 3) {
-        if (dst != src)
+    if (!ctx || !src || !dst || w < 3 || h < 3) {
+        if (dst && src && dst != src && w > 0 && h > 0)
             memcpy(dst, src, w * h);
         return;
     }

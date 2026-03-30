@@ -1,7 +1,7 @@
 #ifndef INTERNAL_H
 #define INTERNAL_H
 
-#include "../include/libphash.h"
+#include "libphash.h"
 #include <stdint.h>
 
 /*

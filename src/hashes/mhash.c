@@ -1,4 +1,4 @@
-#include "../internal.h"
+#include "internal.h"
 #include <stdlib.h>
 
 PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, uint64_t *out_hash) {

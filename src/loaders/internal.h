@@ -1,7 +1,7 @@
 #ifndef PH_LOADERS_INTERNAL_H
 #define PH_LOADERS_INTERNAL_H
 
-#include "../loader.h"
+#include "loader.h"
 
 #ifdef PH_USE_TURBOJPEG
 int ph_can_read_jpeg(const uint8_t *magic, size_t len);

@@ -1,6 +1,5 @@
-# Compiler and common flags
 CC ?= gcc
-CFLAGS = -I./include -O3 -Wall -Wextra -fPIC
+CFLAGS = -I./include -I./src -O3 -Wall -Wextra -fPIC
 LDFLAGS = -lm
 
 # Architecture-specific optimizations
@@ -36,8 +35,7 @@ TEST_DIR = tests/src
 INC_DIR = include
 
 # CFLAGS updates
-CFLAGS += -I./$(TEST_DIR)
-CFLAGS += -DTEST_DATA_DIR=\"$(shell pwd)/tests/data\"
+CFLAGS += -I./$(TEST_DIR) -DPH_TESTING -DTEST_DATA_DIR=\"$(shell pwd)/tests/data\"
 
 # Sources and Objects
 LOADER_DIR = $(SRC_DIR)/loaders
@@ -81,11 +79,25 @@ test: $(TEST_BINS)
 	done
 	@echo "ALL TESTS PASSED"
 
+# Coverage build
+coverage: CFLAGS += -g -O0 --coverage -DPH_TESTING
+coverage: LDFLAGS += --coverage
+coverage: clean test
+	@echo "Generating coverage reports..."
+	@mkdir -p docs/coverage
+	@lcov --capture --directory . --output-file docs/coverage/coverage.info --ignore-errors mismatch,mismatch,unused,unused
+	@lcov --remove docs/coverage/coverage.info '/usr/*' 'tests/*' 'vendor/*' --output-file docs/coverage/coverage.info --ignore-errors unused,unused
+	@genhtml docs/coverage/coverage.info --output-directory docs/coverage/html
+	@echo "Coverage report generated at docs/coverage/html/index.html"
+
 # Legacy/Standalone benchmark target (internal use)
 benchmark: test_benchmark
 	./test_benchmark hash tests/data/photo.jpeg 100
 
 clean:
-	rm -rf $(OBJ_DIR) *.a test_* benchmark build .cache
+	rm -rf $(OBJ_DIR) *.a test_* benchmark build .cache docs/coverage
+	find . -name "*.gcda" -delete
+	find . -name "*.gcno" -delete
+	rm -f tests/output_*.jpeg
 
-.PHONY: all debug test clean format benchmark
+.PHONY: all debug test clean format benchmark coverage

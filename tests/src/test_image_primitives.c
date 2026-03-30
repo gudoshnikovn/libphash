@@ -20,27 +20,7 @@
 #include <stdint.h>
 #include <string.h>
 
-/* =========================================================
- * Helpers
- * ========================================================= */
-
-/* Build a minimal context with default grayscale weights and gamma.
- * The context is stack-allocated — caller must NOT call ph_free(). */
-static ph_context_t make_ctx(void) {
-    ph_context_t ctx;
-    memset(&ctx, 0, sizeof(ctx));
-    ctx.config.gamma = PH_DEFAULT_GAMMA;
-    ctx.config.gray_r = PH_GRAY_R;
-    ctx.config.gray_g = PH_GRAY_G;
-    ctx.config.gray_b = PH_GRAY_B;
-    /* Build gamma LUT */
-    for (int i = 0; i < 256; i++) {
-        double norm = i / 255.0;
-        double corrected = pow(norm, 1.0 / PH_DEFAULT_GAMMA);
-        ctx.config.gamma_lut[i] = (uint8_t)(corrected * 255.0 + 0.5);
-    }
-    return ctx;
-}
+/* Helpers */
 
 /* =========================================================
  * ph_to_grayscale tests
@@ -48,83 +28,99 @@ static ph_context_t make_ctx(void) {
 
 static void test_gray_pure_red(void) {
     /* Expected: (255*38 + 0*75 + 0*15) >> 7 = 9690 >> 7 = 75 */
-    ph_context_t ctx = make_ctx();
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t rgb[] = {255, 0, 0};
     uint8_t out[1];
-    ph_to_grayscale(&ctx, rgb, 1, 1, 3, out);
+    ph_to_grayscale(ctx, rgb, 1, 1, 3, out);
     ASSERT_UINT8_EQ(75, out[0]);
+    ph_free(ctx);
     PASS("test_gray_pure_red");
 }
 
 static void test_gray_pure_green(void) {
     /* Expected: (0*38 + 255*75 + 0*15) >> 7 = 19125 >> 7 = 149 */
-    ph_context_t ctx = make_ctx();
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t rgb[] = {0, 255, 0};
     uint8_t out[1];
-    ph_to_grayscale(&ctx, rgb, 1, 1, 3, out);
+    ph_to_grayscale(ctx, rgb, 1, 1, 3, out);
     ASSERT_UINT8_EQ(149, out[0]);
+    ph_free(ctx);
     PASS("test_gray_pure_green");
 }
 
 static void test_gray_pure_blue(void) {
     /* Expected: (0*38 + 0*75 + 255*15) >> 7 = 3825 >> 7 = 29 */
-    ph_context_t ctx = make_ctx();
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t rgb[] = {0, 0, 255};
     uint8_t out[1];
-    ph_to_grayscale(&ctx, rgb, 1, 1, 3, out);
+    ph_to_grayscale(ctx, rgb, 1, 1, 3, out);
     ASSERT_UINT8_EQ(29, out[0]);
+    ph_free(ctx);
     PASS("test_gray_pure_blue");
 }
 
 static void test_gray_white(void) {
     /* Expected: (255*(38+75+15)) >> 7 = (255*128) >> 7 = 255 */
-    ph_context_t ctx = make_ctx();
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t rgb[] = {255, 255, 255};
     uint8_t out[1];
-    ph_to_grayscale(&ctx, rgb, 1, 1, 3, out);
+    ph_to_grayscale(ctx, rgb, 1, 1, 3, out);
     ASSERT_UINT8_EQ(255, out[0]);
+    ph_free(ctx);
     PASS("test_gray_white");
 }
 
 static void test_gray_black(void) {
-    ph_context_t ctx = make_ctx();
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t rgb[] = {0, 0, 0};
     uint8_t out[1];
-    ph_to_grayscale(&ctx, rgb, 1, 1, 3, out);
+    ph_to_grayscale(ctx, rgb, 1, 1, 3, out);
     ASSERT_UINT8_EQ(0, out[0]);
+    ph_free(ctx);
     PASS("test_gray_black");
 }
 
 static void test_gray_passthrough_1ch(void) {
     /* Single-channel input must be copied verbatim */
-    ph_context_t ctx = make_ctx();
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t src[] = {42, 100, 200, 7};
     uint8_t out[4];
-    ph_to_grayscale(&ctx, src, 4, 1, 1, out);
+    ph_to_grayscale(ctx, src, 4, 1, 1, out);
     for (int i = 0; i < 4; i++)
         ASSERT_UINT8_EQ(src[i], out[i]);
+    ph_free(ctx);
     PASS("test_gray_passthrough_1ch");
 }
 
 static void test_gray_rgba_ignores_alpha(void) {
     /* RGBA: formula uses only R,G,B channels (indices 0,1,2). Alpha is stride-skipped. */
-    ph_context_t ctx = make_ctx();
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t rgba[] = {255, 0, 0, 128}; /* pure red with alpha=128 */
     uint8_t out[1];
-    ph_to_grayscale(&ctx, rgba, 1, 1, 4, out);
+    ph_to_grayscale(ctx, rgba, 1, 1, 4, out);
     ASSERT_UINT8_EQ(75, out[0]); /* same as pure red in RGB */
+    ph_free(ctx);
     PASS("test_gray_rgba_ignores_alpha");
 }
 
 static void test_gray_multi_pixel(void) {
     /* Two pixels: red and green, verify both correct simultaneously */
-    ph_context_t ctx = make_ctx();
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t rgb[] = {255, 0,   0,  /* red   → 75  */
                      0,   255, 0}; /* green → 149 */
     uint8_t out[2];
-    ph_to_grayscale(&ctx, rgb, 2, 1, 3, out);
+    ph_to_grayscale(ctx, rgb, 2, 1, 3, out);
     ASSERT_UINT8_EQ(75, out[0]);
     ASSERT_UINT8_EQ(149, out[1]);
+    ph_free(ctx);
     PASS("test_gray_multi_pixel");
 }
 
@@ -143,54 +139,61 @@ static void test_gray_null_ctx_uses_defaults(void) {
 
 static void test_gamma_identity_lut(void) {
     /* gamma=1.0 → pow(x, 1/1.0) = x → LUT is identity */
-    ph_context_t ctx = make_ctx();
-    ctx.config.gamma = 1.0f;
-    for (int i = 0; i < 256; i++) {
-        ctx.config.gamma_lut[i] = (uint8_t)i;
-    }
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ph_context_set_gamma(ctx, 1.0f);
     uint8_t data[] = {0, 64, 128, 192, 255};
     uint8_t copy[5];
     memcpy(copy, data, 5);
-    ph_apply_gamma(&ctx, data, 5, 1);
+    ph_apply_gamma(ctx, data, 5, 1);
     for (int i = 0; i < 5; i++)
         ASSERT_UINT8_EQ(copy[i], data[i]);
+    ph_free(ctx);
     PASS("test_gamma_identity_lut");
 }
 
 static void test_gamma_2_2_midpoint(void) {
     /* gamma=2.2, input=128 → expected = round(pow(128/255, 1/2.2) * 255) ≈ 186 */
-    ph_context_t ctx = make_ctx();
-    uint8_t expected = ctx.config.gamma_lut[128];
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    uint8_t expected = ctx->config.gamma_lut[128];
     double computed = pow(128.0 / 255.0, 1.0 / 2.2) * 255.0;
     ASSERT_FLOAT_EQ(computed, (double)expected, 1.0);
+    ph_free(ctx);
     PASS("test_gamma_2_2_midpoint");
 }
 
 static void test_gamma_uniform_image(void) {
     /* All pixels the same value → after gamma all still the same value */
-    ph_context_t ctx = make_ctx();
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t data[16];
     memset(data, 100, 16);
-    ph_apply_gamma(&ctx, data, 4, 4);
-    uint8_t expected = ctx.config.gamma_lut[100];
+    ph_apply_gamma(ctx, data, 4, 4);
+    uint8_t expected = ctx->config.gamma_lut[100];
     for (int i = 0; i < 16; i++)
         ASSERT_UINT8_EQ(expected, data[i]);
+    ph_free(ctx);
     PASS("test_gamma_uniform_image");
 }
 
 static void test_gamma_zero_stays_zero(void) {
-    ph_context_t ctx = make_ctx();
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t data[] = {0};
-    ph_apply_gamma(&ctx, data, 1, 1);
+    ph_apply_gamma(ctx, data, 1, 1);
     ASSERT_UINT8_EQ(0, data[0]);
+    ph_free(ctx);
     PASS("test_gamma_zero_stays_zero");
 }
 
 static void test_gamma_255_stays_255(void) {
-    ph_context_t ctx = make_ctx();
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t data[] = {255};
-    ph_apply_gamma(&ctx, data, 1, 1);
+    ph_apply_gamma(ctx, data, 1, 1);
     ASSERT_UINT8_EQ(255, data[0]);
+    ph_free(ctx);
     PASS("test_gamma_255_stays_255");
 }
 
@@ -304,33 +307,29 @@ static void test_bilinear_uniform(void) {
 
 static void test_mipmap_uniform(void) {
     /* Uniform image should come out uniform */
-    ph_context_t ctx = make_ctx();
-    ctx.arena.buffer = NULL;
-    ctx.arena.capacity = 0;
-    ctx.arena.offset = 0;
-
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t src[64];
     memset(src, 150, 64);
     uint8_t dst[4];
-    ph_resize_mipmap(&ctx, src, 8, 8, dst, 2, 2);
+    ph_resize_mipmap(ctx, src, 8, 8, dst, 2, 2);
     for (int i = 0; i < 4; i++)
         ASSERT_UINT8_EQ(150, dst[i]);
+    ph_free(ctx);
     PASS("test_mipmap_uniform");
 }
 
 static void test_mipmap_small_falls_back_to_bilinear(void) {
     /* src (3×3) <= dst*2 (4×4) → falls back to bilinear → uniform preserves value */
-    ph_context_t ctx = make_ctx();
-    ctx.arena.buffer = NULL;
-    ctx.arena.capacity = 0;
-    ctx.arena.offset = 0;
-
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t src[9];
     memset(src, 88, 9);
     uint8_t dst[4];
-    ph_resize_mipmap(&ctx, src, 3, 3, dst, 2, 2);
+    ph_resize_mipmap(ctx, src, 3, 3, dst, 2, 2);
     for (int i = 0; i < 4; i++)
         ASSERT_UINT8_EQ(88, dst[i]);
+    ph_free(ctx);
     PASS("test_mipmap_small_falls_back_to_bilinear");
 }
 
@@ -340,16 +339,14 @@ static void test_mipmap_small_falls_back_to_bilinear(void) {
 
 static void test_gaussian_uniform(void) {
     /* Blurring a constant image must keep every pixel the same value */
-    ph_context_t ctx = make_ctx();
-    ctx.arena.buffer = NULL;
-    ctx.arena.capacity = 0;
-    ctx.arena.offset = 0;
-
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t src[25], dst[25];
     memset(src, 120, 25);
-    ph_apply_gaussian_blur(&ctx, src, 5, 5, dst);
+    ph_apply_gaussian_blur(ctx, src, 5, 5, dst);
     for (int i = 0; i < 25; i++)
         ASSERT_UINT8_EQ(120, dst[i]);
+    ph_free(ctx);
     PASS("test_gaussian_uniform");
 }
 
@@ -357,15 +354,12 @@ static void test_gaussian_impulse_spreads(void) {
     /* Single bright pixel in the center of a 5×5 black image.
      * After blur the center must be dimmer, and its 4 direct neighbors
      * must be brighter than the corners. */
-    ph_context_t ctx = make_ctx();
-    ctx.arena.buffer = NULL;
-    ctx.arena.capacity = 0;
-    ctx.arena.offset = 0;
-
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t src[25] = {0};
     src[2 * 5 + 2] = 255; /* center pixel */
     uint8_t dst[25] = {0};
-    ph_apply_gaussian_blur(&ctx, src, 5, 5, dst);
+    ph_apply_gaussian_blur(ctx, src, 5, 5, dst);
 
     /* Center must have been dimmed (from 255) */
     if (dst[2 * 5 + 2] >= 255) {
@@ -376,46 +370,42 @@ static void test_gaussian_impulse_spreads(void) {
     /* At least one direct neighbor must be non-zero */
     int neighbor_sum = dst[1 * 5 + 2] + dst[3 * 5 + 2] + dst[2 * 5 + 1] + dst[2 * 5 + 3];
     if (neighbor_sum == 0) {
-        fprintf(stderr,
-                "[FAIL] test_gaussian_impulse_spreads: energy did not spread to neighbors\n");
+        fprintf(stderr, "[FAIL] test_gaussian_impulse_spreads: energy did not spread\n");
         exit(1);
     }
+    ph_free(ctx);
     PASS("test_gaussian_impulse_spreads");
 }
 
 static void test_gaussian_horizontal_kernel(void) {
     /* 1×3 image [0, 255, 0]: after horizontal pass centre → (0+510+0)/4 = 127.
      * Too small for full 2D blur (h<3), so blur copies src→dst. Just confirm no crash. */
-    ph_context_t ctx = make_ctx();
-    ctx.arena.buffer = NULL;
-    ctx.arena.capacity = 0;
-    ctx.arena.offset = 0;
-
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t src[] = {0, 255, 0};
     uint8_t dst[3];
-    ph_apply_gaussian_blur(&ctx, src, 3, 1, dst);
+    ph_apply_gaussian_blur(ctx, src, 3, 1, dst);
     /* w=3 but h=1 < 3 → copies verbatim */
     ASSERT_UINT8_EQ(0, dst[0]);
     ASSERT_UINT8_EQ(255, dst[1]);
     ASSERT_UINT8_EQ(0, dst[2]);
+    ph_free(ctx);
     PASS("test_gaussian_horizontal_kernel");
 }
 
 static void test_gaussian_alias_safe(void) {
     /* Calling blur with src == dst must not corrupt the image
      * (the implementation uses a temp scratchpad). */
-    ph_context_t ctx = make_ctx();
-    ctx.arena.buffer = NULL;
-    ctx.arena.capacity = 0;
-    ctx.arena.offset = 0;
-
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
     uint8_t img[25];
     memset(img, 80, 25);
     /* Pass img as both src and dst */
-    ph_apply_gaussian_blur(&ctx, img, 5, 5, img);
+    ph_apply_gaussian_blur(ctx, img, 5, 5, img);
     /* Uniform image → should still be 80 */
     for (int i = 0; i < 25; i++)
         ASSERT_UINT8_EQ(80, img[i]);
+    ph_free(ctx);
     PASS("test_gaussian_alias_safe");
 }
 
@@ -473,9 +463,77 @@ static void test_laplacian_borders_copied(void) {
     PASS("test_laplacian_borders_copied");
 }
 
-/* =========================================================
- * main
- * ========================================================= */
+
+
+void test_resize_zero_negative_dims(void) {
+    uint8_t src[4] = {1, 2, 3, 4};
+    uint8_t dst[4] = {0};
+
+    // Bilinear
+    ph_resize_bilinear(src, 2, 2, dst, 0, 2);
+    ph_resize_bilinear(src, 2, 2, dst, 2, 0);
+    ph_resize_bilinear(src, 0, 2, dst, 2, 2);
+    ph_resize_bilinear(src, 2, 0, dst, 2, 2);
+
+    // Box
+    ph_resize_box(src, 2, 2, dst, 0, 2);
+    ph_resize_box(src, 2, 2, dst, 2, 0);
+    ph_resize_box(src, 0, 2, dst, 2, 2);
+    ph_resize_box(src, 2, 0, dst, 2, 2);
+
+    // Mipmap
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ph_resize_mipmap(ctx, src, 2, 2, dst, 0, 2);
+    ph_resize_mipmap(ctx, src, 2, 2, dst, 2, 0);
+    ph_resize_mipmap(ctx, src, 0, 2, dst, 2, 2);
+    ph_resize_mipmap(ctx, src, 2, 0, dst, 2, 2);
+    ph_free(ctx);
+
+    PASS("test_resize_zero_negative_dims");
+}
+
+void test_box_resize_count_zero(void) {
+    // This triggers the 'if (count == 0)' branch in ph_resize_box
+    // sw=1, dw=10 -> x_ratio = (1 << 16) / 10 = 6553.
+    // dx=0: sx_start=0, sx_end=0. -> count=0.
+    uint8_t src[1] = {255};
+    uint8_t dst[100]; // Correct size for 10x10
+    ph_resize_box(src, 1, 1, dst, 10, 10);
+    PASS("test_box_resize_count_zero");
+}
+
+void test_gaussian_blur_edge_cases(void) {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    uint8_t src[100], dst[100];
+
+    // 1. NULL/Zero args
+    ph_apply_gaussian_blur(NULL, src, 10, 10, dst);
+    ph_apply_gaussian_blur(ctx, NULL, 10, 10, dst);
+    ph_apply_gaussian_blur(ctx, src, 10, 10, NULL);
+    ph_apply_gaussian_blur(ctx, src, 0, 10, dst);
+    ph_apply_gaussian_blur(ctx, src, 10, 0, dst);
+
+    // 2. Small image (w < 3)
+    ph_apply_gaussian_blur(ctx, src, 2, 10, dst);
+    ph_apply_gaussian_blur(ctx, src, 10, 2, dst);
+
+    ph_free(ctx);
+    PASS("test_gaussian_blur_edge_cases");
+}
+
+void test_laplacian_edge_cases(void) {
+    uint8_t src[100], dst[100];
+
+    // 1. NULL/Zero args
+    ph_apply_laplacian_3x3(NULL, 10, 10, dst);
+    ph_apply_laplacian_3x3(src, 10, 10, NULL);
+    ph_apply_laplacian_3x3(src, 0, 10, dst);
+    ph_apply_laplacian_3x3(src, 10, 0, dst);
+
+    PASS("test_laplacian_edge_cases");
+}
 
 int main(void) {
     /* Grayscale */
@@ -502,6 +560,7 @@ int main(void) {
     test_box_4x1_to_2x1();
     test_box_identity();
     test_box_black_white_halves();
+    test_box_resize_count_zero();
 
     /* Bilinear resize */
     test_bilinear_identity();
@@ -513,17 +572,22 @@ int main(void) {
     test_mipmap_uniform();
     test_mipmap_small_falls_back_to_bilinear();
 
+    /* General Resize Edges */
+    test_resize_zero_negative_dims();
+
     /* Gaussian blur */
     test_gaussian_uniform();
     test_gaussian_impulse_spreads();
     test_gaussian_horizontal_kernel();
     test_gaussian_alias_safe();
+    test_gaussian_blur_edge_cases();
 
     /* Laplacian */
     test_laplacian_uniform();
     test_laplacian_center_amplified();
     test_laplacian_negative_clamped();
     test_laplacian_borders_copied();
+    test_laplacian_edge_cases();
 
     printf("\nAll image primitive tests passed.\n");
     return 0;

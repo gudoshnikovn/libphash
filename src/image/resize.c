@@ -1,4 +1,4 @@
-#include "../internal.h"
+#include "internal.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -9,7 +9,7 @@
 #endif
 
 void ph_resize_bilinear(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh) {
-    if (dw <= 0 || dh <= 0)
+    if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0)
         return;
 
     /* 16.16 fixed point for ratios and positions */

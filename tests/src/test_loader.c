@@ -1,4 +1,5 @@
 #include "libphash.h"
+#include "loader.h"
 #include "test_macros.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -132,6 +133,38 @@ void test_memory_loading() {
     printf("test_memory_loading: PASSED\n");
 }
 
+void test_loader_edge_cases() {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+
+    // 1. NULL/Empty buffer
+    ph_error_t err = ph_load_from_memory(ctx, NULL, 0);
+    if (err == PH_SUCCESS) {
+        fprintf(stderr, "[FAIL] test_loader_edge_cases - NULL buffer should fail\n");
+        exit(1);
+    }
+
+    err = ph_load_from_memory(ctx, (const uint8_t *)"not empty", 0);
+    if (err == PH_SUCCESS) {
+        fprintf(stderr, "[FAIL] test_loader_edge_cases - Zero length should fail\n");
+        exit(1);
+    }
+
+    // 2. Unknown format (magic not matching any backend)
+    uint8_t garbage[10] = "garbage!!!";
+    err = ph_load_from_memory(ctx, garbage, 10);
+    if (err == PH_SUCCESS) {
+        fprintf(stderr, "[FAIL] test_loader_edge_cases - Unknown format should fail\n");
+        exit(1);
+    }
+
+    // 3. ph_free_image(NULL) check (internal call coverage)
+    ph_free_image(NULL);
+
+    ph_free(ctx);
+    printf("test_loader_edge_cases: PASSED\n");
+}
+
 int main() {
     test_jpeg_loading();
     test_png_loading();
@@ -141,5 +174,6 @@ int main() {
     test_corrupted_loading();
     test_grayscale_loading();
     test_memory_loading();
+    test_loader_edge_cases();
     return 0;
 }

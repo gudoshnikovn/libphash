@@ -48,6 +48,7 @@ endif()
 
 target_include_directories(phash PUBLIC 
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
     $<INSTALL_INTERFACE:include>
 )
 
@@ -125,9 +126,9 @@ if(PHASH_USE_WEBP)
         ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libwebp/src
     )
 endif()
-
 # --- Tests ---
 if(PHASH_BUILD_TESTS)
+    target_compile_definitions(phash PRIVATE PH_TESTING)
     enable_testing()
     file(GLOB TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/tests/src/test_*.c")
     foreach(test_src ${TEST_SOURCES})
@@ -138,9 +139,9 @@ if(PHASH_BUILD_TESTS)
             ${CMAKE_CURRENT_SOURCE_DIR}/src
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/src
         )
-        # Define TEST_DATA_DIR so tests can find images
         target_compile_definitions(${test_name} PRIVATE 
             TEST_DATA_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/data\"
+            PH_TESTING
         )
         add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
     endforeach()
