@@ -1,3 +1,10 @@
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE
+#endif
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "internal.h"
 #include "loader.h"
 #include <math.h>
@@ -245,7 +252,7 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
             void *mapped = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
             if (mapped != MAP_FAILED) {
 #if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
-                madvise(mapped, st.st_size, MADV_SEQUENTIAL);
+                posix_madvise(mapped, st.st_size, POSIX_MADV_SEQUENTIAL);
 #endif
                 const unsigned char *data = (const unsigned char *)mapped;
                 int req_comp_opt = ctx->config.load_grayscale ? 1 : 0;

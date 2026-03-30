@@ -41,12 +41,14 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
 
     // --- Optimization 1: AVX2 (x86) ---
 #if defined(__AVX2__)
-    const __m256i *a256 = (const __m256i *)a->data;
-    const __m256i *b256 = (const __m256i *)b->data;
+    const uint8_t *a_ptr = a->data;
+    const uint8_t *b_ptr = b->data;
     size_t len32 = len / 32;
 
     for (; i < len32; i++) {
-        __m256i vxor = _mm256_xor_si256(a256[i], b256[i]);
+        __m256i v_a = _mm256_loadu_si256((const __m256i *)&a_ptr[i * 32]);
+        __m256i v_b = _mm256_loadu_si256((const __m256i *)&b_ptr[i * 32]);
+        __m256i vxor = _mm256_xor_si256(v_a, v_b);
         uint64_t v0 = _mm256_extract_epi64(vxor, 0);
         uint64_t v1 = _mm256_extract_epi64(vxor, 1);
         uint64_t v2 = _mm256_extract_epi64(vxor, 2);
