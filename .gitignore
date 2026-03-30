@@ -30,6 +30,7 @@ tests/output_*.jpeg
 docs/coverage/
 *.gcda
 *.gcno
+*.gcov
 src/*.gcda
 src/*.gcno
 src/**/*.gcda
