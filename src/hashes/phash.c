@@ -209,7 +209,12 @@ uint64_t ph_median_bitpack(const float *values, int n) {
         sorted[j + 1] = key;
     }
 
-    float median = sorted[n / 2];
+    float median;
+    if (n % 2 == 0) {
+        median = (sorted[n / 2 - 1] + sorted[n / 2]) * 0.5f;
+    } else {
+        median = sorted[n / 2];
+    }
 
     uint64_t hash = 0;
     for (int i = 0; i < n; i++) {

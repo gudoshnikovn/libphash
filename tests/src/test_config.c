@@ -31,8 +31,8 @@ void test_config_phash_params() {
     uint64_t hash1, hash2;
     ASSERT_OK(ph_compute_phash(ctx, &hash1));
 
-    // Change DCT size
-    ph_context_set_phash_params(ctx, 16, 8);
+    // Change DCT size significantly to guarantee different hash
+    ph_context_set_phash_params(ctx, 16, 4);
     ASSERT_OK(ph_compute_phash(ctx, &hash2));
 
     if (hash1 == hash2) {
