@@ -10,6 +10,13 @@ The project supports `gcc`, `clang`, and `msvc`. The `Makefile` allows compiler 
 make CC=clang
 ```
 
+### Build Configurations (CMake)
+The C engine utilizes modular CMake flags allowing deterministic inclusions of external decoders:
+- `PHASH_USE_TURBOJPEG` (ON/OFF): Configures bundled `libjpeg-turbo`.
+- `PHASH_USE_LIBPNG` (ON/OFF): Configures bundled `libpng`.
+- `PHASH_USE_WEBP` (ON/OFF): Toggles `libwebp` external submodules.
+- `PHASH_USE_SPNG` (ON/OFF): Configures `spng` integration.
+
 ### Formatting
 We use `clang-format` with a custom style (based on LLVM with minor tweaks).
 - **Indentation**: 4 spaces.
@@ -39,6 +46,9 @@ Used for performance regression testing. Run with:
 ## Adding New Features
 
 1.  **Header**: Add the public signature to `include/libphash.h`.
-2.  **Implementation**: Add the source file to `src/` or `src/hashes/`.
-3.  **Build**: `Makefile` and `CMakeLists.txt` use wildcards, so new files are detected automatically.
-4.  **Documentation**: Update `docs/algorithms.md` and the function comments in the header (Doxygen style).
+2.  **Implementation**: 
+    - Add hash algorithms to `src/hashes/`.
+    - Add image processing kernels to `src/image/`.
+    - Add new decoders to `src/loaders/`.
+3.  **Build**: `Makefile` and `CMakeLists.txt` are configured to detect new files in these directories automatically.
+4.  **Documentation**: Update `docs/algorithms.md` or `docs/architecture.md` and the function comments in the header (Doxygen style).

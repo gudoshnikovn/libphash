@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake clang libpng-dev libjpeg-dev libwebp-dev zlib1g-dev
+
+    - name: Configure CMake
+      run: cmake -B build -DPHASH_BUILD_TESTS=ON
+
+    - name: Build
+      run: cmake --build build --config Release
+
+    - name: Run Tests
+      run: cd build && ctest --output-on-failure
+
+  benchmark:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout PR branch
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake libpng-dev libjpeg-dev libwebp-dev zlib1g-dev
+
+    - name: Build
+      run: |
+        cmake -B build -DPHASH_BUILD_TESTS=ON
+        cmake --build build --config Release
+
+    - name: Run Benchmarks
+      run: |
+        cd build
+        echo "### Performance Benchmark" > ../benchmark_report.md
+        echo '```text' >> ../benchmark_report.md
+        ./test_benchmark smoke >> ../benchmark_report.md
+        echo '```' >> ../benchmark_report.md
+        cat ../benchmark_report.md >> $GITHUB_STEP_SUMMARY
+
+    - name: Post Performance Report
+      uses: thollander/actions-comment-pull-request@v2
+      with:
+        filePath: benchmark_report.md
+        comment_tag: performance_report

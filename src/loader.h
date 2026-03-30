@@ -1,7 +1,7 @@
 #ifndef PH_LOADER_H
 #define PH_LOADER_H
 
-#include "../include/libphash.h"
+#include "libphash.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -35,8 +35,28 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
                                  int *height, int *channels, int req_comp);
 #endif
 
+#ifdef PH_USE_WEBP
+// --- WebP: libwebp (decodes to RGB, no native grayscale) ---
+unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long size, int *width,
+                                  int *height, int *channels, int req_comp);
+#endif
+
 // Runtime capability checks (always available)
 int ph_can_use_libjpeg(void);
 int ph_can_use_libpng(void);
+int ph_can_use_webp(void);
+
+// Image Backend Interface for unified decoding
+typedef struct {
+    int (*can_read)(const uint8_t *magic, size_t len);
+    uint8_t *(*decode)(const uint8_t *data, size_t len, int *w, int *h, int *ch, int req_comp);
+} ph_image_backend_t;
+
+// Unified decoder that tries all registered backends
+uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int *height,
+                          int *channels, int req_comp);
+
+// Safe image memory free
+void ph_free_image(uint8_t *data);
 
 #endif // PH_LOADER_H

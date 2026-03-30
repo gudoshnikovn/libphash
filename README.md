@@ -2,21 +2,21 @@
 
 A high-performance, portable C library for Perceptual Image Hashing.
 
-`libphash` is designed for speed and efficiency, providing a robust set of algorithms for image fingerprinting with native, SIMD-accelerated decoders.
+`libphash` is designed for speed and efficiency, providing a robust set of algorithms for image fingerprinting with native, SIMD-accelerated decoders and a zero-fragmentation memory model.
 
 ## 🔗 Language Bindings
 
 * **Python**: [python-libphash](https://github.com/gudoshnikovn/python-libphash) (`pip install python-libphash`)
-* *More bindings (Node.js,...) are coming soon.*
+* *More bindings (Node.js, Rust, Go) are in development.*
 
 ---
 
 ## 🚀 Core Features
 
 * **Multiple Algorithms**: `aHash`, `dHash`, `pHash` (DCT-based), `wHash` (Wavelet), `mHash`, `BMH`, `Radial`, and `ColorHash`.
-* **High-Performance Decoders**: Built-in support for `libjpeg-turbo`, `libpng`, and `spng` with SIMD acceleration (NEON/SSE).
+* **High-Performance Decoders**: Built-in support for `libjpeg-turbo`, `libpng`, `spng`, and `libwebp` with SIMD acceleration (NEON/SSE) and `mmap` optimization.
 * **Fast Grayscale Loading**: Native decoders can perform grayscale conversion during decompression, significantly reducing CPU cycles and memory overhead.
-* **Zero-Allocation Processing**: Optimized context-based scratchpad for internal operations, ideal for high-load environments.
+* **Zero-Fragmentation Arena**: Optimized context-based **Arena Allocator** for internal operations, ensuring predictable performance in high-load environments.
 * **FFI-Friendly**: Clean C API with opaque pointers, designed for seamless integration with Python, Rust, Node.js, and Go.
 * **Cross-Platform**: Optimized for ARM64 (Apple Silicon, Raspberry Pi) and x86_64.
 
@@ -28,7 +28,7 @@ A high-performance, portable C library for Perceptual Image Hashing.
 
 | Mode | Decoders | Dependencies | Best For |
 | --- | --- | --- | --- |
-| **High Performance** (Default) | `libjpeg-turbo`, `libpng`/`spng` | Self-contained (vendor submodules) | Production, massive datasets, server-side processing |
+| **High Performance** (Default) | `libjpeg-turbo`, `libpng`/`spng`, `libwebp` | Self-contained (vendor submodules) | Production, massive datasets, server-side processing |
 | **Minimal** | `stb_image` (fallback) | Zero | Embedded systems, quick scripts, simple builds |
 
 ---
@@ -111,6 +111,7 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 * **libjpeg-turbo**: IJG, BSD-3-Clause, zlib.
 * **libpng**: libpng License 2.0.
+* **libwebp**: WebP License (BSD 3-Clause).
 * **spng**: BSD 2-Clause License.
 * **stb_image**: Public Domain / MIT.
 

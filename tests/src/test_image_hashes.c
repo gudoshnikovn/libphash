@@ -10,8 +10,8 @@ void test_hash_algorithm(const char *name, ph_error_t (*hash_func)(ph_context_t 
     ASSERT_OK(ph_create(&ctx1));
     ASSERT_OK(ph_create(&ctx2));
 
-    ASSERT_OK(ph_load_from_file(ctx1, "tests/photo.jpeg"));
-    ASSERT_OK(ph_load_from_file(ctx2, "tests/photo_copy.jpeg"));
+    ASSERT_OK(ph_load_from_file(ctx1, TEST_DATA_DIR "/photo.jpeg"));
+    ASSERT_OK(ph_load_from_file(ctx2, TEST_DATA_DIR "/photo_copy.jpeg"));
 
     ASSERT_OK(hash_func(ctx1, &hash1));
     ASSERT_OK(hash_func(ctx2, &hash2));

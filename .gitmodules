@@ -7,3 +7,6 @@
 [submodule "vendor/spng"]
 	path = vendor/spng
 	url = https://github.com/randy408/libspng.git
+[submodule "vendor/libwebp"]
+	path = vendor/libwebp
+	url = https://github.com/webmproject/libwebp.git

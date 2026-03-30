@@ -1,7 +1,7 @@
 #ifndef INTERNAL_H
 #define INTERNAL_H
 
-#include "../include/libphash.h"
+#include "libphash.h"
 #include <stdint.h>
 
 /*
@@ -25,7 +25,46 @@ void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h);
 
 void ph_resize_bilinear(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh);
 
+/* Applies 3x3 Laplacian sharpening for edge preservation */
+void ph_apply_laplacian_3x3(const uint8_t *src, int w, int h, uint8_t *dst);
+
 uint8_t *ph_get_gray(ph_context_t *ctx);
+
+/* mHash Laplacian scan helper */
+uint64_t ph_laplacian_scan(const uint8_t *grid, int size, int step);
+
+typedef struct {
+    double mean;
+    double std_dev;
+    double skew;
+} ph_channel_moments_t;
+
+ph_channel_moments_t ph_compute_moments(const uint8_t *data, int num_pixels, int channels,
+                                        int channel_index);
+
+void ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size, int reduction_size,
+                     float *out);
+
+uint64_t ph_median_bitpack(const float *values, int n);
+
+typedef enum { PH_HSV_BLACK = 0, PH_HSV_GRAY, PH_HSV_FAINT, PH_HSV_BRIGHT } ph_hsv_category_t;
+
+typedef struct {
+    ph_hsv_category_t category;
+    int hue_bin; // 0..5, valid only for FAINT/BRIGHT
+} ph_hsv_result_t;
+
+ph_hsv_result_t ph_hsv_classify_pixel(float r, float g, float b);
+uint64_t ph_pack_3bit_values(const double *values, int n);
+
+float ph_get_pixel_bilinear(const uint8_t *img, int w, int h, float x, float y);
+double ph_projection_variance(const uint8_t *img, int w, int h, double cx, double cy,
+                              double max_radius, float cos_t, float sin_t, int samples);
+
+void ph_haar_1d_float(float *data, int n, float *temp);
+void ph_haar_2d_level(float *data, int size, int stride, float *temp_row, float *temp_col);
+
+const float *ph_get_dct_matrix_32(void);
 
 /* Initializes the DCT matrix (thread-safe, idempotent) */
 void init_dct_matrix(void);
@@ -72,37 +111,38 @@ void init_dct_matrix(void);
 
 /* Internal Context Structure */
 struct ph_context {
-    uint8_t *data;
-    uint8_t *gray_data;
-    int width;
-    int height;
-    int channels;
-    int is_loaded;
+    // Uploaded image data
+    struct {
+        uint8_t *raw_rgb;
+        uint8_t *gray_cache;
+        int width;
+        int height;
+        int channels;
+        int is_loaded;
+    } image;
 
-    /* Configuration */
-    float gamma;
-    uint8_t gamma_lut[256];
+    // User-defined configuration parameters
+    struct {
+        float gamma;
+        uint8_t gamma_lut[256];
+        int gray_r, gray_g, gray_b;
+        int load_grayscale;
 
-    int gray_r, gray_g, gray_b;
+        // Various tunings for hashes
+        int phash_dct_size;
+        int phash_reduction_size;
+        int radial_projections;
+        int radial_samples;
+        int block_size;
+        ph_whash_mode_t whash_mode;
+    } config;
 
-    /* pHash params */
-    int phash_dct_size;
-    int phash_reduction_size;
-
-    /* Radial params */
-    int radial_projections;
-    int radial_samples;
-
-    /* Block params (BMH, mHash) */
-    int block_size;
-
-    /* Tier 3: Memory Reuse */
-    uint8_t *scratchpad;
-    size_t scratchpad_size;
-
-    /* Optimization Flags */
-    int load_grayscale;
-    ph_whash_mode_t whash_mode;
+    // System data of the allocator (Arena)
+    struct {
+        uint8_t *buffer;
+        size_t capacity;
+        size_t offset;
+    } arena;
 };
 
 /* Ensures the context's scratchpad is at least 'size' bytes.

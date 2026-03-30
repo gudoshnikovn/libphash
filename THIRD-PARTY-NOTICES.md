@@ -59,6 +59,19 @@ This software is dual-licensed to the public domain and under the following lice
 
 Copyright (c) 2017 Sean Barrett.
 
+## 5. libwebp
+
+* **Project:** [https://developers.google.com/speed/webp/](https://developers.google.com/speed/webp/)
+* **License:** BSD 3-Clause License
+
+Copyright (c) 2010, Google Inc. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+3. Neither the name of Google nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+
 ---
 
 ### Summary Table
@@ -67,5 +80,6 @@ Copyright (c) 2017 Sean Barrett.
 | --- | --- | --- |
 | **libjpeg-turbo** | `vendor/libjpeg-turbo` | IJG / BSD-3 / zlib |
 | **libpng** | `vendor/libpng` | libpng License 2.0 |
+| **libwebp** | `vendor/libwebp` | BSD 3-Clause |
 | **spng** | `vendor/spng` | BSD 2-Clause |
 | **stb_image** | `vendor/stb_image.h` | Public Domain (MIT) |

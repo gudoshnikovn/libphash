@@ -63,6 +63,13 @@ typedef enum {
 } ph_error_t;
 
 /**
+ * @brief Returns a human-readable string description for an error code.
+ * @param err The error code.
+ * @return A constant string describing the error. Never returns NULL.
+ */
+PH_API const char *ph_get_error_string(ph_error_t err);
+
+/**
  * @brief Wavelet Hash operating modes.
  */
 typedef enum {
@@ -249,6 +256,12 @@ PH_API int ph_can_use_libjpeg(void);
  * @return 1 if available, 0 otherwise.
  */
 PH_API int ph_can_use_libpng(void);
+
+/**
+ * @brief Checks if libwebp is available and loaded.
+ * @return 1 if available, 0 otherwise.
+ */
+PH_API int ph_can_use_webp(void);
 
 #ifdef __cplusplus
 }

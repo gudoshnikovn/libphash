@@ -1,11 +1,11 @@
-#include "../include/libphash.h"
+#include "libphash.h"
 #include "test_macros.h"
 #include <stdio.h>
 
 void test_config_gray_weights() {
     ph_context_t *ctx;
     ASSERT_OK(ph_create(&ctx));
-    ASSERT_OK(ph_load_from_file(ctx, "tests/photo_color_changed.jpeg"));
+    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo_color_changed.jpeg"));
 
     uint64_t hash_default, hash_custom;
     ASSERT_OK(ph_compute_ahash(ctx, &hash_default));
@@ -26,7 +26,7 @@ void test_config_gray_weights() {
 void test_config_phash_params() {
     ph_context_t *ctx;
     ASSERT_OK(ph_create(&ctx));
-    ASSERT_OK(ph_load_from_file(ctx, "tests/photo.jpeg"));
+    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
 
     uint64_t hash1, hash2;
     ASSERT_OK(ph_compute_phash(ctx, &hash1));
@@ -47,7 +47,7 @@ void test_config_phash_params() {
 void test_config_radial_params() {
     ph_context_t *ctx;
     ASSERT_OK(ph_create(&ctx));
-    ASSERT_OK(ph_load_from_file(ctx, "tests/photo.jpeg"));
+    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
 
     ph_digest_t d1, d2;
     ASSERT_OK(ph_compute_radial_hash(ctx, &d1));
@@ -68,7 +68,7 @@ void test_config_radial_params() {
 void test_config_block_size() {
     ph_context_t *ctx;
     ASSERT_OK(ph_create(&ctx));
-    ASSERT_OK(ph_load_from_file(ctx, "tests/photo.jpeg"));
+    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
 
     ph_digest_t d1, d2;
     ASSERT_OK(ph_compute_bmh(ctx, &d1)); // Default 16x16 -> 32 bytes

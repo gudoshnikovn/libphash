@@ -1,4 +1,5 @@
 #include "libphash.h"
+#include "loader.h"
 #include "test_macros.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,7 +10,7 @@ void test_jpeg_loading() {
     ASSERT_OK(ph_create(&ctx));
 
     // Test loading valid JPEG
-    ASSERT_OK(ph_load_from_file(ctx, "tests/photo.jpeg"));
+    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
     ASSERT_PTR_NOT_NULL(ctx);
     ASSERT_INT_EQ(1, ph_is_loaded(ctx));
 
@@ -27,7 +28,7 @@ void test_png_loading() {
     ASSERT_OK(ph_create(&ctx));
 
     // Test loading valid PNG (newly created)
-    ASSERT_OK(ph_load_from_file(ctx, "tests/photo.png"));
+    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.png"));
     ASSERT_PTR_NOT_NULL(ctx);
 
     int w, h, ch;
@@ -41,12 +42,31 @@ void test_png_loading() {
     printf("test_png_loading: PASSED\n");
 }
 
+#ifdef PH_USE_WEBP
+void test_webp_loading() {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+
+    // Test loading valid WebP
+    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.webp"));
+    ASSERT_PTR_NOT_NULL(ctx);
+
+    int w, h, ch;
+    ph_context_get_dimensions(ctx, &w, &h, &ch);
+    printf("WebP Loader stats: w=%d, h=%d, ch=%d, webp_active=%d\n", w, h, ch, ph_can_use_webp());
+    ASSERT_INT_EQ(3, ch); // WebP decodes to RGB by default in our implementation
+
+    ph_free(ctx);
+    printf("test_webp_loading: PASSED\n");
+}
+#endif
+
 void test_corrupted_loading() {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
 
     // Loading corrupted file should return error
-    ph_error_t err = ph_load_from_file(ctx, "tests/corrupted.jpg");
+    ph_error_t err = ph_load_from_file(ctx, TEST_DATA_DIR "/corrupted.jpg");
     if (err == PH_SUCCESS) {
         fprintf(stderr,
                 "[FAIL] test_corrupted_loading - Should have failed to load corrupted.jpg\n");
@@ -54,7 +74,7 @@ void test_corrupted_loading() {
     }
 
     // Loading non-existent file
-    err = ph_load_from_file(ctx, "tests/non_existent.jpg");
+    err = ph_load_from_file(ctx, TEST_DATA_DIR "/non_existent.jpg");
     if (err == PH_SUCCESS) {
         fprintf(stderr,
                 "[FAIL] test_corrupted_loading - Should have failed to load non_existent.jpg\n");
@@ -73,13 +93,13 @@ void test_grayscale_loading() {
     ph_context_set_load_grayscale(ctx, 1);
 
     // Load JPEG
-    ASSERT_OK(ph_load_from_file(ctx, "tests/photo.jpeg"));
+    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
     int w, h, ch;
     ph_context_get_dimensions(ctx, &w, &h, &ch);
     ASSERT_INT_EQ(1, ch); // Should be 1 despite image being RGB
 
     // Load PNG
-    ASSERT_OK(ph_load_from_file(ctx, "tests/photo.png"));
+    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.png"));
     ph_context_get_dimensions(ctx, &w, &h, &ch);
     ASSERT_INT_EQ(1, ch);
 
@@ -92,7 +112,7 @@ void test_memory_loading() {
     ASSERT_OK(ph_create(&ctx));
 
     // Read photo.png into memory manually
-    FILE *f = fopen("tests/photo.png", "rb");
+    FILE *f = fopen(TEST_DATA_DIR "/photo.png", "rb");
     ASSERT_PTR_NOT_NULL(f);
     fseek(f, 0, SEEK_END);
     long size = ftell(f);
@@ -113,11 +133,47 @@ void test_memory_loading() {
     printf("test_memory_loading: PASSED\n");
 }
 
+void test_loader_edge_cases() {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+
+    // 1. NULL/Empty buffer
+    ph_error_t err = ph_load_from_memory(ctx, NULL, 0);
+    if (err == PH_SUCCESS) {
+        fprintf(stderr, "[FAIL] test_loader_edge_cases - NULL buffer should fail\n");
+        exit(1);
+    }
+
+    err = ph_load_from_memory(ctx, (const uint8_t *)"not empty", 0);
+    if (err == PH_SUCCESS) {
+        fprintf(stderr, "[FAIL] test_loader_edge_cases - Zero length should fail\n");
+        exit(1);
+    }
+
+    // 2. Unknown format (magic not matching any backend)
+    uint8_t garbage[10] = "garbage!!!";
+    err = ph_load_from_memory(ctx, garbage, 10);
+    if (err == PH_SUCCESS) {
+        fprintf(stderr, "[FAIL] test_loader_edge_cases - Unknown format should fail\n");
+        exit(1);
+    }
+
+    // 3. ph_free_image(NULL) check (internal call coverage)
+    ph_free_image(NULL);
+
+    ph_free(ctx);
+    printf("test_loader_edge_cases: PASSED\n");
+}
+
 int main() {
     test_jpeg_loading();
     test_png_loading();
+#ifdef PH_USE_WEBP
+    test_webp_loading();
+#endif
     test_corrupted_loading();
     test_grayscale_loading();
     test_memory_loading();
+    test_loader_edge_cases();
     return 0;
 }

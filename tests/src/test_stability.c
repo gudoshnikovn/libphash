@@ -1,4 +1,3 @@
-#include "../src/internal.h"
 #include "libphash.h"
 #include "test_macros.h"
 #include <stdio.h>
@@ -41,19 +40,31 @@ void verify_hash_consistency(const char *image_path, const char *algo_name,
 }
 
 int main() {
-    const char *jpeg = "tests/photo.jpeg";
-    const char *png = "tests/photo_complex.png";
+    const char *jpeg = TEST_DATA_DIR "/photo.jpeg";
+    const char *png = TEST_DATA_DIR "/photo_complex.png";
+#ifdef PH_USE_WEBP
+    const char *webp = TEST_DATA_DIR "/photo.webp";
+#endif
 
     printf("--- Checking Consistency: RGB vs Decoder-Grayscale ---\n");
 
     verify_hash_consistency(jpeg, "aHash", ph_compute_ahash);
     verify_hash_consistency(png, "aHash", ph_compute_ahash);
+#ifdef PH_USE_WEBP
+    verify_hash_consistency(webp, "aHash", ph_compute_ahash);
+#endif
 
     verify_hash_consistency(jpeg, "pHash", ph_compute_phash);
     verify_hash_consistency(png, "pHash", ph_compute_phash);
+#ifdef PH_USE_WEBP
+    verify_hash_consistency(webp, "pHash", ph_compute_phash);
+#endif
 
     verify_hash_consistency(jpeg, "dHash", ph_compute_dhash);
     verify_hash_consistency(png, "dHash", ph_compute_dhash);
+#ifdef PH_USE_WEBP
+    verify_hash_consistency(webp, "dHash", ph_compute_dhash);
+#endif
 
     printf("test_stability: PASSED\n");
     return 0;

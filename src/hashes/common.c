@@ -1,10 +1,12 @@
-#include "../internal.h"
+#include "internal.h"
 #include <math.h>
 #include <stddef.h> // For size_t
 #include <stdint.h>
 
 // Include intrinsics based on detected architecture
-#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#if defined(__AVX2__)
+#include <immintrin.h>
+#elif defined(__ARM_NEON) || defined(__ARM_NEON__)
 #include <arm_neon.h>
 #elif defined(__SSE4_2__)
 #include <nmmintrin.h>
@@ -37,16 +39,46 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
     int total = 0;
     size_t i = 0;
 
-    // --- Optimization 1: SSE4.2 (x86) ---
-#if defined(__SSE4_2__) && !defined(__GNUC__)
-    // Use 64-bit chunks for maximum efficiency with hardware popcount
+    // --- Optimization 1: AVX2 (x86) ---
+#if defined(__AVX2__)
+    const uint8_t *a_ptr = a->data;
+    const uint8_t *b_ptr = b->data;
+    size_t len32 = len / 32;
+
+    for (; i < len32; i++) {
+        __m256i v_a = _mm256_loadu_si256((const __m256i *)&a_ptr[i * 32]);
+        __m256i v_b = _mm256_loadu_si256((const __m256i *)&b_ptr[i * 32]);
+        __m256i vxor = _mm256_xor_si256(v_a, v_b);
+        uint64_t v0 = _mm256_extract_epi64(vxor, 0);
+        uint64_t v1 = _mm256_extract_epi64(vxor, 1);
+        uint64_t v2 = _mm256_extract_epi64(vxor, 2);
+        uint64_t v3 = _mm256_extract_epi64(vxor, 3);
+
+#if defined(__GNUC__) || defined(__clang__)
+        total += __builtin_popcountll(v0) + __builtin_popcountll(v1) + __builtin_popcountll(v2) +
+                 __builtin_popcountll(v3);
+#else
+        total += (int)(_mm_popcnt_u64(v0) + _mm_popcnt_u64(v1) + _mm_popcnt_u64(v2) +
+                       _mm_popcnt_u64(v3));
+#endif
+    }
+    i *= 32; // Advance byte index
+#endif
+
+    // --- Optimization 1b: SSE4.2 (x86) ---
+#if defined(__SSE4_2__) || defined(__AVX2__)
+    // AVX2 implies SSE4.2. We use 'i < len / 8' so it gracefully covers remainders of 32
     const uint64_t *a64 = (const uint64_t *)a->data;
     const uint64_t *b64 = (const uint64_t *)b->data;
-    size_t len64 = len / 8;
+    size_t len8 = len / 8;
 
-    for (; i < len64; i++) {
+    for (; i < len8; i++) {
         uint64_t x = a64[i] ^ b64[i];
+#if defined(__GNUC__) || defined(__clang__)
+        total += __builtin_popcountll(x);
+#else
         total += (int)_mm_popcnt_u64(x);
+#endif
     }
     i *= 8; // Advance byte index
 #endif

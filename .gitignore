@@ -8,7 +8,8 @@ obj/
 
 # Executables (Tests)
 test_*
-!tests/test_*.c
+!tests/**/test_*.c
+!tests/**/*.h
 
 # IDEs and Editors
 .vscode/
@@ -20,6 +21,17 @@ test_*
 # Build artifacts
 dist/
 build/
+.cache/
 
 # Test images (if generated)
 tests/output_*.jpeg
+
+# Coverage and GCov data
+docs/coverage/
+*.gcda
+*.gcno
+*.gcov
+src/*.gcda
+src/*.gcno
+src/**/*.gcda
+src/**/*.gcno

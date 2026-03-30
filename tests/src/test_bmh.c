@@ -14,8 +14,8 @@ void test_bmh_logic() {
     ASSERT_OK(ph_create(&ctx1));
     ASSERT_OK(ph_create(&ctx2));
 
-    ASSERT_OK(ph_load_from_file(ctx1, "tests/photo.jpeg"));
-    ASSERT_OK(ph_load_from_file(ctx2, "tests/photo_copy.jpeg"));
+    ASSERT_OK(ph_load_from_file(ctx1, TEST_DATA_DIR "/photo.jpeg"));
+    ASSERT_OK(ph_load_from_file(ctx2, TEST_DATA_DIR "/photo_copy.jpeg"));
 
     ASSERT_OK(ph_compute_bmh(ctx1, &digest1));
     ASSERT_OK(ph_compute_bmh(ctx2, &digest2));
