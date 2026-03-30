@@ -14,18 +14,18 @@ void test_bilinear_unit() {
     // (0,2)=100, (1,2)=200, (2,2)=255
 
     // In a 3x3 image, max valid x/y for bilinear is < 2.0
-    ASSERT_FLOAT_EQ(0.0, ph_get_pixel_bilinear(img, 3, 3, 0.0, 0.0), 0.1);
-    ASSERT_FLOAT_EQ(150.0, ph_get_pixel_bilinear(img, 3, 3, 1.0, 1.0), 0.1);
+    ASSERT_FLOAT_EQ(0.0, ph_get_pixel_bilinear(img, 3, 3, 0.0f, 0.0f), 0.1);
+    ASSERT_FLOAT_EQ(150.0, ph_get_pixel_bilinear(img, 3, 3, 1.0f, 1.0f), 0.1);
 
     // Halfway between (0,0) and (1,0) -> 50.0
-    ASSERT_FLOAT_EQ(50.0, ph_get_pixel_bilinear(img, 3, 3, 0.5, 0.0), 0.1);
+    ASSERT_FLOAT_EQ(50.0, ph_get_pixel_bilinear(img, 3, 3, 0.5f, 0.0f), 0.1);
 
     // Center of (0,0),(1,0),(0,1),(1,1) -> (0+100+50+150)/4 = 300/4 = 75.0
-    ASSERT_FLOAT_EQ(75.0, ph_get_pixel_bilinear(img, 3, 3, 0.5, 0.5), 0.1);
+    ASSERT_FLOAT_EQ(75.0, ph_get_pixel_bilinear(img, 3, 3, 0.5f, 0.5f), 0.1);
 
     // Out of bounds
-    ASSERT_FLOAT_EQ(-1.0, ph_get_pixel_bilinear(img, 3, 3, -0.1, 0.0), 0.1);
-    ASSERT_FLOAT_EQ(-1.0, ph_get_pixel_bilinear(img, 3, 3, 2.0, 0.0),
+    ASSERT_FLOAT_EQ(-1.0, ph_get_pixel_bilinear(img, 3, 3, -0.1f, 0.0f), 0.1);
+    ASSERT_FLOAT_EQ(-1.0, ph_get_pixel_bilinear(img, 3, 3, 2.0f, 0.0f),
                     0.1); // Edge point is OOB for bilinear
 
     PASS("test_bilinear_unit");
@@ -35,14 +35,14 @@ void test_projection_variance_unit() {
     uint8_t img[16];
     memset(img, 128, sizeof(img));
     // Uniform image -> variance should be 0
-    double var = ph_projection_variance(img, 4, 4, 2.0, 2.0, 2.0, 1.0, 0.0, 4);
+    double var = ph_projection_variance(img, 4, 4, 2.0, 2.0, 2.0, 1.0f, 0.0f, 4);
     ASSERT_FLOAT_EQ(0.0, var, 0.01);
 
     // Non-uniform image
     memset(img, 0, sizeof(img));
     img[5] = 255; // (1,1)
     img[6] = 255; // (2,1)
-    var = ph_projection_variance(img, 4, 4, 2.0, 1.0, 2.0, 1.0, 0.0, 4);
+    var = ph_projection_variance(img, 4, 4, 2.0, 1.0, 2.0, 1.0f, 0.0f, 4);
     ASSERT(var > 0.0);
 
     PASS("test_projection_variance_unit");

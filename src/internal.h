@@ -57,10 +57,9 @@ typedef struct {
 ph_hsv_result_t ph_hsv_classify_pixel(float r, float g, float b);
 uint64_t ph_pack_3bit_values(const double *values, int n);
 
-double ph_get_pixel_bilinear(const uint8_t *img, int w, int h, double x, double y);
-
+float ph_get_pixel_bilinear(const uint8_t *img, int w, int h, float x, float y);
 double ph_projection_variance(const uint8_t *img, int w, int h, double cx, double cy,
-                              double max_radius, double cos_t, double sin_t, int samples);
+                              double max_radius, float cos_t, float sin_t, int samples);
 
 void ph_haar_1d_float(float *data, int n, float *temp);
 void ph_haar_2d_level(float *data, int size, int stride, float *temp_row, float *temp_col);

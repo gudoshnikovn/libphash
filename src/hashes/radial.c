@@ -3,43 +3,49 @@
 #include <stdlib.h>
 #include <string.h>
 
-double ph_get_pixel_bilinear(const uint8_t *img, int w, int h, double x, double y) {
-    if (x < 0 || x >= w - 1 || y < 0 || y >= h - 1)
-        return -1.0;
+float ph_get_pixel_bilinear(const uint8_t *img, int w, int h, float x, float y) {
+    if (x < 0.0f || x >= (float)(w - 1) || y < 0.0f || y >= (float)(h - 1))
+        return -1.0f;
 
     int x1 = (int)x;
     int y1 = (int)y;
     int x2 = x1 + 1;
     int y2 = y1 + 1;
 
-    double dx = x - (double)x1;
-    double dy = y - (double)y1;
+    float dx = x - (float)x1;
+    float dy = y - (float)y1;
 
-    double p1 = (double)img[y1 * w + x1];
-    double p2 = (double)img[y1 * w + x2];
-    double p3 = (double)img[y2 * w + x1];
-    double p4 = (double)img[y2 * w + x2];
+    float p1 = (float)img[y1 * w + x1];
+    float p2 = (float)img[y1 * w + x2];
+    float p3 = (float)img[y2 * w + x1];
+    float p4 = (float)img[y2 * w + x2];
 
-    return p1 * (1.0 - dx) * (1.0 - dy) + p2 * dx * (1.0 - dy) + p3 * (1.0 - dx) * dy +
+    return p1 * (1.0f - dx) * (1.0f - dy) + p2 * dx * (1.0f - dy) + p3 * (1.0f - dx) * dy +
            p4 * dx * dy;
 }
 
 double ph_projection_variance(const uint8_t *img, int w, int h, double cx, double cy,
-                              double max_radius, double cos_t, double sin_t, int samples) {
+                              double max_radius, float cos_t, float sin_t, int samples) {
     double sum = 0.0;
     double sum_sq = 0.0;
     int count = 0;
 
-    for (int r = 0; r < samples; r++) {
-        double real_r = (double)r - (samples / 2.0);
-        double dist = (real_r * max_radius) / (samples / 2.0);
-        double px = cx + dist * cos_t;
-        double py = cy + dist * sin_t;
+    float f_cx = (float)cx;
+    float f_cy = (float)cy;
+    float f_max_radius = (float)max_radius;
+    float f_samples_half = (float)samples / 2.0f;
+    float scale = f_max_radius / f_samples_half;
 
-        double val = ph_get_pixel_bilinear(img, w, h, px, py);
-        if (val >= 0.0) {
-            sum += val;
-            sum_sq += val * val;
+    for (int r = 0; r < samples; r++) {
+        float f_r = (float)r - f_samples_half;
+        float dist = f_r * scale;
+        float px = f_cx + dist * cos_t;
+        float py = f_cy + dist * sin_t;
+
+        float val = ph_get_pixel_bilinear(img, w, h, px, py);
+        if (val >= 0.0f) {
+            sum += (double)val;
+            sum_sq += (double)(val * val);
             count++;
         }
     }
@@ -95,8 +101,8 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
 
     for (int i = 0; i < projections; i++) {
         double theta = (i * M_PI) / (double)projections;
-        double cos_t = cos(theta);
-        double sin_t = sin(theta);
+        float cos_t = (float)cos(theta);
+        float sin_t = (float)sin(theta);
 
         projection_variances[i] =
             ph_projection_variance(blurred, ctx->image.width, ctx->image.height, centerX, centerY,

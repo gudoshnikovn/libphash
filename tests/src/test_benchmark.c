@@ -34,6 +34,16 @@ struct ph_hash_algo {
     ph_hash_func_t func;
 };
 
+ph_error_t ph_compute_whash_fast_wrapper(ph_context_t *ctx, uint64_t *out_hash) {
+    ph_context_set_whash_mode(ctx, PH_WHASH_FAST);
+    return ph_compute_whash(ctx, out_hash);
+}
+
+ph_error_t ph_compute_whash_full_wrapper(ph_context_t *ctx, uint64_t *out_hash) {
+    ph_context_set_whash_mode(ctx, PH_WHASH_FULL);
+    return ph_compute_whash(ctx, out_hash);
+}
+
 /* --- Benchmark Functions --- */
 void benchmark_hashing(ph_context_t *ctx, int iterations) {
     uint64_t hash;
@@ -51,7 +61,8 @@ void benchmark_hashing(ph_context_t *ctx, int iterations) {
     struct ph_hash_algo uint64_algos[] = {{"aHash", ph_compute_ahash},
                                           {"dHash", ph_compute_dhash},
                                           {"pHash", ph_compute_phash},
-                                          {"wHash", ph_compute_whash},
+                                          {"wHash (Fast)", ph_compute_whash_fast_wrapper},
+                                          {"wHash (Full)", ph_compute_whash_full_wrapper},
                                           {"mHash", ph_compute_mhash},
                                           {"ColorHash", ph_compute_color_hash},
                                           {NULL, NULL}};
