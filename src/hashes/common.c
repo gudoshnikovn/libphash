@@ -53,13 +53,13 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
         uint64_t v1 = _mm256_extract_epi64(vxor, 1);
         uint64_t v2 = _mm256_extract_epi64(vxor, 2);
         uint64_t v3 = _mm256_extract_epi64(vxor, 3);
-        
+
 #if defined(__GNUC__) || defined(__clang__)
-        total += __builtin_popcountll(v0) + __builtin_popcountll(v1) + 
-                 __builtin_popcountll(v2) + __builtin_popcountll(v3);
+        total += __builtin_popcountll(v0) + __builtin_popcountll(v1) + __builtin_popcountll(v2) +
+                 __builtin_popcountll(v3);
 #else
-        total += (int)(_mm_popcnt_u64(v0) + _mm_popcnt_u64(v1) + 
-                       _mm_popcnt_u64(v2) + _mm_popcnt_u64(v3));
+        total += (int)(_mm_popcnt_u64(v0) + _mm_popcnt_u64(v1) + _mm_popcnt_u64(v2) +
+                       _mm_popcnt_u64(v3));
 #endif
     }
     i *= 32; // Advance byte index

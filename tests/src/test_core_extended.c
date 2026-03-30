@@ -27,8 +27,8 @@ void test_scratchpad_management(void) {
     uint8_t *p2 = ph_get_scratchpad(ctx, 200);
     ASSERT_PTR_NOT_NULL(p2);
     if (p2 != p1 + 100) {
-         fprintf(stderr, "[FAIL] Scratchpad did not increment offset correctly\n");
-         exit(1);
+        fprintf(stderr, "[FAIL] Scratchpad did not increment offset correctly\n");
+        exit(1);
     }
 
     // 3. Growth triggering reallocation
@@ -37,8 +37,8 @@ void test_scratchpad_management(void) {
     uint8_t *p3 = ph_get_scratchpad(ctx, 2000);
     ASSERT_PTR_NOT_NULL(p3);
     if (ctx->arena.capacity < 2300) {
-         fprintf(stderr, "[FAIL] Capacity did not grow: %zu\n", ctx->arena.capacity);
-         exit(1);
+        fprintf(stderr, "[FAIL] Capacity did not grow: %zu\n", ctx->arena.capacity);
+        exit(1);
     }
 
     ph_free(ctx);
@@ -61,10 +61,11 @@ void test_scratchpad_autotrim(void) {
     // 10000 * 4 = 40000. Wait, our capacity is ~10240.
     // If I request 100 bytes, 100 * 4 = 400. 10240 > 400 -> SHOULD TRIM.
     ph_get_scratchpad(ctx, 100);
-    
+
     if (ctx->arena.capacity >= large_capacity) {
-         fprintf(stderr, "[FAIL] Scratchpad did not auto-trim (cap=%zu)\n", ctx->arena.capacity);
-         // Note: Implementation might use a minimum 1024, so as long as it's smaller than large_capacity it's fine.
+        fprintf(stderr, "[FAIL] Scratchpad did not auto-trim (cap=%zu)\n", ctx->arena.capacity);
+        // Note: Implementation might use a minimum 1024, so as long as it's smaller than
+        // large_capacity it's fine.
     }
 
     ph_free(ctx);
@@ -101,8 +102,8 @@ void test_parameter_validation(void) {
     int old_proj = ctx->config.radial_projections;
     ph_context_set_radial_params(ctx, 0, 128);
     if (ctx->config.radial_projections != old_proj) {
-         fprintf(stderr, "[FAIL] Radial params accepted 0 projections\n");
-         exit(1);
+        fprintf(stderr, "[FAIL] Radial params accepted 0 projections\n");
+        exit(1);
     }
 
     ph_free(ctx);
@@ -125,11 +126,14 @@ void test_error_handling(void) {
         fprintf(stderr, "[FAIL] ph_load_from_file should have failed for non-existent path\n");
         exit(1);
     }
-    
+
     // NULL arguments
-    if (ph_create(NULL) != PH_ERR_INVALID_ARGUMENT) exit(1);
-    if (ph_load_from_file(NULL, "test.jpg") != PH_ERR_INVALID_ARGUMENT) exit(1);
-    if (ph_load_from_memory(NULL, (uint8_t*)"abc", 3) != PH_ERR_INVALID_ARGUMENT) exit(1);
+    if (ph_create(NULL) != PH_ERR_INVALID_ARGUMENT)
+        exit(1);
+    if (ph_load_from_file(NULL, "test.jpg") != PH_ERR_INVALID_ARGUMENT)
+        exit(1);
+    if (ph_load_from_memory(NULL, (uint8_t *)"abc", 3) != PH_ERR_INVALID_ARGUMENT)
+        exit(1);
 
     ph_free(ctx);
     PASS("test_error_handling");

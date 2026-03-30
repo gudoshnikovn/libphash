@@ -44,7 +44,7 @@ void test_dct2_scalar_reference_parity() {
 
     const float *dct_mat = ph_get_dct_matrix_32();
     float optimized_out[8 * 8] = {0};
-    
+
     // Call the library function which might be SIMD-accelerated
     ph_dct2_partial(dct_mat, input, n, reduce, optimized_out);
 
@@ -74,7 +74,8 @@ void test_dct2_scalar_reference_parity() {
         }
     }
 
-    // The optimized and reference outputs should be nearly identical (allowing for tiny fp order differences)
+    // The optimized and reference outputs should be nearly identical (allowing for tiny fp order
+    // differences)
     for (int i = 0; i < reduce * reduce; i++) {
         ASSERT_FLOAT_EQ(reference_out[i], optimized_out[i], 0.05f);
     }
@@ -83,24 +84,27 @@ void test_dct2_scalar_reference_parity() {
 }
 
 void test_median_stability() {
-    // Case 1: Mostly equal values. 
-    // We check that the median successfully picks the dominant value, and strictly-greater works accurately.
-    // Insertion sort's stability doesn't logically affect the outcome since indistinguishable floats act the same.
+    // Case 1: Mostly equal values.
+    // We check that the median successfully picks the dominant value, and strictly-greater works
+    // accurately. Insertion sort's stability doesn't logically affect the outcome since
+    // indistinguishable floats act the same.
     float values1[64];
-    for(int i = 0; i < 64; i++) values1[i] = 100.0f;
+    for (int i = 0; i < 64; i++)
+        values1[i] = 100.0f;
     values1[0] = 500.0f;
     values1[63] = 0.0f;
-    
+
     uint64_t hash1 = ph_median_bitpack(values1, 64);
     // Since 62 elements are 100, the median is 100.
     // > 100 is only values1[0] -> bit 0
     ASSERT_UINT64_EQ(1ULL, hash1);
-    
+
     // Case 2: Alternating binary pattern
     float values2[64];
-    for(int i = 0; i < 64; i++) values2[i] = (i % 2 == 0) ? 1.0f : 0.0f;
+    for (int i = 0; i < 64; i++)
+        values2[i] = (i % 2 == 0) ? 1.0f : 0.0f;
     // We have 32 '1.0's and 32 '0.0's. Sorted: 32 '0.0's then 32 '1.0's.
-    // Index n/2 = 64/2 = 32. 
+    // Index n/2 = 64/2 = 32.
     // Sorted[32] = 1.0f.
     // "values2[i] > 1.0f" will evaluate to false for ALL elements! So hash should be 0.
     uint64_t hash2 = ph_median_bitpack(values2, 64);
@@ -150,7 +154,7 @@ int main() {
     test_dct2_scalar_reference_parity();
     test_median_stability();
     test_hsv_singularities();
-    
+
     printf("\nAll Math Rigor tests passed!\n");
     return 0;
 }

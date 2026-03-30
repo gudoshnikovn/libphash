@@ -463,8 +463,6 @@ static void test_laplacian_borders_copied(void) {
     PASS("test_laplacian_borders_copied");
 }
 
-
-
 void test_resize_zero_negative_dims(void) {
     uint8_t src[4] = {1, 2, 3, 4};
     uint8_t dst[4] = {0};
