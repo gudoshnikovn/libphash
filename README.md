@@ -4,14 +4,14 @@ A high-performance, portable C library for Perceptual Image Hashing.
 
 `libphash` is designed for speed and efficiency, providing a robust set of algorithms for image fingerprinting with native, SIMD-accelerated decoders and a zero-fragmentation memory model.
 
-## 🔗 Language Bindings
+## Language Bindings
 
 * **Python**: [python-libphash](https://github.com/gudoshnikovn/python-libphash) (`pip install python-libphash`)
 * *More bindings (Node.js, Rust, Go) are in development.*
 
 ---
 
-## 🚀 Core Features
+## Core Features
 
 * **Multiple Algorithms**: `aHash`, `dHash`, `pHash` (DCT-based), `wHash` (Wavelet), `mHash`, `BMH`, `Radial`, and `ColorHash`.
 * **High-Performance Decoders**: Built-in support for `libjpeg-turbo`, `libpng`, `spng`, and `libwebp` with SIMD acceleration (NEON/SSE) and `mmap` optimization.
@@ -22,7 +22,7 @@ A high-performance, portable C library for Perceptual Image Hashing.
 
 ---
 
-## 📊 Performance Modes
+## Performance Modes
 
 `libphash` can be built in two primary configurations:
 
@@ -33,7 +33,7 @@ A high-performance, portable C library for Perceptual Image Hashing.
 
 ---
 
-## 🛠 Building & Installation
+## Building & Installation
 
 ### Recommended (CMake)
 
@@ -62,7 +62,7 @@ make test
 
 ---
 
-## 💻 Usage Example
+## Usage Example
 
 ### C Code
 
@@ -101,7 +101,7 @@ gcc main.c -o my_app -lphash
 
 ---
 
-## ⚖️ License & Credits
+## License & Credits
 
 This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for the full text.
 
@@ -109,10 +109,10 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 `libphash` bundles several high-performance libraries to ensure zero-dependency builds:
 
-* **libjpeg-turbo**: IJG, BSD-3-Clause, zlib.
-* **libpng**: libpng License 2.0.
-* **libwebp**: WebP License (BSD 3-Clause).
-* **spng**: BSD 2-Clause License.
+* **libjpeg-turbo (v3.1.4)**: IJG, BSD-3-Clause, zlib.
+* **libpng (v1.6.56)**: libpng License 2.0.
+* **libwebp (v1.6.0)**: WebP License (BSD 3-Clause).
+* **spng (v0.7.4)**: BSD 2-Clause License.
 * **stb_image**: Public Domain / MIT.
 
 For detailed licensing information regarding these components, please refer to [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
