@@ -104,11 +104,10 @@ void test_median_stability() {
     for (int i = 0; i < 64; i++)
         values2[i] = (i % 2 == 0) ? 1.0f : 0.0f;
     // We have 32 '1.0's and 32 '0.0's. Sorted: 32 '0.0's then 32 '1.0's.
-    // Index n/2 = 64/2 = 32.
-    // Sorted[32] = 1.0f.
-    // "values2[i] > 1.0f" will evaluate to false for ALL elements! So hash should be 0.
+    // For even n: median = (sorted[31] + sorted[32]) / 2 = (0.0f + 1.0f) / 2 = 0.5f.
+    // "values2[i] > 0.5f" is true for even indices (1.0f) -> bits 0,2,4,...,62 are set.
     uint64_t hash2 = ph_median_bitpack(values2, 64);
-    ASSERT_UINT64_EQ(0ULL, hash2);
+    ASSERT_UINT64_EQ(0x5555555555555555ULL, hash2);
 
     PASS("test_median_stability");
 }

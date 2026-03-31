@@ -48,19 +48,19 @@ void test_dct2_partial_unit() {
 
 void test_median_bitpack_unit() {
     float values[4] = {1.0, 3.0, 2.0, 4.0};
-    // sorted: 1.0, 2.0, 3.0, 4.0. n=4. n/2=2. median=3.0.
-    // values > 3.0: 4.0 only (index 3). hash = 1<<3 = 8
+    // sorted: 1.0, 2.0, 3.0, 4.0. n=4 (even). median = (sorted[1]+sorted[2])/2 = (2.0+3.0)/2 = 2.5
+    // values > 2.5: 3.0 (index 1) and 4.0 (index 3). hash = (1<<1)|(1<<3) = 0xa
     uint64_t hash = ph_median_bitpack(values, 4);
-    ASSERT_UINT64_EQ(0x08, hash);
+    ASSERT_UINT64_EQ(0x0a, hash);
 
     float values64[64];
     for (int i = 0; i < 64; i++)
         values64[i] = (float)i;
-    // median is indexed at 64/2 = 32. sorted[32] = 32.0.
-    // values > 32.0 are 33..63 (31 values).
+    // n=64 (even). median = (sorted[31]+sorted[32])/2 = (31.0+32.0)/2 = 31.5
+    // values > 31.5 are indices 32..63 (32 values).
     hash = ph_median_bitpack(values64, 64);
     uint64_t expected = 0;
-    for (int i = 33; i < 64; i++)
+    for (int i = 32; i < 64; i++)
         expected |= (1ULL << i);
     ASSERT_UINT64_EQ(expected, hash);
 
