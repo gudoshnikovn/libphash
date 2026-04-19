@@ -14,8 +14,8 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
 
 /* Resizes a grayscale image using box sampling (averaging) */
 void ph_resize_box(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh);
-void ph_resize_mipmap(ph_context_t *ctx, const uint8_t *src, int sw, int sh, uint8_t *dst, int dw,
-                      int dh);
+
+void ph_resize_lanczos(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh);
 
 /* Applies a 3x3 Gaussian Blur to reduce noise */
 void ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst);

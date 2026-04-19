@@ -118,8 +118,8 @@ static ph_context_t *load_ppm(int w, int h, const uint8_t *pixels) {
  * ========================================================= */
 
 static void test_ahash_uniform_gray(void) {
-    /* 8×8 uniform gray image: every pixel == avg, so every pixel >= avg.
-     * All 64 bits must be set → hash == UINT64_MAX */
+    /* 8×8 uniform gray image: every pixel == avg. Since we use strict inequality (> avg),
+     * no bits will be set → hash == 0 */
     uint8_t pixels[64];
     memset(pixels, 128, 64);
 
@@ -128,14 +128,14 @@ static void test_ahash_uniform_gray(void) {
 
     uint64_t hash = 0;
     ASSERT_INT_EQ(PH_SUCCESS, ph_compute_ahash(ctx, &hash));
-    ASSERT_UINT64_EQ(UINT64_MAX, hash);
+    ASSERT_UINT64_EQ(0, hash);
 
     ph_free(ctx);
     PASS("test_ahash_uniform_gray");
 }
 
 static void test_ahash_all_black(void) {
-    /* All-black image: avg=0, every pixel >= 0 → all bits set */
+    /* All-black image: avg=0, every pixel == 0, strict inequality fails → all bits 0 */
     uint8_t pixels[64];
     memset(pixels, 0, 64);
 
@@ -144,7 +144,7 @@ static void test_ahash_all_black(void) {
 
     uint64_t hash = 0;
     ASSERT_INT_EQ(PH_SUCCESS, ph_compute_ahash(ctx, &hash));
-    ASSERT_UINT64_EQ(UINT64_MAX, hash);
+    ASSERT_UINT64_EQ(0, hash);
 
     ph_free(ctx);
     PASS("test_ahash_all_black");

@@ -13,8 +13,8 @@ PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash) {
 
     uint8_t hash_input[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
 
-    ph_resize_box(gray_input, ctx->image.width, ctx->image.height, hash_input, PH_CORE_HASH_SIZE,
-                  PH_CORE_HASH_SIZE);
+    ph_resize_lanczos(gray_input, ctx->image.width, ctx->image.height, hash_input,
+                      PH_CORE_HASH_SIZE, PH_CORE_HASH_SIZE);
 
     uint64_t total_sum = 0;
     int num_pixels = PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE;
@@ -25,8 +25,8 @@ PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash) {
 
     uint64_t hash = 0;
     for (int i = 0; i < num_pixels; i++) {
-        if (hash_input[i] >= avg) {
-            hash |= (1ULL << i);
+        if (hash_input[i] > avg) {
+            hash |= (1ULL << (63 - i));
         }
     }
 
