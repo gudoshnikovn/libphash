@@ -21,7 +21,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "../vendor/stb_image.h"
 
-PH_API const char *ph_version(void) { return "1.10.0"; }
+PH_API const char *ph_version(void) { return "1.10.3"; }
 
 PH_API const char *ph_get_error_string(ph_error_t err) {
     switch (err) {
