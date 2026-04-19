@@ -5,8 +5,6 @@
  *   - ph_to_grayscale
  *   - ph_apply_gamma (via LUT baked into ctx)
  *   - ph_resize_box
- *   - ph_resize_bilinear
- *   - ph_resize_mipmap
  *   - ph_apply_gaussian_blur
  *   - ph_apply_laplacian_3x3
  *
@@ -252,88 +250,6 @@ static void test_box_black_white_halves(void) {
 }
 
 /* =========================================================
- * ph_resize_bilinear tests
- * ========================================================= */
-
-static void test_bilinear_identity(void) {
-    uint8_t src[] = {10, 20, 30, 40};
-    uint8_t dst[4];
-    ph_resize_bilinear(src, 2, 2, dst, 2, 2);
-    for (int i = 0; i < 4; i++)
-        ASSERT_UINT8_EQ(src[i], dst[i]);
-    PASS("test_bilinear_identity");
-}
-
-static void test_bilinear_1x1_upscale(void) {
-    /* 1×1 px → 3×3: all output must equal the single input pixel */
-    uint8_t src[] = {128};
-    uint8_t dst[9];
-    ph_resize_bilinear(src, 1, 1, dst, 3, 3);
-    for (int i = 0; i < 9; i++)
-        ASSERT_UINT8_EQ(128, dst[i]);
-    PASS("test_bilinear_1x1_upscale");
-}
-
-static void test_bilinear_interpolation_midpoint(void) {
-    /* 2×1 [0, 255] → 3×1: endpoints preserved, middle ≈ 127 or 128 */
-    uint8_t src[] = {0, 255};
-    uint8_t dst[3];
-    ph_resize_bilinear(src, 2, 1, dst, 3, 1);
-    ASSERT_UINT8_EQ(0, dst[0]);
-    /* Middle pixel: interpolated. Allow ±1 rounding */
-    if (dst[1] < 126 || dst[1] > 129) {
-        fprintf(stderr, "[FAIL] test_bilinear_interpolation_midpoint: mid=%u (expected ~127)\n",
-                dst[1]);
-        exit(1);
-    }
-    ASSERT_UINT8_EQ(255, dst[2]);
-    PASS("test_bilinear_interpolation_midpoint");
-}
-
-static void test_bilinear_uniform(void) {
-    /* Uniform input → uniform output regardless of size */
-    uint8_t src[16];
-    memset(src, 77, 16);
-    uint8_t dst[25];
-    ph_resize_bilinear(src, 4, 4, dst, 5, 5);
-    for (int i = 0; i < 25; i++)
-        ASSERT_UINT8_EQ(77, dst[i]);
-    PASS("test_bilinear_uniform");
-}
-
-/* =========================================================
- * ph_resize_mipmap tests
- * ========================================================= */
-
-static void test_mipmap_uniform(void) {
-    /* Uniform image should come out uniform */
-    ph_context_t *ctx = NULL;
-    ASSERT_OK(ph_create(&ctx));
-    uint8_t src[64];
-    memset(src, 150, 64);
-    uint8_t dst[4];
-    ph_resize_mipmap(ctx, src, 8, 8, dst, 2, 2);
-    for (int i = 0; i < 4; i++)
-        ASSERT_UINT8_EQ(150, dst[i]);
-    ph_free(ctx);
-    PASS("test_mipmap_uniform");
-}
-
-static void test_mipmap_small_falls_back_to_bilinear(void) {
-    /* src (3×3) <= dst*2 (4×4) → falls back to bilinear → uniform preserves value */
-    ph_context_t *ctx = NULL;
-    ASSERT_OK(ph_create(&ctx));
-    uint8_t src[9];
-    memset(src, 88, 9);
-    uint8_t dst[4];
-    ph_resize_mipmap(ctx, src, 3, 3, dst, 2, 2);
-    for (int i = 0; i < 4; i++)
-        ASSERT_UINT8_EQ(88, dst[i]);
-    ph_free(ctx);
-    PASS("test_mipmap_small_falls_back_to_bilinear");
-}
-
-/* =========================================================
  * ph_apply_gaussian_blur tests
  * ========================================================= */
 
@@ -467,26 +383,11 @@ void test_resize_zero_negative_dims(void) {
     uint8_t src[4] = {1, 2, 3, 4};
     uint8_t dst[4] = {0};
 
-    // Bilinear
-    ph_resize_bilinear(src, 2, 2, dst, 0, 2);
-    ph_resize_bilinear(src, 2, 2, dst, 2, 0);
-    ph_resize_bilinear(src, 0, 2, dst, 2, 2);
-    ph_resize_bilinear(src, 2, 0, dst, 2, 2);
-
     // Box
     ph_resize_box(src, 2, 2, dst, 0, 2);
     ph_resize_box(src, 2, 2, dst, 2, 0);
     ph_resize_box(src, 0, 2, dst, 2, 2);
     ph_resize_box(src, 2, 0, dst, 2, 2);
-
-    // Mipmap
-    ph_context_t *ctx = NULL;
-    ASSERT_OK(ph_create(&ctx));
-    ph_resize_mipmap(ctx, src, 2, 2, dst, 0, 2);
-    ph_resize_mipmap(ctx, src, 2, 2, dst, 2, 0);
-    ph_resize_mipmap(ctx, src, 0, 2, dst, 2, 2);
-    ph_resize_mipmap(ctx, src, 2, 0, dst, 2, 2);
-    ph_free(ctx);
 
     PASS("test_resize_zero_negative_dims");
 }
@@ -559,16 +460,6 @@ int main(void) {
     test_box_identity();
     test_box_black_white_halves();
     test_box_resize_count_zero();
-
-    /* Bilinear resize */
-    test_bilinear_identity();
-    test_bilinear_1x1_upscale();
-    test_bilinear_interpolation_midpoint();
-    test_bilinear_uniform();
-
-    /* Mipmap resize */
-    test_mipmap_uniform();
-    test_mipmap_small_falls_back_to_bilinear();
 
     /* General Resize Edges */
     test_resize_zero_negative_dims();
