@@ -74,6 +74,17 @@ Redistribution and use in source and binary forms, with or without modification,
 
 ---
 
+## 6. stb_image_resize2.h
+
+* **Project:** [https://github.com/nothings/stb](https://github.com/nothings/stb)
+* **License:** Public Domain / MIT / Unlicense
+
+This software is dual-licensed to the public domain and under the following license: you are free to use this software under the terms of the MIT license or the Unlicense.
+
+Copyright (c) 2023 Jeff Roberts and Jorge L Rodriguez.
+
+---
+
 ### Summary Table
 
 | Library | Directory | License Type |
@@ -83,3 +94,4 @@ Redistribution and use in source and binary forms, with or without modification,
 | **libwebp** | `vendor/libwebp` | BSD 3-Clause |
 | **spng** | `vendor/spng` | BSD 2-Clause |
 | **stb_image** | `vendor/stb_image.h` | Public Domain (MIT) |
+| **stb_image_resize2** | `vendor/stb_image_resize2.h` | Public Domain (MIT) |
