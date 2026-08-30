@@ -108,4 +108,20 @@ clean:
 	find . -name "*.gcov" -delete
 	rm -f tests/output_*.jpeg
 
-.PHONY: all debug test clean format benchmark coverage
+# Native linux/arm64 dev container (task 17, tasks/17_docker_dev_environment.md).
+# Functional Linux/GCC sanity check only — NOT a substitute for the CI matrix (task 7),
+# and NEVER use this image with --platform linux/amd64 for perf numbers (QEMU-emulated
+# x86_64 invalidates the zlib-ng benchmark from task 6).
+DOCKER_IMAGE = libphash-dev-arm64
+
+docker-build:
+	docker build -t $(DOCKER_IMAGE) .
+
+docker-test: docker-build
+	docker run --rm $(DOCKER_IMAGE) bash -c \
+		"mkdir -p build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j$$(nproc) && ctest --output-on-failure"
+
+docker-shell: docker-build
+	docker run --rm -it $(DOCKER_IMAGE) bash
+
+.PHONY: all debug test clean format benchmark coverage docker-build docker-test docker-shell

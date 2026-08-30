@@ -1,0 +1,8 @@
+.git
+build/
+generated/
+docs/coverage/
+*.o
+*.a
+*.dSYM
+.DS_Store
