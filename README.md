@@ -113,6 +113,7 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 * **libpng (v1.6.56)**: libpng License 2.0.
 * **libwebp (v1.6.0)**: WebP License (BSD 3-Clause).
 * **spng (v0.7.4)**: BSD 2-Clause License.
+* **zlib-ng (v2.3.3)**: zlib License.
 * **stb_image (v2.30)**: Public Domain / MIT.
 * **stb_image_resize2 (v2.18)**: Public Domain / MIT.
 

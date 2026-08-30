@@ -85,6 +85,19 @@ Copyright (c) 2023 Jeff Roberts and Jorge L Rodriguez.
 
 ---
 
+## 7. zlib-ng
+
+* **Project:** [https://github.com/zlib-ng/zlib-ng](https://github.com/zlib-ng/zlib-ng)
+* **License:** zlib License
+
+(C) 1995-2024 Jean-loup Gailly and Mark Adler
+
+This software is provided 'as-is', without any express or implied warranty. In no event will the authors be held liable for any damages arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose, including commercial applications, and to alter it and redistribute it freely, subject to the restrictions listed in the zlib license.
+
+---
+
 ### Summary Table
 
 | Library | Directory | License Type |
@@ -95,3 +108,4 @@ Copyright (c) 2023 Jeff Roberts and Jorge L Rodriguez.
 | **spng** | `vendor/spng` | BSD 2-Clause |
 | **stb_image** | `vendor/stb_image.h` | Public Domain (MIT) |
 | **stb_image_resize2** | `vendor/stb_image_resize2.h` | Public Domain (MIT) |
+| **zlib-ng** | `vendor/zlib-ng` | zlib License |

@@ -10,3 +10,6 @@
 [submodule "vendor/libwebp"]
 	path = vendor/libwebp
 	url = https://github.com/webmproject/libwebp.git
+[submodule "vendor/zlib-ng"]
+	path = vendor/zlib-ng
+	url = https://github.com/zlib-ng/zlib-ng.git

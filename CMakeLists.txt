@@ -8,6 +8,7 @@ option(PHASH_BUILD_SHARED "Build shared library" OFF)
 option(PHASH_USE_TURBOJPEG "Use bundled libjpeg-turbo for fast JPEG decoding" ON)
 option(PHASH_USE_LIBPNG "Use bundled libpng for fast PNG decoding" ON)
 option(PHASH_USE_WEBP "Use external libwebp for WebP decoding" ON)
+option(PHASH_USE_ZLIB_NG "Use bundled zlib-ng (zlib-compat) instead of system zlib for PNG inflate" ON)
 option(PHASH_OPTIMIZE_NATIVE "Optimize for host CPU architecture (-march=native)" OFF)
 
 # --- Compiler Flags ---
@@ -75,6 +76,37 @@ if(PHASH_USE_TURBOJPEG)
     endif()
 endif()
 
+# --- Bundled zlib-ng (zlib-compat inflate/deflate used by libpng/spng) ---
+set(PHASH_ZLIB_TARGET z)
+if(PHASH_USE_ZLIB_NG AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/zlib-ng/CMakeLists.txt")
+    set(ZLIB_COMPAT ON CACHE BOOL "" FORCE)
+    set(ZLIB_ALIASES ON CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    set(WITH_GTEST OFF CACHE BOOL "" FORCE)
+    set(WITH_FUZZERS OFF CACHE BOOL "" FORCE)
+    set(WITH_BENCHMARKS OFF CACHE BOOL "" FORCE)
+    set(WITH_BENCHMARK_APPS OFF CACHE BOOL "" FORCE)
+    add_subdirectory(vendor/zlib-ng EXCLUDE_FROM_ALL)
+    # Predefine ZLIB::ZLIB before libpng's find_package(ZLIB) runs: FindZLIB.cmake
+    # skips creating its own imported target when one already exists, so libpng
+    # links against zlib-ng instead of the system zlib it would otherwise find.
+    add_library(ZLIB::ZLIB ALIAS zlib-ng)
+    # find_package(ZLIB) also short-circuits its own find_path()/find_library()
+    # searches once these are already set, so pin them to zlib-ng's generated
+    # zlib.h and static lib. Without this, libpng's pnglibconf.h gets baked with
+    # the system zlib's ZLIB_VERNUM while the actual compile picks up zlib-ng's
+    # zlib.h through the include path, and the two disagree at compile time.
+    set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/vendor/zlib-ng" CACHE PATH "" FORCE)
+    set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/vendor/zlib-ng/libz.a" CACHE FILEPATH "" FORCE)
+    target_compile_definitions(phash PRIVATE PH_USE_ZLIB_NG)
+    set(PHASH_ZLIB_TARGET zlib-ng)
+else()
+    if(PHASH_USE_ZLIB_NG)
+        message(WARNING "vendor/zlib-ng submodule not found. Falling back to system zlib.")
+    endif()
+endif()
+
 # --- Bundled libpng ---
 if(PHASH_USE_LIBPNG)
     target_compile_definitions(phash PRIVATE PH_USE_LIBPNG)
@@ -84,8 +116,8 @@ if(PHASH_USE_LIBPNG)
     set(PNG_HARDWARE_OPTIMIZATIONS ON CACHE BOOL "" FORCE)
     # libpng works mostly OK with add_subdirectory
     add_subdirectory(vendor/libpng EXCLUDE_FROM_ALL)
-    target_link_libraries(phash PRIVATE png_static z)
-    target_include_directories(phash PRIVATE 
+    target_link_libraries(phash PRIVATE png_static ${PHASH_ZLIB_TARGET})
+    target_include_directories(phash PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libpng
         ${CMAKE_CURRENT_BINARY_DIR}/vendor/libpng
     )
@@ -96,7 +128,7 @@ if(PHASH_USE_SPNG)
     target_compile_definitions(phash PRIVATE PH_USE_SPNG)
     add_library(spng_static STATIC vendor/spng/spng/spng.c)
     target_include_directories(spng_static PUBLIC vendor/spng/spng)
-    target_link_libraries(phash PRIVATE spng_static z)
+    target_link_libraries(phash PRIVATE spng_static ${PHASH_ZLIB_TARGET})
     target_include_directories(phash PRIVATE vendor/spng/spng)
 endif()
 
