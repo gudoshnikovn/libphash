@@ -21,6 +21,14 @@ ifeq ($(USE_WEBP),1)
     LDFLAGS += -lwebp -lwebpdecoder
 endif
 
+# --- Optional batch-hashing thread pool (task 9) ---
+# Off by default: keeps the portable/minimal Makefile build free of pthread linkage.
+PHASH_ENABLE_THREADS ?= 0
+ifeq ($(PHASH_ENABLE_THREADS),1)
+    CFLAGS += -DPH_ENABLE_THREADS
+    LDFLAGS += -lpthread
+endif
+
 # OS-specific flags
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Linux)

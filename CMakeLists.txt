@@ -32,6 +32,7 @@ option(PHASH_USE_ZLIB_NG "Use bundled zlib-ng (zlib-compat) instead of system zl
 option(PHASH_OPTIMIZE_NATIVE "Optimize for host CPU architecture (-march=native)" OFF)
 option(PHASH_BUILD_FUZZERS "Build libFuzzer harnesses (requires Clang)" OFF)
 option(PHASH_STRICT_DEPS "Fail the configure step instead of silently falling back when a bundled decoder dependency (e.g. vendored TurboJPEG/zlib-ng) can't be found" OFF)
+option(PHASH_ENABLE_THREADS "Let ph_hash_files()/ph_hash_buffers() spawn a pool of OS threads (pthreads/Win32) instead of always running sequentially" ON)
 
 if(PHASH_IS_TOP_LEVEL)
     include(GNUInstallDirs)
@@ -102,6 +103,15 @@ target_link_libraries(phash PRIVATE m)
 
 if(UNIX AND NOT APPLE)
     target_link_libraries(phash PRIVATE dl)
+endif()
+
+# --- Optional batch-hashing thread pool (task 9) ---
+if(PHASH_ENABLE_THREADS)
+    target_compile_definitions(phash PRIVATE PH_ENABLE_THREADS)
+    if(NOT WIN32)
+        find_package(Threads REQUIRED)
+        target_link_libraries(phash PRIVATE Threads::Threads)
+    endif()
 endif()
 
 # --- Bundled libjpeg-turbo (TurboJPEG API) ---
@@ -282,6 +292,9 @@ if(PHASH_IS_TOP_LEVEL)
     list(APPEND PHASH_PC_LIBS_PRIVATE "-lm")
     if(UNIX AND NOT APPLE)
         list(APPEND PHASH_PC_LIBS_PRIVATE "-ldl")
+    endif()
+    if(PHASH_ENABLE_THREADS AND NOT WIN32)
+        list(APPEND PHASH_PC_LIBS_PRIVATE "-lpthread")
     endif()
 
     # For a STATIC build this exposes the vendored codec archives (installed
