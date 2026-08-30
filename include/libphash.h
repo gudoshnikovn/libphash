@@ -262,6 +262,43 @@ PH_API PH_NODISCARD ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out
 PH_API PH_NODISCARD ph_error_t ph_compute_mhash(ph_context_t *ctx, uint64_t *out_hash);
 PH_API PH_NODISCARD ph_error_t ph_compute_color_hash(ph_context_t *ctx, uint64_t *out_hash);
 
+/**
+ * @brief Flags selecting which uint64_t hash algorithms to compute in a single
+ *        `ph_compute_multi()` call. Bitwise-OR any combination.
+ */
+typedef enum {
+    PH_HASH_AHASH = 1 << 0,
+    PH_HASH_DHASH = 1 << 1,
+    PH_HASH_PHASH = 1 << 2,
+    PH_HASH_WHASH = 1 << 3,
+    PH_HASH_MHASH = 1 << 4,
+    PH_HASH_COLOR_HASH = 1 << 5,
+} ph_hash_flags_t;
+
+/** Number of distinct bits defined in ph_hash_flags_t. Sizes ph_compute_multi's out[]. */
+#define PH_HASH_FLAGS_COUNT 6
+
+/**
+ * @brief Computes multiple uint64_t hash algorithms for the loaded image in one call.
+ *
+ * Equivalent to calling the individual `ph_compute_*` functions for each flag set in
+ * `flags`, but shares the grayscale conversion across all of them instead of recomputing
+ * it once per algorithm (each `ph_compute_*` call already reuses the context's cached
+ * grayscale buffer, so calling several of them back to back on the same context has
+ * always been cheaper than reloading between them — this just wraps that into one call).
+ * Results are bit-for-bit identical to calling the equivalent `ph_compute_*` function
+ * directly.
+ *
+ * @param ctx The context. Must have an image already loaded.
+ * @param flags Bitwise-OR of `ph_hash_flags_t` values selecting which hashes to compute.
+ * @param[out] out Array written with one uint64_t per flag that was set, in ascending
+ *                 bit order (e.g. for `PH_HASH_DHASH | PH_HASH_MHASH`, `out[0]` receives
+ *                 the dHash and `out[1]` the mHash). Must have room for at least as many
+ *                 elements as bits set in `flags` (at most `PH_HASH_FLAGS_COUNT`).
+ */
+PH_API PH_NODISCARD ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flags,
+                                                uint64_t out[]);
+
 // --- Digest Hash Algorithms ---
 
 /**
