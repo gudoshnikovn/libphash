@@ -10,6 +10,7 @@ option(PHASH_USE_LIBPNG "Use bundled libpng for fast PNG decoding" ON)
 option(PHASH_USE_WEBP "Use external libwebp for WebP decoding" ON)
 option(PHASH_USE_ZLIB_NG "Use bundled zlib-ng (zlib-compat) instead of system zlib for PNG inflate" ON)
 option(PHASH_OPTIMIZE_NATIVE "Optimize for host CPU architecture (-march=native)" OFF)
+option(PHASH_BUILD_FUZZERS "Build libFuzzer harnesses (requires Clang)" OFF)
 
 # --- Compiler Flags ---
 include(CheckCCompilerFlag)
@@ -180,4 +181,20 @@ if(PHASH_BUILD_TESTS)
 
     # Add benchmark as a smoke test (verifies loading and hashing works)
     add_test(NAME benchmark_smoke COMMAND $<TARGET_FILE:test_benchmark> hash ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/photo.jpeg 10)
+endif()
+
+# --- Fuzzing (libFuzzer, Clang only) ---
+if(PHASH_BUILD_FUZZERS)
+    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "PHASH_BUILD_FUZZERS requires Clang (libFuzzer is a Clang/compiler-rt feature).")
+    endif()
+
+    # Instrument the library for coverage/sanitizers without pulling in a fuzzer main,
+    # so it can still be linked into the plain ctest binaries above.
+    target_compile_options(phash PRIVATE -fsanitize=fuzzer-no-link,address,undefined -g -O1)
+
+    add_executable(fuzz_load tests/fuzz/fuzz_load.c)
+    target_link_libraries(fuzz_load PRIVATE phash)
+    target_compile_options(fuzz_load PRIVATE -fsanitize=fuzzer,address,undefined -g -O1)
+    target_link_options(fuzz_load PRIVATE -fsanitize=fuzzer,address,undefined)
 endif()

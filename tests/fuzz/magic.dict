@@ -1,0 +1,13 @@
+# libFuzzer dictionary: format magic bytes to help the fuzzer discover
+# valid PNG/JPEG/WebP headers quickly. See tests/fuzz/fuzz_load.c.
+
+"\x89PNG\x0d\x0a\x1a\x0a"
+"\xff\xd8\xff\xe0"
+"\xff\xd8\xff\xe1"
+"RIFF"
+"WEBP"
+"IHDR"
+"IDAT"
+"IEND"
+"JFIF"
+"Exif"

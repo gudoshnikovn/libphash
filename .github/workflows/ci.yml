@@ -65,3 +65,66 @@ jobs:
       with:
         filePath: benchmark_report.md
         comment_tag: performance_report
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    env:
+      CC: clang
+      ASAN_OPTIONS: halt_on_error=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake clang
+
+    - name: Configure CMake (ASan/UBSan)
+      run: |
+        cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all" \
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+
+    - name: Build
+      run: cmake --build build
+
+    - name: Run Tests
+      run: cd build && ctest --output-on-failure
+
+  fuzz:
+    runs-on: ubuntu-latest
+    env:
+      CC: clang
+      ASAN_OPTIONS: halt_on_error=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake clang
+
+    - name: Configure CMake (fuzzers)
+      run: cmake -B build -DPHASH_BUILD_TESTS=OFF -DPHASH_BUILD_FUZZERS=ON -DCMAKE_BUILD_TYPE=Debug
+
+    - name: Build
+      run: cmake --build build --target fuzz_load
+
+    - name: Run fuzz_load (short session on every PR)
+      run: |
+        mkdir -p /tmp/fuzz-artifacts
+        ./build/fuzz_load -max_total_time=90 -dict=tests/fuzz/magic.dict \
+          -artifact_prefix=/tmp/fuzz-artifacts/ tests/data
+
+    - name: Upload crash artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: fuzz-crashes
+        path: /tmp/fuzz-artifacts/
