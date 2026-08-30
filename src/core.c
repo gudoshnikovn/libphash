@@ -8,6 +8,7 @@
 #include "internal.h"
 #include "loader.h"
 #include "phash_version.h"
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,9 +44,23 @@ PH_API const char *ph_get_error_string(ph_error_t err) {
             return "Empty image (no image loaded)";
         case PH_ERR_IMAGE_TOO_LARGE:
             return "Image exceeds the configured maximum pixel count";
+        case PH_ERR_UNSUPPORTED_FORMAT:
+            return "Data is not a recognized image format";
+        case PH_ERR_CORRUPT_DATA:
+            return "Recognized image format, but the data is corrupt or truncated";
+        case PH_ERR_DECODER_UNAVAILABLE:
+            return "Recognized image format, but no decoder for it was compiled into this build";
+        case PH_ERR_IO:
+            return "File could not be opened or read";
         default:
             return "Unknown error";
     }
+}
+
+PH_API const char *ph_get_last_error_message(const ph_context_t *ctx) {
+    if (!ctx)
+        return "";
+    return ctx->last_error;
 }
 
 PH_API void ph_context_set_gamma(ph_context_t *ctx, float gamma) {
@@ -245,15 +260,66 @@ uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size) {
     return ptr;
 }
 
+/* stb_image is the last-resort fallback for anything the native backends didn't
+ * recognize/handle; classify its terse failure reason into one of our specific
+ * error codes instead of the generic PH_ERR_DECODE_FAILED for every cause. */
+static ph_error_t ph_classify_stb_failure(ph_context_t *ctx) {
+    const char *reason = stbi_failure_reason();
+    if (reason) {
+        ph_set_err_msg(ctx->last_error, sizeof(ctx->last_error), reason);
+        if (strcmp(reason, "unknown image type") == 0)
+            return PH_ERR_UNSUPPORTED_FORMAT;
+    }
+    return PH_ERR_CORRUPT_DATA;
+}
+
 PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
     if (!ctx || !filepath)
         return PH_ERR_INVALID_ARGUMENT;
+    ctx->last_error[0] = '\0';
     if (ctx->image.raw_rgb)
         ph_free_image(ctx->image.raw_rgb);
+    ctx->image.raw_rgb = NULL;
+    ctx->image.is_loaded = 0;
     if (ctx->image.gray_cache) {
         free(ctx->image.gray_cache);
         ctx->image.gray_cache = NULL;
     }
+
+#ifndef _WIN32
+    // Distinguish "can't even open this path" from a decode failure up front, for
+    // both the native-decoder and stb_image-only builds below.
+    {
+        int probe_fd = open(filepath, O_RDONLY);
+        if (probe_fd < 0) {
+            char msg[PH_LAST_ERROR_MAX];
+            snprintf(msg, sizeof(msg), "Cannot open '%s': %s", filepath, strerror(errno));
+            ph_set_err_msg(ctx->last_error, sizeof(ctx->last_error), msg);
+            return PH_ERR_IO;
+        }
+        close(probe_fd);
+    }
+#endif
+
+#ifndef PH_USE_WEBP
+    // Report "recognized but unavailable" precisely even in a build with no native
+    // decoders at all, where the mmap+ph_decode_buffer path below is compiled out
+    // entirely and would otherwise silently fall through to stb_image (which has
+    // no WebP support either) and report a misleading PH_ERR_UNSUPPORTED_FORMAT.
+    {
+        FILE *probe = fopen(filepath, "rb");
+        if (probe) {
+            uint8_t magic[12];
+            size_t n = fread(magic, 1, sizeof(magic), probe);
+            fclose(probe);
+            if (ph_magic_is_webp(magic, n)) {
+                ph_set_err_msg(ctx->last_error, sizeof(ctx->last_error),
+                               "WebP support was not compiled into this build (PH_USE_WEBP)");
+                return PH_ERR_DECODER_UNAVAILABLE;
+            }
+        }
+    }
+#endif
 
 #if defined(PH_USE_TURBOJPEG) || defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG) ||                 \
     defined(PH_USE_WEBP)
@@ -271,9 +337,9 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
                 int req_comp_opt = ctx->config.load_grayscale ? 1 : 0;
                 int w, h, ch;
                 ph_error_t decode_err = PH_SUCCESS;
-                uint8_t *decoded_data = ph_decode_buffer(data, (size_t)st.st_size, &w, &h, &ch,
-                                                         req_comp_opt, ctx->config.max_pixels,
-                                                         &decode_err);
+                uint8_t *decoded_data = ph_decode_buffer(
+                    data, (size_t)st.st_size, &w, &h, &ch, req_comp_opt, ctx->config.max_pixels,
+                    &decode_err, ctx->last_error, sizeof(ctx->last_error));
 
                 munmap(mapped, st.st_size);
                 close(fd);
@@ -286,8 +352,10 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
                     ctx->image.is_loaded = 1;
                     return PH_SUCCESS;
                 }
-                if (decode_err == PH_ERR_IMAGE_TOO_LARGE)
-                    return PH_ERR_IMAGE_TOO_LARGE;
+                // A native backend recognized the format and gave a definitive answer
+                // (too large / corrupt / unavailable) — trust it over trying stb_image.
+                if (decode_err != PH_SUCCESS)
+                    return decode_err;
             } else {
                 close(fd);
             }
@@ -309,7 +377,7 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
     ctx->image.raw_rgb =
         stbi_load(filepath, &ctx->image.width, &ctx->image.height, &ctx->image.channels, req_comp);
     if (!ctx->image.raw_rgb)
-        return PH_ERR_DECODE_FAILED;
+        return ph_classify_stb_failure(ctx);
 
     // If we requested specific channels, update the struct to reflect that
     if (req_comp != 0) {
@@ -323,8 +391,11 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
 PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, size_t length) {
     if (!ctx || !buffer || length == 0)
         return PH_ERR_INVALID_ARGUMENT;
+    ctx->last_error[0] = '\0';
     if (ctx->image.raw_rgb)
         ph_free_image(ctx->image.raw_rgb);
+    ctx->image.raw_rgb = NULL;
+    ctx->image.is_loaded = 0;
     if (ctx->image.gray_cache) {
         free(ctx->image.gray_cache);
         ctx->image.gray_cache = NULL;
@@ -335,8 +406,9 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
     // Try unified decoder first
     int w, h, ch;
     ph_error_t decode_err = PH_SUCCESS;
-    uint8_t *decoded_data = ph_decode_buffer(buffer, length, &w, &h, &ch, req_comp,
-                                             ctx->config.max_pixels, &decode_err);
+    uint8_t *decoded_data =
+        ph_decode_buffer(buffer, length, &w, &h, &ch, req_comp, ctx->config.max_pixels, &decode_err,
+                         ctx->last_error, sizeof(ctx->last_error));
     if (decoded_data) {
         ctx->image.raw_rgb = decoded_data;
         ctx->image.width = w;
@@ -345,8 +417,10 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
         ctx->image.is_loaded = 1;
         return PH_SUCCESS;
     }
-    if (decode_err == PH_ERR_IMAGE_TOO_LARGE)
-        return PH_ERR_IMAGE_TOO_LARGE;
+    // A native backend recognized the format and gave a definitive answer (too
+    // large / corrupt / unavailable) — trust it over trying stb_image.
+    if (decode_err != PH_SUCCESS)
+        return decode_err;
 
     if (ctx->config.max_pixels != 0) {
         int iw, ih, icomp;
@@ -359,7 +433,7 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
     ctx->image.raw_rgb = stbi_load_from_memory(buffer, (int)length, &ctx->image.width,
                                                &ctx->image.height, &ctx->image.channels, req_comp);
     if (!ctx->image.raw_rgb)
-        return PH_ERR_DECODE_FAILED;
+        return ph_classify_stb_failure(ctx);
 
     if (req_comp != 0) {
         ctx->image.channels = req_comp;
@@ -397,6 +471,8 @@ PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels, 
 
     if (ctx->image.raw_rgb)
         ph_free_image(ctx->image.raw_rgb);
+    ctx->image.raw_rgb = NULL;
+    ctx->image.is_loaded = 0;
     if (ctx->image.gray_cache) {
         free(ctx->image.gray_cache);
         ctx->image.gray_cache = NULL;

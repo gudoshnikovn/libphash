@@ -84,11 +84,13 @@ void test_core_loading_mock_success(void) {
     // Memory loading FAILures
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_load_from_memory(ctx, NULL, 3));
     uint8_t junk[4] = {0, 0, 0, 0};
-    ASSERT_INT_EQ(PH_ERR_DECODE_FAILED, ph_load_from_memory(ctx, junk, 4));
+    // Not any magic libphash recognizes, and stb_image doesn't know it either.
+    ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, ph_load_from_memory(ctx, junk, 4));
 
     // File loading edge cases
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_load_from_file(ctx, NULL));
-    ASSERT_INT_EQ(PH_ERR_DECODE_FAILED, ph_load_from_file(ctx, "non_existent_file.png"));
+    // The path itself can't be opened, distinct from a recognized-but-bad decode.
+    ASSERT_INT_EQ(PH_ERR_IO, ph_load_from_file(ctx, "non_existent_file.png"));
 
     ph_free(ctx);
     PASS("test_core_loading_mock_success");

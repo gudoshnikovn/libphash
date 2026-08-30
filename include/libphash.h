@@ -56,11 +56,20 @@ extern "C" {
 typedef enum {
     PH_SUCCESS = 0,
     PH_ERR_ALLOCATION_FAILED = -1,
-    PH_ERR_DECODE_FAILED = -2,
+    PH_ERR_DECODE_FAILED = -2, ///< Generic/legacy decode failure; kept for ABI compatibility.
+                               ///< New code prefers one of the more specific codes below.
     PH_ERR_INVALID_ARGUMENT = -3,
     PH_ERR_NOT_IMPLEMENTED = -4,
     PH_ERR_EMPTY_IMAGE = -5,
     PH_ERR_IMAGE_TOO_LARGE = -6,
+    PH_ERR_UNSUPPORTED_FORMAT = -7,  ///< The data isn't any image format libphash recognizes.
+    PH_ERR_CORRUPT_DATA = -8,        ///< A recognized format's magic/header matched, but the
+                                     ///< bitstream itself is malformed or truncated.
+    PH_ERR_DECODER_UNAVAILABLE = -9, ///< The format was recognized, but no decoder for it was
+                                     ///< compiled into this build (e.g. WebP without
+                                     ///< PH_USE_WEBP).
+    PH_ERR_IO = -10,                 ///< The file could not be opened/read (missing, permissions,
+                                     ///< not a regular file, etc).
 } ph_error_t;
 
 /**
@@ -85,6 +94,19 @@ typedef enum {
  * Treat this as a void* in FFI.
  */
 typedef struct ph_context ph_context_t;
+
+/**
+ * @brief Returns a short diagnostic message about the most recent failure on this
+ * context (e.g. the decoder-reported reason a load failed), or an empty string if
+ * nothing has failed yet or no extra detail was captured.
+ *
+ * @note Not thread-safe to read concurrently with a load call on the same context;
+ * follows the same "one context per thread at a time" rule as the rest of the API.
+ * The returned pointer is owned by the context and is invalidated by the next
+ * load/free call on it.
+ * @param ctx The context. Passing NULL returns an empty string.
+ */
+PH_API const char *ph_get_last_error_message(const ph_context_t *ctx);
 
 /**
  * @brief A flat structure representing a hash digest.

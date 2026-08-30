@@ -35,16 +35,37 @@ static void png_mem_read_fn(png_structp png_ptr, png_bytep out, png_size_t count
     reader->offset += count;
 }
 
+// Captures libpng's error text (normally lost to the longjmp) into our fixed-size
+// diagnostic buffer instead of libpng's default behavior of printing to stderr.
+typedef struct {
+    char *err_msg;
+    size_t err_msg_cap;
+} PngErrorCtx;
+
+static void png_error_fn(png_structp png_ptr, png_const_charp msg) {
+    PngErrorCtx *ectx = (PngErrorCtx *)png_get_error_ptr(png_ptr);
+    if (ectx)
+        ph_set_err_msg(ectx->err_msg, ectx->err_msg_cap, msg);
+    longjmp(png_jmpbuf(png_ptr), 1);
+}
+
+static void png_warning_fn(png_structp png_ptr, png_const_charp msg) {
+    (void)png_ptr;
+    (void)msg; // Warnings aren't fatal; nothing to surface for now.
+}
+
 unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                 ph_error_t *out_err) {
+                                 ph_error_t *out_err, char *err_msg, size_t err_msg_cap) {
     if (!buffer || size < 8)
         return NULL;
 
     if (png_sig_cmp(buffer, 0, 8) != 0)
         return NULL;
 
-    png_structp png_ptr = png_create_read_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
+    PngErrorCtx ectx = {.err_msg = err_msg, .err_msg_cap = err_msg_cap};
+    png_structp png_ptr =
+        png_create_read_struct(PNG_LIBPNG_VER_STRING, &ectx, png_error_fn, png_warning_fn);
     if (!png_ptr)
         return NULL;
 
@@ -55,6 +76,11 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     }
 
     if (setjmp(png_jmpbuf(png_ptr))) {
+        // png_error_fn already captured the message and/or code (PH_ERR_IMAGE_TOO_LARGE
+        // sites below set *out_err before their own longjmp-free early returns; this
+        // path is libpng's own fatal errors, which are always a malformed bitstream).
+        if (out_err && *out_err == PH_SUCCESS)
+            *out_err = PH_ERR_CORRUPT_DATA;
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return NULL;
     }
@@ -130,12 +156,16 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
 
     unsigned char *data = (unsigned char *)malloc(alloc_size);
     if (!data) {
+        if (out_err)
+            *out_err = PH_ERR_ALLOCATION_FAILED;
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return NULL;
     }
 
     png_bytep *row_ptrs = (png_bytep *)malloc(sizeof(png_bytep) * h);
     if (!row_ptrs) {
+        if (out_err)
+            *out_err = PH_ERR_ALLOCATION_FAILED;
         free(data);
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return NULL;
@@ -162,26 +192,37 @@ PH_API int ph_can_use_libpng(void) { return 1; }
 
 unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                 ph_error_t *out_err) {
+                                 ph_error_t *out_err, char *err_msg, size_t err_msg_cap) {
     if (!buffer || size < 8)
         return NULL;
 
     spng_ctx *ctx = spng_ctx_new(0);
-    if (!ctx)
+    if (!ctx) {
+        if (out_err)
+            *out_err = PH_ERR_ALLOCATION_FAILED;
         return NULL;
+    }
 
     if (max_pixels != 0) {
         // Defense in depth against huge ancillary-chunk allocations.
         spng_set_chunk_limits(ctx, 128 * 1024 * 1024, 128 * 1024 * 1024);
     }
 
-    if (spng_set_png_buffer(ctx, buffer, size) != 0) {
+    int ret = spng_set_png_buffer(ctx, buffer, size);
+    if (ret != 0) {
+        if (out_err)
+            *out_err = PH_ERR_CORRUPT_DATA;
+        ph_set_err_msg(err_msg, err_msg_cap, spng_strerror(ret));
         spng_ctx_free(ctx);
         return NULL;
     }
 
     struct spng_ihdr ihdr;
-    if (spng_get_ihdr(ctx, &ihdr) != 0) {
+    ret = spng_get_ihdr(ctx, &ihdr);
+    if (ret != 0) {
+        if (out_err)
+            *out_err = PH_ERR_CORRUPT_DATA;
+        ph_set_err_msg(err_msg, err_msg_cap, spng_strerror(ret));
         spng_ctx_free(ctx);
         return NULL;
     }
@@ -196,18 +237,28 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     // Select format based on req_comp
     int fmt = (req_comp == 1) ? SPNG_FMT_G8 : SPNG_FMT_RGB8;
     size_t out_size;
-    if (spng_decoded_image_size(ctx, fmt, &out_size) != 0) {
+    ret = spng_decoded_image_size(ctx, fmt, &out_size);
+    if (ret != 0) {
+        if (out_err)
+            *out_err = PH_ERR_CORRUPT_DATA;
+        ph_set_err_msg(err_msg, err_msg_cap, spng_strerror(ret));
         spng_ctx_free(ctx);
         return NULL;
     }
 
     unsigned char *data = (unsigned char *)malloc(out_size);
     if (!data) {
+        if (out_err)
+            *out_err = PH_ERR_ALLOCATION_FAILED;
         spng_ctx_free(ctx);
         return NULL;
     }
 
-    if (spng_decode_image(ctx, data, out_size, fmt, 0) != 0) {
+    ret = spng_decode_image(ctx, data, out_size, fmt, 0);
+    if (ret != 0) {
+        if (out_err)
+            *out_err = PH_ERR_CORRUPT_DATA;
+        ph_set_err_msg(err_msg, err_msg_cap, spng_strerror(ret));
         free(data);
         spng_ctx_free(ctx);
         return NULL;

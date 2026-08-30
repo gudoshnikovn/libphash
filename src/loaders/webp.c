@@ -15,14 +15,19 @@ int ph_can_read_webp(const uint8_t *magic, size_t len) {
 
 unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long size, int *width,
                                   int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                  ph_error_t *out_err) {
+                                  ph_error_t *out_err, char *err_msg, size_t err_msg_cap) {
     (void)req_comp;
     if (!buffer || size < 12)
         return NULL;
 
     int w, h;
-    if (!WebPGetInfo(buffer, size, &w, &h))
+    if (!WebPGetInfo(buffer, size, &w, &h)) {
+        if (out_err)
+            *out_err = PH_ERR_CORRUPT_DATA;
+        ph_set_err_msg(err_msg, err_msg_cap,
+                       "WebP header could not be parsed (corrupt or truncated bitstream)");
         return NULL;
+    }
 
     if (ph_exceeds_pixel_limit((uint64_t)w, (uint64_t)h, max_pixels)) {
         if (out_err)
@@ -43,11 +48,17 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long siz
     size_t stride = (size_t)w * out_channels;
 
     unsigned char *output = (unsigned char *)malloc(out_size);
-    if (!output)
+    if (!output) {
+        if (out_err)
+            *out_err = PH_ERR_ALLOCATION_FAILED;
         return NULL;
+    }
 
     /* Decode into our buffer so we can free() it normally */
     if (!WebPDecodeRGBInto(buffer, size, output, out_size, (int)stride)) {
+        if (out_err)
+            *out_err = PH_ERR_CORRUPT_DATA;
+        ph_set_err_msg(err_msg, err_msg_cap, "WebP pixel data decode failed (corrupt bitstream)");
         free(output);
         return NULL;
     }

@@ -116,8 +116,7 @@ void init_dct_matrix(void);
 /* Computes w * h * channels for an allocation size, refusing to silently wrap.
  * Returns 0 (and leaves *out untouched) if the product would overflow size_t;
  * returns 1 and sets *out to the byte count otherwise. */
-static inline int ph_safe_image_alloc_size(uint64_t w, uint64_t h, uint64_t channels,
-                                           size_t *out) {
+static inline int ph_safe_image_alloc_size(uint64_t w, uint64_t h, uint64_t channels, size_t *out) {
     if (w == 0 || h == 0 || channels == 0)
         return 0;
     if (w > (uint64_t)SIZE_MAX / h)
@@ -136,6 +135,20 @@ static inline int ph_exceeds_pixel_limit(uint64_t w, uint64_t h, uint64_t max_pi
     return w * h > max_pixels;
 }
 
+/* Truncating copy into a fixed-size diagnostic buffer (err_msg may be NULL/zero-size,
+ * meaning the caller isn't collecting a message). Never allocates. */
+static inline void ph_set_err_msg(char *err_msg, size_t err_msg_cap, const char *msg) {
+    if (!err_msg || err_msg_cap == 0 || !msg)
+        return;
+    size_t i = 0;
+    for (; i + 1 < err_msg_cap && msg[i] != '\0'; i++)
+        err_msg[i] = msg[i];
+    err_msg[i] = '\0';
+}
+
+/* Max length (including NUL) of the diagnostic message stashed by a failed load. */
+#define PH_LAST_ERROR_MAX 160
+
 /* Internal Context Structure */
 struct ph_context {
     // Uploaded image data
@@ -147,6 +160,9 @@ struct ph_context {
         int channels;
         int is_loaded;
     } image;
+
+    // Diagnostic message for the most recent failed load; empty string if none.
+    char last_error[PH_LAST_ERROR_MAX];
 
     // User-defined configuration parameters
     struct {

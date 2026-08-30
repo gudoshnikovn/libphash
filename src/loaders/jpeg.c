@@ -15,7 +15,7 @@ int ph_can_read_jpeg(const uint8_t *magic, size_t len) {
 
 unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size, int *width,
                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                 ph_error_t *out_err) {
+                                 ph_error_t *out_err, char *err_msg, size_t err_msg_cap) {
     if (!buffer || size == 0)
         return NULL;
 
@@ -25,6 +25,9 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size
 
     int w, h, subsamp, colorspace;
     if (tjDecompressHeader3(handle, buffer, size, &w, &h, &subsamp, &colorspace) < 0) {
+        if (out_err)
+            *out_err = PH_ERR_CORRUPT_DATA;
+        ph_set_err_msg(err_msg, err_msg_cap, tjGetErrorStr2(handle));
         tjDestroy(handle);
         return NULL;
     }
@@ -59,12 +62,17 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size
 
     unsigned char *output = (unsigned char *)malloc(alloc_size);
     if (!output) {
+        if (out_err)
+            *out_err = PH_ERR_ALLOCATION_FAILED;
         tjDestroy(handle);
         return NULL;
     }
 
     int flags = TJFLAG_FASTDCT | TJFLAG_NOREALLOC;
     if (tjDecompress2(handle, buffer, size, output, w, pitch, h, pixelFormat, flags) < 0) {
+        if (out_err)
+            *out_err = PH_ERR_CORRUPT_DATA;
+        ph_set_err_msg(err_msg, err_msg_cap, tjGetErrorStr2(handle));
         free(output);
         tjDestroy(handle);
         return NULL;

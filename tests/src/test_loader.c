@@ -42,44 +42,49 @@ void test_png_loading() {
     printf("test_png_loading: PASSED\n");
 }
 
-#ifdef PH_USE_WEBP
-void test_webp_loading() {
+// Branches on the runtime capability check rather than the PH_USE_WEBP compile-time
+// macro: under CMake, that macro is a PRIVATE define on the `phash` target and isn't
+// visible here, so it wouldn't reliably reflect how the library itself was built.
+void test_webp_loading_or_unavailable() {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
 
-    // Test loading valid WebP
-    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.webp"));
-    ASSERT_PTR_NOT_NULL(ctx);
+    ph_error_t err = ph_load_from_file(ctx, TEST_DATA_DIR "/photo.webp");
 
-    int w, h, ch;
-    ph_context_get_dimensions(ctx, &w, &h, &ch);
-    printf("WebP Loader stats: w=%d, h=%d, ch=%d, webp_active=%d\n", w, h, ch, ph_can_use_webp());
-    ASSERT_INT_EQ(3, ch); // WebP decodes to RGB by default in our implementation
+    if (ph_can_use_webp()) {
+        ASSERT_INT_EQ(PH_SUCCESS, err);
+        int w, h, ch;
+        ph_context_get_dimensions(ctx, &w, &h, &ch);
+        printf("WebP Loader stats: w=%d, h=%d, ch=%d, webp_active=1\n", w, h, ch);
+        ASSERT_INT_EQ(3, ch); // WebP decodes to RGB by default in our implementation
+    } else {
+        // A real WebP file is recognized by its RIFF/WEBP magic, but with no WebP
+        // decoder compiled in (and stb_image having no WebP support to fall back
+        // to), this must be reported as "decoder unavailable", not a generic or
+        // corrupt-data failure.
+        ASSERT_INT_EQ(PH_ERR_DECODER_UNAVAILABLE, err);
+        ASSERT(strlen(ph_get_last_error_message(ctx)) > 0);
+    }
 
     ph_free(ctx);
-    printf("test_webp_loading: PASSED\n");
+    printf("test_webp_loading_or_unavailable: PASSED\n");
 }
-#endif
 
 void test_corrupted_loading() {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
 
-    // Loading corrupted file should return error
+    // Loading a truncated/garbled-but-recognizable file must be reported as
+    // corrupt data specifically, not a generic decode failure, and should leave
+    // a non-empty diagnostic message behind.
     ph_error_t err = ph_load_from_file(ctx, TEST_DATA_DIR "/corrupted.jpg");
-    if (err == PH_SUCCESS) {
-        fprintf(stderr,
-                "[FAIL] test_corrupted_loading - Should have failed to load corrupted.jpg\n");
-        exit(1);
-    }
+    ASSERT_INT_EQ(PH_ERR_CORRUPT_DATA, err);
+    ASSERT(strlen(ph_get_last_error_message(ctx)) > 0);
 
-    // Loading non-existent file
+    // A missing file is an I/O problem, distinct from a decode failure.
     err = ph_load_from_file(ctx, TEST_DATA_DIR "/non_existent.jpg");
-    if (err == PH_SUCCESS) {
-        fprintf(stderr,
-                "[FAIL] test_corrupted_loading - Should have failed to load non_existent.jpg\n");
-        exit(1);
-    }
+    ASSERT_INT_EQ(PH_ERR_IO, err);
+    ASSERT(strlen(ph_get_last_error_message(ctx)) > 0);
 
     ph_free(ctx);
     printf("test_corrupted_loading: PASSED\n");
@@ -150,13 +155,11 @@ void test_loader_edge_cases() {
         exit(1);
     }
 
-    // 2. Unknown format (magic not matching any backend)
+    // 2. Unknown format (magic not matching any backend, and not recognized by
+    // stb_image's fallback either) must report PH_ERR_UNSUPPORTED_FORMAT.
     uint8_t garbage[10] = "garbage!!!";
     err = ph_load_from_memory(ctx, garbage, 10);
-    if (err == PH_SUCCESS) {
-        fprintf(stderr, "[FAIL] test_loader_edge_cases - Unknown format should fail\n");
-        exit(1);
-    }
+    ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, err);
 
     // 3. ph_free_image(NULL) check (internal call coverage)
     ph_free_image(NULL);
@@ -168,9 +171,7 @@ void test_loader_edge_cases() {
 int main() {
     test_jpeg_loading();
     test_png_loading();
-#ifdef PH_USE_WEBP
-    test_webp_loading();
-#endif
+    test_webp_loading_or_unavailable();
     test_corrupted_loading();
     test_grayscale_loading();
     test_memory_loading();

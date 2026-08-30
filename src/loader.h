@@ -19,37 +19,51 @@
 // Override: LIBPHASH_MINIMAL=1 disables all at pip install time.
 // =====================================================================
 
+#ifndef PH_USE_WEBP
+// Magic-byte check that stays available even when no WebP decoder is compiled in,
+// so a recognized-but-unavailable format can be reported precisely (used by both
+// ph_decode_buffer() and, for the fully-portable/no-native-decoders build where
+// ph_load_from_file() never reaches ph_decode_buffer, directly by core.c).
+static inline int ph_magic_is_webp(const uint8_t *magic, size_t len) {
+    return (len >= 12 && magic[0] == 'R' && magic[1] == 'I' && magic[2] == 'F' && magic[3] == 'F' &&
+            magic[8] == 'W' && magic[9] == 'E' && magic[10] == 'B' && magic[11] == 'P');
+}
+#endif
+
 // max_pixels: 0 = unlimited, otherwise the max allowed width*height; the decoder must
 // check this against the image's header-declared dimensions *before* allocating a
 // pixel buffer, and on violation set *out_err = PH_ERR_IMAGE_TOO_LARGE and return NULL.
-// out_err: set to PH_SUCCESS by the caller before the call; decoders only need to set
-// it on the PH_ERR_IMAGE_TOO_LARGE path (a NULL return with it left at PH_SUCCESS is
-// treated as a generic decode failure).
+// out_err: set to PH_SUCCESS by the caller before the call. Once a backend's can_read()
+// has claimed the data, any decode failure it hits is a recognized-but-broken bitstream,
+// so it should set *out_err to the most specific applicable code (PH_ERR_IMAGE_TOO_LARGE
+// or PH_ERR_CORRUPT_DATA) rather than leaving it at PH_SUCCESS.
+// err_msg/err_msg_cap: optional fixed-size buffer (may be NULL/0) that the decoder can
+// fill with a short human-readable reason via ph_set_err_msg(); never allocates.
 
 #ifdef PH_USE_TURBOJPEG
 // --- JPEG: Static TurboJPEG API (tjDecompress2) ---
 unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size, int *width,
                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                 ph_error_t *out_err);
+                                 ph_error_t *out_err, char *err_msg, size_t err_msg_cap);
 #endif
 
 #ifdef PH_USE_LIBPNG
 // --- PNG: Static libpng (memory-based reading, ARM NEON optimized) ---
 unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                 ph_error_t *out_err);
+                                 ph_error_t *out_err, char *err_msg, size_t err_msg_cap);
 #elif defined(PH_USE_SPNG)
 // --- PNG: Static spng (single-call API, fast on x86) ---
 unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                 ph_error_t *out_err);
+                                 ph_error_t *out_err, char *err_msg, size_t err_msg_cap);
 #endif
 
 #ifdef PH_USE_WEBP
 // --- WebP: libwebp (decodes to RGB, no native grayscale) ---
 unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long size, int *width,
                                   int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                  ph_error_t *out_err);
+                                  ph_error_t *out_err, char *err_msg, size_t err_msg_cap);
 #endif
 
 // Runtime capability checks (always available)
@@ -61,15 +75,20 @@ int ph_can_use_webp(void);
 typedef struct {
     int (*can_read)(const uint8_t *magic, size_t len);
     uint8_t *(*decode)(const uint8_t *data, size_t len, int *w, int *h, int *ch, int req_comp,
-                      uint64_t max_pixels, ph_error_t *out_err);
+                       uint64_t max_pixels, ph_error_t *out_err, char *err_msg, size_t err_msg_cap);
 } ph_image_backend_t;
 
 // Unified decoder that tries all registered backends.
 // max_pixels: 0 = unlimited, otherwise the max allowed width*height.
-// out_err: optional; set to PH_ERR_IMAGE_TOO_LARGE if a backend recognized the format
-// but rejected it for exceeding max_pixels (left untouched on any other failure).
+// out_err: optional; set to a specific PH_ERR_* code if a backend recognized the format
+// but couldn't decode it (too large, corrupt) or if the format is recognized by magic
+// bytes but its decoder wasn't compiled into this build (left untouched, i.e. PH_SUCCESS,
+// if nothing recognized the data at all).
+// err_msg/err_msg_cap: optional fixed-size buffer (may be NULL/0) filled with a short
+// human-readable reason alongside *out_err.
 uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int *height,
-                          int *channels, int req_comp, uint64_t max_pixels, ph_error_t *out_err);
+                          int *channels, int req_comp, uint64_t max_pixels, ph_error_t *out_err,
+                          char *err_msg, size_t err_msg_cap);
 
 // Safe image memory free
 void ph_free_image(uint8_t *data);

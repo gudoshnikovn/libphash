@@ -11,12 +11,15 @@ static int ph_mock_can_read(const uint8_t *magic, size_t len) {
     return 0;
 }
 static uint8_t *ph_mock_decode(const uint8_t *data, size_t len, int *w, int *h, int *ch, int req,
-                               uint64_t max_pixels, ph_error_t *out_err) {
+                               uint64_t max_pixels, ph_error_t *out_err, char *err_msg,
+                               size_t err_msg_cap) {
     (void)data;
     (void)len;
     (void)req;
     (void)max_pixels;
     (void)out_err;
+    (void)err_msg;
+    (void)err_msg_cap;
     *w = 1;
     *h = 1;
     *ch = 3;
@@ -40,8 +43,8 @@ static const ph_image_backend_t backends[] = {
     {NULL, NULL}};
 
 uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int *height,
-                          int *channels, int req_comp, uint64_t max_pixels,
-                          ph_error_t *out_err) {
+                          int *channels, int req_comp, uint64_t max_pixels, ph_error_t *out_err,
+                          char *err_msg, size_t err_msg_cap) {
     if (out_err)
         *out_err = PH_SUCCESS;
     if (!buffer || length == 0)
@@ -50,18 +53,26 @@ uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int 
         if (backends[i].can_read(buffer, length)) {
             ph_error_t err = PH_SUCCESS;
             uint8_t *data = backends[i].decode(buffer, length, width, height, channels, req_comp,
-                                               max_pixels, &err);
+                                               max_pixels, &err, err_msg, err_msg_cap);
             if (data)
                 return data;
-            if (err == PH_ERR_IMAGE_TOO_LARGE) {
-                // Format was recognized and rejected for size: don't let a later
-                // backend (or the stb_image fallback) attempt the same allocation.
-                if (out_err)
-                    *out_err = err;
-                return NULL;
-            }
+            // The magic bytes matched this backend, so a decode failure here is a
+            // definitive answer (too large / corrupt): don't let a later backend or
+            // the stb_image fallback re-attempt the same data.
+            if (out_err)
+                *out_err = (err != PH_SUCCESS) ? err : PH_ERR_CORRUPT_DATA;
+            return NULL;
         }
     }
+#ifndef PH_USE_WEBP
+    if (ph_magic_is_webp(buffer, length)) {
+        if (out_err)
+            *out_err = PH_ERR_DECODER_UNAVAILABLE;
+        ph_set_err_msg(err_msg, err_msg_cap,
+                       "WebP support was not compiled into this build (PH_USE_WEBP)");
+        return NULL;
+    }
+#endif
     return NULL;
 }
 
