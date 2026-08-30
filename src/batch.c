@@ -15,67 +15,54 @@
     (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_MHASH |              \
      PH_HASH_COLOR_HASH)
 
-static ph_error_t ph_compute_by_flag(ph_context_t *ctx, uint32_t flag, uint64_t *out) {
-    switch (flag) {
-        case PH_HASH_AHASH:
-            return ph_compute_ahash(ctx, out);
-        case PH_HASH_DHASH:
-            return ph_compute_dhash(ctx, out);
-        case PH_HASH_PHASH:
-            return ph_compute_phash(ctx, out);
-        case PH_HASH_WHASH:
-            return ph_compute_whash(ctx, out);
-        case PH_HASH_MHASH:
-            return ph_compute_mhash(ctx, out);
-        case PH_HASH_COLOR_HASH:
-            return ph_compute_color_hash(ctx, out);
-        default:
-            return PH_ERR_INVALID_ARGUMENT;
+static int ph_flags_are_valid(uint32_t flags) {
+    return flags != 0 && (flags & ~(uint32_t)PH_HASH_FLAGS_ALL) == 0;
+}
+
+static void clear_hashes(uint64_t hashes[PH_HASH_FLAGS_COUNT]) {
+    for (int i = 0; i < PH_HASH_FLAGS_COUNT; i++) {
+        hashes[i] = 0;
     }
 }
 
-static int ph_flag_is_single_valid_bit(uint32_t flag) {
-    return flag != 0 && (flag & (flag - 1)) == 0 && (flag & ~(uint32_t)PH_HASH_FLAGS_ALL) == 0;
-}
-
-static void process_file_item(ph_context_t *ctx, ph_batch_item_t *item, uint32_t flag) {
+static void process_file_item(ph_context_t *ctx, ph_batch_item_t *item, uint32_t flags) {
     if (!item->path) {
-        item->hash = 0;
+        clear_hashes(item->hashes);
         item->status = PH_ERR_INVALID_ARGUMENT;
         return;
     }
     ph_error_t err = ph_load_from_file(ctx, item->path);
     if (err != PH_SUCCESS) {
-        item->hash = 0;
+        clear_hashes(item->hashes);
         item->status = err;
         return;
     }
-    item->status = ph_compute_by_flag(ctx, flag, &item->hash);
+    item->status = ph_compute_multi(ctx, flags, item->hashes);
 }
 
-static void process_buffer_item(ph_context_t *ctx, ph_batch_buffer_item_t *item, uint32_t flag) {
+static void process_buffer_item(ph_context_t *ctx, ph_batch_buffer_item_t *item, uint32_t flags) {
     if (!item->buffer || item->length == 0) {
-        item->hash = 0;
+        clear_hashes(item->hashes);
         item->status = PH_ERR_INVALID_ARGUMENT;
         return;
     }
     ph_error_t err = ph_load_from_memory(ctx, item->buffer, item->length);
     if (err != PH_SUCCESS) {
-        item->hash = 0;
+        clear_hashes(item->hashes);
         item->status = err;
         return;
     }
-    item->status = ph_compute_by_flag(ctx, flag, &item->hash);
+    item->status = ph_compute_multi(ctx, flags, item->hashes);
 }
 
-typedef void (*ph_batch_process_fn)(ph_context_t *ctx, void *item, uint32_t flag);
+typedef void (*ph_batch_process_fn)(ph_context_t *ctx, void *item, uint32_t flags);
 
-static void process_file_item_v(ph_context_t *ctx, void *item, uint32_t flag) {
-    process_file_item(ctx, (ph_batch_item_t *)item, flag);
+static void process_file_item_v(ph_context_t *ctx, void *item, uint32_t flags) {
+    process_file_item(ctx, (ph_batch_item_t *)item, flags);
 }
 
-static void process_buffer_item_v(ph_context_t *ctx, void *item, uint32_t flag) {
-    process_buffer_item(ctx, (ph_batch_buffer_item_t *)item, flag);
+static void process_buffer_item_v(ph_context_t *ctx, void *item, uint32_t flags) {
+    process_buffer_item(ctx, (ph_batch_buffer_item_t *)item, flags);
 }
 
 #if defined(PH_ENABLE_THREADS)
@@ -84,7 +71,7 @@ typedef struct {
     uint8_t *items_base;
     size_t item_stride;
     size_t n;
-    uint32_t flag;
+    uint32_t flags;
     ph_batch_process_fn process;
     atomic_size_t next;
 } ph_batch_shared_t;
@@ -103,7 +90,7 @@ static void ph_batch_worker_run(ph_batch_shared_t *shared) {
         size_t idx = atomic_fetch_add(&shared->next, 1);
         if (idx >= shared->n)
             break;
-        shared->process(ctx, shared->items_base + idx * shared->item_stride, shared->flag);
+        shared->process(ctx, shared->items_base + idx * shared->item_stride, shared->flags);
     }
 
     ph_free(ctx);
@@ -133,13 +120,13 @@ static int ph_detect_num_cores(void) {
 }
 
 static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, size_t n,
-                                        uint32_t flag, ph_batch_process_fn process,
+                                        uint32_t flags, ph_batch_process_fn process,
                                         int nthreads) {
     ph_batch_shared_t shared = {
         .items_base = (uint8_t *)items_base,
         .item_stride = item_stride,
         .n = n,
-        .flag = flag,
+        .flags = flags,
         .process = process,
     };
     atomic_init(&shared.next, 0);
@@ -197,12 +184,12 @@ static int ph_resolve_thread_count(int threads, size_t n) {
     return count;
 }
 
-static ph_error_t ph_hash_batch(void *items_base, size_t item_stride, size_t n, uint32_t flag,
+static ph_error_t ph_hash_batch(void *items_base, size_t item_stride, size_t n, uint32_t flags,
                                 int threads, ph_batch_process_fn process,
                                 void (*init_defaults)(void *item)) {
     if (n == 0)
         return PH_SUCCESS;
-    if (!items_base || threads < 0 || !ph_flag_is_single_valid_bit(flag))
+    if (!items_base || threads < 0 || !ph_flags_are_valid(flags))
         return PH_ERR_INVALID_ARGUMENT;
 
     for (size_t i = 0; i < n; i++) {
@@ -216,14 +203,14 @@ static ph_error_t ph_hash_batch(void *items_base, size_t item_stride, size_t n, 
         if (ph_create(&ctx) != PH_SUCCESS)
             return PH_ERR_ALLOCATION_FAILED;
         for (size_t i = 0; i < n; i++) {
-            process(ctx, (uint8_t *)items_base + i * item_stride, flag);
+            process(ctx, (uint8_t *)items_base + i * item_stride, flags);
         }
         ph_free(ctx);
         return PH_SUCCESS;
     }
 
 #if defined(PH_ENABLE_THREADS)
-    return ph_batch_run_threaded(items_base, item_stride, n, flag, process, nthreads);
+    return ph_batch_run_threaded(items_base, item_stride, n, flags, process, nthreads);
 #else
     return PH_ERR_NOT_IMPLEMENTED; /* unreachable: ph_resolve_thread_count clamps to 1 */
 #endif
@@ -231,23 +218,23 @@ static ph_error_t ph_hash_batch(void *items_base, size_t item_stride, size_t n, 
 
 static void init_file_item_defaults(void *item) {
     ph_batch_item_t *i = (ph_batch_item_t *)item;
-    i->hash = 0;
+    clear_hashes(i->hashes);
     i->status = PH_ERR_ALLOCATION_FAILED;
 }
 
 static void init_buffer_item_defaults(void *item) {
     ph_batch_buffer_item_t *i = (ph_batch_buffer_item_t *)item;
-    i->hash = 0;
+    clear_hashes(i->hashes);
     i->status = PH_ERR_ALLOCATION_FAILED;
 }
 
-PH_API ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, uint32_t flag, int threads) {
-    return ph_hash_batch(items, sizeof(ph_batch_item_t), n, flag, threads, process_file_item_v,
+PH_API ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, uint32_t flags, int threads) {
+    return ph_hash_batch(items, sizeof(ph_batch_item_t), n, flags, threads, process_file_item_v,
                          init_file_item_defaults);
 }
 
-PH_API ph_error_t ph_hash_buffers(ph_batch_buffer_item_t *items, size_t n, uint32_t flag,
+PH_API ph_error_t ph_hash_buffers(ph_batch_buffer_item_t *items, size_t n, uint32_t flags,
                                   int threads) {
-    return ph_hash_batch(items, sizeof(ph_batch_buffer_item_t), n, flag, threads,
+    return ph_hash_batch(items, sizeof(ph_batch_buffer_item_t), n, flags, threads,
                          process_buffer_item_v, init_buffer_item_defaults);
 }

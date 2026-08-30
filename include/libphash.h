@@ -302,47 +302,57 @@ PH_API PH_NODISCARD ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flag
 // --- Batch Hashing ---
 
 /**
- * @brief One entry in a `ph_hash_files()` batch: a file path in, a hash and status out.
+ * @brief One entry in a `ph_hash_files()` batch: a file path in, hashes and status out.
  */
 typedef struct {
     const char *path; ///< Path to the image file to hash. Must stay valid for the call.
-    uint64_t hash;    ///< [out] The computed hash, valid only if `status == PH_SUCCESS`.
+    /** [out] One uint64_t per flag set in the `flags` passed to `ph_hash_files()`, packed
+     *  in ascending bit order -- same layout as `ph_compute_multi()`'s `out[]`. Valid only
+     *  if `status == PH_SUCCESS`. */
+    uint64_t hashes[PH_HASH_FLAGS_COUNT];
     ph_error_t status; ///< [out] Per-item result. A failure here does not abort the batch.
 } ph_batch_item_t;
 
 /**
- * @brief One entry in a `ph_hash_buffers()` batch: an in-memory image buffer in, a hash
+ * @brief One entry in a `ph_hash_buffers()` batch: an in-memory image buffer in, hashes
  *        and status out.
  */
 typedef struct {
     const uint8_t *buffer; ///< Pointer to the encoded image bytes (e.g. JPEG/PNG/WebP).
     size_t length;          ///< Size of `buffer` in bytes.
-    uint64_t hash;          ///< [out] The computed hash, valid only if `status == PH_SUCCESS`.
-    ph_error_t status;      ///< [out] Per-item result. A failure here does not abort the batch.
+    /** [out] One uint64_t per flag set in the `flags` passed to `ph_hash_buffers()`, packed
+     *  in ascending bit order -- same layout as `ph_compute_multi()`'s `out[]`. Valid only
+     *  if `status == PH_SUCCESS`. */
+    uint64_t hashes[PH_HASH_FLAGS_COUNT];
+    ph_error_t status; ///< [out] Per-item result. A failure here does not abort the batch.
 } ph_batch_buffer_item_t;
 
 /**
  * @brief Hashes a batch of image files, optionally across a pool of internal threads.
  *
- * Each item is loaded and hashed independently, using one `ph_hash_flags_t` algorithm
- * (`flag` must be exactly one bit — call this once per algorithm if several are needed).
- * A decode/hash failure on one item is recorded in that item's `status` and does not
- * stop the rest of the batch from being processed. The overall return value only
- * reports argument-validation failures that prevented the batch from starting at all.
+ * Each item is loaded and hashed independently. Internally this calls the same shared-
+ * grayscale `ph_compute_multi()` used for a single image, so requesting several
+ * algorithms for the same file is no more expensive per-file than requesting one (the
+ * grayscale conversion/downscales are not repeated). A decode/hash failure on one item is
+ * recorded in that item's `status` and does not stop the rest of the batch from being
+ * processed. The overall return value only reports argument-validation failures that
+ * prevented the batch from starting at all.
  *
- * @param items Array of batch entries; `path`/`hash`/`status` are read/written in place.
+ * @param items Array of batch entries; `path`/`hashes`/`status` are read/written in place.
  * @param n Number of entries in `items`. 0 is a no-op that returns PH_SUCCESS immediately.
- * @param flag Exactly one bit from `ph_hash_flags_t` selecting the algorithm to compute.
+ * @param flags Bitwise-OR of `ph_hash_flags_t` values selecting which algorithms to
+ *              compute for every item. See `ph_compute_multi()` for the `hashes[]`
+ *              packing convention.
  * @param threads Worker thread count. 0 = one per detected CPU core, 1 = run sequentially
  *                on the calling thread with no thread creation, >1 = that many workers.
  *                Ignored (always sequential) if the library was built without
- *                `PHASH_ENABLE_THREADS` (default OFF) or if `n` is smaller than the
- *                requested thread count.
+ *                `PHASH_ENABLE_THREADS` (default ON in CMake, OFF in the Makefile) or if
+ *                `n` is smaller than the requested thread count.
  * @return PH_SUCCESS once the batch has been dispatched (regardless of per-item
  *         outcomes), or PH_ERR_INVALID_ARGUMENT for a malformed call (NULL `items` with
- *         `n > 0`, `flag` not exactly one valid bit, or negative `threads`).
+ *         `n > 0`, `flags` zero or containing an unknown bit, or negative `threads`).
  */
-PH_API PH_NODISCARD ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, uint32_t flag,
+PH_API PH_NODISCARD ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, uint32_t flags,
                                              int threads);
 
 /**
@@ -350,7 +360,7 @@ PH_API PH_NODISCARD ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, u
  *        (e.g. downloaded bytes) instead of file paths.
  */
 PH_API PH_NODISCARD ph_error_t ph_hash_buffers(ph_batch_buffer_item_t *items, size_t n,
-                                               uint32_t flag, int threads);
+                                               uint32_t flags, int threads);
 
 // --- Digest Hash Algorithms ---
 
