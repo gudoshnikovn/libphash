@@ -66,7 +66,8 @@ $(GENERATED_DIR)/phash_version.h: CMakeLists.txt include/phash_version.h.in scri
 $(OBJS): $(GENERATED_DIR)/phash_version.h
 
 # Diagnostic/Debug build
-debug: CFLAGS = -I./include -I./$(GENERATED_DIR) -g -O0 -fsanitize=address,undefined -Wall -Wextra -fPIC
+debug: CFLAGS += -g -O0 -fsanitize=address,undefined
+debug: LDFLAGS += -fsanitize=address,undefined
 debug: clean all
 
 # Reformat code
