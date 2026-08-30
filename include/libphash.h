@@ -212,6 +212,25 @@ PH_API PH_NODISCARD ph_error_t ph_load_from_file(ph_context_t *ctx, const char *
 PH_API PH_NODISCARD ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer,
                                                    size_t length);
 
+/**
+ * @brief Loads an image from an already-decoded pixel buffer.
+ *
+ * Use this to hash frames that already live in memory as raw pixels (e.g. from
+ * OpenCV, PIL, numpy, or a video frame), skipping the encode/decode round-trip
+ * that `ph_load_from_file`/`ph_load_from_memory` would otherwise require.
+ *
+ * @param ctx The context.
+ * @param pixels Pointer to the raw pixel data, `height` rows of `channels`-interleaved bytes.
+ * @param width Image width in pixels. Must be > 0.
+ * @param height Image height in pixels. Must be > 0.
+ * @param channels Number of channels per pixel. Must be 1, 3, or 4.
+ * @param stride Number of bytes between the start of consecutive rows. Pass 0 for
+ *               tightly packed rows (stride = width * channels).
+ */
+PH_API PH_NODISCARD ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels,
+                                                   int width, int height, int channels,
+                                                   int stride);
+
 // --- uint64_t Hash Algorithms ---
 
 PH_API PH_NODISCARD ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash);

@@ -10,6 +10,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifndef _WIN32
 #include <fcntl.h>
@@ -328,6 +329,47 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
         ctx->image.channels = req_comp;
     }
 
+    ctx->image.is_loaded = 1;
+    return PH_SUCCESS;
+}
+
+PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels, int width,
+                                      int height, int channels, int stride) {
+    if (!ctx || !pixels)
+        return PH_ERR_INVALID_ARGUMENT;
+    if (width <= 0 || height <= 0)
+        return PH_ERR_INVALID_ARGUMENT;
+    if (channels != 1 && channels != 3 && channels != 4)
+        return PH_ERR_INVALID_ARGUMENT;
+
+    unsigned long long row_bytes = (unsigned long long)width * (unsigned long long)channels;
+    if (stride < 0 || (stride != 0 && (unsigned long long)stride < row_bytes))
+        return PH_ERR_INVALID_ARGUMENT;
+    unsigned long long src_stride = (stride == 0) ? row_bytes : (unsigned long long)stride;
+
+    unsigned long long total_bytes = row_bytes * (unsigned long long)height;
+    if (total_bytes == 0 || total_bytes > SIZE_MAX)
+        return PH_ERR_INVALID_ARGUMENT;
+
+    uint8_t *dst = malloc((size_t)total_bytes);
+    if (!dst)
+        return PH_ERR_ALLOCATION_FAILED;
+
+    for (int y = 0; y < height; y++) {
+        memcpy(dst + (size_t)y * row_bytes, pixels + (size_t)y * src_stride, (size_t)row_bytes);
+    }
+
+    if (ctx->image.raw_rgb)
+        ph_free_image(ctx->image.raw_rgb);
+    if (ctx->image.gray_cache) {
+        free(ctx->image.gray_cache);
+        ctx->image.gray_cache = NULL;
+    }
+
+    ctx->image.raw_rgb = dst;
+    ctx->image.width = width;
+    ctx->image.height = height;
+    ctx->image.channels = channels;
     ctx->image.is_loaded = 1;
     return PH_SUCCESS;
 }
