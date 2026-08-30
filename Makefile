@@ -1,5 +1,6 @@
 CC ?= gcc
-CFLAGS = -I./include -I./src -O3 -Wall -Wextra -fPIC
+GENERATED_DIR = generated
+CFLAGS = -I./include -I./src -I./$(GENERATED_DIR) -O3 -Wall -Wextra -fPIC
 LDFLAGS = -lm
 
 # Architecture-specific optimizations
@@ -50,8 +51,14 @@ TEST_BINS = $(TEST_SRCS:$(TEST_DIR)/%.c=%)
 # Default target
 all: $(LIB_NAME) $(TEST_BINS)
 
+# Version header (single source of truth: project() VERSION in CMakeLists.txt)
+$(GENERATED_DIR)/phash_version.h: CMakeLists.txt include/phash_version.h.in scripts/gen_version.sh
+	@./scripts/gen_version.sh CMakeLists.txt include/phash_version.h.in $@
+
+$(OBJS): $(GENERATED_DIR)/phash_version.h
+
 # Diagnostic/Debug build
-debug: CFLAGS = -I./include -g -O0 -fsanitize=address,undefined -Wall -Wextra -fPIC
+debug: CFLAGS = -I./include -I./$(GENERATED_DIR) -g -O0 -fsanitize=address,undefined -Wall -Wextra -fPIC
 debug: clean all
 
 # Reformat code
@@ -95,7 +102,7 @@ benchmark: test_benchmark
 	./test_benchmark hash tests/data/photo.jpeg 100
 
 clean:
-	rm -rf $(OBJ_DIR) *.a test_* benchmark build .cache docs/coverage
+	rm -rf $(OBJ_DIR) $(GENERATED_DIR) *.a test_* benchmark build .cache docs/coverage
 	find . -name "*.gcda" -delete
 	find . -name "*.gcno" -delete
 	find . -name "*.gcov" -delete

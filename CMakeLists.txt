@@ -1,6 +1,17 @@
 cmake_minimum_required(VERSION 3.10)
-project(libphash VERSION 1.9.0 LANGUAGES C)
+project(libphash VERSION 1.11.0 LANGUAGES C)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# --- Version header (single source of truth: the project() VERSION above) ---
+set(PH_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
+set(PH_VERSION_MINOR ${PROJECT_VERSION_MINOR})
+set(PH_VERSION_PATCH ${PROJECT_VERSION_PATCH})
+set(PH_VERSION_STRING ${PROJECT_VERSION})
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/phash_version.h.in
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/phash_version.h
+    @ONLY
+)
 
 # --- Options ---
 option(PHASH_BUILD_TESTS "Build tests" ON)
@@ -48,9 +59,10 @@ else()
     add_library(phash STATIC ${SOURCES})
 endif()
 
-target_include_directories(phash PUBLIC 
+target_include_directories(phash PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>
     $<INSTALL_INTERFACE:include>
 )
 

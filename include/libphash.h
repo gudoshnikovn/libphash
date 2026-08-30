@@ -100,9 +100,16 @@ typedef struct {
 // --- Lifecycle & Configuration ---
 
 /**
- * @brief Returns the library version string (e.g., "1.2.0").
+ * @brief Returns the library version string (e.g., "1.11.0").
  */
 PH_API const char *ph_version(void);
+
+/**
+ * @brief Returns the library version as a single comparable integer:
+ *        major*10000 + minor*100 + patch (e.g. 1.11.0 -> 11100).
+ *        Intended for FFI callers doing compatibility checks without string parsing.
+ */
+PH_API int ph_version_number(void);
 
 /**
  * @brief Allocates a new context with default settings (Gamma 2.2).

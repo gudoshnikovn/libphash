@@ -7,6 +7,7 @@
 
 #include "internal.h"
 #include "loader.h"
+#include "phash_version.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,7 +23,9 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "../vendor/stb_image.h"
 
-PH_API const char *ph_version(void) { return "1.10.4"; }
+PH_API const char *ph_version(void) { return PH_VERSION_STRING; }
+
+PH_API int ph_version_number(void) { return PH_VERSION_NUMBER; }
 
 PH_API const char *ph_get_error_string(ph_error_t err) {
     switch (err) {
