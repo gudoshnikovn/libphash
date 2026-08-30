@@ -109,6 +109,43 @@ static size_t build_webp_with_exif(uint8_t *out, int le, uint16_t tag_type, uint
     return off;
 }
 
+static void put32_be_into(uint8_t *p, uint32_t v) {
+    p[0] = (uint8_t)(v >> 24);
+    p[1] = (uint8_t)(v >> 16);
+    p[2] = (uint8_t)(v >> 8);
+    p[3] = (uint8_t)v;
+}
+
+/* Builds a minimal (invalid-as-an-image, but structurally correct) PNG stream
+ * with just an eXIf chunk — the scanner only looks at the signature + chunk
+ * headers, so no other chunk (IHDR/IDAT/IEND) is needed for these tests. */
+static size_t build_png_with_exif(uint8_t *out, int le, uint16_t tag_type, uint32_t tag_count,
+                                  uint16_t value, int with_exif_prefix) {
+    static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+    uint8_t tiff[64];
+    size_t tiff_len = build_tiff_orientation(tiff, le, tag_type, tag_count, value);
+    size_t prefix_len = with_exif_prefix ? 6 : 0;
+    size_t chunk_len = prefix_len + tiff_len;
+
+    size_t off = 0;
+    memcpy(out + off, sig, 8);
+    off += 8;
+
+    put32_be_into(out + off, (uint32_t)chunk_len);
+    off += 4;
+    memcpy(out + off, "eXIf", 4);
+    off += 4;
+    if (with_exif_prefix) {
+        memcpy(out + off, "Exif\0\0", 6);
+        off += 6;
+    }
+    memcpy(out + off, tiff, tiff_len);
+    off += tiff_len;
+    put32_be_into(out + off, 0); // CRC: unchecked by the scanner
+    off += 4;
+    return off;
+}
+
 /* --- TIFF/IFD0 Orientation parsing --------------------------------------- */
 
 void test_jpeg_orientation_all_values(void) {
@@ -137,6 +174,20 @@ void test_webp_orientation_all_values(void) {
     PASS("test_webp_orientation_all_values");
 }
 
+void test_png_orientation_all_values(void) {
+    uint8_t buf[128];
+    for (int le = 0; le <= 1; le++) {
+        for (int prefix = 0; prefix <= 1; prefix++) {
+            for (int v = 1; v <= 8; v++) {
+                size_t n = build_png_with_exif(buf, le, 3, 1, (uint16_t)v, prefix);
+                int got = ph_exif_orientation_from_png(buf, n);
+                ASSERT_INT_EQ(v, got);
+            }
+        }
+    }
+    PASS("test_png_orientation_all_values");
+}
+
 void test_orientation_degrades_gracefully(void) {
     uint8_t buf[128];
 
@@ -156,10 +207,19 @@ void test_orientation_degrades_gracefully(void) {
     uint8_t no_exif[] = {0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x04, 0x00, 0x00, 0xFF, 0xD9};
     ASSERT_INT_EQ(1, ph_exif_orientation_from_jpeg(no_exif, sizeof(no_exif)));
 
-    // Not a JPEG at all.
+    // Not the format at all.
     uint8_t garbage[] = {0x00, 0x01, 0x02, 0x03};
     ASSERT_INT_EQ(1, ph_exif_orientation_from_jpeg(garbage, sizeof(garbage)));
     ASSERT_INT_EQ(1, ph_exif_orientation_from_webp(garbage, sizeof(garbage)));
+    ASSERT_INT_EQ(1, ph_exif_orientation_from_png(garbage, sizeof(garbage)));
+
+    // PNG with no eXIf chunk (just IHDR then IEND).
+    uint8_t no_exif_png[] = {0x89, 'P',  'N',  'G',  '\r', '\n', 0x1A, '\n', 0x00, 0x00,
+                            0x00, 0x0D, 'I',  'H',  'D',  'R',  0,    0,    0,    0,
+                            0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
+                            0,    0,    0,    0,    0,    0,    0,    0,    0x00, 0x00,
+                            0x00, 0x00, 'I',  'E',  'N',  'D',  0,    0,    0,    0};
+    ASSERT_INT_EQ(1, ph_exif_orientation_from_png(no_exif_png, sizeof(no_exif_png)));
 
     // Truncated buffers must not crash (ASAN is the real judge here) and must
     // degrade to "no transform".
@@ -170,6 +230,15 @@ void test_orientation_degrades_gracefully(void) {
     n = build_webp_with_exif(buf, 1, 3, 1, 6, 1);
     for (size_t cut = 0; cut < n; cut++) {
         ASSERT_INT_EQ(1, ph_exif_orientation_from_webp(buf, cut));
+    }
+    // Unlike the JPEG/WebP builders, a PNG chunk has a 4-byte CRC trailer the
+    // scanner doesn't need — so once `cut` covers the eXIf chunk's header and
+    // full payload, the tag parses correctly even with the CRC truncated away.
+    n = build_png_with_exif(buf, 1, 3, 1, 6, 1);
+    size_t png_payload_end = 8 /* sig */ + 4 /* len */ + 4 /* type */ + 6 /* "Exif\0\0" */ + 26 /* tiff */;
+    for (size_t cut = 0; cut < n; cut++) {
+        int expected = (cut >= png_payload_end) ? 6 : 1;
+        ASSERT_INT_EQ(expected, ph_exif_orientation_from_png(buf, cut));
     }
 
     PASS("test_orientation_degrades_gracefully");
@@ -287,30 +356,31 @@ void test_auto_orient_e2e(void) {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
 
-    // Default (auto-orient off): the tag must be ignored, matching plain photo.jpeg.
+    // Default (auto-orient on): the rotation must actually be applied,
+    // producing a hash that differs substantially from the untagged original.
     ASSERT_OK(ph_load_from_memory(ctx, tagged, tagged_len));
-    uint64_t hash_off = 0;
-    ASSERT_OK(ph_compute_ahash(ctx, &hash_off));
+    uint64_t hash_default = 0;
+    ASSERT_OK(ph_compute_ahash(ctx, &hash_default));
 
     ASSERT_OK(ph_load_from_memory(ctx, orig, (size_t)sz));
     uint64_t hash_plain = 0;
     ASSERT_OK(ph_compute_ahash(ctx, &hash_plain));
-    ASSERT_UINT64_EQ(hash_plain, hash_off);
 
-    // Auto-orient on: the rotation must actually be applied, changing the hash.
-    ph_context_set_auto_orient(ctx, 1);
-    ASSERT_OK(ph_load_from_memory(ctx, tagged, tagged_len));
-    uint64_t hash_on = 0;
-    ASSERT_OK(ph_compute_ahash(ctx, &hash_on));
-
-    int dist = ph_hamming_distance(hash_plain, hash_on);
+    int dist = ph_hamming_distance(hash_plain, hash_default);
     if (dist < 10) {
         fprintf(stderr,
-                "[FAIL] test_auto_orient_e2e: expected auto-orient to substantially change the "
-                "hash of a 90-degree rotation, distance was only %d\n",
+                "[FAIL] test_auto_orient_e2e: expected the default (auto-orient on) to "
+                "substantially change the hash of a 90-degree rotation, distance was only %d\n",
                 dist);
         exit(1);
     }
+
+    // Explicitly disabled: the tag must be ignored, matching plain photo.jpeg.
+    ph_context_set_auto_orient(ctx, 0);
+    ASSERT_OK(ph_load_from_memory(ctx, tagged, tagged_len));
+    uint64_t hash_off = 0;
+    ASSERT_OK(ph_compute_ahash(ctx, &hash_off));
+    ASSERT_UINT64_EQ(hash_plain, hash_off);
 
     free(orig);
     free(tagged);
@@ -321,6 +391,7 @@ void test_auto_orient_e2e(void) {
 int main(void) {
     test_jpeg_orientation_all_values();
     test_webp_orientation_all_values();
+    test_png_orientation_all_values();
     test_orientation_degrades_gracefully();
     test_apply_orientation_known_values();
     test_apply_orientation_noop_and_invalid();

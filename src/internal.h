@@ -73,6 +73,7 @@ void init_dct_matrix(void);
  * the load — see src/image/orient.c. */
 int ph_exif_orientation_from_jpeg(const uint8_t *data, size_t len);
 int ph_exif_orientation_from_webp(const uint8_t *data, size_t len);
+int ph_exif_orientation_from_png(const uint8_t *data, size_t len);
 
 /* Applies one of the 8 EXIF orientation transforms (rotate/mirror) to a
  * decoded pixel buffer in place, reallocating *data and updating *width/

@@ -138,6 +138,44 @@ int ph_exif_orientation_from_webp(const uint8_t *data, size_t len) {
     return 1;
 }
 
+int ph_exif_orientation_from_png(const uint8_t *data, size_t len) {
+    static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+    if (len < 8 || memcmp(data, sig, 8) != 0)
+        return 1;
+
+    size_t i = 8;
+    while (i + 8 <= len) {
+        uint32_t chunk_len = ((uint32_t)data[i] << 24) | ((uint32_t)data[i + 1] << 16) |
+                             ((uint32_t)data[i + 2] << 8) | (uint32_t)data[i + 3];
+        const uint8_t *type = data + i + 4;
+        size_t payload_off = i + 8;
+        if (chunk_len > len - payload_off)
+            break; // Malformed length: stop rather than read out of bounds.
+
+        if (memcmp(type, "eXIf", 4) == 0) {
+            // Per the PNG spec the chunk holds the raw EXIF TIFF structure with
+            // no "Exif\0\0" wrapper, but tolerate one anyway in case some writer
+            // copied the JPEG APP1 payload over verbatim.
+            const uint8_t *payload = data + payload_off;
+            size_t plen = chunk_len;
+            if (plen >= 6 && memcmp(payload, "Exif\0\0", 6) == 0) {
+                payload += 6;
+                plen -= 6;
+            }
+            return ph_parse_tiff_orientation(payload, plen);
+        }
+        if (memcmp(type, "IEND", 4) == 0)
+            break;
+
+        // Advance past this chunk's payload and its 4-byte CRC trailer; bail
+        // rather than wrap past the end of the buffer on a truncated chunk.
+        if (payload_off + (size_t)chunk_len > len - 4)
+            break;
+        i = payload_off + chunk_len + 4;
+    }
+    return 1;
+}
+
 void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int channels,
                                int orientation) {
     if (!data || !*data || !width || !height || orientation <= 1 || orientation > 8)

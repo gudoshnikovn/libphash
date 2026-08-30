@@ -185,9 +185,13 @@ PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     ctx->config.whash_mode = PH_WHASH_FAST;
     ctx->config.max_pixels = PH_DEFAULT_MAX_PIXELS;
 
-    /* Optimization Defaults: Disabled by default for compatibility */
+    /* Optimization Default: disabled by default for compatibility with
+     * ColorHash and custom weights. */
     ctx->config.load_grayscale = 0;
-    ctx->config.auto_orient = 0;
+    /* Applying EXIF/WebP-metadata orientation defaults to on: an image hashed
+     * "as the sensor stored it" instead of "as it displays" is a correctness
+     * bug, not a neutral choice. See ph_context_set_auto_orient(). */
+    ctx->config.auto_orient = 1;
 
     ph_context_set_gamma(ctx, PH_DEFAULT_GAMMA);
 
@@ -283,10 +287,13 @@ static ph_error_t ph_classify_stb_failure(ph_context_t *ctx) {
 /* Picks the right EXIF-orientation scanner for the encoded (still-compressed)
  * bytes based on magic, or reports "no transform needed" (1) for anything else. */
 static int ph_scan_orientation(const uint8_t *data, size_t len) {
+    static const uint8_t png_sig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
     if (len >= 2 && data[0] == 0xFF && data[1] == 0xD8)
         return ph_exif_orientation_from_jpeg(data, len);
     if (ph_magic_is_webp(data, len))
         return ph_exif_orientation_from_webp(data, len);
+    if (len >= 8 && memcmp(data, png_sig, 8) == 0)
+        return ph_exif_orientation_from_png(data, len);
     return 1;
 }
 

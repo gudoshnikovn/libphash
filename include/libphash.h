@@ -210,25 +210,24 @@ PH_API void ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t mode);
 PH_API void ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
 
 /**
- * @brief Controls whether EXIF/WebP-metadata orientation is applied automatically
- * right after decoding.
+ * @brief Controls whether EXIF/metadata orientation is applied automatically
+ * right after decoding. On by default.
  *
  * JPEG files from cameras/phones are often stored in sensor orientation with an
  * EXIF `Orientation` tag (values 1-8) telling viewers how to rotate/mirror them
- * for display; WebP carries the same tag in an `EXIF` chunk. When disabled (the
- * default), libphash hashes the raw decoded buffer as-is and ignores this tag —
- * matching every prior version of this library. When enabled, a recognized
- * orientation tag is applied (rotate/mirror, before any hash is computed) so
- * that visually-identical images stored with different orientation tags hash
- * the same.
+ * for display; WebP carries the same tag in an `EXIF` chunk, and PNG in an
+ * `eXIf` chunk. When enabled (the default), a recognized orientation tag is
+ * applied (rotate/mirror, before any hash is computed) so that
+ * visually-identical images stored with different orientation tags hash the
+ * same — hashing the raw sensor-orientation buffer instead of what a viewer
+ * actually displays is a correctness bug, not a neutral default. When
+ * disabled, libphash hashes the raw decoded buffer as-is and ignores the tag.
  *
- * @note Off by default so this doesn't silently change hashes already computed
- * by existing deployments; a future major version may flip this default.
- * Missing or malformed orientation metadata is treated as "no transform needed"
- * rather than an error — this never causes a load to fail.
+ * @note Missing or malformed orientation metadata is treated as "no transform
+ * needed" rather than an error — this never causes a load to fail.
  * @param ctx The context.
- * @param enable 1 to auto-orient using EXIF metadata, 0 to hash the raw decoded
- * buffer as-is (default).
+ * @param enable 1 to auto-orient using EXIF metadata (default), 0 to hash the
+ * raw decoded buffer as-is.
  */
 PH_API void ph_context_set_auto_orient(ph_context_t *ctx, int enable);
 
