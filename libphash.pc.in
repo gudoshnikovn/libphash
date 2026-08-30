@@ -1,0 +1,11 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+exec_prefix=${prefix}
+libdir=@CMAKE_INSTALL_FULL_LIBDIR@
+includedir=@CMAKE_INSTALL_FULL_INCLUDEDIR@
+
+Name: libphash
+Description: Portable C library for perceptual image hashing
+Version: @PROJECT_VERSION@
+Libs: -L${libdir} -lphash
+Libs.private: @PHASH_PC_LIBS_PRIVATE_STR@
+Cflags: -I${includedir}

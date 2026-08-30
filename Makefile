@@ -101,6 +101,12 @@ coverage: clean test
 benchmark: test_benchmark
 	./test_benchmark hash tests/data/photo.jpeg 100
 
+# Smoke-test install()/pkg-config/find_package(phash) packaging (task 4).
+# Builds+installs into a throwaway prefix, then builds a consumer against it.
+install-test:
+	./scripts/smoke_install.sh static
+	./scripts/smoke_install.sh shared
+
 clean:
 	rm -rf $(OBJ_DIR) $(GENERATED_DIR) *.a test_* benchmark build .cache docs/coverage
 	find . -name "*.gcda" -delete
@@ -124,4 +130,4 @@ docker-test: docker-build
 docker-shell: docker-build
 	docker run --rm -it $(DOCKER_IMAGE) bash
 
-.PHONY: all debug test clean format benchmark coverage docker-build docker-test docker-shell
+.PHONY: all debug test clean format benchmark coverage docker-build docker-test docker-shell install-test

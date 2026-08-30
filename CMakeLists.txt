@@ -2,6 +2,14 @@ cmake_minimum_required(VERSION 3.10)
 project(libphash VERSION 1.11.0 LANGUAGES C)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Only install()/export when built standalone -- a parent project that pulls
+# libphash in via add_subdirectory() owns its own install rules.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(PHASH_IS_TOP_LEVEL ON)
+else()
+    set(PHASH_IS_TOP_LEVEL OFF)
+endif()
+
 # --- Version header (single source of truth: the project() VERSION above) ---
 set(PH_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
 set(PH_VERSION_MINOR ${PROJECT_VERSION_MINOR})
@@ -18,10 +26,33 @@ option(PHASH_BUILD_TESTS "Build tests" ON)
 option(PHASH_BUILD_SHARED "Build shared library" OFF)
 option(PHASH_USE_TURBOJPEG "Use bundled libjpeg-turbo for fast JPEG decoding" ON)
 option(PHASH_USE_LIBPNG "Use bundled libpng for fast PNG decoding" ON)
+option(PHASH_USE_SPNG "Use bundled spng (single-file, low-level) instead of libpng for PNG decoding" OFF)
 option(PHASH_USE_WEBP "Use external libwebp for WebP decoding" ON)
 option(PHASH_USE_ZLIB_NG "Use bundled zlib-ng (zlib-compat) instead of system zlib for PNG inflate" ON)
 option(PHASH_OPTIMIZE_NATIVE "Optimize for host CPU architecture (-march=native)" OFF)
 option(PHASH_BUILD_FUZZERS "Build libFuzzer harnesses (requires Clang)" OFF)
+
+if(PHASH_IS_TOP_LEVEL)
+    include(GNUInstallDirs)
+    include(CMakePackageConfigHelpers)
+
+    # Static-build consumers link libphash.a plus whichever vendored codec
+    # archives were baked into it -- accumulated below as each backend is
+    # configured, then written into libphash.pc's Libs.private and into
+    # phashConfig.cmake's INTERFACE_LINK_LIBRARIES. Order matters for the
+    # single-pass GNU ld: codecs before the zlib they depend on.
+    set(PHASH_PC_LIBS_PRIVATE "")
+    set(PHASH_INSTALL_LINK_LIBS "")
+endif()
+
+# Vendored codec archives only need to be installed/relinked for a STATIC
+# build -- a SHARED build already bakes them into libphash.so, and relisting
+# them in Libs.private/INTERFACE_LINK_LIBRARIES would just be redundant.
+if(PHASH_IS_TOP_LEVEL AND NOT PHASH_BUILD_SHARED)
+    set(PHASH_INSTALL_PRIVATE_DEPS ON)
+else()
+    set(PHASH_INSTALL_PRIVATE_DEPS OFF)
+endif()
 
 # --- Compiler Flags ---
 include(CheckCCompilerFlag)
@@ -75,15 +106,29 @@ endif()
 # --- Bundled libjpeg-turbo (TurboJPEG API) ---
 if(PHASH_USE_TURBOJPEG)
     # libjpeg-turbo doesn't like add_subdirectory, so we point to pre-built lib
+    # NO_DEFAULT_PATH: otherwise a system copy (e.g. Homebrew's jpeg-turbo)
+    # found on the default search path wins over the vendored static build
+    # here, even when both exist -- see tasks/PROGRESS.md known bugs (task 7).
     find_library(TURBOJPEG_LIB NAMES turbojpeg turbojpeg-static
-                 PATHS ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build)
+                 PATHS ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build
+                 NO_DEFAULT_PATH)
     if(TURBOJPEG_LIB)
         target_compile_definitions(phash PRIVATE PH_USE_TURBOJPEG)
-        target_link_libraries(phash PRIVATE ${TURBOJPEG_LIB})
-        target_include_directories(phash PRIVATE 
+        # BUILD_INTERFACE: link the build-tree archive directly, as before.
+        # INSTALL_INTERFACE: link the copy installed below instead -- the
+        # build-tree path above won't exist for an installed consumer.
+        target_link_libraries(phash PRIVATE $<BUILD_INTERFACE:${TURBOJPEG_LIB}>)
+        target_include_directories(phash PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/src
             ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build
         )
+        if(PHASH_INSTALL_PRIVATE_DEPS)
+            target_link_libraries(phash PRIVATE
+                $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/libturbojpeg.a>)
+            install(FILES ${TURBOJPEG_LIB} DESTINATION ${CMAKE_INSTALL_LIBDIR}
+                    RENAME libturbojpeg.a)
+            list(APPEND PHASH_PC_LIBS_PRIVATE "-lturbojpeg")
+        endif()
     else()
         message(WARNING "libturbojpeg.a not found in vendor/libjpeg-turbo/build. Falling back to stb_image.")
     endif()
@@ -114,9 +159,20 @@ if(PHASH_USE_ZLIB_NG AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/zlib-ng/CMak
     set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/vendor/zlib-ng/libz.a" CACHE FILEPATH "" FORCE)
     target_compile_definitions(phash PRIVATE PH_USE_ZLIB_NG)
     set(PHASH_ZLIB_TARGET zlib-ng)
+    if(PHASH_INSTALL_PRIVATE_DEPS)
+        install(TARGETS zlib-ng ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        # Appended after the codec blocks below (not here) so it lands last
+        # in link order -- libpng/spng need to precede the zlib they use.
+        set(PHASH_ZLIB_INSTALL_LINK_LIB
+            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/libz.a>)
+    endif()
 else()
     if(PHASH_USE_ZLIB_NG)
         message(WARNING "vendor/zlib-ng submodule not found. Falling back to system zlib.")
+    endif()
+    if(PHASH_INSTALL_PRIVATE_DEPS)
+        # System zlib -- nothing to install, just record the dependency.
+        set(PHASH_ZLIB_INSTALL_LINK_LIB $<INSTALL_INTERFACE:z>)
     endif()
 endif()
 
@@ -129,11 +185,27 @@ if(PHASH_USE_LIBPNG)
     set(PNG_HARDWARE_OPTIMIZATIONS ON CACHE BOOL "" FORCE)
     # libpng works mostly OK with add_subdirectory
     add_subdirectory(vendor/libpng EXCLUDE_FROM_ALL)
-    target_link_libraries(phash PRIVATE png_static ${PHASH_ZLIB_TARGET})
+    # png_static/PHASH_ZLIB_TARGET aren't in phash's export set, so they can
+    # only be linked for the local build; installed consumers get the copies
+    # installed below via PHASH_INSTALL_LINK_LIBS instead.
+    target_link_libraries(phash PRIVATE $<BUILD_INTERFACE:png_static> $<BUILD_INTERFACE:${PHASH_ZLIB_TARGET}>)
     target_include_directories(phash PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libpng
         ${CMAKE_CURRENT_BINARY_DIR}/vendor/libpng
     )
+    if(PHASH_INSTALL_PRIVATE_DEPS)
+        # libpng renames its static target's output (e.g. "png16", not
+        # "png_static") via OUTPUT_NAME -- read it back rather than assuming.
+        get_target_property(PHASH_PNG_LIB_NAME png_static OUTPUT_NAME)
+        if(NOT PHASH_PNG_LIB_NAME)
+            set(PHASH_PNG_LIB_NAME png_static)
+        endif()
+        install(TARGETS png_static ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        list(APPEND PHASH_INSTALL_LINK_LIBS
+            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/lib${PHASH_PNG_LIB_NAME}.a>)
+        list(APPEND PHASH_PC_LIBS_PRIVATE "-l${PHASH_PNG_LIB_NAME}")
+        set(PHASH_ZLIB_NEEDED ON)
+    endif()
 endif()
 
 # --- Bundled spng ---
@@ -141,8 +213,15 @@ if(PHASH_USE_SPNG)
     target_compile_definitions(phash PRIVATE PH_USE_SPNG)
     add_library(spng_static STATIC vendor/spng/spng/spng.c)
     target_include_directories(spng_static PUBLIC vendor/spng/spng)
-    target_link_libraries(phash PRIVATE spng_static ${PHASH_ZLIB_TARGET})
+    target_link_libraries(phash PRIVATE $<BUILD_INTERFACE:spng_static> $<BUILD_INTERFACE:${PHASH_ZLIB_TARGET}>)
     target_include_directories(phash PRIVATE vendor/spng/spng)
+    if(PHASH_INSTALL_PRIVATE_DEPS)
+        install(TARGETS spng_static ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        list(APPEND PHASH_INSTALL_LINK_LIBS
+            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/libspng_static.a>)
+        list(APPEND PHASH_PC_LIBS_PRIVATE "-lspng_static")
+        set(PHASH_ZLIB_NEEDED ON)
+    endif()
 endif()
 
 # --- Bundled libwebp ---
@@ -164,13 +243,91 @@ if(PHASH_USE_WEBP)
     set(WEBP_LINK_STATIC ON CACHE BOOL "" FORCE)
 
     add_subdirectory(vendor/libwebp EXCLUDE_FROM_ALL)
-    
+
     # We only need the decoder part for phash
-    target_link_libraries(phash PRIVATE webpdecoder)
-    target_include_directories(phash PRIVATE 
+    target_link_libraries(phash PRIVATE $<BUILD_INTERFACE:webpdecoder>)
+    target_include_directories(phash PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libwebp/src
     )
+    if(PHASH_INSTALL_PRIVATE_DEPS)
+        # libwebp tags this target with its own public headers -- we only want
+        # its archive installed (phash's own libphash.h is the public surface).
+        set_target_properties(webpdecoder PROPERTIES PUBLIC_HEADER "")
+        install(TARGETS webpdecoder ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        list(APPEND PHASH_INSTALL_LINK_LIBS
+            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/libwebpdecoder.a>)
+        list(APPEND PHASH_PC_LIBS_PRIVATE "-lwebpdecoder")
+    endif()
 endif()
+
+if(PHASH_INSTALL_PRIVATE_DEPS AND PHASH_ZLIB_NEEDED)
+    list(APPEND PHASH_INSTALL_LINK_LIBS ${PHASH_ZLIB_INSTALL_LINK_LIB})
+    list(APPEND PHASH_PC_LIBS_PRIVATE "-lz")
+endif()
+
+# --- install() / find_package(phash) / pkg-config ---
+if(PHASH_IS_TOP_LEVEL)
+    # -lm/-ldl for libphash.pc's Libs.private: not added to
+    # PHASH_INSTALL_LINK_LIBS, since `target_link_libraries(phash PRIVATE m)`
+    # above already puts them on phash's exported INTERFACE_LINK_LIBRARIES.
+    list(APPEND PHASH_PC_LIBS_PRIVATE "-lm")
+    if(UNIX AND NOT APPLE)
+        list(APPEND PHASH_PC_LIBS_PRIVATE "-ldl")
+    endif()
+
+    # For a STATIC build this exposes the vendored codec archives (installed
+    # above) to consumers of the exported phash::phash target; for a SHARED
+    # build they're already baked into libphash.so and this is a no-op since
+    # PHASH_INSTALL_LINK_LIBS entries are BUILD-time inert (INSTALL_INTERFACE-only).
+    if(NOT PHASH_BUILD_SHARED)
+        target_link_libraries(phash PRIVATE ${PHASH_INSTALL_LINK_LIBS})
+    endif()
+
+    set_target_properties(phash PROPERTIES PUBLIC_HEADER
+        ${CMAKE_CURRENT_SOURCE_DIR}/include/libphash.h)
+
+    install(TARGETS phash
+        EXPORT phashTargets
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
+
+    install(EXPORT phashTargets
+        FILE phashTargets.cmake
+        NAMESPACE phash::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/phash
+    )
+
+    write_basic_package_version_file(
+        ${CMAKE_CURRENT_BINARY_DIR}/phashConfigVersion.cmake
+        VERSION ${PROJECT_VERSION}
+        COMPATIBILITY SameMajorVersion
+    )
+    configure_package_config_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/phashConfig.cmake.in
+        ${CMAKE_CURRENT_BINARY_DIR}/phashConfig.cmake
+        INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/phash
+    )
+    install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/phashConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/phashConfigVersion.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/phash
+    )
+
+    string(REPLACE ";" " " PHASH_PC_LIBS_PRIVATE_STR "${PHASH_PC_LIBS_PRIVATE}")
+    configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/libphash.pc.in
+        ${CMAKE_CURRENT_BINARY_DIR}/libphash.pc
+        @ONLY
+    )
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libphash.pc
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
+    )
+endif()
+
 # --- Tests ---
 if(PHASH_BUILD_TESTS)
     target_compile_definitions(phash PRIVATE PH_TESTING)
