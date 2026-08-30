@@ -2,6 +2,7 @@
 #include <math.h>
 #include <stddef.h> // For size_t
 #include <stdint.h>
+#include <string.h>
 
 // Include intrinsics based on detected architecture
 #if defined(__AVX2__)
@@ -127,4 +128,84 @@ PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b) {
         sum += diff * diff;
     }
     return sqrt(sum);
+}
+
+PH_API double ph_similarity(uint64_t a, uint64_t b) {
+    int dist = ph_hamming_distance(a, b);
+    return 1.0 - ((double)dist / 64.0);
+}
+
+PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b) {
+    if (!a || !b || a->size != b->size || a->size == 0)
+        return -1.0;
+
+    int dist = ph_hamming_distance_digest(a, b);
+    if (dist < 0)
+        return -1.0;
+
+    double total_bits = (double)a->size * 8.0;
+    return 1.0 - ((double)dist / total_bits);
+}
+
+static const char PH_HEX_DIGITS[] = "0123456789abcdef";
+
+PH_API ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out, size_t out_size) {
+    if (!d || !out)
+        return PH_ERR_INVALID_ARGUMENT;
+
+    size_t needed = (size_t)d->size * 2 + 1;
+    if (out_size < needed)
+        return PH_ERR_INVALID_ARGUMENT;
+
+    for (size_t i = 0; i < d->size; i++) {
+        out[i * 2] = PH_HEX_DIGITS[(d->data[i] >> 4) & 0x0F];
+        out[i * 2 + 1] = PH_HEX_DIGITS[d->data[i] & 0x0F];
+    }
+    out[d->size * 2] = '\0';
+    return PH_SUCCESS;
+}
+
+static int ph_hex_nibble(char c) {
+    if (c >= '0' && c <= '9')
+        return c - '0';
+    if (c >= 'a' && c <= 'f')
+        return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F')
+        return c - 'A' + 10;
+    return -1;
+}
+
+PH_API ph_error_t ph_digest_from_hex(const char *hex, ph_digest_t *out) {
+    if (!hex || !out)
+        return PH_ERR_INVALID_ARGUMENT;
+
+    size_t len = strlen(hex);
+    if (len % 2 != 0 || len / 2 > PH_DIGEST_MAX_BYTES)
+        return PH_ERR_INVALID_ARGUMENT;
+
+    size_t n_bytes = len / 2;
+    for (size_t i = 0; i < n_bytes; i++) {
+        int hi = ph_hex_nibble(hex[i * 2]);
+        int lo = ph_hex_nibble(hex[i * 2 + 1]);
+        if (hi < 0 || lo < 0)
+            return PH_ERR_INVALID_ARGUMENT;
+        out->data[i] = (uint8_t)((hi << 4) | lo);
+    }
+    memset(out->data + n_bytes, 0, PH_DIGEST_MAX_BYTES - n_bytes);
+    out->size = (uint8_t)n_bytes;
+    memset(out->reserved, 0, sizeof(out->reserved));
+    return PH_SUCCESS;
+}
+
+PH_API ph_error_t ph_hash_to_hex(uint64_t hash, char *out, size_t out_size) {
+    if (!out || out_size < 17)
+        return PH_ERR_INVALID_ARGUMENT;
+
+    for (int i = 0; i < 8; i++) {
+        uint8_t byte = (uint8_t)(hash >> ((7 - i) * 8));
+        out[i * 2] = PH_HEX_DIGITS[(byte >> 4) & 0x0F];
+        out[i * 2 + 1] = PH_HEX_DIGITS[byte & 0x0F];
+    }
+    out[16] = '\0';
+    return PH_SUCCESS;
 }

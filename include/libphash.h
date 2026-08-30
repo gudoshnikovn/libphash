@@ -250,8 +250,7 @@ PH_API PH_NODISCARD ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint
  *               tightly packed rows (stride = width * channels).
  */
 PH_API PH_NODISCARD ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels,
-                                                   int width, int height, int channels,
-                                                   int stride);
+                                                   int width, int height, int channels, int stride);
 
 // --- uint64_t Hash Algorithms ---
 
@@ -296,8 +295,7 @@ typedef enum {
  *                 the dHash and `out[1]` the mHash). Must have room for at least as many
  *                 elements as bits set in `flags` (at most `PH_HASH_FLAGS_COUNT`).
  */
-PH_API PH_NODISCARD ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flags,
-                                                uint64_t out[]);
+PH_API PH_NODISCARD ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flags, uint64_t out[]);
 
 // --- Batch Hashing ---
 
@@ -319,7 +317,7 @@ typedef struct {
  */
 typedef struct {
     const uint8_t *buffer; ///< Pointer to the encoded image bytes (e.g. JPEG/PNG/WebP).
-    size_t length;          ///< Size of `buffer` in bytes.
+    size_t length;         ///< Size of `buffer` in bytes.
     /** [out] One uint64_t per flag set in the `flags` passed to `ph_hash_buffers()`, packed
      *  in ascending bit order -- same layout as `ph_compute_multi()`'s `out[]`. Valid only
      *  if `status == PH_SUCCESS`. */
@@ -385,6 +383,52 @@ PH_API PH_NODISCARD ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_dige
 PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
 PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b);
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b);
+
+/**
+ * @brief Normalized similarity between two 64-bit hashes, in [0.0, 1.0].
+ *
+ * 1.0 means identical hashes, 0.0 means every bit differs. Unlike
+ * ph_hamming_distance(), this is comparable across algorithms of different
+ * bit widths.
+ */
+PH_API double ph_similarity(uint64_t a, uint64_t b);
+
+/**
+ * @brief Normalized similarity between two digests, in [0.0, 1.0].
+ * @return -1.0 if the digests are NULL or have mismatched sizes.
+ */
+PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
+
+/**
+ * @brief Encodes a digest as a lowercase hex string (big-endian, i.e. data[0]
+ * produces the first two hex characters).
+ * @param d Digest to encode.
+ * @param out Output buffer.
+ * @param out_size Size of 'out' in bytes; must be at least d->size * 2 + 1.
+ * @return PH_SUCCESS, or PH_ERR_INVALID_ARGUMENT if arguments are invalid or
+ * 'out_size' is too small.
+ */
+PH_API PH_NODISCARD ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out, size_t out_size);
+
+/**
+ * @brief Decodes a hex string produced by ph_digest_to_hex() back into a digest.
+ * @param hex NUL-terminated hex string; must have an even number of hex digits
+ * and decode to at most PH_DIGEST_MAX_BYTES bytes.
+ * @param out Output digest.
+ * @return PH_SUCCESS, or PH_ERR_INVALID_ARGUMENT if 'hex' is malformed or too long.
+ */
+PH_API PH_NODISCARD ph_error_t ph_digest_from_hex(const char *hex, ph_digest_t *out);
+
+/**
+ * @brief Encodes a 64-bit hash as a fixed 16-character lowercase hex string
+ * (big-endian, i.e. the most significant byte comes first).
+ * @param hash Hash value to encode.
+ * @param out Output buffer.
+ * @param out_size Size of 'out' in bytes; must be at least 17.
+ * @return PH_SUCCESS, or PH_ERR_INVALID_ARGUMENT if arguments are invalid or
+ * 'out_size' is too small.
+ */
+PH_API PH_NODISCARD ph_error_t ph_hash_to_hex(uint64_t hash, char *out, size_t out_size);
 
 /**
  * @brief Checks if libjpeg-turbo is available and loaded.
