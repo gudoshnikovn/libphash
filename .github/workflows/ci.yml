@@ -11,26 +11,94 @@ permissions:
   pull-requests: write
 
 jobs:
+  # Full vendored build (all bundled decoders) across the platforms/arches we
+  # actually ship for. PHASH_STRICT_DEPS=ON turns a silent decoder fallback
+  # (e.g. TurboJPEG not found) into a hard configure failure, so a CI green
+  # here means the vendored decoders were genuinely built and linked, not
+  # quietly swapped for stb_image (see tasks/PROGRESS.md known bugs, task 7).
   build-and-test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubuntu-x86_64-gcc
+            os: ubuntu-latest
+            needs_nasm: true
+            cc: gcc
+          - name: ubuntu-x86_64-clang
+            os: ubuntu-latest
+            needs_nasm: true
+            cc: clang
+          - name: ubuntu-arm64-gcc
+            os: ubuntu-24.04-arm
+            needs_nasm: false
+            cc: gcc
+          - name: macos-arm64-clang
+            os: macos-latest
+            needs_nasm: false
+            cc: clang
+    runs-on: ${{ matrix.os }}
+    name: build-and-test (${{ matrix.name }})
+    env:
+      CC: ${{ matrix.cc }}
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
 
-    - name: Install Dependencies
+    - name: Install dependencies (Linux)
+      if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake clang libpng-dev libjpeg-dev libwebp-dev zlib1g-dev
+        sudo apt-get install -y cmake${{ matrix.needs_nasm && ' nasm' || '' }}${{ matrix.cc == 'clang' && ' clang' || '' }}
 
-    - name: Configure CMake
-      run: cmake -B build -DPHASH_BUILD_TESTS=ON
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: brew install cmake
+
+    # libjpeg-turbo doesn't like add_subdirectory (see CMakeLists.txt), so its
+    # submodule is built separately; the main configure below then finds the
+    # resulting static lib in vendor/libjpeg-turbo/build.
+    - name: Build vendored TurboJPEG
+      run: |
+        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
+        cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
+
+    - name: Configure CMake (full vendored build)
+      run: cmake -B build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: cmake --build build --config Release -j
+
+    - name: Run Tests
+      run: cd build && ctest --output-on-failure
+
+  # Zero-dependency build: every PHASH_USE_* backend off, stb_image only.
+  # Only needs to compile cleanly -- exercising the stb_image decode path
+  # itself is tracked separately (tasks/PROGRESS.md, task 14: stb_image is
+  # built but not registered in loader.c's backends[] table yet).
+  minimal-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    name: minimal-build (${{ matrix.os }})
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Configure CMake (minimal, stb_image only)
+      run: >
+        cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+        -DPHASH_USE_TURBOJPEG=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
 
     - name: Build
       run: cmake --build build --config Release
 
     - name: Run Tests
-      run: cd build && ctest --output-on-failure
+      run: cd build && ctest -C Release --output-on-failure
 
   benchmark:
     if: github.event_name == 'pull_request'
@@ -41,15 +109,20 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Install Dependencies
+    - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake libpng-dev libjpeg-dev libwebp-dev zlib1g-dev
+        sudo apt-get install -y cmake nasm
+
+    - name: Build vendored TurboJPEG
+      run: |
+        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
+        cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
 
     - name: Build
       run: |
-        cmake -B build -DPHASH_BUILD_TESTS=ON
-        cmake --build build --config Release
+        cmake -B build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
+        cmake --build build --config Release -j
 
     - name: Run Benchmarks
       run: |
@@ -77,14 +150,19 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Install Dependencies
+    - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake clang
+        sudo apt-get install -y cmake clang nasm
+
+    - name: Build vendored TurboJPEG
+      run: |
+        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DCMAKE_C_COMPILER=clang
+        cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
 
     - name: Configure CMake (ASan/UBSan)
       run: |
-        cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug \
+        cmake -B build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Debug \
           -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all" \
           -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
 
@@ -105,13 +183,18 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Install Dependencies
+    - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake clang
+        sudo apt-get install -y cmake clang nasm
+
+    - name: Build vendored TurboJPEG
+      run: |
+        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DCMAKE_C_COMPILER=clang
+        cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
 
     - name: Configure CMake (fuzzers)
-      run: cmake -B build -DPHASH_BUILD_TESTS=OFF -DPHASH_BUILD_FUZZERS=ON -DCMAKE_BUILD_TYPE=Debug
+      run: cmake -B build -DPHASH_BUILD_TESTS=OFF -DPHASH_BUILD_FUZZERS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Debug
 
     - name: Build
       run: cmake --build build --target fuzz_load
@@ -128,3 +211,27 @@ jobs:
       with:
         name: fuzz-crashes
         path: /tmp/fuzz-artifacts/
+
+  install-smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake nasm pkg-config
+
+    - name: Build vendored TurboJPEG
+      run: |
+        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
+        cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
+
+    # cmake --install into a throwaway prefix + build a mini find_package(phash)
+    # consumer against it (task 4). Exercises both the static and shared build.
+    - name: Smoke-test install()/pkg-config/find_package(phash)
+      run: |
+        ./scripts/smoke_install.sh static
+        ./scripts/smoke_install.sh shared
