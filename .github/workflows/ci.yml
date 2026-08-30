@@ -100,6 +100,11 @@ jobs:
     - name: Run Tests
       run: cd build && ctest -C Release --output-on-failure
 
+  # Task 16: compares the PR against its base commit built in this same job
+  # (not against hardcoded numbers) to keep GH-hosted-runner noise out of the
+  # comparison -- see tasks/16_benchmark_regression_gate.md. Warning-only for
+  # now (STRICT unset below): flip to STRICT=1 once the signal has proven
+  # stable across a handful of real PRs, per tasks/PROGRESS.md.
   benchmark:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -108,30 +113,45 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: recursive
+        path: pr
+
+    - name: Checkout base branch
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        ref: ${{ github.event.pull_request.base.sha }}
+        path: base
 
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake nasm
+        sudo apt-get install -y cmake nasm jq
 
-    - name: Build vendored TurboJPEG
+    - name: Build PR
       run: |
-        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
-        cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
+        cmake -S pr/vendor/libjpeg-turbo -B pr/vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
+        cmake --build pr/vendor/libjpeg-turbo/build --target turbojpeg-static -j
+        cmake -S pr -B pr/build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
+        cmake --build pr/build --config Release -j
 
-    - name: Build
+    - name: Build base
       run: |
-        cmake -B build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
-        cmake --build build --config Release -j
+        cmake -S base/vendor/libjpeg-turbo -B base/vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
+        cmake --build base/vendor/libjpeg-turbo/build --target turbojpeg-static -j
+        cmake -S base -B base/build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
+        cmake --build base/build --config Release -j
 
     - name: Run Benchmarks
       run: |
-        cd build
-        echo "### Performance Benchmark" > ../benchmark_report.md
-        echo '```text' >> ../benchmark_report.md
-        ./test_benchmark smoke >> ../benchmark_report.md
-        echo '```' >> ../benchmark_report.md
-        cat ../benchmark_report.md >> $GITHUB_STEP_SUMMARY
+        echo "### Performance Benchmark (PR)" > benchmark_report.md
+        echo '```text' >> benchmark_report.md
+        ./pr/build/test_benchmark smoke >> benchmark_report.md
+        echo '```' >> benchmark_report.md
+        echo >> benchmark_report.md
+        bash pr/scripts/bench_regression_gate.sh \
+          pr/build/test_benchmark base/build/test_benchmark 5 25 regression.md
+        cat regression.md >> benchmark_report.md
+        cat benchmark_report.md >> $GITHUB_STEP_SUMMARY
 
     - name: Post Performance Report
       uses: thollander/actions-comment-pull-request@v2
