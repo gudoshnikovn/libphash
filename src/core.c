@@ -401,8 +401,13 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
 
     if (ctx->config.max_pixels != 0) {
         int iw, ih, icomp;
+        // stbi_info reports height as a signed int, and a top-down BMP
+        // legitimately has a negative height in its header -- casting that
+        // straight to uint64_t would wrap to a huge value and reject a
+        // perfectly small image (see the equivalent ph_abs_dim() in loader.c).
         if (stbi_info(filepath, &iw, &ih, &icomp) &&
-            ph_exceeds_pixel_limit((uint64_t)iw, (uint64_t)ih, ctx->config.max_pixels)) {
+            ph_exceeds_pixel_limit((uint64_t)(iw < 0 ? -(int64_t)iw : iw),
+                                   (uint64_t)(ih < 0 ? -(int64_t)ih : ih), ctx->config.max_pixels)) {
             return PH_ERR_IMAGE_TOO_LARGE;
         }
     }
@@ -480,37 +485,12 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
         }
         return PH_SUCCESS;
     }
-    // A native backend recognized the format and gave a definitive answer (too
-    // large / corrupt / unavailable) — trust it over trying stb_image.
-    if (decode_err != PH_SUCCESS)
-        return decode_err;
-
-    if (ctx->config.max_pixels != 0) {
-        int iw, ih, icomp;
-        if (stbi_info_from_memory(buffer, (int)length, &iw, &ih, &icomp) &&
-            ph_exceeds_pixel_limit((uint64_t)iw, (uint64_t)ih, ctx->config.max_pixels)) {
-            return PH_ERR_IMAGE_TOO_LARGE;
-        }
-    }
-
-    ctx->image.raw_rgb = stbi_load_from_memory(buffer, (int)length, &ctx->image.width,
-                                               &ctx->image.height, &ctx->image.channels, req_comp);
-    if (!ctx->image.raw_rgb)
-        return ph_classify_stb_failure(ctx);
-
-    if (req_comp != 0) {
-        ctx->image.channels = req_comp;
-    }
-
-    if (ctx->config.auto_orient) {
-        int orientation = ph_scan_orientation(buffer, length);
-        if (orientation != 1)
-            ph_apply_exif_orientation(&ctx->image.raw_rgb, &ctx->image.width, &ctx->image.height,
-                                      ctx->image.channels, orientation);
-    }
-
-    ctx->image.is_loaded = 1;
-    return PH_SUCCESS;
+    // ph_decode_buffer() always resolves a non-empty buffer to either decoded
+    // data or a specific error now (its last-resort stb_image backend claims
+    // anything not already claimed, except WebP without PH_USE_WEBP, which the
+    // WebP-unavailable check inside ph_decode_buffer itself covers) -- so
+    // decode_err is never PH_SUCCESS here.
+    return decode_err;
 }
 
 PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels, int width,
