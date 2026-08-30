@@ -78,19 +78,26 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     if (!gray)
         return PH_ERR_ALLOCATION_FAILED;
 
+    // `blurred` has to survive the call into ph_apply_gaussian_blur() below, which
+    // itself grabs its own scratchpad region — the arena may grow (reallocating and
+    // freeing its backing buffer) to satisfy that nested request, which would
+    // invalidate any pointer of ours already sitting in the arena. So this one stays
+    // a plain heap allocation; only projection_variances (arena-allocated further
+    // down, after every arena-using call has already happened) gets the scratchpad.
     uint8_t *blurred = (uint8_t *)malloc(img_size);
-    if (!blurred) {
+    if (!blurred)
         return PH_ERR_ALLOCATION_FAILED;
-    }
 
-    double *projection_variances = (double *)malloc((size_t)projections * sizeof(double));
+    ph_apply_gaussian_blur(ctx, gray, ctx->image.width, ctx->image.height, blurred);
+    ph_apply_gamma(ctx, blurred, ctx->image.width, ctx->image.height);
+
+    size_t saved_offset = ctx->arena.offset;
+    double *projection_variances =
+        (double *)ph_get_scratchpad(ctx, (size_t)projections * sizeof(double));
     if (!projection_variances) {
         free(blurred);
         return PH_ERR_ALLOCATION_FAILED;
     }
-
-    ph_apply_gaussian_blur(ctx, gray, ctx->image.width, ctx->image.height, blurred);
-    ph_apply_gamma(ctx, blurred, ctx->image.width, ctx->image.height);
 
     double centerX = (double)ctx->image.width / 2.0;
     double centerY = (double)ctx->image.height / 2.0;
@@ -121,8 +128,8 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
         }
     }
 
+    ctx->arena.offset = saved_offset;
     free(blurred);
-    free(projection_variances);
 
     return PH_SUCCESS;
 }

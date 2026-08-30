@@ -23,8 +23,6 @@ void ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8
 /* Applies Gamma Correction (gamma=2.2) to normalize brightness */
 void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h);
 
-void ph_resize_bilinear(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh);
-
 /* Applies 3x3 Laplacian sharpening for edge preservation */
 void ph_apply_laplacian_3x3(const uint8_t *src, int w, int h, uint8_t *dst);
 
