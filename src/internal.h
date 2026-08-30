@@ -86,6 +86,10 @@ void init_dct_matrix(void);
 #define PH_DEFAULT_GAMMA 2.2f
 #define PH_GAMMA_EPSILON 0.001f
 
+/* Default cap on width*height before decoding a pixel buffer (decompression-bomb
+ * protection). Overridable via ph_context_set_max_pixels(); 0 disables it. */
+#define PH_DEFAULT_MAX_PIXELS ((uint64_t)256 * 1024 * 1024)
+
 /* Grayscale Weights (standard ITU-R BT.601) scaled by 128 */
 #define PH_GRAY_R 38
 #define PH_GRAY_G 75
@@ -108,6 +112,29 @@ void init_dct_matrix(void);
  */
 // Check for integer overflow before allocation: w * h
 #define PH_SAFE_ALLOC_SIZE(w, h) ((unsigned long long)(w) * (unsigned long long)(h) <= SIZE_MAX)
+
+/* Computes w * h * channels for an allocation size, refusing to silently wrap.
+ * Returns 0 (and leaves *out untouched) if the product would overflow size_t;
+ * returns 1 and sets *out to the byte count otherwise. */
+static inline int ph_safe_image_alloc_size(uint64_t w, uint64_t h, uint64_t channels,
+                                           size_t *out) {
+    if (w == 0 || h == 0 || channels == 0)
+        return 0;
+    if (w > (uint64_t)SIZE_MAX / h)
+        return 0;
+    uint64_t wh = w * h;
+    if (wh > (uint64_t)SIZE_MAX / channels)
+        return 0;
+    *out = (size_t)(wh * channels);
+    return 1;
+}
+
+/* Returns 1 if decoding a w x h image is disallowed by max_pixels (0 = unlimited). */
+static inline int ph_exceeds_pixel_limit(uint64_t w, uint64_t h, uint64_t max_pixels) {
+    if (max_pixels == 0)
+        return 0;
+    return w * h > max_pixels;
+}
 
 /* Internal Context Structure */
 struct ph_context {
@@ -135,6 +162,9 @@ struct ph_context {
         int radial_samples;
         int block_size;
         ph_whash_mode_t whash_mode;
+
+        // 0 = unlimited; otherwise max allowed width*height before decoding a pixel buffer.
+        uint64_t max_pixels;
     } config;
 
     // System data of the allocator (Arena)

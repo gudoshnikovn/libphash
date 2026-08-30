@@ -60,6 +60,7 @@ typedef enum {
     PH_ERR_INVALID_ARGUMENT = -3,
     PH_ERR_NOT_IMPLEMENTED = -4,
     PH_ERR_EMPTY_IMAGE = -5,
+    PH_ERR_IMAGE_TOO_LARGE = -6,
 } ph_error_t;
 
 /**
@@ -185,6 +186,20 @@ PH_API void ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t mode);
  * @param enable 1 to enable grayscale loading, 0 to disable (load native channels).
  */
 PH_API void ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
+
+/**
+ * @brief Sets the maximum number of pixels (width * height) an image is allowed to
+ *        decode to, before any pixel buffer is allocated. Protects against
+ *        decompression-bomb inputs (a small file that declares an enormous image size).
+ *
+ * @param ctx The context.
+ * @param max_pixels Maximum width*height allowed. 0 disables the check entirely
+ *                    (unlimited). Defaults to 256 * 1024 * 1024 (256 megapixels).
+ *
+ * @note Loading an image that exceeds the limit fails with PH_ERR_IMAGE_TOO_LARGE
+ *       instead of attempting the allocation.
+ */
+PH_API void ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixels);
 
 /**
  * @brief Returns the dimensions of the currently loaded image.

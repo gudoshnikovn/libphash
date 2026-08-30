@@ -36,7 +36,8 @@ static void png_mem_read_fn(png_structp png_ptr, png_bytep out, png_size_t count
 }
 
 unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
-                                 int *height, int *channels, int req_comp) {
+                                 int *height, int *channels, int req_comp, uint64_t max_pixels,
+                                 ph_error_t *out_err) {
     if (!buffer || size < 8)
         return NULL;
 
@@ -62,11 +63,28 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     PngMemReader reader = {.data = buffer, .size = size, .offset = 0};
     png_set_read_fn(png_ptr, &reader, png_mem_read_fn);
 
+    if (max_pixels != 0) {
+        // Defense in depth: cap each dimension individually (in addition to the
+        // width*height check below) and cap ancillary-chunk allocations, so a
+        // malicious header can't force a huge allocation before we even see w/h.
+        png_uint_32 dim_limit =
+            (max_pixels > 0xFFFFFFFFULL) ? 0xFFFFFFFFu : (png_uint_32)max_pixels;
+        png_set_user_limits(png_ptr, dim_limit, dim_limit);
+        png_set_chunk_malloc_max(png_ptr, 128 * 1024 * 1024);
+    }
+
     png_read_info(png_ptr, info_ptr);
 
     png_uint_32 w, h;
     int bit_depth, color_type;
     png_get_IHDR(png_ptr, info_ptr, &w, &h, &bit_depth, &color_type, NULL, NULL, NULL);
+
+    if (ph_exceeds_pixel_limit(w, h, max_pixels)) {
+        if (out_err)
+            *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        return NULL;
+    }
 
     // Transform to 8-bit
     if (color_type == PNG_COLOR_TYPE_PALETTE)
@@ -102,7 +120,15 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     size_t rowbytes = png_get_rowbytes(png_ptr, info_ptr);
     int out_channels = (int)(rowbytes / w);
 
-    unsigned char *data = (unsigned char *)malloc(rowbytes * h);
+    size_t alloc_size;
+    if (!ph_safe_image_alloc_size(rowbytes, h, 1, &alloc_size)) {
+        if (out_err)
+            *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        return NULL;
+    }
+
+    unsigned char *data = (unsigned char *)malloc(alloc_size);
     if (!data) {
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return NULL;
@@ -135,13 +161,19 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
 PH_API int ph_can_use_libpng(void) { return 1; }
 
 unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
-                                 int *height, int *channels, int req_comp) {
+                                 int *height, int *channels, int req_comp, uint64_t max_pixels,
+                                 ph_error_t *out_err) {
     if (!buffer || size < 8)
         return NULL;
 
     spng_ctx *ctx = spng_ctx_new(0);
     if (!ctx)
         return NULL;
+
+    if (max_pixels != 0) {
+        // Defense in depth against huge ancillary-chunk allocations.
+        spng_set_chunk_limits(ctx, 128 * 1024 * 1024, 128 * 1024 * 1024);
+    }
 
     if (spng_set_png_buffer(ctx, buffer, size) != 0) {
         spng_ctx_free(ctx);
@@ -150,6 +182,13 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
 
     struct spng_ihdr ihdr;
     if (spng_get_ihdr(ctx, &ihdr) != 0) {
+        spng_ctx_free(ctx);
+        return NULL;
+    }
+
+    if (ph_exceeds_pixel_limit(ihdr.width, ihdr.height, max_pixels)) {
+        if (out_err)
+            *out_err = PH_ERR_IMAGE_TOO_LARGE;
         spng_ctx_free(ctx);
         return NULL;
     }

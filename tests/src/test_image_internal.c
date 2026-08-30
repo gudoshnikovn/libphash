@@ -108,11 +108,11 @@ void test_loader_exhaustion(void) {
     int w, h, ch;
 
     // Identification loop exhaustion
-    if (ph_decode_buffer(junk, 16, &w, &h, &ch, 0) != NULL)
+    if (ph_decode_buffer(junk, 16, &w, &h, &ch, 0, 0, NULL) != NULL)
         exit(1);
-    if (ph_decode_buffer(NULL, 10, &w, &h, &ch, 0) != NULL)
+    if (ph_decode_buffer(NULL, 10, &w, &h, &ch, 0, 0, NULL) != NULL)
         exit(1);
-    if (ph_decode_buffer(junk, 0, &w, &h, &ch, 0) != NULL)
+    if (ph_decode_buffer(junk, 0, &w, &h, &ch, 0, 0, NULL) != NULL)
         exit(1);
 
     ph_free_image(NULL);
@@ -124,13 +124,13 @@ void test_loader_corrupted_backend(void) {
 
     // 1. Trigger mock backend (starts with DE AD)
     uint8_t mock_data[4] = {0xDE, 0xAD, 0xBE, 0xEF};
-    uint8_t *res = ph_decode_buffer(mock_data, 4, &w, &h, &ch, 0);
+    uint8_t *res = ph_decode_buffer(mock_data, 4, &w, &h, &ch, 0, 0, NULL);
     if (res)
         free(res);
 
     // 2. Junk data (loop exhaustion)
     uint8_t junk[4] = {0, 0, 0, 0};
-    ph_decode_buffer(junk, 4, &w, &h, &ch, 0);
+    ph_decode_buffer(junk, 4, &w, &h, &ch, 0, 0, NULL);
 
     PASS("test_loader_corrupted_backend");
 }

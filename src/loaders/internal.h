@@ -1,6 +1,7 @@
 #ifndef PH_LOADERS_INTERNAL_H
 #define PH_LOADERS_INTERNAL_H
 
+#include "../internal.h" // ph_exceeds_pixel_limit / ph_safe_image_alloc_size / struct ph_context
 #include "loader.h"
 
 #ifdef PH_USE_TURBOJPEG

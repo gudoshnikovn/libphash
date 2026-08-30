@@ -14,7 +14,8 @@ int ph_can_read_webp(const uint8_t *magic, size_t len) {
 }
 
 unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long size, int *width,
-                                  int *height, int *channels, int req_comp) {
+                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
+                                  ph_error_t *out_err) {
     (void)req_comp;
     if (!buffer || size < 12)
         return NULL;
@@ -23,11 +24,23 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long siz
     if (!WebPGetInfo(buffer, size, &w, &h))
         return NULL;
 
+    if (ph_exceeds_pixel_limit((uint64_t)w, (uint64_t)h, max_pixels)) {
+        if (out_err)
+            *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        return NULL;
+    }
+
     /* libwebp has no native grayscale decode — always decode to RGB.
      * Grayscale conversion is handled later by ph_to_grayscale. */
     int out_channels = 3;
+
+    size_t out_size;
+    if (!ph_safe_image_alloc_size((uint64_t)w, (uint64_t)h, (uint64_t)out_channels, &out_size)) {
+        if (out_err)
+            *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        return NULL;
+    }
     size_t stride = (size_t)w * out_channels;
-    size_t out_size = stride * h;
 
     unsigned char *output = (unsigned char *)malloc(out_size);
     if (!output)

@@ -41,6 +41,8 @@ PH_API const char *ph_get_error_string(ph_error_t err) {
             return "Not implemented";
         case PH_ERR_EMPTY_IMAGE:
             return "Empty image (no image loaded)";
+        case PH_ERR_IMAGE_TOO_LARGE:
+            return "Image exceeds the configured maximum pixel count";
         default:
             return "Unknown error";
     }
@@ -129,6 +131,12 @@ PH_API void ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t mode) {
     }
 }
 
+PH_API void ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixels) {
+    if (ctx) {
+        ctx->config.max_pixels = max_pixels;
+    }
+}
+
 PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     if (!out_ctx)
         return PH_ERR_INVALID_ARGUMENT;
@@ -154,6 +162,7 @@ PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     ctx->config.radial_samples = PH_RADIAL_SAMPLES;
     ctx->config.block_size = PH_BLOCK_SIZE;
     ctx->config.whash_mode = PH_WHASH_FAST;
+    ctx->config.max_pixels = PH_DEFAULT_MAX_PIXELS;
 
     /* Optimization Defaults: Disabled by default for compatibility */
     ctx->config.load_grayscale = 0;
@@ -261,8 +270,10 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
                 const unsigned char *data = (const unsigned char *)mapped;
                 int req_comp_opt = ctx->config.load_grayscale ? 1 : 0;
                 int w, h, ch;
-                uint8_t *decoded_data =
-                    ph_decode_buffer(data, (size_t)st.st_size, &w, &h, &ch, req_comp_opt);
+                ph_error_t decode_err = PH_SUCCESS;
+                uint8_t *decoded_data = ph_decode_buffer(data, (size_t)st.st_size, &w, &h, &ch,
+                                                         req_comp_opt, ctx->config.max_pixels,
+                                                         &decode_err);
 
                 munmap(mapped, st.st_size);
                 close(fd);
@@ -275,6 +286,8 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
                     ctx->image.is_loaded = 1;
                     return PH_SUCCESS;
                 }
+                if (decode_err == PH_ERR_IMAGE_TOO_LARGE)
+                    return PH_ERR_IMAGE_TOO_LARGE;
             } else {
                 close(fd);
             }
@@ -283,6 +296,14 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
         }
     }
 #endif // PH_USE_TURBOJPEG || PH_USE_LIBPNG || PH_USE_SPNG || PH_USE_WEBP
+
+    if (ctx->config.max_pixels != 0) {
+        int iw, ih, icomp;
+        if (stbi_info(filepath, &iw, &ih, &icomp) &&
+            ph_exceeds_pixel_limit((uint64_t)iw, (uint64_t)ih, ctx->config.max_pixels)) {
+            return PH_ERR_IMAGE_TOO_LARGE;
+        }
+    }
 
     int req_comp = ctx->config.load_grayscale ? 1 : 0;
     ctx->image.raw_rgb =
@@ -313,7 +334,9 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
 
     // Try unified decoder first
     int w, h, ch;
-    uint8_t *decoded_data = ph_decode_buffer(buffer, length, &w, &h, &ch, req_comp);
+    ph_error_t decode_err = PH_SUCCESS;
+    uint8_t *decoded_data = ph_decode_buffer(buffer, length, &w, &h, &ch, req_comp,
+                                             ctx->config.max_pixels, &decode_err);
     if (decoded_data) {
         ctx->image.raw_rgb = decoded_data;
         ctx->image.width = w;
@@ -321,6 +344,16 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
         ctx->image.channels = ch;
         ctx->image.is_loaded = 1;
         return PH_SUCCESS;
+    }
+    if (decode_err == PH_ERR_IMAGE_TOO_LARGE)
+        return PH_ERR_IMAGE_TOO_LARGE;
+
+    if (ctx->config.max_pixels != 0) {
+        int iw, ih, icomp;
+        if (stbi_info_from_memory(buffer, (int)length, &iw, &ih, &icomp) &&
+            ph_exceeds_pixel_limit((uint64_t)iw, (uint64_t)ih, ctx->config.max_pixels)) {
+            return PH_ERR_IMAGE_TOO_LARGE;
+        }
     }
 
     ctx->image.raw_rgb = stbi_load_from_memory(buffer, (int)length, &ctx->image.width,

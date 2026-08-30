@@ -17,6 +17,7 @@ A high-performance, portable C library for Perceptual Image Hashing.
 * **High-Performance Decoders**: Built-in support for `libjpeg-turbo`, `libpng`, `spng`, and `libwebp` with SIMD acceleration (NEON/SSE) and `mmap` optimization.
 * **Fast Grayscale Loading**: Native decoders can perform grayscale conversion during decompression, significantly reducing CPU cycles and memory overhead.
 * **Zero-Fragmentation Arena**: Optimized context-based **Arena Allocator** for internal operations, ensuring predictable performance in high-load environments.
+* **Decompression-Bomb Protection**: Images are rejected with `PH_ERR_IMAGE_TOO_LARGE` before any pixel buffer is allocated if they exceed a configurable pixel-count limit (256 megapixels by default; tune or disable via `ph_context_set_max_pixels()`).
 * **FFI-Friendly**: Clean C API with opaque pointers, designed for seamless integration with Python, Rust, Node.js, and Go.
 * **Cross-Platform**: Optimized for ARM64 (Apple Silicon, Raspberry Pi) and x86_64.
 
