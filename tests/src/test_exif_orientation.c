@@ -1,0 +1,330 @@
+#include "internal.h"
+#include "libphash.h"
+#include "test_macros.h"
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* --- Synthetic TIFF/EXIF buffer builders --------------------------------- */
+
+static void put16(uint8_t *p, uint16_t v, int le) {
+    if (le) {
+        p[0] = (uint8_t)(v & 0xFF);
+        p[1] = (uint8_t)(v >> 8);
+    } else {
+        p[0] = (uint8_t)(v >> 8);
+        p[1] = (uint8_t)(v & 0xFF);
+    }
+}
+
+static void put32(uint8_t *p, uint32_t v, int le) {
+    if (le) {
+        p[0] = (uint8_t)(v & 0xFF);
+        p[1] = (uint8_t)((v >> 8) & 0xFF);
+        p[2] = (uint8_t)((v >> 16) & 0xFF);
+        p[3] = (uint8_t)((v >> 24) & 0xFF);
+    } else {
+        p[0] = (uint8_t)((v >> 24) & 0xFF);
+        p[1] = (uint8_t)((v >> 16) & 0xFF);
+        p[2] = (uint8_t)((v >> 8) & 0xFF);
+        p[3] = (uint8_t)(v & 0xFF);
+    }
+}
+
+/* Builds a minimal IFD0 with a single Orientation (0x0112) entry of the given
+ * type/count/value, wrapped in a TIFF header. Returns the number of bytes written. */
+static size_t build_tiff_orientation(uint8_t *out, int le, uint16_t tag_type, uint32_t tag_count,
+                                     uint16_t value) {
+    size_t off = 0;
+    out[off++] = le ? 'I' : 'M';
+    out[off++] = le ? 'I' : 'M';
+    put16(out + off, 42, le);
+    off += 2;
+    put32(out + off, 8, le); // IFD0 offset
+    off += 4;
+
+    put16(out + off, 1, le); // 1 entry
+    off += 2;
+    put16(out + off, 0x0112, le); // tag: Orientation
+    off += 2;
+    put16(out + off, tag_type, le);
+    off += 2;
+    put32(out + off, tag_count, le);
+    off += 4;
+    put16(out + off, value, le); // value stored left-justified in the 4-byte field
+    off += 2;
+    put16(out + off, 0, le); // padding to fill the 4-byte value field
+    off += 2;
+    put32(out + off, 0, le); // next IFD offset: none
+    off += 4;
+    return off;
+}
+
+static size_t build_jpeg_with_exif(uint8_t *out, int le, uint16_t tag_type, uint32_t tag_count,
+                                   uint16_t value) {
+    uint8_t tiff[64];
+    size_t tiff_len = build_tiff_orientation(tiff, le, tag_type, tag_count, value);
+
+    size_t off = 0;
+    out[off++] = 0xFF;
+    out[off++] = 0xD8; // SOI
+    out[off++] = 0xFF;
+    out[off++] = 0xE1; // APP1
+    uint16_t seg_len = (uint16_t)(2 + 6 + tiff_len);
+    put16(out + off, seg_len, 0 /* segment length is always big-endian */);
+    off += 2;
+    memcpy(out + off, "Exif\0\0", 6);
+    off += 6;
+    memcpy(out + off, tiff, tiff_len);
+    off += tiff_len;
+    return off;
+}
+
+static size_t build_webp_with_exif(uint8_t *out, int le, uint16_t tag_type, uint32_t tag_count,
+                                   uint16_t value, int with_exif_prefix) {
+    uint8_t tiff[64];
+    size_t tiff_len = build_tiff_orientation(tiff, le, tag_type, tag_count, value);
+    size_t prefix_len = with_exif_prefix ? 6 : 0;
+    size_t chunk_payload_len = prefix_len + tiff_len;
+
+    size_t off = 0;
+    memcpy(out + off, "RIFF", 4);
+    off += 4;
+    put32(out + off, 0, 1); // file size: unused by the scanner, left as 0
+    off += 4;
+    memcpy(out + off, "WEBP", 4);
+    off += 4;
+
+    memcpy(out + off, "EXIF", 4);
+    off += 4;
+    put32(out + off, (uint32_t)chunk_payload_len, 1); // RIFF sizes are little-endian
+    off += 4;
+    if (with_exif_prefix) {
+        memcpy(out + off, "Exif\0\0", 6);
+        off += 6;
+    }
+    memcpy(out + off, tiff, tiff_len);
+    off += tiff_len;
+    return off;
+}
+
+/* --- TIFF/IFD0 Orientation parsing --------------------------------------- */
+
+void test_jpeg_orientation_all_values(void) {
+    uint8_t buf[128];
+    for (int le = 0; le <= 1; le++) {
+        for (int v = 1; v <= 8; v++) {
+            size_t n = build_jpeg_with_exif(buf, le, 3 /* SHORT */, 1, (uint16_t)v);
+            int got = ph_exif_orientation_from_jpeg(buf, n);
+            ASSERT_INT_EQ(v, got);
+        }
+    }
+    PASS("test_jpeg_orientation_all_values");
+}
+
+void test_webp_orientation_all_values(void) {
+    uint8_t buf[128];
+    for (int le = 0; le <= 1; le++) {
+        for (int prefix = 0; prefix <= 1; prefix++) {
+            for (int v = 1; v <= 8; v++) {
+                size_t n = build_webp_with_exif(buf, le, 3, 1, (uint16_t)v, prefix);
+                int got = ph_exif_orientation_from_webp(buf, n);
+                ASSERT_INT_EQ(v, got);
+            }
+        }
+    }
+    PASS("test_webp_orientation_all_values");
+}
+
+void test_orientation_degrades_gracefully(void) {
+    uint8_t buf[128];
+
+    // Wrong tag type (LONG instead of SHORT): ignored, defaults to 1.
+    size_t n = build_jpeg_with_exif(buf, 1, 4 /* LONG */, 1, 6);
+    ASSERT_INT_EQ(1, ph_exif_orientation_from_jpeg(buf, n));
+
+    // Wrong count.
+    n = build_jpeg_with_exif(buf, 1, 3, 2, 6);
+    ASSERT_INT_EQ(1, ph_exif_orientation_from_jpeg(buf, n));
+
+    // Value outside the valid 1..8 range.
+    n = build_jpeg_with_exif(buf, 1, 3, 1, 99);
+    ASSERT_INT_EQ(1, ph_exif_orientation_from_jpeg(buf, n));
+
+    // No APP1 at all: plain SOI + APP0 + immediate EOI.
+    uint8_t no_exif[] = {0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x04, 0x00, 0x00, 0xFF, 0xD9};
+    ASSERT_INT_EQ(1, ph_exif_orientation_from_jpeg(no_exif, sizeof(no_exif)));
+
+    // Not a JPEG at all.
+    uint8_t garbage[] = {0x00, 0x01, 0x02, 0x03};
+    ASSERT_INT_EQ(1, ph_exif_orientation_from_jpeg(garbage, sizeof(garbage)));
+    ASSERT_INT_EQ(1, ph_exif_orientation_from_webp(garbage, sizeof(garbage)));
+
+    // Truncated buffers must not crash (ASAN is the real judge here) and must
+    // degrade to "no transform".
+    n = build_jpeg_with_exif(buf, 1, 3, 1, 6);
+    for (size_t cut = 0; cut < n; cut++) {
+        ASSERT_INT_EQ(1, ph_exif_orientation_from_jpeg(buf, cut));
+    }
+    n = build_webp_with_exif(buf, 1, 3, 1, 6, 1);
+    for (size_t cut = 0; cut < n; cut++) {
+        ASSERT_INT_EQ(1, ph_exif_orientation_from_webp(buf, cut));
+    }
+
+    PASS("test_orientation_degrades_gracefully");
+}
+
+/* --- Pixel transform ------------------------------------------------------ */
+
+/* 3x2 single-channel source, values labeled by position so a transform's
+ * correctness can be read off directly:
+ *   0 1 2
+ *   3 4 5
+ * Expected outputs below were derived by hand from what each EXIF Orientation
+ * value means physically (rotate/mirror), not from the implementation's
+ * formulas, so this is an independent check. */
+void test_apply_orientation_known_values(void) {
+    static const uint8_t src[6] = {0, 1, 2, 3, 4, 5};
+    struct {
+        int orientation;
+        int wd, hd;
+        uint8_t expected[6];
+    } cases[] = {
+        {1, 3, 2, {0, 1, 2, 3, 4, 5}}, {2, 3, 2, {2, 1, 0, 5, 4, 3}}, {3, 3, 2, {5, 4, 3, 2, 1, 0}},
+        {4, 3, 2, {3, 4, 5, 0, 1, 2}}, {5, 2, 3, {0, 3, 1, 4, 2, 5}}, {6, 2, 3, {3, 0, 4, 1, 5, 2}},
+        {7, 2, 3, {5, 2, 4, 1, 3, 0}}, {8, 2, 3, {2, 5, 1, 4, 0, 3}},
+    };
+
+    for (size_t c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
+        uint8_t *data = (uint8_t *)malloc(6);
+        memcpy(data, src, 6);
+        int w = 3, h = 2;
+        ph_apply_exif_orientation(&data, &w, &h, 1, cases[c].orientation);
+        ASSERT_INT_EQ(cases[c].wd, w);
+        ASSERT_INT_EQ(cases[c].hd, h);
+        if (memcmp(data, cases[c].expected, 6) != 0) {
+            fprintf(stderr, "[FAIL] orientation %d: got {%d,%d,%d,%d,%d,%d}\n",
+                    cases[c].orientation, data[0], data[1], data[2], data[3], data[4], data[5]);
+            exit(1);
+        }
+        free(data);
+    }
+    PASS("test_apply_orientation_known_values");
+}
+
+void test_apply_orientation_noop_and_invalid(void) {
+    uint8_t *data = (uint8_t *)malloc(6);
+    memcpy(data, (uint8_t[]){0, 1, 2, 3, 4, 5}, 6);
+    int w = 3, h = 2;
+
+    ph_apply_exif_orientation(&data, &w, &h, 1, 1); // orientation 1: no-op
+    ASSERT_INT_EQ(3, w);
+    ASSERT_INT_EQ(2, h);
+    ASSERT_UINT8_EQ(0, data[0]);
+
+    ph_apply_exif_orientation(&data, &w, &h, 1, 0); // out of range: no-op
+    ph_apply_exif_orientation(&data, &w, &h, 1, 9); // out of range: no-op
+    ASSERT_INT_EQ(3, w);
+    ASSERT_INT_EQ(2, h);
+
+    free(data);
+    PASS("test_apply_orientation_noop_and_invalid");
+}
+
+/* Applying an orientation and then its inverse must recover the exact original
+ * buffer. 6 and 8 are each other's inverse; the rest are self-inverse. Uses a
+ * larger, asymmetric 5x4 buffer (unique byte per pixel) to catch indexing bugs
+ * the small 3x2 hand-checked case might not exercise. */
+void test_apply_orientation_roundtrip(void) {
+    const int W = 5, H = 4;
+    uint8_t original[20];
+    for (int i = 0; i < 20; i++)
+        original[i] = (uint8_t)i;
+
+    int inverse_of[9] = {0, 1, 2, 3, 4, 5, 8, 7, 6}; // index by orientation 1..8
+
+    for (int o = 1; o <= 8; o++) {
+        uint8_t *data = (uint8_t *)malloc(20);
+        memcpy(data, original, 20);
+        int w = W, h = H;
+
+        ph_apply_exif_orientation(&data, &w, &h, 1, o);
+        ph_apply_exif_orientation(&data, &w, &h, 1, inverse_of[o]);
+
+        ASSERT_INT_EQ(W, w);
+        ASSERT_INT_EQ(H, h);
+        if (memcmp(data, original, 20) != 0) {
+            fprintf(stderr, "[FAIL] orientation %d round-trip mismatch\n", o);
+            exit(1);
+        }
+        free(data);
+    }
+    PASS("test_apply_orientation_roundtrip");
+}
+
+/* --- End-to-end: real JPEG + spliced-in synthetic EXIF -------------------- */
+
+void test_auto_orient_e2e(void) {
+    FILE *f = fopen(TEST_DATA_DIR "/photo.jpeg", "rb");
+    ASSERT_PTR_NOT_NULL(f);
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    uint8_t *orig = (uint8_t *)malloc((size_t)sz);
+    ASSERT_INT_EQ((int)sz, (int)fread(orig, 1, (size_t)sz, f));
+    fclose(f);
+
+    // Splice a synthetic APP1/Exif segment (Orientation=6) right after SOI.
+    uint8_t app1[128];
+    size_t app1_len = build_jpeg_with_exif(app1, 1, 3, 1, 6) - 2; // minus the SOI we already have
+    size_t tagged_len = (size_t)sz + app1_len;
+    uint8_t *tagged = (uint8_t *)malloc(tagged_len);
+    memcpy(tagged, orig, 2);                // SOI
+    memcpy(tagged + 2, app1 + 2, app1_len); // APP1 segment only
+    memcpy(tagged + 2 + app1_len, orig + 2, (size_t)sz - 2);
+
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+
+    // Default (auto-orient off): the tag must be ignored, matching plain photo.jpeg.
+    ASSERT_OK(ph_load_from_memory(ctx, tagged, tagged_len));
+    uint64_t hash_off = 0;
+    ASSERT_OK(ph_compute_ahash(ctx, &hash_off));
+
+    ASSERT_OK(ph_load_from_memory(ctx, orig, (size_t)sz));
+    uint64_t hash_plain = 0;
+    ASSERT_OK(ph_compute_ahash(ctx, &hash_plain));
+    ASSERT_UINT64_EQ(hash_plain, hash_off);
+
+    // Auto-orient on: the rotation must actually be applied, changing the hash.
+    ph_context_set_auto_orient(ctx, 1);
+    ASSERT_OK(ph_load_from_memory(ctx, tagged, tagged_len));
+    uint64_t hash_on = 0;
+    ASSERT_OK(ph_compute_ahash(ctx, &hash_on));
+
+    int dist = ph_hamming_distance(hash_plain, hash_on);
+    if (dist < 10) {
+        fprintf(stderr,
+                "[FAIL] test_auto_orient_e2e: expected auto-orient to substantially change the "
+                "hash of a 90-degree rotation, distance was only %d\n",
+                dist);
+        exit(1);
+    }
+
+    free(orig);
+    free(tagged);
+    ph_free(ctx);
+    PASS("test_auto_orient_e2e");
+}
+
+int main(void) {
+    test_jpeg_orientation_all_values();
+    test_webp_orientation_all_values();
+    test_orientation_degrades_gracefully();
+    test_apply_orientation_known_values();
+    test_apply_orientation_noop_and_invalid();
+    test_apply_orientation_roundtrip();
+    test_auto_orient_e2e();
+    return 0;
+}

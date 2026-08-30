@@ -210,6 +210,29 @@ PH_API void ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t mode);
 PH_API void ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
 
 /**
+ * @brief Controls whether EXIF/WebP-metadata orientation is applied automatically
+ * right after decoding.
+ *
+ * JPEG files from cameras/phones are often stored in sensor orientation with an
+ * EXIF `Orientation` tag (values 1-8) telling viewers how to rotate/mirror them
+ * for display; WebP carries the same tag in an `EXIF` chunk. When disabled (the
+ * default), libphash hashes the raw decoded buffer as-is and ignores this tag —
+ * matching every prior version of this library. When enabled, a recognized
+ * orientation tag is applied (rotate/mirror, before any hash is computed) so
+ * that visually-identical images stored with different orientation tags hash
+ * the same.
+ *
+ * @note Off by default so this doesn't silently change hashes already computed
+ * by existing deployments; a future major version may flip this default.
+ * Missing or malformed orientation metadata is treated as "no transform needed"
+ * rather than an error — this never causes a load to fail.
+ * @param ctx The context.
+ * @param enable 1 to auto-orient using EXIF metadata, 0 to hash the raw decoded
+ * buffer as-is (default).
+ */
+PH_API void ph_context_set_auto_orient(ph_context_t *ctx, int enable);
+
+/**
  * @brief Sets the maximum number of pixels (width * height) an image is allowed to
  *        decode to, before any pixel buffer is allocated. Protects against
  *        decompression-bomb inputs (a small file that declares an enormous image size).

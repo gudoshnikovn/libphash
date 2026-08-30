@@ -140,6 +140,12 @@ PH_API void ph_context_set_load_grayscale(ph_context_t *ctx, int enable) {
     }
 }
 
+PH_API void ph_context_set_auto_orient(ph_context_t *ctx, int enable) {
+    if (ctx) {
+        ctx->config.auto_orient = enable ? 1 : 0;
+    }
+}
+
 PH_API void ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t mode) {
     if (ctx) {
         ctx->config.whash_mode = mode;
@@ -181,6 +187,7 @@ PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
 
     /* Optimization Defaults: Disabled by default for compatibility */
     ctx->config.load_grayscale = 0;
+    ctx->config.auto_orient = 0;
 
     ph_context_set_gamma(ctx, PH_DEFAULT_GAMMA);
 
@@ -273,6 +280,16 @@ static ph_error_t ph_classify_stb_failure(ph_context_t *ctx) {
     return PH_ERR_CORRUPT_DATA;
 }
 
+/* Picks the right EXIF-orientation scanner for the encoded (still-compressed)
+ * bytes based on magic, or reports "no transform needed" (1) for anything else. */
+static int ph_scan_orientation(const uint8_t *data, size_t len) {
+    if (len >= 2 && data[0] == 0xFF && data[1] == 0xD8)
+        return ph_exif_orientation_from_jpeg(data, len);
+    if (ph_magic_is_webp(data, len))
+        return ph_exif_orientation_from_webp(data, len);
+    return 1;
+}
+
 PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
     if (!ctx || !filepath)
         return PH_ERR_INVALID_ARGUMENT;
@@ -341,6 +358,12 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
                     data, (size_t)st.st_size, &w, &h, &ch, req_comp_opt, ctx->config.max_pixels,
                     &decode_err, ctx->last_error, sizeof(ctx->last_error));
 
+                // Scan the still-mmap'd compressed bytes for orientation metadata
+                // before unmapping them below.
+                int orientation = 1;
+                if (decoded_data && ctx->config.auto_orient)
+                    orientation = ph_scan_orientation(data, (size_t)st.st_size);
+
                 munmap(mapped, st.st_size);
                 close(fd);
 
@@ -350,6 +373,10 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
                     ctx->image.height = h;
                     ctx->image.channels = ch;
                     ctx->image.is_loaded = 1;
+                    if (orientation != 1)
+                        ph_apply_exif_orientation(&ctx->image.raw_rgb, &ctx->image.width,
+                                                  &ctx->image.height, ctx->image.channels,
+                                                  orientation);
                     return PH_SUCCESS;
                 }
                 // A native backend recognized the format and gave a definitive answer
@@ -384,6 +411,29 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
         ctx->image.channels = req_comp;
     }
 
+    if (ctx->config.auto_orient) {
+        // No mmap'd buffer available on this path (stb_image reads by path
+        // itself), so re-read the raw bytes just to scan for the tag.
+        FILE *f = fopen(filepath, "rb");
+        if (f) {
+            fseek(f, 0, SEEK_END);
+            long sz = ftell(f);
+            fseek(f, 0, SEEK_SET);
+            if (sz > 0) {
+                uint8_t *raw = (uint8_t *)malloc((size_t)sz);
+                if (raw && fread(raw, 1, (size_t)sz, f) == (size_t)sz) {
+                    int orientation = ph_scan_orientation(raw, (size_t)sz);
+                    if (orientation != 1)
+                        ph_apply_exif_orientation(&ctx->image.raw_rgb, &ctx->image.width,
+                                                  &ctx->image.height, ctx->image.channels,
+                                                  orientation);
+                }
+                free(raw);
+            }
+            fclose(f);
+        }
+    }
+
     ctx->image.is_loaded = 1;
     return PH_SUCCESS;
 }
@@ -415,6 +465,12 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
         ctx->image.height = h;
         ctx->image.channels = ch;
         ctx->image.is_loaded = 1;
+        if (ctx->config.auto_orient) {
+            int orientation = ph_scan_orientation(buffer, length);
+            if (orientation != 1)
+                ph_apply_exif_orientation(&ctx->image.raw_rgb, &ctx->image.width,
+                                          &ctx->image.height, ctx->image.channels, orientation);
+        }
         return PH_SUCCESS;
     }
     // A native backend recognized the format and gave a definitive answer (too
@@ -437,6 +493,13 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
 
     if (req_comp != 0) {
         ctx->image.channels = req_comp;
+    }
+
+    if (ctx->config.auto_orient) {
+        int orientation = ph_scan_orientation(buffer, length);
+        if (orientation != 1)
+            ph_apply_exif_orientation(&ctx->image.raw_rgb, &ctx->image.width, &ctx->image.height,
+                                      ctx->image.channels, orientation);
     }
 
     ctx->image.is_loaded = 1;

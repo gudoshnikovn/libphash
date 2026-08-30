@@ -19,16 +19,15 @@
 // Override: LIBPHASH_MINIMAL=1 disables all at pip install time.
 // =====================================================================
 
-#ifndef PH_USE_WEBP
-// Magic-byte check that stays available even when no WebP decoder is compiled in,
-// so a recognized-but-unavailable format can be reported precisely (used by both
-// ph_decode_buffer() and, for the fully-portable/no-native-decoders build where
-// ph_load_from_file() never reaches ph_decode_buffer, directly by core.c).
+// Magic-byte check that stays available regardless of whether a WebP decoder is
+// compiled in — used by ph_decode_buffer() and core.c to report a recognized-
+// but-unavailable format precisely (see PH_ERR_DECODER_UNAVAILABLE), and also by
+// core.c's EXIF-orientation dispatch (src/image/orient.c) to tell a WebP buffer
+// apart from a JPEG one before picking which metadata scanner to run.
 static inline int ph_magic_is_webp(const uint8_t *magic, size_t len) {
     return (len >= 12 && magic[0] == 'R' && magic[1] == 'I' && magic[2] == 'F' && magic[3] == 'F' &&
             magic[8] == 'W' && magic[9] == 'E' && magic[10] == 'B' && magic[11] == 'P');
 }
-#endif
 
 // max_pixels: 0 = unlimited, otherwise the max allowed width*height; the decoder must
 // check this against the image's header-declared dimensions *before* allocating a

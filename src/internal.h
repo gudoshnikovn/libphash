@@ -69,6 +69,21 @@ const float *ph_get_dct_matrix_32(void);
 /* Initializes the DCT matrix (thread-safe, idempotent) */
 void init_dct_matrix(void);
 
+/* EXIF Orientation (tag 0x0112) support. Only consulted when
+ * ph_context_set_auto_orient() is enabled; degrades silently (returns 1, i.e.
+ * "no transform needed") on any malformed/absent metadata rather than failing
+ * the load — see src/image/orient.c. */
+int ph_exif_orientation_from_jpeg(const uint8_t *data, size_t len);
+int ph_exif_orientation_from_webp(const uint8_t *data, size_t len);
+
+/* Applies one of the 8 EXIF orientation transforms (rotate/mirror) to a
+ * decoded pixel buffer in place, reallocating *data and updating *width/
+ * *height as needed (values 5-8 swap the dimensions). orientation 1 (or any
+ * value outside 1..8) is a no-op. Leaves the image untouched on allocation
+ * failure. */
+void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int channels,
+                               int orientation);
+
 /*
  * Constants
  */
@@ -170,6 +185,7 @@ struct ph_context {
         uint8_t gamma_lut[256];
         int gray_r, gray_g, gray_b;
         int load_grayscale;
+        int auto_orient; // Off by default: see ph_context_set_auto_orient().
 
         // Various tunings for hashes
         int phash_dct_size;
