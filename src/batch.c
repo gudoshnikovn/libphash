@@ -135,17 +135,43 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
     HANDLE *handles = malloc(sizeof(HANDLE) * (size_t)nthreads);
     if (!handles)
         return PH_ERR_ALLOCATION_FAILED;
+    /* Store only handles that were actually created, packed with no gaps.
+     * WaitForMultipleObjects() fails immediately with WAIT_FAILED if *any* slot in
+     * the range it is given is NULL, so a single CreateThread() failure in the middle
+     * of the array used to make us stop waiting while other workers were still
+     * writing into items[] -- a data race and a use-after-free for the caller. */
     int spawned = 0;
     for (int i = 0; i < nthreads; i++) {
-        handles[i] = CreateThread(NULL, 0, ph_batch_worker_win, &shared, 0, NULL);
-        if (handles[i])
-            spawned++;
+        HANDLE h = CreateThread(NULL, 0, ph_batch_worker_win, &shared, 0, NULL);
+        if (h)
+            handles[spawned++] = h;
     }
-    if (spawned > 0)
-        WaitForMultipleObjects((DWORD)spawned, handles, TRUE, INFINITE);
-    for (int i = 0; i < nthreads; i++) {
-        if (handles[i])
-            CloseHandle(handles[i]);
+
+    /* WaitForMultipleObjects() accepts at most MAXIMUM_WAIT_OBJECTS (64) handles, so
+     * wait in chunks of that size instead of clamping nthreads to 64: clamping would
+     * silently cap parallelism on machines with more than 64 logical processors
+     * (routine on CI runners and servers), which is exactly the configuration
+     * `threads = 0` is meant to exploit. Waiting on chunks one after another is safe
+     * because the workers are independent: they only drain a shared atomic index and
+     * never wait on each other or on us, so by the time the last chunk returns every
+     * worker has terminated. */
+    for (int i = 0; i < spawned;) {
+        DWORD chunk = (DWORD)(spawned - i);
+        if (chunk > MAXIMUM_WAIT_OBJECTS)
+            chunk = MAXIMUM_WAIT_OBJECTS;
+        if (WaitForMultipleObjects(chunk, handles + i, TRUE, INFINITE) == WAIT_FAILED) {
+            /* Should not happen (all handles are valid), but returning here would
+             * hand the caller an array that live workers are still writing to.
+             * Fall back to joining this chunk one handle at a time. */
+            for (DWORD k = 0; k < chunk; k++) {
+                WaitForSingleObject(handles[i + (int)k], INFINITE);
+            }
+        }
+        i += (int)chunk;
+    }
+
+    for (int i = 0; i < spawned; i++) {
+        CloseHandle(handles[i]);
     }
     free(handles);
 #else
@@ -162,6 +188,12 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
     }
     free(threads_arr);
 #endif
+
+    /* Not a single worker started: nothing touched items[], every one of them is still
+     * at its pre-set PH_ERR_ALLOCATION_FAILED. Reporting PH_SUCCESS here would tell the
+     * caller the batch is done when no work was performed at all. */
+    if (spawned == 0)
+        return PH_ERR_ALLOCATION_FAILED;
 
     return PH_SUCCESS;
 }
