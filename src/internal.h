@@ -51,6 +51,23 @@ PH_NODISCARD ph_error_t ph_dct2_partial(const float *dct_mat, const uint8_t *inp
 
 uint64_t ph_median_bitpack(const float *values, int n);
 
+/* Structural validity of a caller-supplied ph_digest_t.
+ *
+ * ph_digest_t is a flat public struct that FFI bindings (Python, C#, Rust) fill in
+ * by hand, and `size` is a uint8_t that can hold up to 255 while `data` is only
+ * PH_DIGEST_MAX_BYTES long. Every public function that reads a digest must check
+ * this first, or a size of 200 reads past the end of the array. */
+static inline int ph_digest_is_valid(const ph_digest_t *d) {
+    return d != NULL && d->size <= PH_DIGEST_MAX_BYTES;
+}
+
+/* As above, plus "carries information". A zero-length digest has no bits to
+ * compare, so distance/similarity functions reject it rather than reporting a
+ * distance of 0 -- which would read as "identical". */
+static inline int ph_digest_is_comparable(const ph_digest_t *d) {
+    return ph_digest_is_valid(d) && d->size > 0;
+}
+
 typedef enum { PH_HSV_BLACK = 0, PH_HSV_GRAY, PH_HSV_FAINT, PH_HSV_BRIGHT } ph_hsv_category_t;
 
 typedef struct {

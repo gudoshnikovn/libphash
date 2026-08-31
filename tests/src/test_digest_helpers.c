@@ -101,10 +101,128 @@ void test_similarity() {
     PASS("test_similarity");
 }
 
+/* R07/M4: ph_digest_t is a flat public struct that callers (notably FFI bindings)
+ * fill in by hand. `size` is a uint8_t, so it can hold 200 while `data` is only
+ * PH_DIGEST_MAX_BYTES long -- every public function reading a digest must reject
+ * that instead of reading past the end of the array. Run this under ASan: before
+ * the fix the oversized cases read out of bounds. */
+void test_digest_oversized_size_rejected() {
+    ph_digest_t big = {0};
+    ph_digest_t ok = {0};
+    char hex[PH_DIGEST_MAX_BYTES * 4 + 1];
+
+    big.size = 200; /* > PH_DIGEST_MAX_BYTES (64), representable in uint8_t */
+    ok.size = PH_DIGEST_MAX_BYTES;
+
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_digest_to_hex(&big, hex, sizeof(hex)));
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&big, &big));
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&big, &ok));
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&ok, &big));
+    ASSERT(ph_similarity_digest(&big, &big) < 0.0);
+    ASSERT(ph_l2_distance(&big, &big) < 0.0);
+
+    /* Exactly at the limit must still work -- the check is > MAX, not >= MAX. */
+    ASSERT_OK(ph_digest_to_hex(&ok, hex, sizeof(hex)));
+    ASSERT_INT_EQ(0, ph_hamming_distance_digest(&ok, &ok));
+
+    /* One byte over the limit is rejected. */
+    ph_digest_t over = {0};
+    over.size = PH_DIGEST_MAX_BYTES + 1;
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_digest_to_hex(&over, hex, sizeof(hex)));
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&over, &over));
+
+    PASS("test_digest_oversized_size_rejected");
+}
+
+/* A zero-length digest carries no bits. Comparing two of them and reporting
+ * distance 0 would read as "identical", so the comparison helpers refuse. */
+void test_digest_zero_size_not_comparable() {
+    ph_digest_t empty = {0};
+    ph_digest_t other = {0};
+    char hex[PH_DIGEST_MAX_BYTES * 2 + 1];
+
+    empty.size = 0;
+    other.size = 4;
+
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&empty, &empty));
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&empty, &other));
+    ASSERT(ph_similarity_digest(&empty, &empty) < 0.0);
+    ASSERT(ph_l2_distance(&empty, &empty) < 0.0);
+
+    /* ph_digest_to_hex still accepts it: ph_digest_from_hex("") produces exactly
+     * this digest, so rejecting it here would break the round trip. */
+    ASSERT_OK(ph_digest_to_hex(&empty, hex, sizeof(hex)));
+    ASSERT_STR_EQ("", hex);
+
+    ph_digest_t from_empty = {0};
+    from_empty.size = 42; /* must be overwritten */
+    ASSERT_OK(ph_digest_from_hex("", &from_empty));
+    ASSERT_INT_EQ(0, from_empty.size);
+
+    PASS("test_digest_zero_size_not_comparable");
+}
+
+/* Mismatched sizes were untested (T5) -- both comparison helpers must say -1
+ * rather than comparing the shorter prefix. */
+void test_digest_size_mismatch() {
+    ph_digest_t a = {0}, b = {0};
+    a.size = 8;
+    b.size = 16;
+
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&a, &b));
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&b, &a));
+    ASSERT(ph_similarity_digest(&a, &b) < 0.0);
+    ASSERT(ph_l2_distance(&a, &b) < 0.0);
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(NULL, &a));
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&a, NULL));
+
+    PASS("test_digest_size_mismatch");
+}
+
+/* ph_digest_from_hex documents uppercase support (common.c:174) but it was never
+ * tested; and the round trip was only checked on a couple of fixed values (T5). */
+void test_digest_hex_roundtrip_random_and_uppercase() {
+    unsigned seed = 12345u; /* fixed: a failure must be reproducible */
+    for (int iter = 0; iter < 1000; iter++) {
+        ph_digest_t src = {0}, back = {0};
+        char lower[PH_DIGEST_MAX_BYTES * 2 + 1];
+        char upper[PH_DIGEST_MAX_BYTES * 2 + 1];
+
+        seed = seed * 1103515245u + 12345u;
+        src.size = (uint8_t)(1 + (seed >> 16) % PH_DIGEST_MAX_BYTES);
+        for (int i = 0; i < src.size; i++) {
+            seed = seed * 1103515245u + 12345u;
+            src.data[i] = (uint8_t)(seed >> 16);
+        }
+
+        ASSERT_OK(ph_digest_to_hex(&src, lower, sizeof(lower)));
+        ASSERT_OK(ph_digest_from_hex(lower, &back));
+        ASSERT_INT_EQ(src.size, back.size);
+        ASSERT_INT_EQ(0, memcmp(src.data, back.data, src.size));
+
+        /* Same string uppercased must parse identically. */
+        for (size_t i = 0; i < sizeof(upper); i++) {
+            char c = lower[i];
+            upper[i] = (c >= 'a' && c <= 'f') ? (char)(c - 'a' + 'A') : c;
+            if (c == 0)
+                break;
+        }
+        ph_digest_t from_upper = {0};
+        ASSERT_OK(ph_digest_from_hex(upper, &from_upper));
+        ASSERT_INT_EQ(src.size, from_upper.size);
+        ASSERT_INT_EQ(0, memcmp(src.data, from_upper.data, src.size));
+    }
+    PASS("test_digest_hex_roundtrip_random_and_uppercase");
+}
+
 int main() {
     test_hash_to_hex();
     test_digest_hex_roundtrip();
     test_digest_hex_errors();
     test_similarity();
+    test_digest_oversized_size_rejected();
+    test_digest_zero_size_not_comparable();
+    test_digest_size_mismatch();
+    test_digest_hex_roundtrip_random_and_uppercase();
     return 0;
 }

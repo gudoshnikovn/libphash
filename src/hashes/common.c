@@ -33,7 +33,7 @@ PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2) {
 }
 
 PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b) {
-    if (!a || !b || a->size != b->size)
+    if (!ph_digest_is_comparable(a) || !ph_digest_is_comparable(b) || a->size != b->size)
         return -1;
 
     size_t len = a->size;
@@ -119,7 +119,7 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
 }
 
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b) {
-    if (!a || !b || a->size != b->size)
+    if (!ph_digest_is_comparable(a) || !ph_digest_is_comparable(b) || a->size != b->size)
         return -1.0;
 
     double sum = 0;
@@ -136,7 +136,7 @@ PH_API double ph_similarity(uint64_t a, uint64_t b) {
 }
 
 PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b) {
-    if (!a || !b || a->size != b->size || a->size == 0)
+    if (!ph_digest_is_comparable(a) || !ph_digest_is_comparable(b) || a->size != b->size)
         return -1.0;
 
     int dist = ph_hamming_distance_digest(a, b);
@@ -150,7 +150,9 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b) {
 static const char PH_HEX_DIGITS[] = "0123456789abcdef";
 
 PH_API ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out, size_t out_size) {
-    if (!d || !out)
+    /* size == 0 is accepted here and renders as an empty string: ph_digest_from_hex("")
+     * produces such a digest, so rejecting it would break the round trip. */
+    if (!ph_digest_is_valid(d) || !out)
         return PH_ERR_INVALID_ARGUMENT;
 
     size_t needed = (size_t)d->size * 2 + 1;

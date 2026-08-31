@@ -472,6 +472,18 @@ PH_API PH_NODISCARD ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_dige
 // --- Comparison Functions ---
 
 PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
+/* Contract shared by every function below that reads a ph_digest_t.
+ *
+ * ph_digest_t is a flat struct callers (including FFI bindings) may fill in
+ * themselves, and `size` can hold values `data` cannot: a digest whose `size`
+ * exceeds PH_DIGEST_MAX_BYTES is rejected, never truncated. Since 2.0.0 this is
+ * enforced rather than trusted -- code that relied on the previous leniency will
+ * now get an error instead of a value read past the end of the array.
+ *
+ *   - functions returning ph_error_t: PH_ERR_INVALID_ARGUMENT;
+ *   - distance/similarity functions: -1 (also for a size of 0, which carries no
+ *     bits to compare -- reporting distance 0 there would read as "identical").
+ */
 PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b);
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b);
 
