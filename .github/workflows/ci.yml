@@ -148,8 +148,10 @@ jobs:
         ./pr/build/test_benchmark smoke >> benchmark_report.md
         echo '```' >> benchmark_report.md
         echo >> benchmark_report.md
+        # 10% threshold: the harness's measured noise floor with min_ms is under
+        # 7% on an idle machine (see docs/development.md). Still STRICT=0.
         bash pr/scripts/bench_regression_gate.sh \
-          pr/build/test_benchmark base/build/test_benchmark 5 25 regression.md
+          pr/build/test_benchmark base/build/test_benchmark 5 10 regression.md
         cat regression.md >> benchmark_report.md
         cat benchmark_report.md >> $GITHUB_STEP_SUMMARY
 
