@@ -9,7 +9,11 @@
 #define PH_VERSION_PATCH @PH_VERSION_PATCH@
 #define PH_VERSION_STRING "@PH_VERSION_STRING@"
 
+/* Monotonic, comparable version number: 2.0.0 -> 2000000, 2.3.11 -> 2003011.
+ * Each component gets 1000 slots, so a minor or patch above 99 no longer
+ * collides with the next component up (the pre-2.0.0 scheme used
+ * major*10000 + minor*100 + patch and did collide). */
 #define PH_VERSION_NUMBER \
-    (PH_VERSION_MAJOR * 10000 + PH_VERSION_MINOR * 100 + PH_VERSION_PATCH)
+    (PH_VERSION_MAJOR * 1000000 + PH_VERSION_MINOR * 1000 + PH_VERSION_PATCH)
 
 #endif /* PHASH_VERSION_H */

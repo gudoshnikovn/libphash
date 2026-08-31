@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(libphash VERSION 1.11.0 LANGUAGES C)
+project(libphash VERSION 2.0.0 LANGUAGES C)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Only install()/export when built standalone -- a parent project that pulls
@@ -305,8 +305,12 @@ if(PHASH_IS_TOP_LEVEL)
         target_link_libraries(phash PRIVATE ${PHASH_INSTALL_LINK_LIBS})
     endif()
 
-    set_target_properties(phash PROPERTIES PUBLIC_HEADER
-        ${CMAKE_CURRENT_SOURCE_DIR}/include/libphash.h)
+    # A shared build needs a versioned soname: it's the only signal a consumer's
+    # linker gets when libphash breaks compatibility across a major version.
+    set_target_properties(phash PROPERTIES
+        VERSION ${PROJECT_VERSION}
+        SOVERSION ${PROJECT_VERSION_MAJOR}
+        PUBLIC_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/include/libphash.h)
 
     install(TARGETS phash
         EXPORT phashTargets
@@ -315,6 +319,12 @@ if(PHASH_IS_TOP_LEVEL)
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
         PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
         INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    )
+
+    # Installed alongside libphash.h so consumers get a compile-time version
+    # macro (#if PH_VERSION_NUMBER >= ...), not just the runtime ph_version().
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/generated/phash_version.h
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     )
 
     install(EXPORT phashTargets

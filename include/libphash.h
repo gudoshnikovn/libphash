@@ -53,6 +53,11 @@ extern "C" {
 
 // --- Error Codes ---
 
+/* ABI rule: every value here is spelled out explicitly, and new codes are only
+ * ever appended at the end of the list with the next free negative value.
+ * Renumbering or reusing a value silently changes the meaning of an error in
+ * already-compiled consumers and in FFI bindings that hardcode the number, so
+ * a removed code's value stays retired rather than being handed to a new one. */
 typedef enum {
     PH_SUCCESS = 0,
     PH_ERR_ALLOCATION_FAILED = -1,
