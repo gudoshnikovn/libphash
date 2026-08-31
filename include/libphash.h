@@ -61,8 +61,13 @@ extern "C" {
 typedef enum {
     PH_SUCCESS = 0,
     PH_ERR_ALLOCATION_FAILED = -1,
-    PH_ERR_DECODE_FAILED = -2, ///< Generic/legacy decode failure; kept for ABI compatibility.
-                               ///< New code prefers one of the more specific codes below.
+    /* -2 is retired: it was PH_ERR_DECODE_FAILED, removed in 2.0.0. It had stopped
+     * being returned from anywhere while still being declared, so
+     * `if (err == PH_ERR_DECODE_FAILED)` silently never fired and the compiler said
+     * nothing. Removing the name makes that break visible at compile time. The value
+     * is not reused -- see the ABI rule above. Migration: PH_ERR_CORRUPT_DATA,
+     * PH_ERR_UNSUPPORTED_FORMAT, PH_ERR_IMAGE_TOO_LARGE, PH_ERR_IO,
+     * PH_ERR_DECODER_UNAVAILABLE. */
     PH_ERR_INVALID_ARGUMENT = -3,
     PH_ERR_NOT_IMPLEMENTED = -4,
     PH_ERR_EMPTY_IMAGE = -5,

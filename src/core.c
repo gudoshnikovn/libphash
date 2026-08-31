@@ -34,8 +34,6 @@ PH_API const char *ph_get_error_string(ph_error_t err) {
             return "Success";
         case PH_ERR_ALLOCATION_FAILED:
             return "Memory allocation failed";
-        case PH_ERR_DECODE_FAILED:
-            return "Image decoding failed";
         case PH_ERR_INVALID_ARGUMENT:
             return "Invalid argument";
         case PH_ERR_NOT_IMPLEMENTED:
@@ -278,7 +276,8 @@ uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size) {
 
 /* stb_image is the last-resort fallback for anything the native backends didn't
  * recognize/handle; classify its terse failure reason into one of our specific
- * error codes instead of the generic PH_ERR_DECODE_FAILED for every cause. */
+ * error codes instead of one generic code for every cause (the old catch-all,
+ * PH_ERR_DECODE_FAILED, was removed in 2.0.0 -- see include/libphash.h). */
 static ph_error_t ph_classify_stb_failure(ph_context_t *ctx) {
     const char *reason = stbi_failure_reason();
     if (reason) {

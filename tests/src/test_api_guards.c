@@ -13,11 +13,21 @@ void test_core_lifecycle_and_errors(void) {
     // 2. ph_get_error_string
     ASSERT_STR_EQ("Success", ph_get_error_string(PH_SUCCESS));
     ASSERT_STR_EQ("Memory allocation failed", ph_get_error_string(PH_ERR_ALLOCATION_FAILED));
-    ASSERT_STR_EQ("Image decoding failed", ph_get_error_string(PH_ERR_DECODE_FAILED));
+    /* -2 was PH_ERR_DECODE_FAILED, removed in 2.0.0 and deliberately not reused.
+     * If a later change hands -2 to a new code, this assertion fails and the ABI
+     * rule in libphash.h gets enforced instead of just documented. */
+    ASSERT_STR_EQ("Unknown error", ph_get_error_string((ph_error_t)-2));
     ASSERT_STR_EQ("Invalid argument", ph_get_error_string(PH_ERR_INVALID_ARGUMENT));
     ASSERT_STR_EQ("Not implemented", ph_get_error_string(PH_ERR_NOT_IMPLEMENTED));
     ASSERT_STR_EQ("Empty image (no image loaded)", ph_get_error_string(PH_ERR_EMPTY_IMAGE));
     ASSERT_STR_EQ("Unknown error", ph_get_error_string((ph_error_t)999));
+    /* The codes that replaced the removed catch-all must all have real strings. */
+    ASSERT_STR_EQ("Image exceeds the configured maximum pixel count",
+                  ph_get_error_string(PH_ERR_IMAGE_TOO_LARGE));
+    ASSERT_PTR_NOT_NULL((void *)ph_get_error_string(PH_ERR_UNSUPPORTED_FORMAT));
+    ASSERT_PTR_NOT_NULL((void *)ph_get_error_string(PH_ERR_CORRUPT_DATA));
+    ASSERT_PTR_NOT_NULL((void *)ph_get_error_string(PH_ERR_DECODER_UNAVAILABLE));
+    ASSERT_PTR_NOT_NULL((void *)ph_get_error_string(PH_ERR_IO));
 
     // 3. ph_create NULLj
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_create(NULL));
