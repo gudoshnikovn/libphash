@@ -40,8 +40,14 @@ typedef struct {
 ph_channel_moments_t ph_compute_moments(const uint8_t *data, int num_pixels, int channels,
                                         int channel_index);
 
-void ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size, int reduction_size,
-                     float *out);
+/* Partial 2D DCT: computes the top-left reduction_size x reduction_size block.
+ *
+ * Bounds are hard limits, not hints: dct_size must be in [1, PH_DCT_MAX_SIZE] and
+ * reduction_size in [1, PH_DCT_MAX_REDUCTION_SIZE] and <= dct_size. On violation the
+ * function writes nothing to `out` and returns PH_ERR_INVALID_ARGUMENT — callers MUST
+ * check the result, otherwise `out` stays whatever it was (see R02/H5). */
+PH_NODISCARD ph_error_t ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size,
+                                        int reduction_size, float *out);
 
 uint64_t ph_median_bitpack(const float *values, int n);
 
@@ -93,6 +99,12 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
 #define PH_HAAR_SCALE 1.41421356237 // sqrt(2) for Haar wavelet normalization
 #define PH_RADIAL_PROJECTIONS 40
 #define PH_RADIAL_SAMPLES 128
+
+/* Hard upper bounds for the pHash DCT: ph_dct2_partial() uses a fixed
+ * 32*8 stack scratch buffer, and the resulting hash must fit into 64 bits
+ * (reduction_size^2 <= 64). Anything above is rejected, never clamped. */
+#define PH_DCT_MAX_SIZE 32
+#define PH_DCT_MAX_REDUCTION_SIZE 8
 
 #define PH_COLOR_MOMENTS 3
 #define PH_COLOR_CHANNELS 3

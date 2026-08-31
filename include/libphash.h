@@ -172,8 +172,21 @@ PH_API void ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, int b);
 
 /**
  * @brief Sets pHash parameters.
- * @param dct_size Size of the DCT matrix (default 32).
- * @param reduction_size Size of the low-frequency coefficients to keep (default 8).
+ *
+ * Both values are hard-bounded by the implementation:
+ *   - @p dct_size must be in [1, 32];
+ *   - @p reduction_size must be in [1, 8] and must not exceed @p dct_size
+ *     (the resulting hash has to fit into the 64 bits of @c uint64_t).
+ *
+ * Out-of-range values are rejected and the current configuration is left
+ * unchanged — they are never clamped. If an out-of-range value reaches
+ * ph_compute_phash() by other means, it returns @c PH_ERR_INVALID_ARGUMENT
+ * and leaves the output digest untouched.
+ *
+ * @param ctx The context.
+ * @param dct_size Size of the DCT matrix, 1..32 (default 32).
+ * @param reduction_size Size of the low-frequency coefficient block to keep,
+ *                       1..8 and <= @p dct_size (default 8).
  */
 PH_API void ph_context_set_phash_params(ph_context_t *ctx, int dct_size, int reduction_size);
 

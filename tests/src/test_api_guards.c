@@ -139,15 +139,16 @@ void test_hashes_extra_coverage(void) {
     ctx->image.is_loaded = 1;
     ASSERT_OK(ph_compute_phash(ctx, &hash));
 
-    // Hits ph_dct2_partial fallback for large sizes
-    ph_dct2_partial(NULL, NULL, 33, 8, NULL);
+    // Out-of-range sizes / NULL args are reported, not silently ignored (R02)
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_dct2_partial(NULL, NULL, 33, 8, NULL));
     // Hits ph_median_bitpack guards (insertion sort & boundary)
     ASSERT_UINT64_EQ(0, ph_median_bitpack(NULL, 0));
     float vals[2] = {1.0f, 0.5f};
     ph_median_bitpack(vals, 2); // Hits insertion sort while
 
-    // Hits phash boundary (reduction > 8)
+    // Out-of-range reduction_size is rejected by the setter, config unchanged (R02)
     ph_context_set_phash_params(ctx, 32, 16);
+    ASSERT_INT_EQ(PH_DCT_REDUCTION_SIZE, ctx->config.phash_reduction_size);
     ASSERT_OK(ph_compute_phash(ctx, &hash));
 
     // --- Radial Extra ---

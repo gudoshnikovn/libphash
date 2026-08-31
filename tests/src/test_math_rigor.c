@@ -46,7 +46,7 @@ void test_dct2_scalar_reference_parity() {
     float optimized_out[8 * 8] = {0};
 
     // Call the library function which might be SIMD-accelerated
-    ph_dct2_partial(dct_mat, input, n, reduce, optimized_out);
+    ASSERT_OK(ph_dct2_partial(dct_mat, input, n, reduce, optimized_out));
 
     // Compute naive scalar reference DCT2 partial
     float reference_out[8 * 8] = {0};

@@ -115,7 +115,12 @@ PH_API void ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, int b) 
 }
 
 PH_API void ph_context_set_phash_params(ph_context_t *ctx, int dct_size, int reduction_size) {
-    if (!ctx || dct_size <= 0 || reduction_size <= 0 || reduction_size > dct_size)
+    /* Upper bounds are hard limits of the pHash implementation:
+     * dct_size <= PH_DCT_MAX_SIZE and reduction_size <= PH_DCT_MAX_REDUCTION_SIZE
+     * (the hash must fit into 64 bits). Out-of-range input is rejected without
+     * touching the configuration; it is never clamped. */
+    if (!ctx || dct_size <= 0 || dct_size > PH_DCT_MAX_SIZE || reduction_size <= 0 ||
+        reduction_size > PH_DCT_MAX_REDUCTION_SIZE || reduction_size > dct_size)
         return;
     ctx->config.phash_dct_size = dct_size;
     ctx->config.phash_reduction_size = reduction_size;
@@ -407,7 +412,8 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
         // perfectly small image (see the equivalent ph_abs_dim() in loader.c).
         if (stbi_info(filepath, &iw, &ih, &icomp) &&
             ph_exceeds_pixel_limit((uint64_t)(iw < 0 ? -(int64_t)iw : iw),
-                                   (uint64_t)(ih < 0 ? -(int64_t)ih : ih), ctx->config.max_pixels)) {
+                                   (uint64_t)(ih < 0 ? -(int64_t)ih : ih),
+                                   ctx->config.max_pixels)) {
             return PH_ERR_IMAGE_TOO_LARGE;
         }
     }

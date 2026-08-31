@@ -99,9 +99,14 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     int dct_size = ctx->config.phash_dct_size;
     int reduction_size = ctx->config.phash_reduction_size;
 
-    /* Ensure we can fit in 64-bit hash (max 8x8) */
-    if (reduction_size > 8)
-        reduction_size = 8;
+    /* Defensive bounds check. ph_context_set_phash_params() already rejects
+     * out-of-range values; this catches any other way they could get here.
+     * Out-of-range parameters are an error, never silently clamped: the hash
+     * must fit into 64 bits (reduction_size^2 <= 64) and ph_dct2_partial()
+     * has a fixed 32*8 scratch buffer. */
+    if (dct_size <= 0 || dct_size > PH_DCT_MAX_SIZE || reduction_size <= 0 ||
+        reduction_size > PH_DCT_MAX_REDUCTION_SIZE || reduction_size > dct_size)
+        return PH_ERR_INVALID_ARGUMENT;
 
     uint8_t *gray_full = ph_get_gray(ctx);
     if (!gray_full)
@@ -137,7 +142,11 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
 
     ph_resize_box(gray_full, ctx->image.width, ctx->image.height, dct_input, dct_size, dct_size);
 
-    ph_dct2_partial(dct_mat, dct_input, dct_size, reduction_size, dct_out);
+    ph_error_t err = ph_dct2_partial(dct_mat, dct_input, dct_size, reduction_size, dct_out);
+    if (err != PH_SUCCESS) {
+        ctx->arena.offset = saved_offset;
+        return err;
+    }
 
     *out_hash = ph_median_bitpack(dct_out, reduction_size * reduction_size);
 
@@ -145,14 +154,18 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     return PH_SUCCESS;
 }
 
-void ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size, int reduction_size,
-                     float *out) {
+ph_error_t ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size,
+                           int reduction_size, float *out) {
     // Temporary matrix for first pass: dct_size rows, reduction_size columns
-    float temp[32 * 8]; // max dct_size=32, reduction_size=8
-    if (dct_size > 32 || reduction_size > 8) {
-        // Fallback for unexpected sizes (though in phash they are capped)
-        return;
-    }
+    float temp[PH_DCT_MAX_SIZE * PH_DCT_MAX_REDUCTION_SIZE];
+
+    if (!dct_mat || !input || !out)
+        return PH_ERR_INVALID_ARGUMENT;
+    /* Hard bounds: `temp` is a fixed-size stack buffer and the caller expects
+     * every element of `out` to be written. Never return without writing it. */
+    if (dct_size <= 0 || dct_size > PH_DCT_MAX_SIZE || reduction_size <= 0 ||
+        reduction_size > PH_DCT_MAX_REDUCTION_SIZE || reduction_size > dct_size)
+        return PH_ERR_INVALID_ARGUMENT;
 
     /* First pass: DCT of each row, but only compute first reduction_size columns */
     for (int i = 0; i < dct_size; i++) {
@@ -187,6 +200,8 @@ void ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size, i
             out[i * reduction_size + j] = sum;
         }
     }
+
+    return PH_SUCCESS;
 }
 
 uint64_t ph_median_bitpack(const float *values, int n) {
