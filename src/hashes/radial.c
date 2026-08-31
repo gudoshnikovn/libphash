@@ -66,6 +66,14 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
 
     int projections = ctx->config.radial_projections;
     int samples = ctx->config.radial_samples;
+    if (projections <= 0 || samples <= 0)
+        return PH_ERR_INVALID_ARGUMENT;
+
+    /* projections * sizeof(double) does not overflow size_t on a 64-bit target, but it
+     * does on a 32-bit one (projections is an unbounded int -- the ceiling belongs to
+     * the setter, R04). Refuse rather than wrap (R03/H6). */
+    if ((size_t)projections > SIZE_MAX / sizeof(double))
+        return PH_ERR_ALLOCATION_FAILED;
 
     memset(out_digest, 0, sizeof(ph_digest_t));
     /* Clamp size to the max supported by ph_digest_t */

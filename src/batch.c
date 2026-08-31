@@ -140,7 +140,10 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
     /* nthreads is clamped to n by ph_resolve_thread_count(), so on a 64-bit size_t this
      * product cannot wrap -- but on a 32-bit size_t with a huge n it can. Refuse instead
      * of allocating a wrapped-around, too-small handle array. */
-    if (!PH_SAFE_ALLOC_SIZE(sizeof(HANDLE), (size_t)nthreads))
+    /* Spelled out rather than via a helper: the macro previously used here was a
+     * tautology wherever SIZE_MAX == ULLONG_MAX, i.e. it checked nothing on every
+     * 64-bit build (removed in R03). */
+    if ((size_t)nthreads > SIZE_MAX / sizeof(HANDLE))
         return PH_ERR_ALLOCATION_FAILED;
     HANDLE *handles = malloc(sizeof(HANDLE) * (size_t)nthreads);
     if (!handles)
@@ -186,7 +189,10 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
     free(handles);
 #else
     /* Same overflow guard as the Windows branch above. */
-    if (!PH_SAFE_ALLOC_SIZE(sizeof(pthread_t), (size_t)nthreads))
+    /* Spelled out rather than via a helper: the macro previously used here was a
+     * tautology wherever SIZE_MAX == ULLONG_MAX, i.e. it checked nothing on every
+     * 64-bit build (removed in R03). */
+    if ((size_t)nthreads > SIZE_MAX / sizeof(pthread_t))
         return PH_ERR_ALLOCATION_FAILED;
     pthread_t *threads_arr = malloc(sizeof(pthread_t) * (size_t)nthreads);
     if (!threads_arr)

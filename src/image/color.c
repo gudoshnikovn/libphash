@@ -14,10 +14,16 @@ uint8_t *ph_get_gray(ph_context_t *ctx) {
         return (uint8_t *)ctx->image.raw_rgb;
     }
     if (!ctx->image.gray_cache && ctx->image.raw_rgb) {
-        if (!PH_SAFE_ALLOC_SIZE(ctx->image.width, ctx->image.height)) {
+        /* One byte per pixel. The size must be computed in size_t: an int product
+         * wraps above ~46340x46340 and would hand malloc() a bogus (often negative,
+         * i.e. huge after conversion) size while ph_to_grayscale() still writes
+         * w * h bytes -- a heap overflow (R03/H6). */
+        size_t gray_size;
+        if (!ph_safe_image_alloc_size((uint64_t)ctx->image.width, (uint64_t)ctx->image.height, 1,
+                                      &gray_size)) {
             return NULL;
         }
-        ctx->image.gray_cache = malloc(ctx->image.width * ctx->image.height);
+        ctx->image.gray_cache = malloc(gray_size);
         if (ctx->image.gray_cache) {
             ph_to_grayscale(ctx, ctx->image.raw_rgb, ctx->image.width, ctx->image.height,
                             ctx->image.channels, ctx->image.gray_cache);
@@ -28,10 +34,13 @@ uint8_t *ph_get_gray(ph_context_t *ctx) {
 
 void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, int channels,
                      uint8_t *dst) {
-    int num_pixels = w * h;
+    if (w <= 0 || h <= 0)
+        return;
+    /* size_t, not int: w * h overflows int above ~46340x46340 (R03/H6). */
+    size_t num_pixels = (size_t)w * (size_t)h;
     const uint8_t *s = src;
     uint8_t *d = dst;
-    int i = 0;
+    size_t i = 0;
 
     int r_w = ctx ? ctx->config.gray_r : PH_GRAY_R;
     int g_w = ctx ? ctx->config.gray_g : PH_GRAY_G;
@@ -49,7 +58,7 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
         uint8x8_t g_weight = vdup_n_u8((uint8_t)g_w);
         uint8x8_t b_weight = vdup_n_u8((uint8_t)b_w);
 
-        for (; i <= num_pixels - 8; i += 8) {
+        for (; i + 8 <= num_pixels; i += 8) {
             uint8x8x3_t rgb = vld3_u8(s);
             uint16x8_t gray = vmull_u8(rgb.val[0], r_weight);
             gray = vmlal_u8(gray, rgb.val[1], g_weight);
@@ -64,7 +73,7 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
         uint8x8_t g_weight = vdup_n_u8((uint8_t)g_w);
         uint8x8_t b_weight = vdup_n_u8((uint8_t)b_w);
 
-        for (; i <= num_pixels - 8; i += 8) {
+        for (; i + 8 <= num_pixels; i += 8) {
             uint8x8x4_t rgba = vld4_u8(s);
             uint16x8_t gray = vmull_u8(rgba.val[0], r_weight);
             gray = vmlal_u8(gray, rgba.val[1], g_weight);
@@ -88,10 +97,11 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
 }
 
 void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h) {
-    if (!ctx || !data)
+    if (!ctx || !data || w <= 0 || h <= 0)
         return;
-    // Use the thread-local precomputed LUT
-    for (int i = 0; i < w * h; i++) {
+    // Use the thread-local precomputed LUT. size_t: w * h overflows int (R03/H6).
+    size_t num_pixels = (size_t)w * (size_t)h;
+    for (size_t i = 0; i < num_pixels; i++) {
         data[i] = ctx->config.gamma_lut[data[i]];
     }
 }

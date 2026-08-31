@@ -507,11 +507,20 @@ PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels, 
     if (channels != 1 && channels != 3 && channels != 4)
         return PH_ERR_INVALID_ARGUMENT;
 
+    /* L6: this used to be the one load path with no decompression-bomb protection,
+     * which is what made the int-overflow in the pixel-count arithmetic (H6) reachable
+     * with the default configuration. Same check and same error code as the file and
+     * buffer paths; max_pixels == 0 still means "unlimited". */
+    if (ph_exceeds_pixel_limit((uint64_t)width, (uint64_t)height, ctx->config.max_pixels))
+        return PH_ERR_IMAGE_TOO_LARGE;
+
     unsigned long long row_bytes = (unsigned long long)width * (unsigned long long)channels;
     if (stride < 0 || (stride != 0 && (unsigned long long)stride < row_bytes))
         return PH_ERR_INVALID_ARGUMENT;
     unsigned long long src_stride = (stride == 0) ? row_bytes : (unsigned long long)stride;
 
+    /* Cannot wrap: width and height are each <= INT_MAX and channels <= 4, so the
+     * product is at most 4 * (2^31 - 1)^2, which stays below ULLONG_MAX. */
     unsigned long long total_bytes = row_bytes * (unsigned long long)height;
     if (total_bytes == 0 || total_bytes > SIZE_MAX)
         return PH_ERR_INVALID_ARGUMENT;

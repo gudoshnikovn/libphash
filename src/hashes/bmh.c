@@ -8,10 +8,15 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     }
 
     int block_size = ctx->config.block_size;
-    int total_pixels = block_size * block_size;
+    if (block_size <= 0)
+        return PH_ERR_INVALID_ARGUMENT;
+    /* size_t, not int: block_size = 46341 already overflows the int product (R03/H6).
+     * The upper bound on block_size itself belongs to the setter (R04); here we only
+     * guarantee the arithmetic is well-defined and the allocation is honestly sized. */
+    size_t total_pixels = (size_t)block_size * (size_t)block_size;
 
     memset(out_digest, 0, sizeof(ph_digest_t));
-    int req_bytes = (total_pixels + 7) / 8;
+    size_t req_bytes = (total_pixels + 7) / 8;
     if (req_bytes > PH_DIGEST_MAX_BYTES) {
         out_digest->size = PH_DIGEST_MAX_BYTES;
     } else {
@@ -31,13 +36,13 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
                   block_size);
 
     uint64_t total_sum = 0;
-    for (int i = 0; i < total_pixels; i++) {
+    for (size_t i = 0; i < total_pixels; i++) {
         total_sum += block_data[i];
     }
     uint8_t avg = (uint8_t)(total_sum / total_pixels);
 
-    int max_bits = out_digest->size * 8;
-    for (int i = 0; i < total_pixels && i < max_bits; i++) {
+    size_t max_bits = (size_t)out_digest->size * 8;
+    for (size_t i = 0; i < total_pixels && i < max_bits; i++) {
         if (block_data[i] >= avg) {
             out_digest->data[i / 8] |= (1 << (i % 8));
         }

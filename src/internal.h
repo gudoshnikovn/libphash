@@ -37,7 +37,9 @@ typedef struct {
     double skew;
 } ph_channel_moments_t;
 
-ph_channel_moments_t ph_compute_moments(const uint8_t *data, int num_pixels, int channels,
+/* num_pixels is a size_t on purpose: it is width * height, which does not fit an
+ * int for images above ~46340x46340 (see R03/H6). */
+ph_channel_moments_t ph_compute_moments(const uint8_t *data, size_t num_pixels, int channels,
                                         int channel_index);
 
 /* Partial 2D DCT: computes the top-left reduction_size x reduction_size block.
@@ -151,11 +153,8 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
 #define PH_GAUSS_SHIFT 4 // Divide by 16 (sum of weights)
 
 /*
- * Safety Macros
+ * Safety Helpers
  */
-// Check for integer overflow before allocation: w * h
-#define PH_SAFE_ALLOC_SIZE(w, h) ((unsigned long long)(w) * (unsigned long long)(h) <= SIZE_MAX)
-
 /* Computes w * h * channels for an allocation size, refusing to silently wrap.
  * Returns 0 (and leaves *out untouched) if the product would overflow size_t;
  * returns 1 and sets *out to the byte count otherwise. */
@@ -171,7 +170,12 @@ static inline int ph_safe_image_alloc_size(uint64_t w, uint64_t h, uint64_t chan
     return 1;
 }
 
-/* Returns 1 if decoding a w x h image is disallowed by max_pixels (0 = unlimited). */
+/* Returns 1 if decoding a w x h image is disallowed by max_pixels (0 = unlimited).
+ *
+ * Contract (L4): `w` and `h` must each fit in 32 bits. Every caller feeds it either an
+ * `int` dimension (already made non-negative -- see ph_abs_dim()) or a `png_uint_32`,
+ * so `w * h` is at most 2^64 - 2^33 + 1 and cannot wrap the uint64_t product. Do NOT
+ * call this with values wider than 32 bits without adding an overflow check first. */
 static inline int ph_exceeds_pixel_limit(uint64_t w, uint64_t h, uint64_t max_pixels) {
     if (max_pixels == 0)
         return 0;

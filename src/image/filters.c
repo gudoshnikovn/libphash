@@ -9,17 +9,21 @@
 #endif
 
 void ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst) {
+    /* size_t, not int: w * h overflows int above ~46340x46340, which would both
+     * truncate the memcpy() length and mis-size the scratchpad (R03/H6). */
+    size_t nbytes = (w > 0 && h > 0) ? (size_t)w * (size_t)h : 0;
+
     if (!ctx || !src || !dst || w < 3 || h < 3) {
-        if (dst && src && dst != src && w > 0 && h > 0)
-            memcpy(dst, src, w * h);
+        if (dst && src && dst != src && nbytes > 0)
+            memcpy(dst, src, nbytes);
         return;
     }
 
     size_t saved_offset = ctx->arena.offset;
-    uint8_t *temp = ph_get_scratchpad(ctx, w * h);
+    uint8_t *temp = ph_get_scratchpad(ctx, nbytes);
     if (!temp) {
         if (dst != src)
-            memcpy(dst, src, w * h);
+            memcpy(dst, src, nbytes);
         ctx->arena.offset = saved_offset;
         return;
     }

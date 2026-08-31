@@ -11,17 +11,23 @@ PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, uint64_t *out_hash) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 
-    int total_pixels = ctx->image.width * ctx->image.height;
-    int count_black = 0;
-    int count_gray = 0;
-    int faint_counts[6] = {0};
-    int bright_counts[6] = {0};
-    int count_colors = 0;
+    if (ctx->image.width <= 0 || ctx->image.height <= 0 || !ctx->image.raw_rgb)
+        return PH_ERR_EMPTY_IMAGE;
+
+    /* size_t, not int: width * height overflows int above ~46340x46340, and so does
+     * the `i * channels` index derived from it (R03/H6). The per-category counters
+     * follow suit -- an int counter would overflow on a >2G-pixel image. */
+    size_t total_pixels = (size_t)ctx->image.width * (size_t)ctx->image.height;
+    uint64_t count_black = 0;
+    uint64_t count_gray = 0;
+    uint64_t faint_counts[6] = {0};
+    uint64_t bright_counts[6] = {0};
+    uint64_t count_colors = 0;
 
     const uint8_t *src = ctx->image.raw_rgb;
-    int channels = ctx->image.channels;
+    size_t channels = (size_t)ctx->image.channels;
 
-    for (int i = 0; i < total_pixels; i++) {
+    for (size_t i = 0; i < total_pixels; i++) {
         float r = src[i * channels];
         float g = (channels >= 3) ? src[i * channels + 1] : r;
         float b = (channels >= 3) ? src[i * channels + 2] : r;
