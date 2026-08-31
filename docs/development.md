@@ -87,6 +87,46 @@ On a shared CI runner the floor is higher than measured here, which is why
 `STRICT=0` (warning-only) stays in place until the signal has been observed
 across several real pull requests.
 
+### 4. Sanitizers (ASan + UBSan)
+
+```bash
+make debug        # rebuilds with -O0 -g -fsanitize=address,undefined
+                  # NOTE: this target is `clean all` — it does NOT run the tests
+make test         # ...so always run the suite afterwards
+```
+
+CI runs the same pair through CMake in the `sanitizers` job, with
+`-fno-sanitize-recover=all` so the first report aborts the test.
+
+**Known vendor exemption — `-fno-sanitize=alignment` on `src/image/stb_resize_impl.c`.**
+The vendored `vendor/stb_image_resize2.h` packs its filter coefficients with
+deliberately unaligned 64-bit moves: `STBIR_MOVE_2` in `stbir__pack_coefficients`
+casts a `float*` to `stbir_uint64*`, and the coefficient stride is frequently odd
+(`coeffs += coefficient_width`, `pc += 7`), so every other move lands on a
+4-mod-8 address. The buffer is stb's *own* internal bump allocation — 16-byte
+aligned at its base — and the buffers we hand to `stbir_resize*` are always
+16-byte aligned, so nothing about our call sites is at fault. The pattern is
+present verbatim in current upstream master (v2.18), i.e. a version bump does not
+help. Untreated it produced 5 `runtime error: load/store of misaligned address
+... for type 'stbir_uint64'` per test-suite run, which is exactly the kind of
+constant noise that lets a real finding of ours slip through.
+
+The vendored implementation therefore lives in its own translation unit,
+`src/image/stb_resize_impl.c`, which contains nothing but the
+`#define STB_IMAGE_RESIZE_IMPLEMENTATION` / `#include` pair, and *only that file*
+is compiled with `-fno-sanitize=alignment` (`STB_NOSAN_CFLAGS` in the `Makefile`,
+`set_source_files_properties(...)` in `CMakeLists.txt`). Because the exempt TU has
+no code of ours in it, alignment violations in `libphash` itself are still
+reported normally — as are all other UBSan checks, including in that file.
+
+A runtime `UBSAN_OPTIONS=suppressions=...` file was tried first and rejected: the
+suppression is silently ignored under `-fno-sanitize-recover=all`, so the report
+still fires and the process still aborts — the CI job would stay red.
+
+If you add another file that includes a vendored header with known UB, prefer the
+same shape (isolated TU + narrowest possible `-fno-sanitize=<check>`) over a
+blanket suppression, and document it here.
+
 ## Adding New Features
 
 1.  **Header**: Add the public signature to `include/libphash.h`.

@@ -86,6 +86,20 @@ endif()
 # --- Library ---
 file(GLOB_RECURSE SOURCES "src/*.c")
 
+# R46: the vendored stb_image_resize2 packs filter coefficients with deliberately
+# unaligned 64-bit moves (STBIR_MOVE_2 casts float* -> stbir_uint64*) on its own
+# internal, 16-byte-aligned coefficient array — nothing we pass in is misaligned,
+# and the pattern is unchanged in current upstream master (v2.18). Exempt ONLY the
+# TU that instantiates stb (it contains no code of ours) from UBSan's alignment
+# check, so the `sanitizers` CI job stops drowning our own findings in 5 reports
+# per run. A runtime UBSAN_OPTIONS suppression file does not work here: it is
+# ignored under -fno-sanitize-recover=all, which that job uses.
+check_c_compiler_flag("-fno-sanitize=alignment" PHASH_HAS_FNO_SANITIZE_ALIGNMENT)
+if(PHASH_HAS_FNO_SANITIZE_ALIGNMENT)
+    set_source_files_properties(src/image/stb_resize_impl.c
+        PROPERTIES COMPILE_OPTIONS "-fno-sanitize=alignment")
+endif()
+
 if(PHASH_BUILD_SHARED)
     add_library(phash SHARED ${SOURCES})
     target_compile_definitions(phash PRIVATE LIBPHASH_EXPORTS)

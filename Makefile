@@ -75,8 +75,18 @@ $(GENERATED_DIR)/phash_version.h: CMakeLists.txt include/phash_version.h.in scri
 $(OBJS): $(GENERATED_DIR)/phash_version.h
 
 # Diagnostic/Debug build
+# NOTE: `debug` only REBUILDS (target = `clean all`); run `make test` afterwards.
 debug: CFLAGS += -g -O0 -fsanitize=address,undefined
 debug: LDFLAGS += -fsanitize=address,undefined
+# R46: the vendored stb_image_resize2 packs filter coefficients with deliberately
+# unaligned 64-bit moves (STBIR_MOVE_2 casts float* -> stbir_uint64*), which UBSan
+# reports as `load/store of misaligned address ... for type 'stbir_uint64'`. The
+# misaligned buffer is stb's own internal coefficient array (16-byte aligned at the
+# base; the odd stride is stb's), not anything we pass in, and the pattern is
+# unchanged in current upstream master (v2.18) — so it cannot be fixed by a bump.
+# We exempt ONLY the TU that instantiates stb (src/image/stb_resize_impl.c, which
+# contains no code of ours) from the alignment check, so our own findings still fire.
+debug: STB_NOSAN_CFLAGS = -fno-sanitize=alignment
 debug: clean all
 
 # Reformat code
@@ -91,6 +101,13 @@ $(LIB_NAME): $(OBJS)
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+# R46: stb_image_resize2 implementation TU — see the `debug` target above.
+# Empty outside sanitizer builds, so release builds are unaffected.
+STB_NOSAN_CFLAGS =
+$(OBJ_DIR)/image/stb_resize_impl.o: $(SRC_DIR)/image/stb_resize_impl.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(STB_NOSAN_CFLAGS) -c $< -o $@
 
 # Test compilation
 test_%: $(TEST_DIR)/test_%.c $(LIB_NAME)
