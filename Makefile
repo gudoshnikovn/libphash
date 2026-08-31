@@ -44,7 +44,16 @@ TEST_DIR = tests/src
 INC_DIR = include
 
 # CFLAGS updates
-CFLAGS += -I./$(TEST_DIR) -DPH_TESTING -DTEST_DATA_DIR=\"$(shell pwd)/tests/data\"
+# Note: PH_TESTING is NOT defined for the library build. The mock decoder
+# backend in src/loader.c is opt-in via PHASH_ENABLE_MOCK_BACKEND=1 and must
+# never be present in a shipped artifact.
+CFLAGS += -I./$(TEST_DIR) -DTEST_DATA_DIR=\"$(shell pwd)/tests/data\"
+
+# Opt-in test-only mock decoder backend (see src/loader.c)
+PHASH_ENABLE_MOCK_BACKEND ?= 0
+ifeq ($(PHASH_ENABLE_MOCK_BACKEND),1)
+CFLAGS += -DPH_ENABLE_MOCK_BACKEND
+endif
 
 # Sources and Objects
 LOADER_DIR = $(SRC_DIR)/loaders
@@ -96,7 +105,7 @@ test: $(TEST_BINS)
 	@echo "ALL TESTS PASSED"
 
 # Coverage build
-coverage: CFLAGS += -g -O0 --coverage -DPH_TESTING
+coverage: CFLAGS += -g -O0 --coverage
 coverage: LDFLAGS += --coverage
 coverage: clean test
 	@echo "Generating coverage reports..."

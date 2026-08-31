@@ -122,9 +122,17 @@ void test_loader_exhaustion(void) {
 void test_loader_corrupted_backend(void) {
     int w, h, ch;
 
-    // 1. Trigger mock backend (starts with DE AD)
+    /* 1. DE AD: claimed by the test-only mock backend when it is compiled in,
+     *    and by nothing at all otherwise (see R10). */
     uint8_t mock_data[4] = {0xDE, 0xAD, 0xBE, 0xEF};
-    uint8_t *res = ph_decode_buffer(mock_data, 4, &w, &h, &ch, 0, 0, NULL, NULL, 0);
+    ph_error_t mock_err = PH_SUCCESS;
+    uint8_t *res = ph_decode_buffer(mock_data, 4, &w, &h, &ch, 0, 0, &mock_err, NULL, 0);
+#ifdef PH_ENABLE_MOCK_BACKEND
+    ASSERT_PTR_NOT_NULL(res);
+#else
+    ASSERT_PTR_NULL(res);
+    ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, mock_err);
+#endif
     if (res)
         free(res);
 

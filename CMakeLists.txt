@@ -31,6 +31,7 @@ option(PHASH_USE_WEBP "Use external libwebp for WebP decoding" ON)
 option(PHASH_USE_ZLIB_NG "Use bundled zlib-ng (zlib-compat) instead of system zlib for PNG inflate" ON)
 option(PHASH_OPTIMIZE_NATIVE "Optimize for host CPU architecture (-march=native)" OFF)
 option(PHASH_BUILD_FUZZERS "Build libFuzzer harnesses (requires Clang)" OFF)
+option(PHASH_ENABLE_MOCK_BACKEND "Register the DE AD mock decoder in the loader's backend table (test-only; must never be ON in a shipped build)" OFF)
 option(PHASH_STRICT_DEPS "Fail the configure step instead of silently falling back when a bundled decoder dependency (e.g. vendored TurboJPEG/zlib-ng) can't be found" OFF)
 option(PHASH_ENABLE_THREADS "Let ph_hash_files()/ph_hash_buffers() spawn a pool of OS threads (pthreads/Win32) instead of always running sequentially" ON)
 
@@ -366,9 +367,18 @@ if(PHASH_IS_TOP_LEVEL)
     )
 endif()
 
+# --- Mock decoder backend (test-only) ---
+# Deliberately independent of PHASH_BUILD_TESTS: that option is ON by default, so
+# tying the mock to it shipped a Release library whose loader "decodes" any buffer
+# starting with DE AD into a 1x1 image.
+if(PHASH_ENABLE_MOCK_BACKEND)
+    message(WARNING "PHASH_ENABLE_MOCK_BACKEND=ON: the DE AD mock decoder is compiled "
+                    "into libphash. Never ship this build.")
+    target_compile_definitions(phash PUBLIC PH_ENABLE_MOCK_BACKEND)
+endif()
+
 # --- Tests ---
 if(PHASH_BUILD_TESTS)
-    target_compile_definitions(phash PRIVATE PH_TESTING)
     enable_testing()
     file(GLOB TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/tests/src/test_*.c")
     foreach(test_src ${TEST_SOURCES})

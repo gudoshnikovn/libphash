@@ -40,7 +40,8 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
             ph_exceeds_pixel_limit(ph_abs_dim(iw), ph_abs_dim(ih), max_pixels)) {
             if (out_err)
                 *out_err = PH_ERR_IMAGE_TOO_LARGE;
-            ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
+            ph_set_err_msg(err_msg, err_msg_cap,
+                           "Image exceeds the configured maximum pixel count");
             return NULL;
         }
     }
@@ -61,8 +62,15 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
     return decoded;
 }
 
-#ifdef PH_TESTING
-// Mock backend for testing the dispatcher loop without real libraries
+#ifdef PH_ENABLE_MOCK_BACKEND
+/* Mock backend for exercising the dispatcher loop without real decoders.
+ *
+ * Guarded by its own opt-in flag (CMake: PHASH_ENABLE_MOCK_BACKEND, Makefile:
+ * PHASH_ENABLE_MOCK_BACKEND=1), deliberately NOT by PH_TESTING/PHASH_BUILD_TESTS:
+ * those are ON in the recommended Release build, which used to ship a library
+ * that "decodes" any buffer starting with DE AD into a 1x1 image. This backend
+ * is registered ahead of the stb catch-all, so it really does intercept input --
+ * it must never end up in a shipped artifact. */
 static int ph_mock_can_read(const uint8_t *magic, size_t len) {
     if (len >= 4 && magic[0] == 0xDE && magic[1] == 0xAD)
         return 1;
@@ -95,11 +103,10 @@ static const ph_image_backend_t backends[] = {
 #ifdef PH_USE_WEBP
     {ph_can_read_webp, ph_decode_webp_mem},
 #endif
-#ifdef PH_TESTING
+#ifdef PH_ENABLE_MOCK_BACKEND
     {ph_mock_can_read, ph_mock_decode},
 #endif
-    {ph_can_read_stb, ph_decode_stb_mem},
-    {NULL, NULL}};
+    {ph_can_read_stb, ph_decode_stb_mem},   {NULL, NULL}};
 
 uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int *height,
                           int *channels, int req_comp, uint64_t max_pixels, ph_error_t *out_err,

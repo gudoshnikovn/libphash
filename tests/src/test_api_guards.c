@@ -75,11 +75,19 @@ void test_core_loading_mock_success(void) {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
 
-    // Memory loading SUCCESS with mock data
+    /* DE AD is the magic of the test-only mock backend. In a build without it --
+     * which is every shipped build, see R10 -- nothing claims this buffer and the
+     * loader must report it as an unknown format. Asserting both directions keeps
+     * the mock from silently leaking into a release artifact again. */
     uint8_t mock_data[4] = {0xDE, 0xAD, 0xBE, 0xEF};
+#ifdef PH_ENABLE_MOCK_BACKEND
     ASSERT_OK(ph_load_from_memory(ctx, mock_data, 4));
     ASSERT_INT_EQ(1, ph_is_loaded(ctx));
     ASSERT_INT_EQ(1, ctx->image.width);
+#else
+    ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, ph_load_from_memory(ctx, mock_data, 4));
+    ASSERT_INT_EQ(0, ph_is_loaded(ctx));
+#endif
 
     // Memory loading FAILures
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_load_from_memory(ctx, NULL, 3));
