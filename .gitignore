@@ -36,3 +36,6 @@ src/*.gcda
 src/*.gcno
 src/**/*.gcda
 src/**/*.gcno
+
+# Claude Code agent worktrees (transient, per-session)
+.claude/worktrees/
