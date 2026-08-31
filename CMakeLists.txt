@@ -106,11 +106,17 @@ if(UNIX AND NOT APPLE)
 endif()
 
 # --- Optional batch-hashing thread pool (task 9) ---
+# PHASH_NEEDS_THREADS_DEP records whether the installed package has to
+# find_dependency(Threads) on the consumer's side; it's substituted into
+# cmake/phashConfig.cmake.in. Kept in lockstep with the link below so the two
+# can't drift apart.
+set(PHASH_NEEDS_THREADS_DEP OFF)
 if(PHASH_ENABLE_THREADS)
     target_compile_definitions(phash PRIVATE PH_ENABLE_THREADS)
     if(NOT WIN32)
         find_package(Threads REQUIRED)
         target_link_libraries(phash PRIVATE Threads::Threads)
+        set(PHASH_NEEDS_THREADS_DEP ON)
     endif()
 endif()
 

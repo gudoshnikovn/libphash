@@ -1,5 +1,18 @@
 @PACKAGE_INIT@
 
+include(CMakeFindDependencyMacro)
+
+# A STATIC libphash exports its PRIVATE link dependencies in the imported
+# target's INTERFACE_LINK_LIBRARIES (wrapped in $<LINK_ONLY:>), so a consumer
+# resolving phash::phash must be able to resolve Threads::Threads too --
+# otherwise find_package(phash) fails outright with "the target was not found".
+# Vendored codec archives don't need this: they're exported as absolute paths
+# via $<INSTALL_INTERFACE:>, not as imported targets.
+set(PHASH_NEEDS_THREADS_DEP @PHASH_NEEDS_THREADS_DEP@)
+if(PHASH_NEEDS_THREADS_DEP)
+    find_dependency(Threads)
+endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/phashTargets.cmake")
 
 check_required_components(phash)
