@@ -395,11 +395,30 @@ typedef struct {
  * algorithms for the same file is no more expensive per-file than requesting one (the
  * grayscale conversion/downscales are not repeated). A decode/hash failure on one item is
  * recorded in that item's `status` and does not stop the rest of the batch from being
- * processed. The overall return value only reports argument-validation failures that
- * prevented the batch from starting at all.
+ * processed.
+ *
+ * Return contract -- the overall return value reports only failures that stopped the batch
+ * from being *worked on at all*; anything that happened to an individual image is in that
+ * item's `status` and never in the return value:
+ *
+ * - `PH_ERR_INVALID_ARGUMENT` -- malformed call, nothing was written. `flags` is zero or
+ *   contains an unknown bit, `threads` is negative, or `items` is NULL with `n > 0`.
+ *   Validated *before* `n` is looked at, so an empty batch does not excuse a bad argument:
+ *   `ph_hash_files(NULL, 0, 0, -5)` returns `PH_ERR_INVALID_ARGUMENT`, not `PH_SUCCESS`.
+ * - `PH_SUCCESS` with `n == 0` -- no-op. `items` may be NULL in this case.
+ * - `PH_ERR_ALLOCATION_FAILED` -- the batch could not be worked on: no internal context or
+ *   worker could be created, so not one item was looked at and all of them are left at
+ *   `PH_ERR_ALLOCATION_FAILED`. This covers the sequential path failing to allocate its
+ *   context, failing to allocate the worker array, failing to create any thread, and every
+ *   created thread bailing out because it could not allocate its own context. Partial
+ *   degradation is *not* reported here: if even one worker starts it processes the whole
+ *   batch by itself and the call returns `PH_SUCCESS`.
+ * - `PH_SUCCESS` otherwise -- the batch was processed to the end. This says nothing about
+ *   whether any individual image succeeded; inspect every `items[i].status`.
  *
  * @param items Array of batch entries; `path`/`hashes`/`status` are read/written in place.
- * @param n Number of entries in `items`. 0 is a no-op that returns PH_SUCCESS immediately.
+ * @param n Number of entries in `items`. 0 is a no-op that returns PH_SUCCESS, provided
+ *          `flags` and `threads` are themselves valid.
  * @param flags Bitwise-OR of `ph_hash_flags_t` values selecting which algorithms to
  *              compute for every item. See `ph_compute_multi()` for the `hashes[]`
  *              packing convention.
@@ -408,9 +427,9 @@ typedef struct {
  *                Ignored (always sequential) if the library was built without
  *                `PHASH_ENABLE_THREADS` (default ON in CMake, OFF in the Makefile) or if
  *                `n` is smaller than the requested thread count.
- * @return PH_SUCCESS once the batch has been dispatched (regardless of per-item
- *         outcomes), or PH_ERR_INVALID_ARGUMENT for a malformed call (NULL `items` with
- *         `n > 0`, `flags` zero or containing an unknown bit, or negative `threads`).
+ * @return PH_SUCCESS once the batch has been processed (regardless of per-item outcomes),
+ *         PH_ERR_INVALID_ARGUMENT for a malformed call, or PH_ERR_ALLOCATION_FAILED if no
+ *         item could be worked on at all. See the return contract above.
  */
 PH_API PH_NODISCARD ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, uint32_t flags,
                                              int threads);
@@ -418,6 +437,11 @@ PH_API PH_NODISCARD ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, u
 /**
  * @brief Same as `ph_hash_files()`, but for already-in-memory encoded image buffers
  *        (e.g. downloaded bytes) instead of file paths.
+ *
+ * Identical semantics and identical return contract, including validation running before
+ * the `n == 0` shortcut: `ph_hash_buffers(NULL, 0, 0, -5)` returns PH_ERR_INVALID_ARGUMENT.
+ * An entry whose `buffer` is NULL or whose `length` is 0 is a per-item
+ * PH_ERR_INVALID_ARGUMENT in `status`, not an overall failure.
  */
 PH_API PH_NODISCARD ph_error_t ph_hash_buffers(ph_batch_buffer_item_t *items, size_t n,
                                                uint32_t flags, int threads);

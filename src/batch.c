@@ -74,6 +74,9 @@ typedef struct {
     uint32_t flags;
     ph_batch_process_fn process;
     atomic_size_t next;
+    /* Number of workers that got a context and therefore actually drained the index.
+     * Zero means no item was looked at at all -- see the return contract below. */
+    atomic_int workers_ready;
 } ph_batch_shared_t;
 
 static void ph_batch_worker_run(ph_batch_shared_t *shared) {
@@ -85,6 +88,7 @@ static void ph_batch_worker_run(ph_batch_shared_t *shared) {
          * if every worker fails to allocate a context. */
         return;
     }
+    atomic_fetch_add(&shared->workers_ready, 1);
 
     for (;;) {
         size_t idx = atomic_fetch_add(&shared->next, 1);
@@ -130,8 +134,14 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
         .process = process,
     };
     atomic_init(&shared.next, 0);
+    atomic_init(&shared.workers_ready, 0);
 
 #if defined(_WIN32)
+    /* nthreads is clamped to n by ph_resolve_thread_count(), so on a 64-bit size_t this
+     * product cannot wrap -- but on a 32-bit size_t with a huge n it can. Refuse instead
+     * of allocating a wrapped-around, too-small handle array. */
+    if (!PH_SAFE_ALLOC_SIZE(sizeof(HANDLE), (size_t)nthreads))
+        return PH_ERR_ALLOCATION_FAILED;
     HANDLE *handles = malloc(sizeof(HANDLE) * (size_t)nthreads);
     if (!handles)
         return PH_ERR_ALLOCATION_FAILED;
@@ -175,6 +185,9 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
     }
     free(handles);
 #else
+    /* Same overflow guard as the Windows branch above. */
+    if (!PH_SAFE_ALLOC_SIZE(sizeof(pthread_t), (size_t)nthreads))
+        return PH_ERR_ALLOCATION_FAILED;
     pthread_t *threads_arr = malloc(sizeof(pthread_t) * (size_t)nthreads);
     if (!threads_arr)
         return PH_ERR_ALLOCATION_FAILED;
@@ -189,10 +202,16 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
     free(threads_arr);
 #endif
 
-    /* Not a single worker started: nothing touched items[], every one of them is still
-     * at its pre-set PH_ERR_ALLOCATION_FAILED. Reporting PH_SUCCESS here would tell the
-     * caller the batch is done when no work was performed at all. */
-    if (spawned == 0)
+    /* Nothing touched items[]: either not a single thread was created (spawned == 0), or
+     * threads were created but every one of them bailed out on a failed ph_create(), so
+     * none ever drained the shared index. In both cases every item is still at its pre-set
+     * PH_ERR_ALLOCATION_FAILED and reporting PH_SUCCESS would tell the caller the batch is
+     * done when no work was performed at all.
+     *
+     * Partial degradation is deliberately *not* an error: as long as one worker got a
+     * context it drains the whole index by itself, so the batch still completes and the
+     * per-item statuses are the full story. */
+    if (spawned == 0 || atomic_load(&shared.workers_ready) == 0)
         return PH_ERR_ALLOCATION_FAILED;
 
     return PH_SUCCESS;
@@ -219,10 +238,16 @@ static int ph_resolve_thread_count(int threads, size_t n) {
 static ph_error_t ph_hash_batch(void *items_base, size_t item_stride, size_t n, uint32_t flags,
                                 int threads, ph_batch_process_fn process,
                                 void (*init_defaults)(void *item)) {
+    /* Validation runs before the `n == 0` shortcut: an empty batch must not swallow a
+     * malformed call. `flags` and `threads` are checked unconditionally; `items_base` is
+     * only required when there is something to dereference, so a (NULL, 0) pair -- the
+     * natural spelling of an empty array -- stays a no-op success. */
+    if (threads < 0 || !ph_flags_are_valid(flags))
+        return PH_ERR_INVALID_ARGUMENT;
+    if (!items_base && n > 0)
+        return PH_ERR_INVALID_ARGUMENT;
     if (n == 0)
         return PH_SUCCESS;
-    if (!items_base || threads < 0 || !ph_flags_are_valid(flags))
-        return PH_ERR_INVALID_ARGUMENT;
 
     for (size_t i = 0; i < n; i++) {
         init_defaults((uint8_t *)items_base + i * item_stride);

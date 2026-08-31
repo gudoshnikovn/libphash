@@ -145,10 +145,73 @@ static void test_batch_invalid_args() {
     PASS("test_batch_invalid_args");
 }
 
+/* Argument validation must run *before* the `n == 0` shortcut: an empty batch is not a
+ * licence to swallow a malformed call. `flags` and `threads` are validated unconditionally;
+ * `items == NULL` is only an error when there is something to dereference (`n > 0`). */
+static void test_batch_validation_precedes_empty_shortcut() {
+    ph_batch_item_t items[1] = {{.path = TEST_DATA_DIR "/photo.jpeg"}};
+    ph_batch_buffer_item_t bitems[1] = {{.buffer = (const uint8_t *)"x", .length = 1}};
+
+    /* The exact call from the review: every argument is junk, n == 0. */
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_files(NULL, 0, 0, -5));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_buffers(NULL, 0, 0, -5));
+
+    /* Negative thread count is rejected for any n, including 0. */
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_files(items, 0, PH_HASH_AHASH, -1));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_files(NULL, 0, PH_HASH_AHASH, -1));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_buffers(bitems, 0, PH_HASH_AHASH, -1));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_buffers(NULL, 0, PH_HASH_AHASH, -1));
+
+    /* Empty and unknown-bit flag masks are rejected for any n, including 0. */
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_files(items, 0, 0, 0));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_files(items, 0, 1u << 31, 0));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_files(items, 0, PH_HASH_AHASH | (1u << 6), 0));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_buffers(bitems, 0, 0, 0));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_buffers(bitems, 0, 1u << 31, 0));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
+                  ph_hash_buffers(bitems, 0, PH_HASH_AHASH | (1u << 6), 0));
+
+    /* n == 0 with valid arguments stays a no-op success, with or without an array. */
+    ASSERT_OK(ph_hash_files(items, 0, PH_HASH_AHASH, 0));
+    ASSERT_OK(ph_hash_files(NULL, 0, PH_HASH_AHASH, 0));
+    ASSERT_OK(ph_hash_files(NULL, 0, ALL_FLAGS_MASK, 4));
+    ASSERT_OK(ph_hash_buffers(bitems, 0, PH_HASH_AHASH, 0));
+    ASSERT_OK(ph_hash_buffers(NULL, 0, PH_HASH_AHASH, 0));
+    ASSERT_OK(ph_hash_buffers(NULL, 0, ALL_FLAGS_MASK, 4));
+
+    /* A rejected call must not have touched the array. */
+    ASSERT_PTR_NOT_NULL((void *)items[0].path);
+
+    PASS("test_batch_validation_precedes_empty_shortcut");
+}
+
+/* ph_hash_buffers() must reject the same malformed calls as ph_hash_files() with n > 0. */
+static void test_hash_buffers_invalid_args() {
+    ph_batch_buffer_item_t items[1] = {{.buffer = (const uint8_t *)"x", .length = 1}};
+
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_buffers(NULL, 1, PH_HASH_AHASH, 0));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_buffers(items, 1, 0, 0));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_buffers(items, 1, 1u << 31, 0));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_buffers(items, 1, PH_HASH_AHASH, -1));
+
+    /* An item with a NULL/empty buffer is a per-item failure, not a hard one. */
+    ph_batch_buffer_item_t bad[2] = {
+        {.buffer = NULL, .length = 4},
+        {.buffer = (const uint8_t *)"garbage", .length = 0},
+    };
+    ASSERT_OK(ph_hash_buffers(bad, 2, PH_HASH_AHASH, 0));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, bad[0].status);
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, bad[1].status);
+
+    PASS("test_hash_buffers_invalid_args");
+}
+
 int main() {
     test_hash_files_matches_compute_multi();
     test_hash_files_partial_failure();
     test_hash_buffers_matches_files();
     test_batch_invalid_args();
+    test_batch_validation_precedes_empty_shortcut();
+    test_hash_buffers_invalid_args();
     return 0;
 }
