@@ -70,6 +70,20 @@ option(PHASH_ENABLE_MOCK_BACKEND "Register the DE AD mock decoder in the loader'
 option(PHASH_STRICT_DEPS "Fail the configure step instead of silently falling back when a bundled decoder dependency (e.g. vendored TurboJPEG/zlib-ng) can't be found" OFF)
 option(PHASH_ENABLE_THREADS "Let ph_hash_files()/ph_hash_buffers() spawn a pool of OS threads (pthreads/Win32) instead of always running sequentially" ON)
 
+# libpng and spng are two alternative implementations of the *same* PNG backend:
+# src/loaders/png.c compiles exactly one of them (#ifdef PH_USE_LIBPNG / #elif
+# PH_USE_SPNG). Enabling both used to build and link both libraries while
+# silently using libpng only -- an unused dependency baked into the artifact.
+# Refuse the configuration instead of picking a winner behind the user's back.
+if(PHASH_USE_LIBPNG AND PHASH_USE_SPNG)
+    message(FATAL_ERROR
+        "PHASH_USE_LIBPNG and PHASH_USE_SPNG are mutually exclusive: they are two "
+        "alternative implementations of the single PNG backend, and only one can be "
+        "compiled in. PHASH_USE_LIBPNG defaults to ON, so selecting spng means turning "
+        "libpng off explicitly:\n"
+        "  cmake -S . -B build -DPHASH_USE_SPNG=ON -DPHASH_USE_LIBPNG=OFF")
+endif()
+
 if(PHASH_IS_TOP_LEVEL)
     include(GNUInstallDirs)
     include(CMakePackageConfigHelpers)

@@ -3,6 +3,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Two alternative implementations of one backend: the decoder below is selected
+// with #ifdef/#elif, so defining both would silently drop spng and still link it.
+// The CMake build refuses the combination up front; this catches the other build
+// paths (Makefile, python-libphash's _build.py, hand-rolled CFLAGS).
+#if defined(PH_USE_LIBPNG) && defined(PH_USE_SPNG)
+#error "PH_USE_LIBPNG and PH_USE_SPNG are mutually exclusive: define exactly one PNG backend."
+#endif
+
 #if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
 int ph_can_read_png(const uint8_t *magic, size_t len) {
     return (len >= 8 && magic[0] == 0x89 && magic[1] == 0x50 && magic[2] == 0x4E &&
