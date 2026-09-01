@@ -205,6 +205,19 @@ walkthrough.
 - Batch thread auto-detection on Windows is documented as covering only the current
   processor group (at most 64 logical processors); pass an explicit thread count and
   set affinity yourself if you need more.
+- `ph_load_from_file()` opens the file once instead of up to six times per call, and
+  decodes through exactly the same code path as `ph_load_from_memory()`. Loading is
+  measurably cheaper in builds without the bundled decoders (8-11% faster on a small
+  JPEG); with them the file handling was already a small fraction of the work. The
+  checks that used to accept a path can no longer disagree with the bytes that are
+  actually decoded.
+- Auto-orientation, the `max_pixels` limit and format detection now behave identically
+  whether an image comes from a path or from a buffer, and are covered by a parity test.
+- Loading from a file holds the encoded bytes in memory (mapped where the platform
+  allows it) alongside the decoded image, where some build configurations previously
+  read them incrementally. For ordinary images the encoded bytes are a small fraction
+  of the decoded ones, but callers hashing very large files on a tight memory budget
+  should be aware of the change.
 
 ### Fixed
 
@@ -231,6 +244,14 @@ walkthrough.
 - The exported CMake package declares its `Threads` dependency, so
   `find_package(phash)` links correctly in a consumer project.
 - Fuzzer targets link correctly when built together with the tests.
+- A build for Windows with any of the bundled native decoders enabled failed to
+  compile: the file-mapping code was guarded by the decoder switches but used
+  POSIX-only headers. It now sits behind its own platform check, with a portable read
+  fallback.
+- `ph_load_from_memory()` could return `PH_SUCCESS` without having loaded an image,
+  in the case where the decoder reported failure without setting an error code.
+- A file larger than `SIZE_MAX` (a 32-bit build fed something above 4 GB) is reported
+  as `PH_ERR_IO` instead of failing inside the mapping call.
 - A top-down BMP (legitimately negative height from `stbi_info`) was rejected as
   `PH_ERR_IMAGE_TOO_LARGE` regardless of its actual size, because the signed height
   was cast straight to `uint64_t`.
