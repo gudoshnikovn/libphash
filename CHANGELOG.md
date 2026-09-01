@@ -115,6 +115,13 @@ walkthrough.
 - **Enabling both PNG backends is now a configure-time error.** `PHASH_USE_LIBPNG`
   and `PHASH_USE_SPNG` are mutually exclusive; setting both used to silently pick one.
   *Restore the old behaviour:* not applicable — choose one backend explicitly.
+- **Non-regular files are rejected instead of decoded.** Passing a FIFO, a character
+  device or `/dev/stdin` to `ph_load_from_file()` now returns `PH_ERR_IO`. Previously
+  the fallback decoder would read such a path happily, so this turns a former
+  `PH_SUCCESS` into an error for those (exotic) inputs. Regular files are unaffected.
+  *Restore the old behaviour:* not possible by path — read the stream into memory
+  yourself and call `ph_load_from_memory()`, which is the supported way to hash
+  something that is not a file on disk.
 
 ### Added
 
@@ -188,8 +195,13 @@ walkthrough.
   changed in 2.0.0, since changing it would move Radial hashes.
 - The batch API validates its arguments *before* the `n == 0` shortcut, so an empty
   batch no longer excuses a malformed call.
-- `PH_ERR_IO` is now reported for files that cannot be opened or read (missing,
-  permissions, not a regular file), instead of a generic decode failure.
+- `PH_ERR_IO` is now reported for files that cannot be opened or read, instead of a
+  generic decode failure, and it means the same thing on every platform. The Windows
+  build previously skipped the check entirely and answered
+  `PH_ERR_UNSUPPORTED_FORMAT` or `PH_ERR_CORRUPT_DATA` for a missing file. The cases
+  are: missing path (including a dangling symlink), no read permission, not a regular
+  file, and an empty file. All of them are decided before any decoder sees the bytes,
+  and all of them leave a description in `ph_get_last_error_message()`.
 - Batch thread auto-detection on Windows is documented as covering only the current
   processor group (at most 64 logical processors); pass an explicit thread count and
   set affinity yourself if you need more.
@@ -208,8 +220,11 @@ walkthrough.
 - PNG decoder: the `row_ptrs` allocation is now checked for overflow.
 - PNG decoder: a deliberate dimension cap is applied instead of raising libpng's own
   user limit.
-- The spng backend did not honour grayscale decoding and returned RGB; it now decodes
-  to grayscale like the libpng backend.
+- The spng backend could not decode to grayscale at all: it asked spng for an 8-bit
+  gray output format unconditionally, which spng only accepts for images that are
+  already grayscale, so loading any truecolor, palette, gray+alpha or 16-bit PNG with
+  grayscale loading enabled failed with `PH_ERR_CORRUPT_DATA`. It now converts when
+  the source format requires it, byte for byte identically to the libpng backend.
 - `add_subdirectory()` no longer clobbers the parent project's settings, and works for
   both static and shared parents. The zlib-ng block in particular used to leave a
   `ZLIB_LIBRARY` pin behind in the parent's cache.
