@@ -294,8 +294,26 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
         return NULL;
     }
 
-    // Select format based on req_comp
-    int fmt = (req_comp == 1) ? SPNG_FMT_G8 : SPNG_FMT_RGB8;
+    /* spng accepts SPNG_FMT_G8 only for a genuinely grayscale PNG -- color type 0
+     * with a bit depth of 8 or less (check_decode_fmt() in spng.c). For anything
+     * else -- truecolor, palette, gray+alpha, 16-bit -- it rejects the request with
+     * SPNG_EFMT ("invalid format") and the whole decode fails. Asking for G8
+     * unconditionally therefore broke grayscale loading of every ordinary PNG in
+     * this backend: ph_context_set_load_grayscale(ctx, 1) reported
+     * PH_ERR_CORRUPT_DATA on a perfectly valid file, while the libpng backend
+     * converted it happily.
+     *
+     * Take the same route libpng does: let spng deliver RGB8 whenever G8 is not
+     * applicable, then fold the pixels down here with the exact weights the libpng
+     * path hands to png_set_rgb_to_gray_fixed() -- PH_GRAY_R/G/B over 128, i.e. the
+     * Rec.601 weights of ph_to_grayscale() -- so both backends produce the same
+     * bytes for the same input. */
+    const int gray_native = (ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE && ihdr.bit_depth <= 8);
+    int fmt;
+    if (req_comp == 1)
+        fmt = gray_native ? SPNG_FMT_G8 : SPNG_FMT_RGB8;
+    else
+        fmt = SPNG_FMT_RGB8;
     size_t out_size;
     ret = spng_decoded_image_size(ctx, fmt, &out_size);
     if (ret != 0) {
@@ -325,6 +343,23 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     }
 
     spng_ctx_free(ctx);
+
+    if (req_comp == 1 && fmt == SPNG_FMT_RGB8) {
+        /* In-place RGB -> gray: the destination index i never runs ahead of the
+         * source index 3*i, so a forward pass is safe. */
+        size_t num_pixels = out_size / 3;
+        for (size_t i = 0; i < num_pixels; i++) {
+            unsigned int r = data[i * 3];
+            unsigned int g = data[i * 3 + 1];
+            unsigned int b = data[i * 3 + 2];
+            data[i] = (unsigned char)((PH_GRAY_R * r + PH_GRAY_G * g + PH_GRAY_B * b) >> 7);
+        }
+        /* Hand back a buffer of the size the caller believes it got. A failed shrink
+         * is harmless -- the original block stays valid and merely oversized. */
+        unsigned char *shrunk = (unsigned char *)realloc(data, num_pixels ? num_pixels : 1);
+        if (shrunk)
+            data = shrunk;
+    }
 
     *width = (int)ihdr.width;
     *height = (int)ihdr.height;

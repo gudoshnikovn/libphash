@@ -1,3 +1,4 @@
+#include "internal.h"
 #include "libphash.h"
 #include "loader.h"
 #include "test_macros.h"
@@ -249,12 +250,152 @@ void test_bmp_negative_height_not_too_large() {
     printf("test_bmp_negative_height_not_too_large: PASSED\n");
 }
 
+static unsigned char *read_whole_file(const char *path, size_t *out_size) {
+    FILE *f = fopen(path, "rb");
+    ASSERT_PTR_NOT_NULL(f);
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    ASSERT(size > 0);
+    unsigned char *buf = (unsigned char *)malloc((size_t)size);
+    ASSERT_PTR_NOT_NULL(buf);
+    ASSERT(fread(buf, 1, (size_t)size, f) == (size_t)size);
+    fclose(f);
+    *out_size = (size_t)size;
+    return buf;
+}
+
+// The PNG decoder is one of two interchangeable implementations (libpng or spng),
+// chosen at configure time, and only one of them is ever linked into a given build.
+// A cross-backend comparison therefore cannot be made inside a single binary; what
+// this test does instead is pin BOTH backends to the same reference, which makes
+// them equal to each other by construction. The reference is the library's own
+// ph_to_grayscale() applied to the RGB decode of the same file.
+//
+// The regression this guards: the spng backend asked spng for SPNG_FMT_G8
+// unconditionally, but spng only accepts that format for a color-type-0 PNG. For
+// an ordinary truecolor file it answered SPNG_EFMT and the decode failed outright,
+// so ph_context_set_load_grayscale(ctx, 1) turned every valid PNG into
+// PH_ERR_CORRUPT_DATA -- while the libpng backend decoded the very same file.
+static void check_png_backend_parity(const char *path) {
+    size_t size = 0;
+    unsigned char *buf = read_whole_file(path, &size);
+
+    int rw = 0, rh = 0, rc = 0;
+    ph_error_t err = PH_SUCCESS;
+    uint8_t *rgb = ph_decode_buffer(buf, size, &rw, &rh, &rc, 0, 0, &err, NULL, 0);
+    ASSERT_PTR_NOT_NULL(rgb);
+    ASSERT_INT_EQ(PH_SUCCESS, err);
+    ASSERT_INT_EQ(3, rc);
+
+    int gw = 0, gh = 0, gc = 0;
+    err = PH_SUCCESS;
+    uint8_t *gray = ph_decode_buffer(buf, size, &gw, &gh, &gc, 1, 0, &err, NULL, 0);
+    ASSERT_PTR_NOT_NULL(gray);
+    ASSERT_INT_EQ(PH_SUCCESS, err);
+
+    // Same geometry, and exactly the channel count that was asked for.
+    ASSERT_INT_EQ(rw, gw);
+    ASSERT_INT_EQ(rh, gh);
+    ASSERT_INT_EQ(1, gc);
+
+    if (ph_can_use_libpng()) {
+        // Both native backends must reproduce the library's own conversion
+        // byte for byte. (stb_image, the fallback backend, converts with its
+        // own coefficients, so this exactness is only required of libpng/spng.)
+        size_t num_pixels = (size_t)rw * (size_t)rh;
+        uint8_t *reference = (uint8_t *)malloc(num_pixels);
+        ASSERT_PTR_NOT_NULL(reference);
+        ph_to_grayscale(NULL, rgb, rw, rh, rc, reference);
+        for (size_t i = 0; i < num_pixels; i++) {
+            if (gray[i] != reference[i]) {
+                fprintf(stderr,
+                        "[FAIL] %s: decoder grayscale differs from ph_to_grayscale at "
+                        "pixel %zu (%d vs %d)\n",
+                        path, i, (int)gray[i], (int)reference[i]);
+                exit(1);
+            }
+        }
+        free(reference);
+    }
+
+    ph_free_image(rgb);
+    ph_free_image(gray);
+    free(buf);
+}
+
+// Consequence of the byte-level parity above, checked at the level a user sees:
+// a hash taken from the decoder's grayscale output equals the hash taken from the
+// RGB decode, so switching PNG backends cannot move a stored hash.
+static void check_png_gray_hash_parity(const char *path) {
+    if (!ph_can_use_libpng())
+        return; // stb_image uses different conversion coefficients; see above.
+
+    ph_context_t *rgb_ctx = NULL;
+    ph_context_t *gray_ctx = NULL;
+    ASSERT_OK(ph_create(&rgb_ctx));
+    ASSERT_OK(ph_create(&gray_ctx));
+    ph_context_set_load_grayscale(rgb_ctx, 0);
+    ph_context_set_load_grayscale(gray_ctx, 1);
+    ASSERT_OK(ph_load_from_file(rgb_ctx, path));
+    ASSERT_OK(ph_load_from_file(gray_ctx, path));
+
+    uint64_t a_rgb = 0, a_gray = 0, d_rgb = 0, d_gray = 0, p_rgb = 0, p_gray = 0;
+    ASSERT_OK(ph_compute_ahash(rgb_ctx, &a_rgb));
+    ASSERT_OK(ph_compute_ahash(gray_ctx, &a_gray));
+    ASSERT_OK(ph_compute_dhash(rgb_ctx, &d_rgb));
+    ASSERT_OK(ph_compute_dhash(gray_ctx, &d_gray));
+    ASSERT_OK(ph_compute_phash(rgb_ctx, &p_rgb));
+    ASSERT_OK(ph_compute_phash(gray_ctx, &p_gray));
+
+    ASSERT_INT_EQ(0, ph_hamming_distance(a_rgb, a_gray));
+    ASSERT_INT_EQ(0, ph_hamming_distance(d_rgb, d_gray));
+    ASSERT_INT_EQ(0, ph_hamming_distance(p_rgb, p_gray));
+
+    ph_free(rgb_ctx);
+    ph_free(gray_ctx);
+}
+
+void test_png_grayscale_backend_parity() {
+    check_png_backend_parity(TEST_DATA_DIR "/photo.png");
+    check_png_backend_parity(TEST_DATA_DIR "/photo_complex.png");
+    check_png_gray_hash_parity(TEST_DATA_DIR "/photo.png");
+    check_png_gray_hash_parity(TEST_DATA_DIR "/photo_complex.png");
+    printf("test_png_grayscale_backend_parity: PASSED\n");
+}
+
+// A broken PNG must be reported with the decoder's own reason, not swallowed.
+// The spng backend used to discard its return code entirely, which is what made
+// the grayscale failure above so hard to read: every cause came out as a bare -8.
+void test_png_decode_error_is_reported() {
+    size_t size = 0;
+    unsigned char *buf = read_whole_file(TEST_DATA_DIR "/photo.png", &size);
+    ASSERT(size > 64);
+
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+
+    for (int gray = 0; gray <= 1; gray++) {
+        ph_context_set_load_grayscale(ctx, gray);
+        // Valid signature and IHDR, truncated body: recognized as PNG, undecodable.
+        ph_error_t err = ph_load_from_memory(ctx, buf, 40);
+        ASSERT_INT_EQ(PH_ERR_CORRUPT_DATA, err);
+        ASSERT(strlen(ph_get_last_error_message(ctx)) > 0);
+    }
+
+    ph_free(ctx);
+    free(buf);
+    printf("test_png_decode_error_is_reported: PASSED\n");
+}
+
 int main() {
     test_jpeg_loading();
     test_png_loading();
     test_webp_loading_or_unavailable();
     test_corrupted_loading();
     test_grayscale_loading();
+    test_png_grayscale_backend_parity();
+    test_png_decode_error_is_reported();
     test_memory_loading();
     test_loader_edge_cases();
     test_stb_fallback_formats();
