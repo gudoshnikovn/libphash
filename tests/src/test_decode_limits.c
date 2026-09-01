@@ -2,6 +2,7 @@
 #include "test_macros.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* tests/data/decode_bomb.png is a 45-byte PNG whose IHDR declares a 100000x100000
  * (1e10 pixel) image with no real pixel data behind it — a classic decompression
@@ -81,12 +82,91 @@ void test_custom_higher_limit_allows_normal_image() {
     printf("test_custom_higher_limit_allows_normal_image: PASSED\n");
 }
 
+/* R16/M1: max_pixels bounds the AREA, which on its own permits an absurd aspect
+ * ratio. A 268435456 x 1 PNG hits the default 256 MP limit exactly -- w*h is not
+ * greater than max_pixels -- yet implies a row buffer of ~800 MB. Worse, passing
+ * max_pixels straight into png_set_user_limits() *raised* libpng's own per-dimension
+ * default of 1000000 to 268435456, telling libpng such a width was acceptable.
+ *
+ * The dimensions are read straight out of the IHDR, before the buffer reaches
+ * libpng/spng, so the header below needs no valid CRC or pixel data: it must be
+ * rejected long before anything looks at either. */
+static void build_png_header(uint8_t *out, uint32_t w, uint32_t h) {
+    static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+    memcpy(out, sig, 8);
+    out[8] = 0;
+    out[9] = 0;
+    out[10] = 0;
+    out[11] = 13; /* IHDR length */
+    memcpy(out + 12, "IHDR", 4);
+    out[16] = (uint8_t)(w >> 24);
+    out[17] = (uint8_t)(w >> 16);
+    out[18] = (uint8_t)(w >> 8);
+    out[19] = (uint8_t)w;
+    out[20] = (uint8_t)(h >> 24);
+    out[21] = (uint8_t)(h >> 16);
+    out[22] = (uint8_t)(h >> 8);
+    out[23] = (uint8_t)h;
+    out[24] = 8; /* bit depth */
+    out[25] = 2; /* colour type: truecolour */
+    out[26] = 0;
+    out[27] = 0;
+    out[28] = 0; /* compression, filter, interlace */
+}
+
+void test_extreme_aspect_ratio_rejected() {
+    uint8_t hdr[29];
+    ph_context_t *ctx = NULL;
+    /* Returns 1 for both native PNG backends (libpng and spng), 0 when PNG is left to
+     * stb_image. The dimension cap lives in the native PNG decoder, so only those
+     * builds can promise the specific code; a stb-only build still rejects the input,
+     * just with its own complaint about the truncated stream. Extending the cap to
+     * every format and load path is R50. */
+    const int native_png = ph_can_use_libpng();
+
+    ASSERT_OK(ph_create(&ctx));
+
+    /* Exactly the default area limit, but 268435456 pixels wide. */
+    build_png_header(hdr, 268435456u, 1u);
+    ph_error_t err = ph_load_from_memory(ctx, hdr, sizeof(hdr));
+    ASSERT(err != PH_SUCCESS);
+    if (native_png)
+        ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, err);
+    ASSERT_INT_EQ(0, ph_is_loaded(ctx));
+
+    /* Tall variant of the same shape. */
+    build_png_header(hdr, 1u, 268435456u);
+    err = ph_load_from_memory(ctx, hdr, sizeof(hdr));
+    ASSERT(err != PH_SUCCESS);
+    if (native_png)
+        ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, err);
+
+    /* Raising max_pixels must not raise the per-dimension limit either -- that was
+     * exactly the defect: the dimension cap is deliberate, not derived from area. */
+    ph_context_set_max_pixels(ctx, 0);
+    build_png_header(hdr, 268435456u, 1u);
+    err = ph_load_from_memory(ctx, hdr, sizeof(hdr));
+    ASSERT(err != PH_SUCCESS);
+    if (native_png)
+        ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, err);
+
+    /* A dimension just inside the limit is not rejected for being too large; it fails
+     * later, on its truncated data, which is a different and honest complaint. */
+    build_png_header(hdr, 1000000u, 1u);
+    ASSERT(ph_load_from_memory(ctx, hdr, sizeof(hdr)) != PH_ERR_IMAGE_TOO_LARGE);
+
+    ph_free(ctx);
+    printf("test_extreme_aspect_ratio_rejected: PASSED (native PNG backend: %s)\n",
+           native_png ? "yes" : "no");
+}
+
 int main() {
     test_default_limit_rejects_bomb_from_file();
     test_default_limit_rejects_bomb_from_memory();
     test_default_limit_allows_normal_image();
     test_custom_lower_limit_rejects_normal_image();
     test_custom_higher_limit_allows_normal_image();
+    test_extreme_aspect_ratio_rejected();
     printf("ALL DECODE LIMIT TESTS PASSED\n");
     return 0;
 }

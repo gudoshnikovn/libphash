@@ -60,6 +60,16 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     if (!buffer || size < 8)
         return NULL;
 
+    /* Checked before the buffer reaches libpng/spng so both backends agree on the
+     * verdict and the error code, and so an absurd dimension is refused before any
+     * row buffer is sized (R16/M1). */
+    if (!ph_png_dimensions_within_limit(buffer, size)) {
+        if (out_err)
+            *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        ph_set_err_msg(err_msg, err_msg_cap, "PNG dimension exceeds the supported maximum");
+        return NULL;
+    }
+
     if (png_sig_cmp(buffer, 0, 8) != 0)
         return NULL;
 
@@ -108,8 +118,11 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
         // Defense in depth: cap each dimension individually (in addition to the
         // width*height check below) and cap ancillary-chunk allocations, so a
         // malicious header can't force a huge allocation before we even see w/h.
-        png_uint_32 dim_limit =
-            (max_pixels > 0xFFFFFFFFULL) ? 0xFFFFFFFFu : (png_uint_32)max_pixels;
+        /* Only ever LOWER libpng's own per-dimension default (1000000). Passing
+         * max_pixels straight through raised it -- with the default 256 MP that meant
+         * telling libpng a 268435456-pixel-wide image is acceptable (R16/M1). */
+        png_uint_32 dim_limit = (max_pixels > PH_MAX_IMAGE_DIMENSION) ? PH_MAX_IMAGE_DIMENSION
+                                                                      : (png_uint_32)max_pixels;
         png_set_user_limits(png_ptr, dim_limit, dim_limit);
         png_set_chunk_malloc_max(png_ptr, 128 * 1024 * 1024);
     }
@@ -224,6 +237,16 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
                                  ph_error_t *out_err, char *err_msg, size_t err_msg_cap) {
     if (!buffer || size < 8)
         return NULL;
+
+    /* Checked before the buffer reaches libpng/spng so both backends agree on the
+     * verdict and the error code, and so an absurd dimension is refused before any
+     * row buffer is sized (R16/M1). */
+    if (!ph_png_dimensions_within_limit(buffer, size)) {
+        if (out_err)
+            *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        ph_set_err_msg(err_msg, err_msg_cap, "PNG dimension exceeds the supported maximum");
+        return NULL;
+    }
 
     spng_ctx *ctx = spng_ctx_new(0);
     if (!ctx) {
