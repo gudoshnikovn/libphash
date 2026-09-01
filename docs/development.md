@@ -10,12 +10,102 @@ The project supports `gcc`, `clang`, and `msvc`. The `Makefile` allows compiler 
 make CC=clang
 ```
 
-### Build Configurations (CMake)
-The C engine utilizes modular CMake flags allowing deterministic inclusions of external decoders:
-- `PHASH_USE_TURBOJPEG` (ON/OFF): Configures bundled `libjpeg-turbo`.
-- `PHASH_USE_LIBPNG` (ON/OFF): Configures bundled `libpng`.
-- `PHASH_USE_WEBP` (ON/OFF): Toggles `libwebp` external submodules.
-- `PHASH_USE_SPNG` (ON/OFF): Configures `spng` integration.
+### Build systems and their defaults
+
+There are two build systems, and they are not interchangeable:
+
+- **CMake** — the high-performance build. Vendored SIMD decoders (libjpeg-turbo,
+  libpng/spng, libwebp, zlib-ng) from `vendor/`, `install()`/`find_package(phash)`
+  packaging, `ctest`. This is what CI builds and what releases ship.
+- **Makefile** — the portable/minimal build. No vendored decoders: `stb_image` only,
+  one test binary per `tests/src/test_*.c`, plus the `debug`/`coverage` flows.
+
+Because they are separate implementations, their defaults can drift, and a default
+that differs between them means a code path that is exercised in one flow and dead in
+the other. The table below is the single place where both are recorded — **keep it in
+sync when you add or flip a switch.**
+
+| Knob | CMake default | Makefile default | Notes |
+|---|---|---|---|
+| Bundled TurboJPEG | `PHASH_USE_TURBOJPEG=ON` | *n/a* (stb only) | Makefile has no native JPEG path |
+| Bundled libpng | `PHASH_USE_LIBPNG=ON` | *n/a* (stb only) | mutually exclusive with `PHASH_USE_SPNG` |
+| spng instead of libpng | `PHASH_USE_SPNG=OFF` | *n/a* | raw `-D` flag, not an `option()` |
+| libwebp | `PHASH_USE_WEBP=ON` | `USE_WEBP=0` | Makefile path expects a system libwebp |
+| zlib-ng instead of system zlib | `PHASH_USE_ZLIB_NG=ON` | *n/a* | |
+| **Batch thread pool** | `PHASH_ENABLE_THREADS=ON` | `PHASH_ENABLE_THREADS=1` | **matched in R15**; was `0` in the Makefile |
+| Shared library | `PHASH_BUILD_SHARED=OFF` | *n/a* (static `libphash.a` only) | |
+| Tests | `PHASH_BUILD_TESTS=ON` | always built by `all` | |
+| `-march=native` | `PHASH_OPTIMIZE_NATIVE=OFF` | *n/a* (fixed `-msse4.2` / `-march=armv8-a+simd`) | |
+| libFuzzer harnesses | `PHASH_BUILD_FUZZERS=OFF` | *n/a* | requires Clang |
+| Test-only mock decoder | `PHASH_ENABLE_MOCK_BACKEND=OFF` | `PHASH_ENABLE_MOCK_BACKEND=0` | must never be on in a shipped build |
+| Strict dependency handling | `PHASH_STRICT_DEPS=OFF` | *n/a* | |
+
+Both spellings of the thread switch accept the same off-ramp:
+
+```bash
+make PHASH_ENABLE_THREADS=0                  # portable build without -pthread
+cmake -S . -B build -DPHASH_ENABLE_THREADS=OFF
+```
+
+**Why the thread default was changed (R15/L13).** The Makefile used to default to
+`PHASH_ENABLE_THREADS=0` "to keep the portable build free of pthread linkage". The
+practical effect was not a leaner build but a dead code path: `src/batch.c`'s worker
+pool was compiled out of every local `make test` and every `make coverage` run, so the
+threaded half of `ph_hash_files()`/`ph_hash_buffers()` was never executed or measured
+locally — which is how the Windows thread-pool defect (H1) survived. The default is now
+`1`, i.e. `-pthread` *is* a dependency of the portable build. That is a deliberate
+trade: a pthread implementation is present on every platform the Makefile targets
+(it uses `uname` and POSIX tooling throughout), and correctness coverage of the
+concurrent path is worth more than the dependency.
+
+### Instrumented build modes (Makefile)
+
+`debug` and `coverage` are switch-driven (`PHASH_SANITIZE=1`, `PHASH_COVERAGE=1`) and
+re-invoke `make` rather than listing `clean` as a sibling prerequisite. The old
+`debug: clean all` shape raced under `-jN`: `clean` deleted object files while other
+jobs were compiling them. Prefer the same shape for any future instrumented mode.
+
+### Installed package and `pkg-config`
+
+`cmake --install` writes `libphash.h`, `phash_version.h`, the library, the exported
+`phash::phash` CMake package and `libphash.pc`. Both consumer routes are covered by
+`scripts/smoke_install.sh static|shared` (also `make install-test`), which installs into
+a throwaway prefix, builds a consumer through `find_package(phash)` and through
+`pkg-config`, then **moves the prefix** and repeats the `pkg-config` build from the new
+location.
+
+That last step is the regression guard for R15/L11. `libphash.pc.in` writes
+
+```
+prefix=@CMAKE_INSTALL_PREFIX@
+libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
+includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
+```
+
+so that redefining `prefix` moves everything else with it — `pkg-config --define-prefix`
+guesses `prefix` from the `.pc` file's own location, which is how relocatable and
+relocated (packaged, then unpacked elsewhere) install trees are consumed. It previously
+substituted `@CMAKE_INSTALL_FULL_LIBDIR@`, an absolute configure-time path that
+`--define-prefix` cannot touch.
+
+Three caveats worth knowing:
+
+- Plain `pkg-config` does **not** redefine the prefix unless asked (`--define-prefix`,
+  or a build of pkg-config/pkgconf configured to do it by default, as on Windows). The
+  fix makes relocation *possible*; the consumer still opts into it.
+- The behavioural half of the smoke check (move the tree, rebuild) is **not** a
+  sufficient regression guard on its own, which is why `smoke_install.sh` also asserts
+  on the text of the generated `.pc`. `pkgconf` (3.0.6, what Homebrew installs as
+  `pkg-config`) implements `--define-prefix` by string-replacing the old prefix inside
+  absolute variable values as well, so it produces correct output even from the broken
+  `@CMAKE_INSTALL_FULL_LIBDIR@` form. freedesktop `pkg-config` only redefines the
+  `prefix` variable and leaves an absolute `libdir` stale — the same `.pc` is relocatable
+  under one implementation and not the other. Assert on the file, not just the output.
+- `GNUInstallDirs` allows `CMAKE_INSTALL_LIBDIR`/`CMAKE_INSTALL_INCLUDEDIR` to be
+  absolute paths, and some distribution toolchain files set them that way. Such a value
+  cannot be expressed relative to `${prefix}`, so `CMakeLists.txt` emits it verbatim and
+  prints a `STATUS` message saying the `.pc` will not be relocatable. That is a property
+  of the requested layout, not a bug to paper over.
 
 ### Formatting
 We use `clang-format` with a custom style (based on LLVM with minor tweaks).

@@ -371,6 +371,29 @@ if(PHASH_IS_TOP_LEVEL)
     )
 
     string(REPLACE ";" " " PHASH_PC_LIBS_PRIVATE_STR "${PHASH_PC_LIBS_PRIVATE}")
+
+    # R15/L11: keep libphash.pc relocatable. Substituting CMAKE_INSTALL_FULL_LIBDIR
+    # bakes the configure-time absolute path into the file, so moving (or packaging
+    # and unpacking elsewhere) the install tree yields -L/-I pointing at a directory
+    # that no longer exists. Expressing libdir/includedir relative to ${prefix}
+    # means pkg-config's own --define-prefix (and the redefinition of prefix that
+    # relocatable distributions do) reaches them.
+    #
+    # GNUInstallDirs permits CMAKE_INSTALL_LIBDIR/INCLUDEDIR to be absolute -- some
+    # distributions and toolchain files set them that way. An absolute value cannot
+    # be made prefix-relative, so it is emitted verbatim: such an install is not
+    # relocatable by construction, and silently prefixing it would produce a path
+    # that is simply wrong.
+    foreach(_dir LIBDIR INCLUDEDIR)
+        if(IS_ABSOLUTE "${CMAKE_INSTALL_${_dir}}")
+            set(PHASH_PC_${_dir} "${CMAKE_INSTALL_${_dir}}")
+            message(STATUS "phash: CMAKE_INSTALL_${_dir} is absolute "
+                           "(${CMAKE_INSTALL_${_dir}}); libphash.pc will not be relocatable")
+        else()
+            set(PHASH_PC_${_dir} "\${prefix}/${CMAKE_INSTALL_${_dir}}")
+        endif()
+    endforeach()
+
     configure_file(
         ${CMAKE_CURRENT_SOURCE_DIR}/libphash.pc.in
         ${CMAKE_CURRENT_BINARY_DIR}/libphash.pc

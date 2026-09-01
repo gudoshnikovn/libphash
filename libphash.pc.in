@@ -1,7 +1,7 @@
 prefix=@CMAKE_INSTALL_PREFIX@
 exec_prefix=${prefix}
-libdir=@CMAKE_INSTALL_FULL_LIBDIR@
-includedir=@CMAKE_INSTALL_FULL_INCLUDEDIR@
+libdir=@PHASH_PC_LIBDIR@
+includedir=@PHASH_PC_INCLUDEDIR@
 
 Name: libphash
 Description: Portable C library for perceptual image hashing

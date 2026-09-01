@@ -21,12 +21,18 @@ ifeq ($(USE_WEBP),1)
     LDFLAGS += -lwebp -lwebpdecoder
 endif
 
-# --- Optional batch-hashing thread pool (task 9) ---
-# Off by default: keeps the portable/minimal Makefile build free of pthread linkage.
-PHASH_ENABLE_THREADS ?= 0
+# --- Batch-hashing thread pool (task 9) ---
+# ON by default, matching the CMake option PHASH_ENABLE_THREADS (also ON).
+# R15/L13: the two build systems used to disagree here (Makefile 0, CMake ON).
+# The cost of that divergence was not "one build is leaner": it was that the
+# threaded batch path never ran in the local Makefile flow at all -- neither in
+# `make test` nor in `make coverage` -- which is exactly how the Windows thread-pool
+# defect H1 stayed hidden. `-pthread` is now a dependency of the portable build;
+# that is a deliberate trade. Opt out with `make PHASH_ENABLE_THREADS=0`.
+PHASH_ENABLE_THREADS ?= 1
 ifeq ($(PHASH_ENABLE_THREADS),1)
-    CFLAGS += -DPH_ENABLE_THREADS
-    LDFLAGS += -lpthread
+    CFLAGS += -DPH_ENABLE_THREADS -pthread
+    LDFLAGS += -pthread
 endif
 
 # OS-specific flags
@@ -55,6 +61,34 @@ ifeq ($(PHASH_ENABLE_MOCK_BACKEND),1)
 CFLAGS += -DPH_ENABLE_MOCK_BACKEND
 endif
 
+# --- Instrumented build modes ---
+# These are switches rather than target-specific variables on purpose (R15/R23):
+# the old `debug: clean all` / `coverage: clean test` shape let `clean` run in
+# parallel with compilation under `-jN` and deleted objects out from under the
+# compiler. The `debug`/`coverage` targets below now recurse (`$(MAKE) clean`,
+# then `$(MAKE) all PHASH_SANITIZE=1`), which is ordered at any -j level, and
+# the flags are picked up here instead of being attached to the target.
+PHASH_SANITIZE ?= 0
+ifeq ($(PHASH_SANITIZE),1)
+CFLAGS += -g -O0 -fsanitize=address,undefined
+LDFLAGS += -fsanitize=address,undefined
+# R46: the vendored stb_image_resize2 packs filter coefficients with deliberately
+# unaligned 64-bit moves (STBIR_MOVE_2 casts float* -> stbir_uint64*), which UBSan
+# reports as `load/store of misaligned address ... for type 'stbir_uint64'`. The
+# misaligned buffer is stb's own internal coefficient array (16-byte aligned at the
+# base; the odd stride is stb's), not anything we pass in, and the pattern is
+# unchanged in current upstream master (v2.18) -- so it cannot be fixed by a bump.
+# We exempt ONLY the TU that instantiates stb (src/image/stb_resize_impl.c, which
+# contains no code of ours) from the alignment check, so our own findings still fire.
+STB_NOSAN_CFLAGS = -fno-sanitize=alignment
+endif
+
+PHASH_COVERAGE ?= 0
+ifeq ($(PHASH_COVERAGE),1)
+CFLAGS += -g -O0 --coverage
+LDFLAGS += --coverage
+endif
+
 # Sources and Objects
 LOADER_DIR = $(SRC_DIR)/loaders
 IMAGE_DIR = $(SRC_DIR)/image
@@ -74,20 +108,13 @@ $(GENERATED_DIR)/phash_version.h: CMakeLists.txt include/phash_version.h.in scri
 
 $(OBJS): $(GENERATED_DIR)/phash_version.h
 
-# Diagnostic/Debug build
-# NOTE: `debug` only REBUILDS (target = `clean all`); run `make test` afterwards.
-debug: CFLAGS += -g -O0 -fsanitize=address,undefined
-debug: LDFLAGS += -fsanitize=address,undefined
-# R46: the vendored stb_image_resize2 packs filter coefficients with deliberately
-# unaligned 64-bit moves (STBIR_MOVE_2 casts float* -> stbir_uint64*), which UBSan
-# reports as `load/store of misaligned address ... for type 'stbir_uint64'`. The
-# misaligned buffer is stb's own internal coefficient array (16-byte aligned at the
-# base; the odd stride is stb's), not anything we pass in, and the pattern is
-# unchanged in current upstream master (v2.18) — so it cannot be fixed by a bump.
-# We exempt ONLY the TU that instantiates stb (src/image/stb_resize_impl.c, which
-# contains no code of ours) from the alignment check, so our own findings still fire.
-debug: STB_NOSAN_CFLAGS = -fno-sanitize=alignment
-debug: clean all
+# Diagnostic/Debug build (ASan + UBSan).
+# NOTE: `debug` only REBUILDS; it does NOT run the tests -- follow it with `make test`.
+# Recursive by design so that `clean` finishes before anything compiles even under -jN
+# (see the PHASH_SANITIZE block above).
+debug:
+	@$(MAKE) clean
+	@$(MAKE) all PHASH_SANITIZE=1
 
 # Reformat code
 format:
@@ -102,9 +129,9 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# R46: stb_image_resize2 implementation TU — see the `debug` target above.
+# R46: stb_image_resize2 implementation TU — see the PHASH_SANITIZE block above.
 # Empty outside sanitizer builds, so release builds are unaffected.
-STB_NOSAN_CFLAGS =
+STB_NOSAN_CFLAGS ?=
 $(OBJ_DIR)/image/stb_resize_impl.o: $(SRC_DIR)/image/stb_resize_impl.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(STB_NOSAN_CFLAGS) -c $< -o $@
@@ -121,10 +148,12 @@ test: $(TEST_BINS)
 	done
 	@echo "ALL TESTS PASSED"
 
-# Coverage build
-coverage: CFLAGS += -g -O0 --coverage
-coverage: LDFLAGS += --coverage
-coverage: clean test
+# Coverage build. Recursive for the same reason as `debug` above.
+# Note this inherits PHASH_ENABLE_THREADS=1, so the threaded batch path in
+# src/batch.c is instrumented and executed here (it was dead before R15).
+coverage:
+	@$(MAKE) clean
+	@$(MAKE) test PHASH_COVERAGE=1
 	@echo "Generating coverage reports..."
 	@mkdir -p docs/coverage
 	@lcov --capture --directory . --output-file docs/coverage/coverage.info --ignore-errors mismatch,mismatch,unused,unused
