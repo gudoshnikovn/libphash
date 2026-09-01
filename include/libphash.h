@@ -78,8 +78,12 @@ typedef enum {
     PH_ERR_DECODER_UNAVAILABLE = -9, ///< The format was recognized, but no decoder for it was
                                      ///< compiled into this build (e.g. WebP without
                                      ///< PH_USE_WEBP).
-    PH_ERR_IO = -10,                 ///< The file could not be opened/read (missing, permissions,
-                                     ///< not a regular file, etc).
+    PH_ERR_IO = -10,                 ///< The path could not be used as an image source at all:
+                                     ///< it does not exist (including a dangling symlink), could
+                                     ///< not be opened (permissions), is not a regular file (a
+                                     ///< directory, a device, a FIFO), or is an empty file. It is
+                                     ///< decided before any decoder sees the bytes, and is
+                                     ///< reported identically on POSIX and Windows.
     PH_ERR_REQUIRES_COLOR = -11,     ///< A color algorithm (ph_compute_color_hash(),
                                      ///< ph_compute_color_moments_hash()) was asked to run on an
                                      ///< image that carries fewer than 3 channels -- see

@@ -14,11 +14,36 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef _WIN32
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#else
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
+
+/* One spelling of "open a file read-only and stat the descriptor" for both
+ * platforms, so the pre-decode probe below is a single piece of code rather than
+ * a POSIX implementation and a Windows one that can drift apart. The Windows CRT
+ * (_open/_fstat64/_close) is used rather than the Win32 API on purpose: it sets
+ * errno the same way, which is what the diagnostic message is built from. */
+#ifdef _WIN32
+typedef struct __stat64 ph_file_stat_t;
+#define PH_FILE_OPEN_RDONLY(path) _open((path), _O_RDONLY | _O_BINARY)
+#define PH_FILE_FSTAT(fd, st) _fstat64((fd), (st))
+#define PH_FILE_CLOSE(fd) _close(fd)
+#ifndef S_ISREG
+#define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
+#endif
+#else
+typedef struct stat ph_file_stat_t;
+#define PH_FILE_OPEN_RDONLY(path) open((path), O_RDONLY)
+#define PH_FILE_FSTAT(fd, st) fstat((fd), (st))
+#define PH_FILE_CLOSE(fd) close(fd)
 #endif
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -367,6 +392,69 @@ static int ph_scan_orientation(const uint8_t *data, size_t len) {
     return 1;
 }
 
+/* --- Classifying a path that cannot serve as an image source -------------------
+ *
+ * These three helpers are deliberately split so that a caller which already holds
+ * an open descriptor (or which opens the file once for reading and mapping) can
+ * reuse the classification without opening the path a second time: the failure
+ * branch takes an errno, the success branch takes a descriptor, and only the
+ * convenience wrapper does an open()/close() of its own. */
+
+/* Turns a failed open into PH_ERR_IO with a diagnostic message. `open_errno` must
+ * be errno captured immediately after the failing open -- both POSIX and the
+ * Windows CRT set it (ENOENT for a missing path or a dangling symlink, EACCES for
+ * an unreadable one, and on Windows also for a directory). */
+static ph_error_t ph_report_file_open_failure(const char *filepath, int open_errno, char *err_buf,
+                                              size_t err_len) {
+    char msg[PH_LAST_ERROR_MAX];
+    snprintf(msg, sizeof(msg), "Cannot open '%s': %s", filepath, strerror(open_errno));
+    ph_set_err_msg(err_buf, err_len, msg);
+    return PH_ERR_IO;
+}
+
+/* Checks a descriptor that opened successfully. An image source has to be a
+ * regular file with at least one byte in it: a directory opens fine on POSIX, and
+ * so do character devices and FIFOs, but none of them is something a decoder can
+ * be handed, and an empty file is an I/O-level fact rather than an unrecognized
+ * image format. Returns PH_SUCCESS otherwise, reporting the size through
+ * `out_size` when it is non-NULL. */
+static ph_error_t ph_check_open_file(int fd, const char *filepath, long long *out_size,
+                                     char *err_buf, size_t err_len) {
+    ph_file_stat_t st;
+    char msg[PH_LAST_ERROR_MAX];
+    if (PH_FILE_FSTAT(fd, &st) != 0) {
+        snprintf(msg, sizeof(msg), "Cannot stat '%s': %s", filepath, strerror(errno));
+        ph_set_err_msg(err_buf, err_len, msg);
+        return PH_ERR_IO;
+    }
+    if (!S_ISREG(st.st_mode)) {
+        snprintf(msg, sizeof(msg), "Cannot read '%s': not a regular file", filepath);
+        ph_set_err_msg(err_buf, err_len, msg);
+        return PH_ERR_IO;
+    }
+    if (st.st_size <= 0) {
+        snprintf(msg, sizeof(msg), "Cannot read '%s': file is empty", filepath);
+        ph_set_err_msg(err_buf, err_len, msg);
+        return PH_ERR_IO;
+    }
+    if (out_size)
+        *out_size = (long long)st.st_size;
+    return PH_SUCCESS;
+}
+
+/* Opens the path once and classifies everything that makes it unusable as an
+ * image source before any decoder sees it, so that "I could not read this file"
+ * is reported as PH_ERR_IO instead of surfacing later as an unrecognized format.
+ * The descriptor is closed again -- this is a probe, not the read path. */
+static ph_error_t ph_probe_input_file(const char *filepath, char *err_buf, size_t err_len) {
+    int fd = PH_FILE_OPEN_RDONLY(filepath);
+    if (fd < 0)
+        return ph_report_file_open_failure(filepath, errno, err_buf, err_len);
+    ph_error_t err = ph_check_open_file(fd, filepath, NULL, err_buf, err_len);
+    PH_FILE_CLOSE(fd);
+    return err;
+}
+
 PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
     if (!ctx || !filepath)
         return PH_ERR_INVALID_ARGUMENT;
@@ -380,20 +468,16 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
         ctx->image.gray_cache = NULL;
     }
 
-#ifndef _WIN32
-    // Distinguish "can't even open this path" from a decode failure up front, for
-    // both the native-decoder and stb_image-only builds below.
+    // Distinguish "can't even read this path" from a decode failure up front, for
+    // both the native-decoder and stb_image-only builds below, and identically on
+    // every platform -- consumers (bindings in particular) map PH_ERR_IO to their
+    // own I/O exception and cannot do that if the code depends on the OS.
     {
-        int probe_fd = open(filepath, O_RDONLY);
-        if (probe_fd < 0) {
-            char msg[PH_LAST_ERROR_MAX];
-            snprintf(msg, sizeof(msg), "Cannot open '%s': %s", filepath, strerror(errno));
-            ph_set_err_msg(ctx->last_error, sizeof(ctx->last_error), msg);
-            return PH_ERR_IO;
-        }
-        close(probe_fd);
+        ph_error_t probe_err =
+            ph_probe_input_file(filepath, ctx->last_error, sizeof(ctx->last_error));
+        if (probe_err != PH_SUCCESS)
+            return probe_err;
     }
-#endif
 
 #ifndef PH_USE_WEBP
     // Report "recognized but unavailable" precisely even in a build with no native
