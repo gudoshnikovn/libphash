@@ -1,0 +1,308 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+Nothing yet.
+
+## [2.0.0] - Unreleased
+
+First major release. It is a major not because of the amount of new work, but because
+of a small number of changes a consumer **cannot notice at upgrade time**: the hash
+value produced for the same input can differ, and one error constant is gone. Read
+the BREAKING CHANGES section before upgrading, and see `MIGRATION.md` for the 1.x → 2.0
+walkthrough.
+
+### BREAKING CHANGES
+
+- **Automatic EXIF orientation is now on by default.** Images carrying an
+  `Orientation` tag other than 1 (most photos straight from phones and cameras) are
+  rotated/mirrored before hashing, so a hash now describes what a viewer displays
+  rather than the raw sensor buffer. **Every hash you have stored for such an image
+  changes.** There is no error and no warning — only a silently lower recall in
+  deduplication, so plan a rehash of the affected corpus.
+  *Restore the old behaviour:* `ph_context_set_auto_orient(ctx, 0)` after
+  `ph_create()`.
+
+- **`PH_ERR_DECODE_FAILED` was removed from `ph_error_t`.** It had already stopped
+  being returned from anywhere while still being declared, so
+  `if (err == PH_ERR_DECODE_FAILED)` had quietly stopped matching with no compiler
+  diagnostic. Removing the name makes the break visible at compile time. Its numeric
+  value `-2` is retired and will not be reused.
+  *Restore the old behaviour:* not possible, and not desirable — replace the check
+  with the specific codes that superseded it: `PH_ERR_CORRUPT_DATA`,
+  `PH_ERR_UNSUPPORTED_FORMAT`, `PH_ERR_IMAGE_TOO_LARGE`, `PH_ERR_IO`,
+  `PH_ERR_DECODER_UNAVAILABLE`. A code-to-code mapping table is in `MIGRATION.md`.
+
+- **Every `ph_context_set_*` function returns `ph_error_t` instead of `void`, and
+  invalid input is now rejected.** One contract for all of them: a valid argument
+  returns `PH_SUCCESS`; anything else returns `PH_ERR_INVALID_ARGUMENT` and leaves
+  the configuration **completely unchanged** — never clamped, never partially
+  applied, never reset to defaults. Previously invalid input was swallowed silently,
+  so a caller could hash a whole batch with a configuration it never asked for.
+  Existing call sites still compile (the setters are deliberately not
+  `warn_unused_result`), but calls that used to be silently ignored now leave the
+  previous value in place. The bounds are implementation limits, not style:
+  `gamma` finite and in (0.001, 1000]; gray weights each ≥ 0 with a sum in
+  (0, INT_MAX/255]; `dct_size` 1..32; `reduction_size` 1..8 and ≤ `dct_size`;
+  radial `projections` 1..64; radial `samples` 1..65536; `block_size` 1..22;
+  `whash_mode` a declared enumerator only.
+  *Restore the old behaviour:* not possible — pass values inside the documented
+  bounds, and check the return value wherever the argument comes from outside your
+  own code.
+
+- **Public helpers reading a `ph_digest_t` reject `size > PH_DIGEST_MAX_BYTES` (64)
+  instead of truncating.** `ph_digest_t` is a flat struct that FFI bindings assemble
+  by hand, and `size` could hold values `data` could not — `size = 200` read up to
+  128 bytes past the end of the struct. Functions returning `ph_error_t` now return
+  `PH_ERR_INVALID_ARGUMENT`; distance/similarity functions return `-1`. A `size` of
+  `0` is also uniformly `-1` from every comparison function now (it used to be `0`
+  from `ph_hamming_distance_digest()` and `ph_l2_distance()`, i.e. "identical" for
+  two digests without a single bit, while `ph_similarity_digest()` already returned
+  `-1`).
+  *Restore the old behaviour:* not possible — it was an out-of-bounds read. Make
+  sure hand-assembled digests carry a `size` of at most `PH_DIGEST_MAX_BYTES`.
+
+- **The color algorithms refuse grayscale images.** `ph_compute_color_hash()` and
+  `ph_compute_color_moments_hash()` (and `ph_compute_multi()` with
+  `PH_HASH_COLOR_HASH`) return the new `PH_ERR_REQUIRES_COLOR` when the loaded image
+  has fewer than 3 channels, and leave the output untouched. They previously read
+  r/g/b out of one replicated channel and returned `PH_SUCCESS` with an outwardly
+  valid but meaningless result.
+  *Restore the old behaviour:* not possible — load the image in color
+  (`ph_context_set_load_grayscale(ctx, 0)`, the default, or pass 3/4 channels to
+  `ph_load_from_pixels()`) before asking for a color hash.
+
+- **`max_pixels = 0` no longer means "no limit".** It means "no limit of my own": an
+  implementation ceiling of `INT_MAX` (2147483647) pixels always applies and also
+  caps an explicitly configured larger value. An image above it is rejected with
+  `PH_ERR_IMAGE_TOO_LARGE`. Pixel indexing in the hot loops is done in `int`, so
+  such an image previously overflowed it — undefined behaviour and a heap overflow
+  reachable through the documented "0 = unlimited" mode. The default limit
+  (256 MP) is eight times below the ceiling, so only callers who deliberately raised
+  or disabled the limit are affected.
+  *Restore the old behaviour:* not possible, by design — the previous behaviour was
+  undefined.
+
+- **`PH_VERSION_NUMBER` uses a new scheme:** `major*1000000 + minor*1000 + patch`
+  (2.0.0 → 2000000), replacing `major*10000 + minor*100 + patch`. The old scheme
+  collided as soon as a minor or patch exceeded 99 — 1.100.0 and 2.0.0 both produced
+  20000.
+  *Restore the old behaviour:* not possible — recompute any compile-time
+  `#if PH_VERSION_NUMBER >= ...` check against the new scheme.
+
+- **Shared builds now carry a versioned soname, `SOVERSION = 2`**
+  (`libphash.so.2` / `libphash.2.dylib`). Consumers linked against an unversioned
+  1.x shared library must relink. This is the only signal a consumer's linker gets
+  when the library breaks compatibility across a major version, so it is intentional
+  and permanent.
+  *Restore the old behaviour:* not applicable — relink against the installed 2.x
+  library. `find_package(phash 1.x REQUIRED)` correctly refuses to pick up the 2.0.0
+  package (`COMPATIBILITY SameMajorVersion`).
+
+- **The test-only mock decoder is no longer compiled into the library.** The
+  recommended Release build used to ship a backend that intercepted any buffer
+  starting with `DE AD` and "decoded" it into a 1×1 image. Such a buffer now yields
+  `PH_ERR_UNSUPPORTED_FORMAT`.
+  *Restore the old behaviour:* configure with `-DPHASH_ENABLE_MOCK_BACKEND=ON` (OFF
+  by default, deliberately not tied to `PHASH_BUILD_TESTS`, and it warns at configure
+  time). It is for testing only and must not be enabled in a shipped build.
+
+- **Enabling both PNG backends is now a configure-time error.** `PHASH_USE_LIBPNG`
+  and `PHASH_USE_SPNG` are mutually exclusive; setting both used to silently pick one.
+  *Restore the old behaviour:* not applicable — choose one backend explicitly.
+
+### Added
+
+- **Batch API.** `ph_hash_files()` and `ph_hash_buffers()` hash a batch of files or
+  in-memory buffers, optionally across an internal thread pool (`threads`: 0 = one
+  worker per detected core, 1 = sequential on the calling thread, >1 = that many
+  workers). Per-item failures are reported in `ph_batch_item_t::status` /
+  `ph_batch_buffer_item_t::status` and never abort the batch; the return value
+  reports only failures that stopped the batch from being worked on at all.
+- **`ph_compute_multi()`** computes several `uint64_t` algorithms in one call,
+  selected by a `ph_hash_flags_t` bitmask, sharing the grayscale conversion across
+  them. Results are bit-for-bit identical to the individual `ph_compute_*` calls.
+- **`ph_load_from_pixels()`** hashes an already-decoded pixel buffer (OpenCV, PIL,
+  numpy, a video frame), skipping the encode/decode round-trip. Accepts 1, 3 or 4
+  channels and an arbitrary row stride.
+- **Hex and similarity helpers:** `ph_digest_to_hex()`, `ph_digest_from_hex()`,
+  `ph_hash_to_hex()`, `ph_similarity()`, `ph_similarity_digest()`.
+- **`ph_get_last_error_message()`** returns a short diagnostic string about the most
+  recent failure on a context (e.g. the decoder-reported reason a load failed).
+- **`ph_version_number()`** returns the version as one comparable integer, for FFI
+  callers that would otherwise parse the string.
+- **Specific error codes** replacing the old decode catch-all: `PH_ERR_IMAGE_TOO_LARGE`,
+  `PH_ERR_UNSUPPORTED_FORMAT`, `PH_ERR_CORRUPT_DATA`, `PH_ERR_DECODER_UNAVAILABLE`,
+  `PH_ERR_IO`, plus `PH_ERR_REQUIRES_COLOR`. `ph_error_t` now documents its ABI rule:
+  values are spelled out explicitly, new codes are only appended, and a removed
+  code's value stays retired.
+- **EXIF/metadata orientation support**, applied automatically by default (see
+  BREAKING CHANGES) and controllable via `ph_context_set_auto_orient()`. Orientation
+  is read from JPEG APP1, the WebP `EXIF` chunk and the PNG `eXIf` chunk. Missing or
+  malformed metadata is treated as "no transform needed", never as an error.
+- **`ph_context_set_max_pixels()`** — a decompression-bomb guard applied before any
+  pixel buffer is allocated. Defaults to 256 MP; exceeding it fails with
+  `PH_ERR_IMAGE_TOO_LARGE`.
+- **More input formats for free:** `stb_image` is now registered as an unconditional
+  last-resort decoder backend, adding BMP/GIF/TGA/PSD/HDR/PIC/PNM and covering
+  JPEG/PNG in builds without a native decoder for them. WebP is deliberately excluded
+  from the fallback so a WebP file in a build without `PHASH_USE_WEBP` reports
+  `PH_ERR_DECODER_UNAVAILABLE` precisely instead of failing generically. TIFF and
+  AVIF/HEIC remain unsupported.
+- **Packaging:** `install()` rules, a `phashConfig.cmake` package usable via
+  `find_package(phash)`, and a relocatable `libphash.pc` for pkg-config. The
+  generated `phash_version.h` is installed next to `libphash.h`, so consumers get a
+  compile-time version macro and not just the runtime `ph_version()`.
+- **`PHASH_USE_ZLIB_NG` build option** to build libpng/spng against zlib-ng.
+- **`PHASH_STRICT_DEPS` build option** turning the previously silent "TurboJPEG not
+  found, falling back to stb_image" and "zlib-ng submodule not found" warnings into
+  configure-time errors, so a green build actually proves the vendored decoders were
+  built and linked.
+- **Fuzzing and sanitizers:** a libFuzzer harness for the decode path
+  (`PHASH_BUILD_FUZZERS`) and ASan/UBSan CI jobs.
+- **CI across platforms:** Linux x86_64 (gcc and clang), Linux arm64 and macOS arm64
+  for the full build — so the NEON paths actually run — plus a minimal
+  (stb_image-only) matrix over Linux/macOS/Windows that exercises the MSVC path, an
+  `install()`/pkg-config/`find_package` smoke test, an `add_subdirectory()` smoke
+  test, and a benchmark job that gates on a regression against the base branch.
+- **A native linux/arm64 Docker development environment.**
+- **Tests:** a perceptual robustness suite and a golden-hash regression suite.
+
+### Changed
+
+- Vendored decoder submodules bumped to their latest stable tags.
+- The library version has a single source of truth: `project(libphash VERSION ...)`
+  in `CMakeLists.txt`, from which `phash_version.h` is generated. There are no
+  version literals in sources, scripts, CI or the README any more.
+- The Radial hash's scratch allocations moved onto the context arena, removing
+  per-call `malloc()`/`free()` traffic from the hot path.
+- Thread defaults now match across build systems, and `libphash.pc` is relocatable.
+- `make debug` and `make coverage` inherit `CFLAGS` instead of replacing it.
+- Documentation fix: the gamma setting affects the Radial hash and nothing else.
+  Its default of 2.2 is under review for a future release; it is deliberately not
+  changed in 2.0.0, since changing it would move Radial hashes.
+- The batch API validates its arguments *before* the `n == 0` shortcut, so an empty
+  batch no longer excuses a malformed call.
+- `PH_ERR_IO` is now reported for files that cannot be opened or read (missing,
+  permissions, not a regular file), instead of a generic decode failure.
+- Batch thread auto-detection on Windows is documented as covering only the current
+  processor group (at most 64 logical processors); pass an explicit thread count and
+  set affinity yourself if you need more.
+
+### Fixed
+
+- `ph_compute_phash()` returned a hash computed from **uninitialized memory** when
+  the DCT parameters were out of range; out-of-range parameters are now rejected.
+- Pixel counts were computed in `int` and could overflow (undefined behaviour); they
+  are computed in `size_t` now. This also closed a decompression-bomb hole in
+  `ph_load_from_pixels()`, which bypassed the pixel-limit check entirely.
+- Windows batch thread-pool wait was racy and undefined; the pool now joins its
+  workers correctly.
+- PNG decoder: `setjmp` is now armed *before* the info struct is created, so an early
+  libpng error no longer longjmps into an unprepared state.
+- PNG decoder: the `row_ptrs` allocation is now checked for overflow.
+- PNG decoder: a deliberate dimension cap is applied instead of raising libpng's own
+  user limit.
+- The spng backend did not honour grayscale decoding and returned RGB; it now decodes
+  to grayscale like the libpng backend.
+- `add_subdirectory()` no longer clobbers the parent project's settings, and works for
+  both static and shared parents. The zlib-ng block in particular used to leave a
+  `ZLIB_LIBRARY` pin behind in the parent's cache.
+- The exported CMake package declares its `Threads` dependency, so
+  `find_package(phash)` links correctly in a consumer project.
+- Fuzzer targets link correctly when built together with the tests.
+- A top-down BMP (legitimately negative height from `stbi_info`) was rejected as
+  `PH_ERR_IMAGE_TOO_LARGE` regardless of its actual size, because the signed height
+  was cast straight to `uint64_t`.
+- `ph_digest_from_hex()` accepted uppercase input as documented but this was never
+  tested; mismatched digest sizes in the comparison functions were also unchecked.
+- `make clean` removes stray `*.o` files left outside `obj/`.
+- UBSan alignment noise originating in the vendored `stb_image_resize2.h` is
+  suppressed, so the sanitizer output is actionable again.
+
+### Security
+
+- **Decompression bombs** are rejected before any pixel buffer is allocated, via a
+  configurable `max_pixels` limit (256 MP by default) plus an unconditional
+  `INT_MAX`-pixel implementation ceiling.
+- **Out-of-bounds read** in every public helper that reads a `ph_digest_t`: a
+  hand-assembled digest with `size > 64` read past the end of the struct. Now
+  rejected.
+- **Heap overflow / signed overflow** reachable through `max_pixels = 0` and through
+  `int` pixel-count arithmetic. Fixed by the ceiling and by `size_t` arithmetic.
+- **The mock decoder no longer ships in release builds.** It was registered ahead of
+  the real catch-all backend and intercepted any input beginning with `DE AD`.
+- **PNG decoder hardening:** overflow-checked `row_ptrs` allocation, a dimension cap,
+  and `setjmp` armed before the info struct exists.
+- The decode path is now fuzzed (libFuzzer) and built under ASan/UBSan in CI.
+
+## [1.10.4] - 2026-04-19
+
+### Changed
+
+- Version bump only; no functional change over 1.10.3.
+
+## [1.10.3] - 2026-04-19
+
+### Changed
+
+- Resizing moved to the vendored `stb_image_resize2`, with Lanczos as the filter;
+  the previous hand-written bilinear and mipmap resize paths were removed.
+- Vendored decoder submodules updated to stable tags.
+- THIRD-PARTY-NOTICES updated.
+
+## [1.10.2] - 2026-03-31
+
+### Fixed
+
+- wHash accuracy: switched to box resizing for better feature preservation.
+- `ph_median_bitpack()` computed the wrong median for even-sized arrays.
+
+## [1.10.1] - 2026-03-30
+
+### Changed
+
+- Version bump only; no functional change over 1.10.0.
+
+## [1.10.0] - 2026-03-30
+
+### Added
+
+- Native libwebp decoder backend.
+- `ph_get_error_string()` for human-readable error descriptions.
+- Unit tests for the hash algorithms and math-rigor tests for DCT, median and HSV
+  classification, bringing coverage above 95%.
+- CI with benchmark comparison.
+- THIRD-PARTY-NOTICES.
+
+### Changed
+
+- Complete modular reorganization of the sources (`src/hashes/`, `src/loaders/`,
+  `src/image/`).
+- SIMD optimizations for Linux and x86_64; Radial hash optimized and wHash modes
+  benchmarked.
+- The scratchpad is trimmed automatically to prevent unbounded memory growth.
+
+### Fixed
+
+- Several architectural and mathematical bugs across the hash algorithms.
+- Global AVX2 and LTO were reverted after they caused a performance regression.
+
+## [1.9.0] - 2026-02-23
+
+Earlier releases (1.0.0 – 1.9.0) predate this changelog. See the git history and the
+release tags for details.
+
+[Unreleased]: https://github.com/gudoshnikovn/libphash/compare/1.10.4...HEAD
+[2.0.0]: https://github.com/gudoshnikovn/libphash/compare/1.10.4...HEAD
+[1.10.4]: https://github.com/gudoshnikovn/libphash/compare/1.10.3...1.10.4
+[1.10.3]: https://github.com/gudoshnikovn/libphash/compare/1.10.2...1.10.3
+[1.10.2]: https://github.com/gudoshnikovn/libphash/compare/1.10.1...1.10.2
+[1.10.1]: https://github.com/gudoshnikovn/libphash/compare/1.10.0...1.10.1
+[1.10.0]: https://github.com/gudoshnikovn/libphash/compare/1.9.0...1.10.0
+[1.9.0]: https://github.com/gudoshnikovn/libphash/releases/tag/1.9.0
