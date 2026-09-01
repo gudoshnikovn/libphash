@@ -408,8 +408,26 @@ PH_API int ph_is_loaded(ph_context_t *ctx);
 
 /**
  * @brief Loads an image from a file path.
+ *
+ * The file is opened exactly once and its whole content is made available to the
+ * decoder in one piece — memory-mapped where the platform supports it, read into
+ * a heap buffer otherwise. Decoding, the @c max_pixels check and the EXIF
+ * orientation scan then all work on that one snapshot, so this call behaves
+ * exactly like reading the file yourself and calling @c ph_load_from_memory().
+ *
+ * @note Peak memory therefore includes the encoded file in addition to the
+ *       decoded image. For ordinary photographs the encoded bytes are a small
+ *       fraction of the decoded ones, but a caller that streams very large files
+ *       on a tight memory budget should be aware of it. Before 2.0.0 the file
+ *       was read incrementally in some build configurations — and opened up to
+ *       six times per call, which is what this replaced.
+ *
  * @param ctx The context.
  * @param filepath Path to the image file.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for a NULL argument;
+ *         @c PH_ERR_IO if the path cannot be opened or is not a readable,
+ *         non-empty regular file; otherwise the same decoding errors as
+ *         @c ph_load_from_memory().
  */
 PH_API PH_NODISCARD ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath);
 

@@ -26,15 +26,17 @@
 #include <unistd.h>
 #endif
 
-/* One spelling of "open a file read-only and stat the descriptor" for both
- * platforms, so the pre-decode probe below is a single piece of code rather than
- * a POSIX implementation and a Windows one that can drift apart. The Windows CRT
- * (_open/_fstat64/_close) is used rather than the Win32 API on purpose: it sets
- * errno the same way, which is what the diagnostic message is built from. */
+/* One spelling of "open a file read-only, stat the descriptor and read from it"
+ * for both platforms, so the file-loading path below is a single piece of code
+ * rather than a POSIX implementation and a Windows one that can drift apart. The
+ * Windows CRT (_open/_fstat64/_read/_close) is used rather than the Win32 API on
+ * purpose: it sets errno the same way, which is what the diagnostic message is
+ * built from. */
 #ifdef _WIN32
 typedef struct __stat64 ph_file_stat_t;
 #define PH_FILE_OPEN_RDONLY(path) _open((path), _O_RDONLY | _O_BINARY)
 #define PH_FILE_FSTAT(fd, st) _fstat64((fd), (st))
+#define PH_FILE_READ(fd, buf, n) _read((fd), (buf), (unsigned int)(n))
 #define PH_FILE_CLOSE(fd) _close(fd)
 #ifndef S_ISREG
 #define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
@@ -43,7 +45,19 @@ typedef struct __stat64 ph_file_stat_t;
 typedef struct stat ph_file_stat_t;
 #define PH_FILE_OPEN_RDONLY(path) open((path), O_RDONLY)
 #define PH_FILE_FSTAT(fd, st) fstat((fd), (st))
+#define PH_FILE_READ(fd, buf, n) read((fd), (buf), (n))
 #define PH_FILE_CLOSE(fd) close(fd)
+#endif
+
+/* Whether the file can be mapped instead of copied. Mapping is what makes a load
+ * cost one open() and no read() at all; the read-into-heap fallback in
+ * ph_open_file_bytes() covers the platforms that have no mmap (Windows) and the
+ * filesystems that refuse to map. Nothing outside these two helpers knows which
+ * of the two produced the bytes -- in particular, the mmap block is no longer
+ * tied to the PH_USE_* decoder macros, which used to make a Windows build with
+ * any native decoder enabled fail to compile on <sys/mman.h>. */
+#if !defined(_WIN32) && defined(_POSIX_MAPPED_FILES)
+#define PH_HAVE_MMAP 1
 #endif
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -365,20 +379,6 @@ uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size) {
     return ptr;
 }
 
-/* stb_image is the last-resort fallback for anything the native backends didn't
- * recognize/handle; classify its terse failure reason into one of our specific
- * error codes instead of one generic code for every cause (the old catch-all,
- * PH_ERR_DECODE_FAILED, was removed in 2.0.0 -- see include/libphash.h). */
-static ph_error_t ph_classify_stb_failure(ph_context_t *ctx) {
-    const char *reason = stbi_failure_reason();
-    if (reason) {
-        ph_set_err_msg(ctx->last_error, sizeof(ctx->last_error), reason);
-        if (strcmp(reason, "unknown image type") == 0)
-            return PH_ERR_UNSUPPORTED_FORMAT;
-    }
-    return PH_ERR_CORRUPT_DATA;
-}
-
 /* Picks the right EXIF-orientation scanner for the encoded (still-compressed)
  * bytes based on magic, or reports "no transform needed" (1) for anything else. */
 static int ph_scan_orientation(const uint8_t *data, size_t len) {
@@ -442,210 +442,216 @@ static ph_error_t ph_check_open_file(int fd, const char *filepath, long long *ou
     return PH_SUCCESS;
 }
 
-/* Opens the path once and classifies everything that makes it unusable as an
- * image source before any decoder sees it, so that "I could not read this file"
- * is reported as PH_ERR_IO instead of surfacing later as an unrecognized format.
- * The descriptor is closed again -- this is a probe, not the read path. */
-static ph_error_t ph_probe_input_file(const char *filepath, char *err_buf, size_t err_len) {
+/* --- Getting the encoded bytes of a file, with exactly one open() -------------
+ *
+ * A read-only view of a file's contents: either a mapping of the file (the normal
+ * case) or a heap copy of it (the fallback). `mapped` says which one it is, i.e.
+ * how it has to be released; nothing above this layer needs to care. */
+typedef struct {
+    const uint8_t *data;
+    size_t length;
+    int mapped;
+} ph_file_bytes_t;
+
+static void ph_release_file_bytes(ph_file_bytes_t *fb) {
+    if (!fb->data)
+        return;
+#ifdef PH_HAVE_MMAP
+    if (fb->mapped) {
+        munmap((void *)(uintptr_t)fb->data, fb->length);
+        fb->data = NULL;
+        fb->length = 0;
+        return;
+    }
+#endif
+    free((void *)(uintptr_t)fb->data);
+    fb->data = NULL;
+    fb->length = 0;
+}
+
+/* Fallback when the file cannot be mapped: read all of it through the descriptor
+ * that is already open, so this still costs no extra open(). A short read is not
+ * an error -- the file may legitimately have shrunk since the fstat() above, and
+ * whatever bytes did arrive are handed to the decoder, which is the one that gets
+ * to say whether they form an image. */
+static ph_error_t ph_read_open_file(int fd, const char *filepath, size_t size, ph_file_bytes_t *out,
+                                    char *err_buf, size_t err_len) {
+    char msg[PH_LAST_ERROR_MAX];
+    uint8_t *buf = (uint8_t *)malloc(size);
+    if (!buf) {
+        snprintf(msg, sizeof(msg), "Cannot read '%s': out of memory for %llu bytes", filepath,
+                 (unsigned long long)size);
+        ph_set_err_msg(err_buf, err_len, msg);
+        return PH_ERR_ALLOCATION_FAILED;
+    }
+
+    size_t got = 0;
+    while (got < size) {
+        size_t want = size - got;
+        /* One chunk stays well inside the signed return type of read()/_read()
+         * on every platform, including a 32-bit one. */
+        if (want > (size_t)16 * 1024 * 1024)
+            want = (size_t)16 * 1024 * 1024;
+        long long n = (long long)PH_FILE_READ(fd, buf + got, want);
+        if (n < 0) {
+            if (errno == EINTR)
+                continue;
+            snprintf(msg, sizeof(msg), "Cannot read '%s': %s", filepath, strerror(errno));
+            ph_set_err_msg(err_buf, err_len, msg);
+            free(buf);
+            return PH_ERR_IO;
+        }
+        if (n == 0)
+            break; /* EOF earlier than fstat() promised */
+        got += (size_t)n;
+    }
+
+    if (got == 0) {
+        snprintf(msg, sizeof(msg), "Cannot read '%s': file is empty", filepath);
+        ph_set_err_msg(err_buf, err_len, msg);
+        free(buf);
+        return PH_ERR_IO;
+    }
+
+    out->data = buf;
+    out->length = got;
+    out->mapped = 0;
+    return PH_SUCCESS;
+}
+
+/* Opens the path exactly ONCE and hands back all of its bytes.
+ *
+ * This used to be spread over as many as six openings of the same path -- a
+ * probe, a magic-byte sniff, an mmap attempt, stbi_info(), stbi_load() and a
+ * final full re-read just to scan for an EXIF tag. Besides being pure I/O
+ * overhead on the hottest path in the library, that meant every one of those
+ * steps looked at a potentially different file (TOCTOU): the path could be
+ * replaced between the probe that accepted it and the read that decoded it.
+ * One open, one set of bytes, and everything downstream -- format dispatch,
+ * pixel-limit check, decode, orientation scan -- works on that one snapshot.
+ *
+ * Everything that makes a path unusable as an image source is classified here,
+ * before any decoder sees it, so "I could not read this file" is reported as
+ * PH_ERR_IO instead of surfacing later as an unrecognized image format. */
+static ph_error_t ph_open_file_bytes(const char *filepath, ph_file_bytes_t *out, char *err_buf,
+                                     size_t err_len) {
+    out->data = NULL;
+    out->length = 0;
+    out->mapped = 0;
+
     int fd = PH_FILE_OPEN_RDONLY(filepath);
     if (fd < 0)
         return ph_report_file_open_failure(filepath, errno, err_buf, err_len);
-    ph_error_t err = ph_check_open_file(fd, filepath, NULL, err_buf, err_len);
+
+    long long size = 0;
+    ph_error_t err = ph_check_open_file(fd, filepath, &size, err_buf, err_len);
+    if (err != PH_SUCCESS) {
+        PH_FILE_CLOSE(fd);
+        return err;
+    }
+
+    /* Only reachable where size_t is narrower than off_t (a 32-bit build looking
+     * at a >4 GB file). Neither mapping nor reading it can work. */
+    if ((unsigned long long)size > (unsigned long long)SIZE_MAX) {
+        char msg[PH_LAST_ERROR_MAX];
+        snprintf(msg, sizeof(msg), "Cannot read '%s': file is too large to load into memory",
+                 filepath);
+        ph_set_err_msg(err_buf, err_len, msg);
+        PH_FILE_CLOSE(fd);
+        return PH_ERR_IO;
+    }
+
+#ifdef PH_HAVE_MMAP
+    void *mapped = mmap(NULL, (size_t)size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (mapped != MAP_FAILED) {
+#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
+        posix_madvise(mapped, (size_t)size, POSIX_MADV_SEQUENTIAL);
+#endif
+        /* The mapping keeps the file alive on its own; the descriptor is not
+         * needed past this point. */
+        PH_FILE_CLOSE(fd);
+        out->data = (const uint8_t *)mapped;
+        out->length = (size_t)size;
+        out->mapped = 1;
+        return PH_SUCCESS;
+    }
+#endif
+
+    err = ph_read_open_file(fd, filepath, (size_t)size, out, err_buf, err_len);
     PH_FILE_CLOSE(fd);
     return err;
+}
+
+/* Drops whatever image the context is holding. Both load entry points call this
+ * first, so a failed load never leaves the previously loaded image visible. */
+static void ph_reset_loaded_image(ph_context_t *ctx) {
+    ctx->last_error[0] = '\0';
+    if (ctx->image.raw_rgb)
+        ph_free_image(ctx->image.raw_rgb);
+    ctx->image.raw_rgb = NULL;
+    ctx->image.is_loaded = 0;
+    if (ctx->image.gray_cache) {
+        free(ctx->image.gray_cache);
+        ctx->image.gray_cache = NULL;
+    }
+}
+
+/* The one decode path. Both ph_load_from_file() and ph_load_from_memory() reach
+ * the decoders through this, which is what makes backend dispatch, the
+ * pixel-count limit, error classification and EXIF auto-orientation identical for
+ * a file and for a buffer -- auto-orientation in particular used to be applied on
+ * the file path only in some build configurations. */
+static ph_error_t ph_load_encoded_bytes(ph_context_t *ctx, const uint8_t *data, size_t length) {
+    int req_comp = ctx->config.load_grayscale ? 1 : 0;
+    int w = 0, h = 0, ch = 0;
+    ph_error_t decode_err = PH_SUCCESS;
+
+    uint8_t *decoded = ph_decode_buffer(data, length, &w, &h, &ch, req_comp, ctx->config.max_pixels,
+                                        &decode_err, ctx->last_error, sizeof(ctx->last_error));
+    if (!decoded) {
+        /* ph_decode_buffer() resolves a non-empty buffer to either decoded data
+         * or a specific error (its last-resort stb_image backend claims anything
+         * not already claimed, except WebP without PH_USE_WEBP, which it reports
+         * itself), so the fallback below is belt-and-braces: never report success
+         * without an image. */
+        return (decode_err != PH_SUCCESS) ? decode_err : PH_ERR_CORRUPT_DATA;
+    }
+
+    ctx->image.raw_rgb = decoded;
+    ctx->image.width = w;
+    ctx->image.height = h;
+    ctx->image.channels = ch;
+    ctx->image.is_loaded = 1;
+
+    if (ctx->config.auto_orient) {
+        int orientation = ph_scan_orientation(data, length);
+        if (orientation != 1)
+            ph_apply_exif_orientation(&ctx->image.raw_rgb, &ctx->image.width, &ctx->image.height,
+                                      ctx->image.channels, orientation);
+    }
+    return PH_SUCCESS;
 }
 
 PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
     if (!ctx || !filepath)
         return PH_ERR_INVALID_ARGUMENT;
-    ctx->last_error[0] = '\0';
-    if (ctx->image.raw_rgb)
-        ph_free_image(ctx->image.raw_rgb);
-    ctx->image.raw_rgb = NULL;
-    ctx->image.is_loaded = 0;
-    if (ctx->image.gray_cache) {
-        free(ctx->image.gray_cache);
-        ctx->image.gray_cache = NULL;
-    }
+    ph_reset_loaded_image(ctx);
 
-    // Distinguish "can't even read this path" from a decode failure up front, for
-    // both the native-decoder and stb_image-only builds below, and identically on
-    // every platform -- consumers (bindings in particular) map PH_ERR_IO to their
-    // own I/O exception and cannot do that if the code depends on the OS.
-    {
-        ph_error_t probe_err =
-            ph_probe_input_file(filepath, ctx->last_error, sizeof(ctx->last_error));
-        if (probe_err != PH_SUCCESS)
-            return probe_err;
-    }
+    ph_file_bytes_t bytes;
+    ph_error_t err = ph_open_file_bytes(filepath, &bytes, ctx->last_error, sizeof(ctx->last_error));
+    if (err != PH_SUCCESS)
+        return err;
 
-#ifndef PH_USE_WEBP
-    // Report "recognized but unavailable" precisely even in a build with no native
-    // decoders at all, where the mmap+ph_decode_buffer path below is compiled out
-    // entirely and would otherwise silently fall through to stb_image (which has
-    // no WebP support either) and report a misleading PH_ERR_UNSUPPORTED_FORMAT.
-    {
-        FILE *probe = fopen(filepath, "rb");
-        if (probe) {
-            uint8_t magic[12];
-            size_t n = fread(magic, 1, sizeof(magic), probe);
-            fclose(probe);
-            if (ph_magic_is_webp(magic, n)) {
-                ph_set_err_msg(ctx->last_error, sizeof(ctx->last_error),
-                               "WebP support was not compiled into this build (PH_USE_WEBP)");
-                return PH_ERR_DECODER_UNAVAILABLE;
-            }
-        }
-    }
-#endif
-
-#if defined(PH_USE_TURBOJPEG) || defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG) ||                 \
-    defined(PH_USE_WEBP)
-    // mmap the file for zero-copy decoding with bundled static decoders
-    int fd = open(filepath, O_RDONLY);
-    if (fd >= 0) {
-        struct stat st;
-        if (fstat(fd, &st) == 0 && st.st_size > 8) {
-            void *mapped = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-            if (mapped != MAP_FAILED) {
-#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
-                posix_madvise(mapped, st.st_size, POSIX_MADV_SEQUENTIAL);
-#endif
-                const unsigned char *data = (const unsigned char *)mapped;
-                int req_comp_opt = ctx->config.load_grayscale ? 1 : 0;
-                int w, h, ch;
-                ph_error_t decode_err = PH_SUCCESS;
-                uint8_t *decoded_data = ph_decode_buffer(
-                    data, (size_t)st.st_size, &w, &h, &ch, req_comp_opt, ctx->config.max_pixels,
-                    &decode_err, ctx->last_error, sizeof(ctx->last_error));
-
-                // Scan the still-mmap'd compressed bytes for orientation metadata
-                // before unmapping them below.
-                int orientation = 1;
-                if (decoded_data && ctx->config.auto_orient)
-                    orientation = ph_scan_orientation(data, (size_t)st.st_size);
-
-                munmap(mapped, st.st_size);
-                close(fd);
-
-                if (decoded_data) {
-                    ctx->image.raw_rgb = decoded_data;
-                    ctx->image.width = w;
-                    ctx->image.height = h;
-                    ctx->image.channels = ch;
-                    ctx->image.is_loaded = 1;
-                    if (orientation != 1)
-                        ph_apply_exif_orientation(&ctx->image.raw_rgb, &ctx->image.width,
-                                                  &ctx->image.height, ctx->image.channels,
-                                                  orientation);
-                    return PH_SUCCESS;
-                }
-                // A native backend recognized the format and gave a definitive answer
-                // (too large / corrupt / unavailable) — trust it over trying stb_image.
-                if (decode_err != PH_SUCCESS)
-                    return decode_err;
-            } else {
-                close(fd);
-            }
-        } else {
-            close(fd);
-        }
-    }
-#endif // PH_USE_TURBOJPEG || PH_USE_LIBPNG || PH_USE_SPNG || PH_USE_WEBP
-
-    if (ctx->config.max_pixels != 0) {
-        int iw, ih, icomp;
-        // stbi_info reports height as a signed int, and a top-down BMP
-        // legitimately has a negative height in its header -- casting that
-        // straight to uint64_t would wrap to a huge value and reject a
-        // perfectly small image (see the equivalent ph_abs_dim() in loader.c).
-        if (stbi_info(filepath, &iw, &ih, &icomp) &&
-            ph_exceeds_pixel_limit((uint64_t)(iw < 0 ? -(int64_t)iw : iw),
-                                   (uint64_t)(ih < 0 ? -(int64_t)ih : ih),
-                                   ctx->config.max_pixels)) {
-            return PH_ERR_IMAGE_TOO_LARGE;
-        }
-    }
-
-    int req_comp = ctx->config.load_grayscale ? 1 : 0;
-    ctx->image.raw_rgb =
-        stbi_load(filepath, &ctx->image.width, &ctx->image.height, &ctx->image.channels, req_comp);
-    if (!ctx->image.raw_rgb)
-        return ph_classify_stb_failure(ctx);
-
-    // If we requested specific channels, update the struct to reflect that
-    if (req_comp != 0) {
-        ctx->image.channels = req_comp;
-    }
-
-    if (ctx->config.auto_orient) {
-        // No mmap'd buffer available on this path (stb_image reads by path
-        // itself), so re-read the raw bytes just to scan for the tag.
-        FILE *f = fopen(filepath, "rb");
-        if (f) {
-            fseek(f, 0, SEEK_END);
-            long sz = ftell(f);
-            fseek(f, 0, SEEK_SET);
-            if (sz > 0) {
-                uint8_t *raw = (uint8_t *)malloc((size_t)sz);
-                if (raw && fread(raw, 1, (size_t)sz, f) == (size_t)sz) {
-                    int orientation = ph_scan_orientation(raw, (size_t)sz);
-                    if (orientation != 1)
-                        ph_apply_exif_orientation(&ctx->image.raw_rgb, &ctx->image.width,
-                                                  &ctx->image.height, ctx->image.channels,
-                                                  orientation);
-                }
-                free(raw);
-            }
-            fclose(f);
-        }
-    }
-
-    ctx->image.is_loaded = 1;
-    return PH_SUCCESS;
+    err = ph_load_encoded_bytes(ctx, bytes.data, bytes.length);
+    ph_release_file_bytes(&bytes);
+    return err;
 }
 
 PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, size_t length) {
     if (!ctx || !buffer || length == 0)
         return PH_ERR_INVALID_ARGUMENT;
-    ctx->last_error[0] = '\0';
-    if (ctx->image.raw_rgb)
-        ph_free_image(ctx->image.raw_rgb);
-    ctx->image.raw_rgb = NULL;
-    ctx->image.is_loaded = 0;
-    if (ctx->image.gray_cache) {
-        free(ctx->image.gray_cache);
-        ctx->image.gray_cache = NULL;
-    }
-
-    int req_comp = ctx->config.load_grayscale ? 1 : 0;
-
-    // Try unified decoder first
-    int w, h, ch;
-    ph_error_t decode_err = PH_SUCCESS;
-    uint8_t *decoded_data =
-        ph_decode_buffer(buffer, length, &w, &h, &ch, req_comp, ctx->config.max_pixels, &decode_err,
-                         ctx->last_error, sizeof(ctx->last_error));
-    if (decoded_data) {
-        ctx->image.raw_rgb = decoded_data;
-        ctx->image.width = w;
-        ctx->image.height = h;
-        ctx->image.channels = ch;
-        ctx->image.is_loaded = 1;
-        if (ctx->config.auto_orient) {
-            int orientation = ph_scan_orientation(buffer, length);
-            if (orientation != 1)
-                ph_apply_exif_orientation(&ctx->image.raw_rgb, &ctx->image.width,
-                                          &ctx->image.height, ctx->image.channels, orientation);
-        }
-        return PH_SUCCESS;
-    }
-    // ph_decode_buffer() always resolves a non-empty buffer to either decoded
-    // data or a specific error now (its last-resort stb_image backend claims
-    // anything not already claimed, except WebP without PH_USE_WEBP, which the
-    // WebP-unavailable check inside ph_decode_buffer itself covers) -- so
-    // decode_err is never PH_SUCCESS here.
-    return decode_err;
+    ph_reset_loaded_image(ctx);
+    return ph_load_encoded_bytes(ctx, buffer, length);
 }
 
 PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels, int width,
