@@ -2,6 +2,7 @@
 #define INTERNAL_H
 
 #include "libphash.h"
+#include <limits.h>
 #include <stdint.h>
 
 /*
@@ -170,16 +171,39 @@ static inline int ph_safe_image_alloc_size(uint64_t w, uint64_t h, uint64_t chan
     return 1;
 }
 
-/* Returns 1 if decoding a w x h image is disallowed by max_pixels (0 = unlimited).
+/* Hard ceiling on width * height that the implementation can process correctly,
+ * independent of any user-configured max_pixels.
+ *
+ * Pixel *indexing* is still done in `int` across the hot loops (`y * w + x` in
+ * image/filters.c, image/orient.c, hashes/radial.c, hashes/whash.c, hashes/phash.c),
+ * so an image with more than INT_MAX pixels overflows those index computations --
+ * signed overflow, i.e. undefined behaviour. Rather than leaving that reachable in a
+ * documented mode, the library refuses such images outright. The default max_pixels
+ * (256 MP) is eight times below this ceiling, so the ceiling only ever comes into play
+ * when a caller deliberately raises or disables the limit.
+ *
+ * Raising this ceiling means converting that index arithmetic to size_t everywhere,
+ * SIMD paths included -- see tasks/review/R48. */
+#define PH_MAX_SUPPORTED_PIXELS ((uint64_t)INT_MAX)
+
+/* Returns 1 if decoding a w x h image is disallowed.
+ *
+ * Two limits apply, and the stricter one wins:
+ *   - the caller's max_pixels, where 0 means "no limit of my own";
+ *   - PH_MAX_SUPPORTED_PIXELS, which always applies -- including when max_pixels is 0
+ *     or set above it. `0` therefore means "the implementation's limit", not "no limit".
  *
  * Contract (L4): `w` and `h` must each fit in 32 bits. Every caller feeds it either an
  * `int` dimension (already made non-negative -- see ph_abs_dim()) or a `png_uint_32`,
  * so `w * h` is at most 2^64 - 2^33 + 1 and cannot wrap the uint64_t product. Do NOT
  * call this with values wider than 32 bits without adding an overflow check first. */
 static inline int ph_exceeds_pixel_limit(uint64_t w, uint64_t h, uint64_t max_pixels) {
+    uint64_t pixels = w * h;
+    if (pixels > PH_MAX_SUPPORTED_PIXELS)
+        return 1;
     if (max_pixels == 0)
         return 0;
-    return w * h > max_pixels;
+    return pixels > max_pixels;
 }
 
 /* Truncating copy into a fixed-size diagnostic buffer (err_msg may be NULL/zero-size,
@@ -227,7 +251,8 @@ struct ph_context {
         int block_size;
         ph_whash_mode_t whash_mode;
 
-        // 0 = unlimited; otherwise max allowed width*height before decoding a pixel buffer.
+        // 0 = no caller limit; PH_MAX_SUPPORTED_PIXELS still applies. Otherwise the max
+        // allowed width*height before decoding a pixel buffer.
         uint64_t max_pixels;
     } config;
 

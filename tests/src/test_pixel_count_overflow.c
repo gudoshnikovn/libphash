@@ -195,9 +195,12 @@ void test_load_from_pixels_unlimited(void) {
     ASSERT_OK(ph_create(&ctx));
     ph_context_set_max_pixels(ctx, 0);
 
-    /* w*h overflows int (and 2^62 bytes overflows nothing but the allocator). */
-    ASSERT_INT_EQ(PH_ERR_ALLOCATION_FAILED,
-                  ph_load_from_pixels(ctx, &probe, INT_MAX, INT_MAX, 1, 0));
+    /* Since R48, max_pixels = 0 means "no limit of MY own", not "no limit at all":
+     * the implementation ceiling of INT_MAX pixels still applies, and an image above
+     * it is refused as too large rather than attempted. Before R48 this reached the
+     * allocator (PH_ERR_ALLOCATION_FAILED) -- or, on a host that served the request,
+     * overflowed int index arithmetic. */
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_pixels(ctx, &probe, INT_MAX, INT_MAX, 1, 0));
     ASSERT_INT_EQ(0, ph_is_loaded(ctx));
 
     /* Unlimited still accepts an ordinary image. */
@@ -207,6 +210,77 @@ void test_load_from_pixels_unlimited(void) {
 
     ph_free(ctx);
     PASS("test_load_from_pixels_unlimited");
+}
+
+/* R48: the PH_MAX_SUPPORTED_PIXELS ceiling applies uniformly -- to max_pixels = 0
+ * ("no caller limit") and to an explicitly configured value above it. Without it,
+ * `y * w + x` in the hot loops overflows int, which is undefined behaviour reachable
+ * through a documented configuration. */
+void test_implementation_ceiling_applies_uniformly(void) {
+    uint8_t probe = 0;
+    /* 46342^2 = 2147580964 > INT_MAX (2147483647); 46341^2 = 2147488281 also just
+     * above it. Both are the smallest square dimensions that cross the ceiling. */
+    const int over = 46342;
+    ph_context_t *ctx = NULL;
+
+    ASSERT_OK(ph_create(&ctx));
+
+    /* (a) explicit limit set far ABOVE the ceiling must not raise it */
+    ph_context_set_max_pixels(ctx, (uint64_t)1 << 40);
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_pixels(ctx, &probe, over, over, 1, 0));
+    ASSERT_INT_EQ(0, ph_is_loaded(ctx));
+
+    /* (b) 0 ("no caller limit") must not raise it either */
+    ph_context_set_max_pixels(ctx, 0);
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_pixels(ctx, &probe, over, over, 1, 0));
+    ASSERT_INT_EQ(0, ph_is_loaded(ctx));
+
+    /* (c) a stricter caller limit still wins over the ceiling */
+    ph_context_set_max_pixels(ctx, 64);
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_pixels(ctx, &probe, 16, 16, 1, 0));
+
+    /* (d) and the ceiling does not get in the way of ordinary images */
+    uint8_t px[4 * 4];
+    memset(px, 0x7f, sizeof(px));
+    ph_context_set_max_pixels(ctx, 0);
+    ASSERT_OK(ph_load_from_pixels(ctx, px, 4, 4, 1, 0));
+    ASSERT_INT_EQ(1, ph_is_loaded(ctx));
+
+    ph_free(ctx);
+    PASS("test_implementation_ceiling_applies_uniformly");
+}
+
+/* The ceiling limits width * height, not either dimension on its own: a very wide,
+ * one-pixel-tall image is fine, which is also the shape a decompression bomb takes
+ * (see M1 -- 268435456 x 1).
+ *
+ * Note this cannot be probed with a stub buffer the way the "too large" cases can:
+ * ph_load_from_pixels() takes no buffer length, so it must trust the caller's
+ * dimensions and will read w*h*channels bytes. Anything expected to SUCCEED therefore
+ * needs a real buffer of that size. */
+void test_ceiling_is_on_area_not_dimension(void) {
+    const int wide = 1 << 20; /* 1048576 x 1: far past any single-dimension intuition */
+    uint8_t probe = 0;
+    ph_context_t *ctx = NULL;
+    uint8_t *row = malloc((size_t)wide);
+
+    ASSERT_PTR_NOT_NULL(row);
+    memset(row, 0x40, (size_t)wide);
+
+    ASSERT_OK(ph_create(&ctx));
+    ph_context_set_max_pixels(ctx, 0);
+
+    /* Extreme aspect ratio, area well under the ceiling -> accepted. */
+    ASSERT_OK(ph_load_from_pixels(ctx, row, wide, 1, 1, 0));
+    ASSERT_INT_EQ(1, ph_is_loaded(ctx));
+
+    /* Same width, but an area past the ceiling -> refused before any pixel is touched,
+     * so a stub buffer is safe here. */
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_pixels(ctx, &probe, INT_MAX, 2, 1, 0));
+
+    ph_free(ctx);
+    free(row);
+    PASS("test_ceiling_is_on_area_not_dimension");
 }
 
 /* The size_t rewrite of ph_to_grayscale() must not let the SIMD tail condition
@@ -233,6 +307,8 @@ int main(void) {
     test_load_from_pixels_respects_max_pixels();
     test_load_from_pixels_default_limit();
     test_load_from_pixels_unlimited();
+    test_implementation_ceiling_applies_uniformly();
+    test_ceiling_is_on_area_not_dimension();
     test_tiny_images_grayscale();
     printf("ALL PIXEL-COUNT OVERFLOW TESTS PASSED\n");
     return 0;

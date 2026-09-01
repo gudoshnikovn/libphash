@@ -260,11 +260,21 @@ PH_API void ph_context_set_auto_orient(ph_context_t *ctx, int enable);
  *        decompression-bomb inputs (a small file that declares an enormous image size).
  *
  * @param ctx The context.
- * @param max_pixels Maximum width*height allowed. 0 disables the check entirely
- *                    (unlimited). Defaults to 256 * 1024 * 1024 (256 megapixels).
+ * @param max_pixels Maximum width*height allowed. Defaults to 256 * 1024 * 1024
+ *                    (256 megapixels). 0 means "no limit of my own" -- see the note
+ *                    below on the implementation ceiling; it is not truly unlimited.
  *
  * @note Loading an image that exceeds the limit fails with PH_ERR_IMAGE_TOO_LARGE
  *       instead of attempting the allocation.
+ *
+ * @note Since 2.0.0 an implementation ceiling of INT_MAX (2147483647) pixels always
+ *       applies, whichever value is set here: a larger `max_pixels`, and `0`, are both
+ *       capped by it, and an image above it is rejected with PH_ERR_IMAGE_TOO_LARGE.
+ *       Pixel indexing inside the library is done in `int`, so a larger image would
+ *       overflow it. Before 2.0.0, `0` disabled the check outright and such an image
+ *       caused undefined behaviour and a heap overflow rather than an error. The
+ *       default limit is eight times below the ceiling, so this only affects callers
+ *       that deliberately raise or disable the limit.
  */
 PH_API void ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixels);
 
