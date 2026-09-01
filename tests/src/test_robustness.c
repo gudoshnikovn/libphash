@@ -147,16 +147,16 @@ static void hashes_of(const rgb_image_t *img, uint64_t out[PH_HASH_FLAGS_COUNT])
     ph_context_t *ctx;
     ASSERT_OK(ph_create(&ctx));
     ASSERT_OK(ph_load_from_pixels(ctx, img->pixels, img->w, img->h, 3, 0));
-    uint32_t flags = PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH |
-                     PH_HASH_MHASH | PH_HASH_COLOR_HASH;
+    uint32_t flags = PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_MHASH |
+                     PH_HASH_COLOR_HASH;
     ASSERT_OK(ph_compute_multi(ctx, flags, out));
     ph_free(ctx);
 }
 
 // out[] layout matches PH_HASH_FLAGS_COUNT / ph_compute_multi's ascending-bit
 // order: [aHash, dHash, pHash, wHash, mHash, ColorHash].
-static const char *ALGO_NAMES[PH_HASH_FLAGS_COUNT] = {"aHash", "dHash",     "pHash",
-                                                       "wHash", "mHash", "ColorHash"};
+static const char *ALGO_NAMES[PH_HASH_FLAGS_COUNT] = {"aHash", "dHash", "pHash",
+                                                      "wHash", "mHash", "ColorHash"};
 
 // Contract thresholds (out of 64 bits), per algorithm: a same-scene transform
 // must stay at or under MAX_SIMILAR_DIST[algo], distinct images must clear
@@ -178,7 +178,7 @@ static const int MAX_SIMILAR_DIST[PH_HASH_FLAGS_COUNT] = {
 #define MIN_DIFFERENT_DIST 8
 
 static void assert_similar(const char *label, const uint64_t base[PH_HASH_FLAGS_COUNT],
-                            const uint64_t variant[PH_HASH_FLAGS_COUNT]) {
+                           const uint64_t variant[PH_HASH_FLAGS_COUNT]) {
     for (int i = 0; i < PH_HASH_FLAGS_COUNT; i++) {
         int dist = ph_hamming_distance(base[i], variant[i]);
         if (dist > MAX_SIMILAR_DIST[i]) {

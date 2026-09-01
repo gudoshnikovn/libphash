@@ -4,7 +4,7 @@
 #include <string.h>
 
 /* Every combination of the 6 ph_hash_flags_t bits, including the empty and full sets. */
-#define ALL_FLAGS_MASK                                                                            \
+#define ALL_FLAGS_MASK                                                                             \
     (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_MHASH |               \
      PH_HASH_COLOR_HASH)
 

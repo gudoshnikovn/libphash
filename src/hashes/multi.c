@@ -1,11 +1,12 @@
 #include "internal.h"
 
-#define PH_HASH_FLAGS_ALL                                                                        \
-    (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_MHASH |              \
+#define PH_HASH_FLAGS_ALL                                                                          \
+    (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_MHASH |               \
      PH_HASH_COLOR_HASH)
 
 PH_API ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flags, uint64_t out[]) {
-    if (!ctx || !ctx->image.is_loaded || !out || flags == 0 || (flags & ~(uint32_t)PH_HASH_FLAGS_ALL)) {
+    if (!ctx || !ctx->image.is_loaded || !out || flags == 0 ||
+        (flags & ~(uint32_t)PH_HASH_FLAGS_ALL)) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 

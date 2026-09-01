@@ -69,8 +69,8 @@ void test_load_from_pixels_padded_stride() {
     ASSERT_OK(ph_create(&tight_ctx));
     ASSERT_OK(ph_load_from_pixels(tight_ctx, tight, w, h, ch, 0));
 
-    ASSERT_INT_EQ(0, memcmp(padded_ctx->image.raw_rgb, tight_ctx->image.raw_rgb,
-                            (size_t)w * h * ch));
+    ASSERT_INT_EQ(0,
+                  memcmp(padded_ctx->image.raw_rgb, tight_ctx->image.raw_rgb, (size_t)w * h * ch));
 
     free(padded);
     free(tight);
@@ -126,8 +126,10 @@ void test_load_from_pixels_invalid_arguments() {
     ASSERT(ph_load_from_pixels(ctx, buf, 0, 4, 3, 0) == PH_ERR_INVALID_ARGUMENT);
     ASSERT(ph_load_from_pixels(ctx, buf, 4, 0, 3, 0) == PH_ERR_INVALID_ARGUMENT);
     ASSERT(ph_load_from_pixels(ctx, buf, -1, 4, 3, 0) == PH_ERR_INVALID_ARGUMENT);
-    ASSERT(ph_load_from_pixels(ctx, buf, 4, 4, 2, 0) == PH_ERR_INVALID_ARGUMENT); /* unsupported channels */
-    ASSERT(ph_load_from_pixels(ctx, buf, 4, 4, 3, 5) == PH_ERR_INVALID_ARGUMENT); /* stride < width*channels */
+    ASSERT(ph_load_from_pixels(ctx, buf, 4, 4, 2, 0) ==
+           PH_ERR_INVALID_ARGUMENT); /* unsupported channels */
+    ASSERT(ph_load_from_pixels(ctx, buf, 4, 4, 3, 5) ==
+           PH_ERR_INVALID_ARGUMENT); /* stride < width*channels */
     ASSERT(ph_load_from_pixels(ctx, buf, 4, 4, 3, -1) == PH_ERR_INVALID_ARGUMENT);
 
     ph_free(ctx);

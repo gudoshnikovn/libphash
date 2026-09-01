@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 /* Every combination of the 6 ph_hash_flags_t bits, including the empty and full sets. */
-#define ALL_FLAGS_MASK                                                                            \
+#define ALL_FLAGS_MASK                                                                             \
     (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_MHASH |               \
      PH_HASH_COLOR_HASH)
 
@@ -97,8 +97,7 @@ static void test_multi_invalid_args() {
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_compute_multi(ctx, 0, out));
 
     /* Unknown bit set alongside a valid one. */
-    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
-                  ph_compute_multi(ctx, PH_HASH_AHASH | (1u << 31), out));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_compute_multi(ctx, PH_HASH_AHASH | (1u << 31), out));
 
     ph_free(ctx);
     PASS("test_multi_invalid_args");

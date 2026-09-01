@@ -11,8 +11,8 @@
 #endif
 #endif
 
-#define PH_HASH_FLAGS_ALL                                                                        \
-    (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_MHASH |              \
+#define PH_HASH_FLAGS_ALL                                                                          \
+    (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_MHASH |               \
      PH_HASH_COLOR_HASH)
 
 static int ph_flags_are_valid(uint32_t flags) {
@@ -124,8 +124,7 @@ static int ph_detect_num_cores(void) {
 }
 
 static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, size_t n,
-                                        uint32_t flags, ph_batch_process_fn process,
-                                        int nthreads) {
+                                        uint32_t flags, ph_batch_process_fn process, int nthreads) {
     ph_batch_shared_t shared = {
         .items_base = (uint8_t *)items_base,
         .item_stride = item_stride,

@@ -214,11 +214,10 @@ void test_orientation_degrades_gracefully(void) {
     ASSERT_INT_EQ(1, ph_exif_orientation_from_png(garbage, sizeof(garbage)));
 
     // PNG with no eXIf chunk (just IHDR then IEND).
-    uint8_t no_exif_png[] = {0x89, 'P',  'N',  'G',  '\r', '\n', 0x1A, '\n', 0x00, 0x00,
-                            0x00, 0x0D, 'I',  'H',  'D',  'R',  0,    0,    0,    0,
-                            0,    0,    0,    0,    0,    0,    0,    0,    0,    0,
-                            0,    0,    0,    0,    0,    0,    0,    0,    0x00, 0x00,
-                            0x00, 0x00, 'I',  'E',  'N',  'D',  0,    0,    0,    0};
+    uint8_t no_exif_png[] = {
+        0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n', 0x00, 0x00, 0x00, 0x0D, 'I', 'H', 'D', 'R', 0,
+        0,    0,   0,   0,   0,    0,    0,    0,    0,    0,    0,    0,    0,   0,   0,   0,   0,
+        0,    0,   0,   0,   0x00, 0x00, 0x00, 0x00, 'I',  'E',  'N',  'D',  0,   0,   0,   0};
     ASSERT_INT_EQ(1, ph_exif_orientation_from_png(no_exif_png, sizeof(no_exif_png)));
 
     // Truncated buffers must not crash (ASAN is the real judge here) and must
@@ -235,7 +234,8 @@ void test_orientation_degrades_gracefully(void) {
     // scanner doesn't need — so once `cut` covers the eXIf chunk's header and
     // full payload, the tag parses correctly even with the CRC truncated away.
     n = build_png_with_exif(buf, 1, 3, 1, 6, 1);
-    size_t png_payload_end = 8 /* sig */ + 4 /* len */ + 4 /* type */ + 6 /* "Exif\0\0" */ + 26 /* tiff */;
+    size_t png_payload_end =
+        8 /* sig */ + 4 /* len */ + 4 /* type */ + 6 /* "Exif\0\0" */ + 26 /* tiff */;
     for (size_t cut = 0; cut < n; cut++) {
         int expected = (cut >= png_payload_end) ? 6 : 1;
         ASSERT_INT_EQ(expected, ph_exif_orientation_from_png(buf, cut));
