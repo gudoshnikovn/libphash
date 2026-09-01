@@ -216,7 +216,7 @@ jobs:
         cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
 
     - name: Configure CMake (fuzzers)
-      run: cmake -B build -DPHASH_BUILD_TESTS=OFF -DPHASH_BUILD_FUZZERS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Debug
+      run: cmake -B build -DPHASH_BUILD_FUZZERS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Debug
 
     - name: Build
       run: cmake --build build --target fuzz_load

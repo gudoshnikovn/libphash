@@ -531,6 +531,28 @@ if(PHASH_ENABLE_MOCK_BACKEND)
     target_compile_definitions(phash PUBLIC PH_ENABLE_MOCK_BACKEND)
 endif()
 
+# --- Fuzzing (libFuzzer, Clang only) ---
+# Configured before the tests below on purpose: when fuzzers and tests are enabled
+# together, the ctest binaries link a sanitizer-instrumented libphash and therefore
+# need the very same sanitizer flags at link time. Without them the link fails on
+# undefined __asan_*/__ubsan_* symbols, which is why CI used to disable tests here.
+if(PHASH_BUILD_FUZZERS)
+    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "PHASH_BUILD_FUZZERS requires Clang (libFuzzer is a Clang/compiler-rt feature).")
+    endif()
+
+    # Instrument the library for coverage/sanitizers without pulling in a fuzzer main,
+    # so it can still be linked into the plain ctest binaries below.
+    set(PHASH_FUZZ_INSTRUMENT_FLAGS -fsanitize=fuzzer-no-link,address,undefined)
+    target_compile_options(phash PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS} -g -O1)
+    target_link_options(phash PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS})
+
+    add_executable(fuzz_load tests/fuzz/fuzz_load.c)
+    target_link_libraries(fuzz_load PRIVATE phash)
+    target_compile_options(fuzz_load PRIVATE -fsanitize=fuzzer,address,undefined -g -O1)
+    target_link_options(fuzz_load PRIVATE -fsanitize=fuzzer,address,undefined)
+endif()
+
 # --- Tests ---
 if(PHASH_BUILD_TESTS)
     enable_testing()
@@ -547,25 +569,14 @@ if(PHASH_BUILD_TESTS)
             TEST_DATA_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/data\"
             PH_TESTING
         )
+        if(PHASH_BUILD_FUZZERS)
+            # Match the instrumentation of the library the test links against.
+            target_compile_options(${test_name} PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS} -g -O1)
+            target_link_options(${test_name} PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS})
+        endif()
         add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
     endforeach()
 
     # Add benchmark as a smoke test (verifies loading and hashing works)
     add_test(NAME benchmark_smoke COMMAND $<TARGET_FILE:test_benchmark> hash ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/photo.jpeg 10)
-endif()
-
-# --- Fuzzing (libFuzzer, Clang only) ---
-if(PHASH_BUILD_FUZZERS)
-    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
-        message(FATAL_ERROR "PHASH_BUILD_FUZZERS requires Clang (libFuzzer is a Clang/compiler-rt feature).")
-    endif()
-
-    # Instrument the library for coverage/sanitizers without pulling in a fuzzer main,
-    # so it can still be linked into the plain ctest binaries above.
-    target_compile_options(phash PRIVATE -fsanitize=fuzzer-no-link,address,undefined -g -O1)
-
-    add_executable(fuzz_load tests/fuzz/fuzz_load.c)
-    target_link_libraries(fuzz_load PRIVATE phash)
-    target_compile_options(fuzz_load PRIVATE -fsanitize=fuzzer,address,undefined -g -O1)
-    target_link_options(fuzz_load PRIVATE -fsanitize=fuzzer,address,undefined)
 endif()
