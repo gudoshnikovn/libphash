@@ -14,6 +14,12 @@ PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, uint64_t *out_hash) {
     if (ctx->image.width <= 0 || ctx->image.height <= 0 || !ctx->image.raw_rgb)
         return PH_ERR_EMPTY_IMAGE;
 
+    /* R08/M13: a grayscale image carries no color to classify. Replicating the single
+     * channel into r/g/b would put every pixel in the GRAY bucket and still report
+     * PH_SUCCESS, so refuse instead of returning a hash that means nothing. */
+    if (ctx->image.channels < 3)
+        return PH_ERR_REQUIRES_COLOR;
+
     /* size_t, not int: width * height overflows int above ~46340x46340, and so does
      * the `i * channels` index derived from it (R03/H6). The per-category counters
      * follow suit -- an int counter would overflow on a >2G-pixel image. */
@@ -29,8 +35,8 @@ PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, uint64_t *out_hash) {
 
     for (size_t i = 0; i < total_pixels; i++) {
         float r = src[i * channels];
-        float g = (channels >= 3) ? src[i * channels + 1] : r;
-        float b = (channels >= 3) ? src[i * channels + 2] : r;
+        float g = src[i * channels + 1];
+        float b = src[i * channels + 2];
 
         ph_hsv_result_t res = ph_hsv_classify_pixel(r, g, b);
 

@@ -80,6 +80,10 @@ typedef enum {
                                      ///< PH_USE_WEBP).
     PH_ERR_IO = -10,                 ///< The file could not be opened/read (missing, permissions,
                                      ///< not a regular file, etc).
+    PH_ERR_REQUIRES_COLOR = -11,     ///< A color algorithm (ph_compute_color_hash(),
+                                     ///< ph_compute_color_moments_hash()) was asked to run on an
+                                     ///< image that carries fewer than 3 channels -- see
+                                     ///< ph_context_set_load_grayscale().
 } ph_error_t;
 
 /**
@@ -312,6 +316,11 @@ PH_API ph_error_t ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t m
  * @note Disabled by default for compatibility with ColorHash and custom weights.
  *       Enable it (set to 1) for significant speedup if you only need grayscale hashes
  *       (pHash, aHash, dHash, mHash, wHash, BMH, Radial).
+ * @note While this is enabled, the color algorithms — ph_compute_color_hash() and
+ *       ph_compute_color_moments_hash(), and therefore ph_compute_multi() with
+ *       @c PH_HASH_COLOR_HASH set — fail with @c PH_ERR_REQUIRES_COLOR: a
+ *       single-channel image has no color statistics to compute. Load with this
+ *       disabled if you need them.
  *
  * @param ctx The context.
  * @param enable 1 to enable grayscale loading, 0 to disable (load native channels).
@@ -434,6 +443,15 @@ PH_API PH_NODISCARD ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out
 PH_API PH_NODISCARD ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash);
 PH_API PH_NODISCARD ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash);
 PH_API PH_NODISCARD ph_error_t ph_compute_mhash(ph_context_t *ctx, uint64_t *out_hash);
+
+/**
+ * @brief Computes the HSV ColorHash of the loaded image.
+ *
+ * Requires a color image: the loaded image must have at least 3 channels. On a
+ * single-channel image — one loaded while ph_context_set_load_grayscale() was
+ * enabled, or handed to ph_load_from_pixels() with @c channels = 1 — this returns
+ * @c PH_ERR_REQUIRES_COLOR and leaves @p out_hash untouched.
+ */
 PH_API PH_NODISCARD ph_error_t ph_compute_color_hash(ph_context_t *ctx, uint64_t *out_hash);
 
 /**
@@ -462,6 +480,10 @@ typedef enum {
  * always been cheaper than reloading between them — this just wraps that into one call).
  * Results are bit-for-bit identical to calling the equivalent `ph_compute_*` function
  * directly.
+ *
+ * Computation stops at the first algorithm that fails and its error code is returned;
+ * in particular @c PH_HASH_COLOR_HASH on a grayscale image fails the whole call with
+ * @c PH_ERR_REQUIRES_COLOR (see ph_compute_color_hash()).
  *
  * @param ctx The context. Must have an image already loaded.
  * @param flags Bitwise-OR of `ph_hash_flags_t` values selecting which hashes to compute.
@@ -568,6 +590,11 @@ PH_API PH_NODISCARD ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *ou
 
 /**
  * @brief Computes Color Moments Hash. Returns a digest representing color distribution.
+ *
+ * Requires a color image: the loaded image must have at least 3 channels. On a
+ * single-channel image — one loaded while ph_context_set_load_grayscale() was
+ * enabled, or handed to ph_load_from_pixels() with @c channels = 1 — this returns
+ * @c PH_ERR_REQUIRES_COLOR and leaves @p out_digest untouched.
  */
 PH_API PH_NODISCARD ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
                                                              ph_digest_t *out_digest);

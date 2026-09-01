@@ -63,8 +63,32 @@ void test_color_moments_e2e() {
     PASS("test_color_moments_e2e");
 }
 
+/* R08: with a grayscale image all three "color" moments used to come out of the same
+ * byte -- three identical channels reported as PH_SUCCESS. Refuse, and leave the
+ * caller's digest untouched. */
+void test_color_moments_requires_color() {
+    ph_context_t *ctx = NULL;
+    ph_digest_t digest;
+
+    memset(&digest, 0xAB, sizeof(digest));
+
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_context_set_load_grayscale(ctx, 1));
+    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
+
+    ASSERT_INT_EQ(PH_ERR_REQUIRES_COLOR, ph_compute_color_moments_hash(ctx, &digest));
+
+    /* Not a single byte of the digest was written. */
+    for (size_t i = 0; i < sizeof(digest); i++)
+        ASSERT_UINT8_EQ(0xAB, ((const uint8_t *)&digest)[i]);
+
+    ph_free(ctx);
+    PASS("test_color_moments_requires_color");
+}
+
 int main() {
     test_moments_unit();
     test_color_moments_e2e();
+    test_color_moments_requires_color();
     return 0;
 }

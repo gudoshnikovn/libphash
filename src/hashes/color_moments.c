@@ -8,11 +8,17 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
         return PH_ERR_INVALID_ARGUMENT;
     }
 
-    memset(out_digest, 0, sizeof(ph_digest_t));
-    out_digest->size = PH_COLOR_CHANNELS * PH_COLOR_MOMENTS;
-
     if (ctx->image.width <= 0 || ctx->image.height <= 0)
         return PH_ERR_EMPTY_IMAGE;
+
+    /* R08/M13: with fewer than 3 channels every moment would be computed from the same
+     * byte, yielding three identical channels under a PH_SUCCESS. Refuse, and do it
+     * before touching out_digest so a failed call leaves the caller's buffer alone. */
+    if (ctx->image.channels < 3)
+        return PH_ERR_REQUIRES_COLOR;
+
+    memset(out_digest, 0, sizeof(ph_digest_t));
+    out_digest->size = PH_COLOR_CHANNELS * PH_COLOR_MOMENTS;
 
     /* size_t, not int: width * height overflows int above ~46340x46340 (R03/H6). */
     size_t num_pixels = (size_t)ctx->image.width * (size_t)ctx->image.height;

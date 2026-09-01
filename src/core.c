@@ -50,6 +50,8 @@ PH_API const char *ph_get_error_string(ph_error_t err) {
             return "Recognized image format, but no decoder for it was compiled into this build";
         case PH_ERR_IO:
             return "File could not be opened or read";
+        case PH_ERR_REQUIRES_COLOR:
+            return "Algorithm requires a color image, but the loaded image is grayscale";
         default:
             return "Unknown error";
     }

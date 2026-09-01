@@ -81,9 +81,56 @@ void test_color_hash_e2e() {
     PASS("test_color_hash_e2e");
 }
 
+/* R08: a grayscale-loaded image carries no color information at all -- ColorHash used
+ * to silently classify every pixel from a single replicated channel and still report
+ * PH_SUCCESS. It must refuse instead, without writing to the output. */
+void test_color_hash_requires_color() {
+    ph_context_t *ctx = NULL;
+    uint64_t hash = 0xDEADBEEFULL;
+
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_context_set_load_grayscale(ctx, 1));
+    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
+
+    ASSERT_INT_EQ(PH_ERR_REQUIRES_COLOR, ph_compute_color_hash(ctx, &hash));
+    ASSERT_UINT64_EQ(0xDEADBEEFULL, hash);
+
+    /* ph_compute_multi() propagates the refusal instead of emitting a bogus value. */
+    uint64_t out[2] = {0, 0};
+    ASSERT_INT_EQ(PH_ERR_REQUIRES_COLOR,
+                  ph_compute_multi(ctx, PH_HASH_AHASH | PH_HASH_COLOR_HASH, out));
+
+    /* Grayscale-only algorithms are unaffected. */
+    uint64_t ahash = 0;
+    ASSERT_OK(ph_compute_ahash(ctx, &ahash));
+
+    ph_free(ctx);
+    PASS("test_color_hash_requires_color");
+}
+
+/* A single-channel buffer handed straight to ph_load_from_pixels() is refused for the
+ * same reason -- the check is on the loaded image, not on the load_grayscale setting. */
+void test_color_hash_refuses_one_channel_pixels() {
+    ph_context_t *ctx = NULL;
+    uint8_t gray[16 * 16];
+    uint64_t hash = 0;
+
+    for (int i = 0; i < 16 * 16; i++)
+        gray[i] = (uint8_t)i;
+
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_load_from_pixels(ctx, gray, 16, 16, 1, 0));
+    ASSERT_INT_EQ(PH_ERR_REQUIRES_COLOR, ph_compute_color_hash(ctx, &hash));
+
+    ph_free(ctx);
+    PASS("test_color_hash_refuses_one_channel_pixels");
+}
+
 int main() {
     test_hsv_classify_unit();
     test_pack_3bit_unit();
     test_color_hash_e2e();
+    test_color_hash_requires_color();
+    test_color_hash_refuses_one_channel_pixels();
     return 0;
 }
