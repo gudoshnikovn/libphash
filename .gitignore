@@ -39,3 +39,8 @@ src/**/*.gcno
 
 # Claude Code agent worktrees (transient, per-session)
 .claude/worktrees/
+
+# Internal planning/review material — kept locally, never committed
+tasks/
+CLAUDE.md
+REVIEW_v2.0.0.md
