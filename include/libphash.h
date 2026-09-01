@@ -562,6 +562,18 @@ typedef struct {
  *                Ignored (always sequential) if the library was built without
  *                `PHASH_ENABLE_THREADS` (default ON in CMake, OFF in the Makefile) or if
  *                `n` is smaller than the requested thread count.
+ *
+ *                Platform note for `threads = 0`: on POSIX the detected count covers every
+ *                online CPU, but on Windows it covers only the *current processor group*,
+ *                which the OS caps at 64 logical processors. On a machine with more than
+ *                that (large servers, some CI runners) `threads = 0` therefore uses at most
+ *                64 workers on Windows while the POSIX build uses all of them. This is a
+ *                deliberate limitation, not an oversight: raising the count alone would not
+ *                help, because a thread inherits its creator's processor group and the extra
+ *                workers would contend for the same 64 logical processors. Spreading workers
+ *                across groups needs explicit group affinity and is not implemented. If you
+ *                need more than 64 workers on such a machine, pass the count explicitly and
+ *                set the affinity yourself.
  * @return PH_SUCCESS once the batch has been processed (regardless of per-item outcomes),
  *         PH_ERR_INVALID_ARGUMENT for a malformed call, or PH_ERR_ALLOCATION_FAILED if no
  *         item could be worked on at all. See the return contract above.
@@ -576,7 +588,9 @@ PH_API PH_NODISCARD ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, u
  * Identical semantics and identical return contract, including validation running before
  * the `n == 0` shortcut: `ph_hash_buffers(NULL, 0, 0, -5)` returns PH_ERR_INVALID_ARGUMENT.
  * An entry whose `buffer` is NULL or whose `length` is 0 is a per-item
- * PH_ERR_INVALID_ARGUMENT in `status`, not an overall failure.
+ * PH_ERR_INVALID_ARGUMENT in `status`, not an overall failure. The `threads = 0` platform
+ * note from `ph_hash_files()` applies here unchanged: on Windows the auto-detected count is
+ * limited to the current processor group's 64 logical processors.
  */
 PH_API PH_NODISCARD ph_error_t ph_hash_buffers(ph_batch_buffer_item_t *items, size_t n,
                                                uint32_t flags, int threads);

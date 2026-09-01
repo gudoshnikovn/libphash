@@ -112,6 +112,24 @@ static void *ph_batch_worker_pthread(void *arg) {
 }
 #endif
 
+/* Known and deliberate platform split, documented on ph_hash_files() (R47).
+ *
+ * The Windows branch reports only the processors of the *current processor group*, which
+ * the OS caps at 64. So `threads = 0` on a machine with more than 64 logical processors
+ * spawns at most 64 workers here, while the POSIX branch spawns one per online CPU.
+ *
+ * Swapping in GetActiveProcessorCount(ALL_PROCESSOR_GROUPS) would be a one-line change and
+ * would make things worse, not better: a thread inherits the processor group of its creator,
+ * so workers past the 64th would contend for the same 64 logical processors -- more threads,
+ * more context switching, no extra parallelism. A correct fix has to place workers into
+ * groups explicitly (SetThreadGroupAffinity, or InitializeProcThreadAttributeList with
+ * PROC_THREAD_ATTRIBUTE_GROUP_AFFINITY), which is a design change that cannot be validated
+ * anywhere in this project's current test matrix. Until such a machine is available for
+ * testing, the limitation stays documented rather than half-fixed.
+ *
+ * Note this is not the cause of the MAXIMUM_WAIT_OBJECTS defect fixed in R05: the wait there
+ * is now batched, so it is correct for any worker count. The 64-processor cap merely kept
+ * `threads = 0` from ever reaching that limit, which is why the defect went unnoticed. */
 static int ph_detect_num_cores(void) {
 #if defined(_WIN32)
     SYSTEM_INFO si;
