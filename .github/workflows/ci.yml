@@ -257,3 +257,6 @@ jobs:
       run: |
         ./scripts/smoke_install.sh static
         ./scripts/smoke_install.sh shared
+        # R11/H3: libphash must not reconfigure a parent that pulls it in via
+        # add_subdirectory(). Only an integration build can show that.
+        ./scripts/smoke_add_subdirectory.sh
