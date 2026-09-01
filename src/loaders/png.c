@@ -177,7 +177,21 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
         return NULL;
     }
 
-    png_bytep *row_ptrs = (png_bytep *)malloc(sizeof(png_bytep) * h);
+    /* The only allocation in this decoder that used to skip the overflow check while
+     * its neighbour above went through ph_safe_image_alloc_size() (R17/M2). `h` comes
+     * straight from the PNG header as a png_uint_32, so on a 32-bit target
+     * sizeof(png_bytep) * h wraps and produces a too-small array that png_read_image()
+     * then writes past. Refuse instead. */
+    size_t row_ptrs_size;
+    if (!ph_safe_image_alloc_size(sizeof(png_bytep), h, 1, &row_ptrs_size)) {
+        if (out_err)
+            *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        free(data);
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        return NULL;
+    }
+
+    png_bytep *row_ptrs = (png_bytep *)malloc(row_ptrs_size);
     if (!row_ptrs) {
         if (out_err)
             *out_err = PH_ERR_ALLOCATION_FAILED;
