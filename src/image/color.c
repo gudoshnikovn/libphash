@@ -96,6 +96,9 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
     }
 }
 
+/* Applied from exactly one place: ph_compute_radial_hash() (src/hashes/radial.c).
+ * The setting lives on the context and reads as general preprocessing, but no other
+ * algorithm touches it -- see the warning on ph_context_set_gamma(). */
 void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h) {
     if (!ctx || !data || w <= 0 || h <= 0)
         return;

@@ -180,10 +180,30 @@ PH_API void ph_free(ph_context_t *ctx);
  */
 
 /**
- * @brief Sets the gamma correction value for the context.
+ * @brief Sets the gamma value applied by ph_compute_radial_hash(), and by nothing else.
  *
  * Recomputes the internal lookup table (LUT), which is built as
  * `pow(value, 1.0 / gamma)`. Default value is 2.2.
+ *
+ * @warning Despite living on the context, this setting affects **only** the Radial
+ *          hash, where the LUT is applied to the blurred grayscale buffer before the
+ *          radial projections are taken. aHash, dHash, pHash, wHash, mHash, BMH,
+ *          ColorHash and ColorMoments ignore it entirely. Setting it and expecting
+ *          any of those to change is a mistake the previous wording invited.
+ *
+ * @note TODO(R52): the default of 2.2 is very likely wrong. It makes the LUT an active
+ *       transform (exponent 1/2.2 = 0.4545) where the reference implementation this
+ *       algorithm follows -- pHash's radial digest -- defaults to an identity
+ *       transform. pHash also uses the reciprocal convention (it raises pixels to
+ *       `gamma`, we raise them to `1.0/gamma`, so pHash's `g` is our `1/g`) and
+ *       normalizes the buffer before and after the power step, which we do not.
+ *       Changing any of this moves Radial hashes, so it is deliberately NOT part of
+ *       2.0.0 -- see tasks/review/R52_gamma_default_and_convention.md.
+ *
+ * @note TODO(R53): whether gamma belongs in the shared grayscale path (affecting every
+ *       algorithm) is a separate question. No reference implementation does that --
+ *       ImageHash applies no gamma at all -- so it needs a correctness methodology
+ *       before it is attempted, not just a code change.
  *
  * @param ctx The context.
  * @param gamma The gamma value (e.g., 2.2). Must be finite and in (0.001, 1000].
