@@ -107,6 +107,53 @@ Three caveats worth knowing:
   prints a `STATUS` message saying the `.pc` will not be relocatable. That is a property
   of the requested layout, not a bug to paper over.
 
+### Vendoring libphash with `add_subdirectory()`
+
+Besides the installed package, libphash supports being dropped into another project's
+source tree:
+
+```cmake
+add_subdirectory(third_party/libphash)
+target_link_libraries(my_app PRIVATE phash)
+```
+
+Both parent configurations are supported and covered end to end (configure → build →
+run a real PNG through `ph_load_from_file`) by
+`scripts/smoke_add_subdirectory.sh`, which CI runs alongside `smoke_install.sh`:
+
+- `BUILD_SHARED_LIBS=OFF` (static parent),
+- `BUILD_SHARED_LIBS=ON` (shared parent).
+
+Two rules keep this working, and both were learned the hard way:
+
+- **The parent owns the global build settings.** `BUILD_SHARED_LIBS` and
+  `BUILD_TESTING` are global CMake variables, not options of the vendored codecs, yet
+  the codecs have to see them `OFF` while they configure. `CMakeLists.txt` therefore
+  saves the parent's values, forces its own, and restores them immediately
+  (`phash_push/pop_global_build_flags()`). Forcing them and walking away silently
+  turned off a parent's shared build and its `ctest` (R11/H3).
+- **Never force a dependency pin into the parent's cache.** libpng's
+  `find_package(ZLIB REQUIRED)` has to be steered at the bundled zlib-ng, which is
+  done by pre-setting `ZLIB_INCLUDE_DIR`/`ZLIB_LIBRARY` (and pre-creating the
+  `ZLIB::ZLIB` alias) — but as **normal, directory-scope variables**. `vendor/libpng`
+  is a child scope and inherits them, so nothing has to enter the cache. As `CACHE …
+  FORCE` entries they persisted into the *next* configure of the same build tree,
+  where libphash's own "did the parent bring its own zlib?" check
+  (`DEFINED CACHE{ZLIB_LIBRARY}`) then fired on libphash's own pin: libphash stood
+  aside, the `zlib-ng` target was never created, and the cached absolute path to its
+  archive stayed on libpng's link interface — so the parent's link line acquired a
+  file dependency nothing produced (`No rule to make target
+  'phash_build/vendor/zlib-ng/libz.a'`, R51). Any second `cmake -S . -B build`, i.e.
+  any normal incremental build, hit it, in both parent configurations. Hence the
+  deliberate re-configure step in the smoke script.
+
+`ZLIB_LIBRARY` also holds the zlib-ng **target name**, not a path to `libz.a`: CMake
+resolves a target name to the real artifact plus a build-order dependency, whereas the
+archive's file name is a guess that is wrong on MSVC and wrong for any build in which
+zlib-ng comes out shared. `FindZLIB` never puts that value on a link line here — it is
+guarded by `if(NOT ZLIB_LIBRARY)` and only feeds
+`find_package_handle_standard_args()`; libpng links `ZLIB::ZLIB`, i.e. the target.
+
 ### Formatting
 We use `clang-format` with a custom style (based on LLVM with minor tweaks).
 - **Indentation**: 4 spaces.

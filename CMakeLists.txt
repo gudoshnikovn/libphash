@@ -214,7 +214,21 @@ set(PHASH_ZLIB_TARGET z)
 # reports its result (R11/H3). So: if the parent already brought its own zlib, step
 # aside and use it; otherwise configure zlib-ng but leave the parent's cache intact.
 if(NOT PHASH_IS_TOP_LEVEL AND PHASH_USE_ZLIB_NG)
-    if(TARGET ZLIB::ZLIB OR DEFINED CACHE{ZLIB_LIBRARY})
+    # A cache entry pointing inside our own build tree is not the parent's zlib:
+    # it is a pin left behind by a libphash older than R51, which used to force
+    # ZLIB_LIBRARY into the cache. Standing down for it would drop the zlib-ng
+    # target while that path stays on libpng's link line, so ignore it.
+    set(PHASH_PARENT_HAS_ZLIB OFF)
+    if(DEFINED CACHE{ZLIB_LIBRARY})
+        string(FIND "$CACHE{ZLIB_LIBRARY}" "${CMAKE_CURRENT_BINARY_DIR}/vendor/zlib-ng" PHASH_STALE_ZLIB_PIN)
+        if(NOT PHASH_STALE_ZLIB_PIN EQUAL 0)
+            set(PHASH_PARENT_HAS_ZLIB ON)
+        else()
+            unset(ZLIB_LIBRARY CACHE)
+            unset(ZLIB_INCLUDE_DIR CACHE)
+        endif()
+    endif()
+    if(TARGET ZLIB::ZLIB OR PHASH_PARENT_HAS_ZLIB)
         message(STATUS
             "phash: parent project already provides zlib; using it instead of the "
             "bundled zlib-ng (set PHASH_USE_ZLIB_NG=OFF to silence this).")
@@ -249,18 +263,36 @@ if(PHASH_USE_ZLIB_NG AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/zlib-ng/CMak
     endif()
     # find_package(ZLIB) also short-circuits its own find_path()/find_library()
     # searches once these are already set, so pin them to zlib-ng's generated
-    # zlib.h and static lib. Without this, libpng's pnglibconf.h gets baked with
-    # the system zlib's ZLIB_VERNUM while the actual compile picks up zlib-ng's
-    # zlib.h through the include path, and the two disagree at compile time.
-    set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/vendor/zlib-ng" CACHE PATH "" FORCE)
-    # NOTE (R51): this hardcoded archive name only holds while zlib-ng builds statically.
-    # A parent project with BUILD_SHARED_LIBS=ON -- which R11 now correctly preserves --
-    # makes zlib-ng produce a shared library instead, and this path stops existing
-    # ("No rule to make target .../libz.a"). Substituting the target name here does not
-    # work either: it reaches the parent's own link line as a plain file dependency.
-    # Wiring the vendored codecs for a shared parent is tracked as R51; a static parent
-    # (the common case) builds and links correctly today.
-    set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/vendor/zlib-ng/libz.a" CACHE FILEPATH "" FORCE)
+    # zlib.h. Without this, libpng's pnglibconf.h gets baked with the system
+    # zlib's ZLIB_VERNUM while the actual compile picks up zlib-ng's zlib.h
+    # through the include path, and the two disagree at compile time.
+    #
+    # R51: these are deliberately NORMAL (directory-scope) variables, not cache
+    # entries. vendor/libpng is configured from a child scope and inherits them,
+    # which is all its find_package(ZLIB) needs -- while nothing of ours is left
+    # behind in the parent project's cache (R11/H3), and nothing survives into
+    # the *next* configure run of the same build tree. That last part is what
+    # actually broke: as forced cache entries, our own pin made the stand-down
+    # check above ("DEFINED CACHE{ZLIB_LIBRARY}" => the parent brought its own
+    # zlib) fire on every re-configure. libphash then stood aside, the zlib-ng
+    # target was never created, and the still-cached path to its archive stayed
+    # baked into libpng's link interface -- so the parent's own link line grew a
+    # file dependency nothing produced:
+    #   "No rule to make target 'phash_build/vendor/zlib-ng/libz.a'".
+    # Both parent configurations (BUILD_SHARED_LIBS ON and OFF) failed this way
+    # on the second configure; being normal variables, the pins now cannot
+    # poison the stand-down heuristic they precede.
+    #
+    # ZLIB_LIBRARY holds the zlib-ng TARGET NAME, not a path to libz.a: the
+    # archive's file name is a guess (wrong on MSVC, and wrong for any build in
+    # which zlib-ng comes out shared), and CMake resolves a target name to the
+    # real artifact plus a build-order dependency. FindZLIB never puts this value
+    # on a link line here -- it is guarded by "if(NOT ZLIB_LIBRARY)", used only
+    # for find_package_handle_standard_args() and for an IMPORTED_LOCATION on a
+    # ZLIB::ZLIB it declines to create, because the alias above already exists.
+    # libpng links ZLIB::ZLIB (i.e. the target), which is what makes this work.
+    set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/vendor/zlib-ng")
+    set(ZLIB_LIBRARY zlib-ng)
     target_compile_definitions(phash PRIVATE PH_USE_ZLIB_NG)
     set(PHASH_ZLIB_TARGET zlib-ng)
     if(PHASH_INSTALL_PRIVATE_DEPS)
