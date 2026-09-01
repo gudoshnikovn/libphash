@@ -105,23 +105,24 @@ void test_phash_params_setter_bounds() {
     ASSERT_INT_EQ(PH_DCT_SIZE, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(PH_DCT_REDUCTION_SIZE, ctx->config.phash_reduction_size);
 
-    /* dct_size above the supported maximum -> rejected, config untouched */
-    ph_context_set_phash_params(ctx, 33, 8);
+    /* dct_size above the supported maximum -> rejected, config untouched.
+     * Since R04 the rejection is also reported to the caller. */
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, 33, 8));
     ASSERT_INT_EQ(PH_DCT_SIZE, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(PH_DCT_REDUCTION_SIZE, ctx->config.phash_reduction_size);
 
     /* reduction_size above the supported maximum -> rejected */
-    ph_context_set_phash_params(ctx, 32, 9);
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, 32, 9));
     ASSERT_INT_EQ(PH_DCT_SIZE, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(PH_DCT_REDUCTION_SIZE, ctx->config.phash_reduction_size);
 
     /* Boundary values are accepted */
-    ph_context_set_phash_params(ctx, 32, 8);
+    ASSERT_OK(ph_context_set_phash_params(ctx, 32, 8));
     ASSERT_INT_EQ(32, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(8, ctx->config.phash_reduction_size);
 
     /* A smaller valid pair is accepted too */
-    ph_context_set_phash_params(ctx, 16, 4);
+    ASSERT_OK(ph_context_set_phash_params(ctx, 16, 4));
     ASSERT_INT_EQ(16, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(4, ctx->config.phash_reduction_size);
 

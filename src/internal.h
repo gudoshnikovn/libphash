@@ -115,7 +115,7 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
 #define PH_DCT_SIZE 32
 #define PH_DCT_REDUCTION_SIZE 8     // We use the top-left 8x8 coefficients
 #define PH_CORE_HASH_SIZE 8         // Standard 8x8 grid for ahash/dhash/phash
-#define PH_BLOCK_SIZE 16            // 16x16 grid for BMH and MHash
+#define PH_BLOCK_SIZE 16            // 16x16 grid for BMH (mHash uses a fixed 18x18)
 #define PH_HAAR_SCALE 1.41421356237 // sqrt(2) for Haar wavelet normalization
 #define PH_RADIAL_PROJECTIONS 40
 #define PH_RADIAL_SAMPLES 128
@@ -126,11 +126,68 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
 #define PH_DCT_MAX_SIZE 32
 #define PH_DCT_MAX_REDUCTION_SIZE 8
 
+/* R04 -- hard upper bounds for the remaining tunable parameters. Every one of them is
+ * derived from a real limit of the implementation, not picked as a round number; the
+ * derivation is spelled out next to each constant so a future change to a digest size
+ * or a pixel ceiling shows up here as an inconsistency instead of silently widening
+ * the accepted range. Out-of-range input is rejected by the setter
+ * (PH_ERR_INVALID_ARGUMENT, configuration untouched) and never clamped: clamping is
+ * the "silently wrong answer" anti-pattern that H5/M12 are about. */
+
+/* BMH packs one bit per block, i.e. block_size^2 bits, into a ph_digest_t of at most
+ * PH_DIGEST_MAX_BYTES bytes. 22*22 = 484 bits = 61 bytes fits; 23*23 = 529 bits =
+ * 67 bytes does not. The two _Static_asserts below keep this tied to
+ * PH_DIGEST_MAX_BYTES rather than to the literal 22.
+ * block_size affects BMH only -- mHash uses a fixed 18x18 grid (src/hashes/mhash.c). */
+#define PH_BLOCK_MAX_SIZE 22
+
+/* Radial writes one byte per projection into the same digest, so the projection count
+ * cannot usefully exceed its capacity in bytes. */
+#define PH_RADIAL_MAX_PROJECTIONS PH_DIGEST_MAX_BYTES
+
+/* Radial samples are taken along a straight line across the image, so more samples
+ * than the image's diagonal add no information -- they only re-sample pixels already
+ * visited. The largest square image the library will process has
+ * floor(sqrt(PH_MAX_SUPPORTED_PIXELS)) = 46340 pixels per side (46341^2 exceeds
+ * INT_MAX), and its diagonal is 46340 * sqrt(2) = 65534.66, so 65536 is the first
+ * power of two at or above every diagonal that can occur for a square image.
+ * Caveat, deliberately accepted: a degenerate strip (e.g. INT_MAX x 1) has a longer
+ * diagonal while still fitting the pixel ceiling. Such aspect ratios carry no radial
+ * structure to sample, so the bound is treated as the practical maximum rather than
+ * being raised to INT_MAX for their sake. */
+#define PH_RADIAL_MAX_SAMPLES 65536
+
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+_Static_assert((PH_BLOCK_MAX_SIZE * PH_BLOCK_MAX_SIZE + 7) / 8 <= PH_DIGEST_MAX_BYTES,
+               "PH_BLOCK_MAX_SIZE bits must fit into a ph_digest_t");
+_Static_assert(((PH_BLOCK_MAX_SIZE + 1) * (PH_BLOCK_MAX_SIZE + 1) + 7) / 8 > PH_DIGEST_MAX_BYTES,
+               "PH_BLOCK_MAX_SIZE must be the largest block size that fits, not smaller");
+_Static_assert(PH_RADIAL_MAX_PROJECTIONS <= PH_DIGEST_MAX_BYTES,
+               "one digest byte per radial projection");
+#endif
+
 #define PH_COLOR_MOMENTS 3
 #define PH_COLOR_CHANNELS 3
 
 #define PH_DEFAULT_GAMMA 2.2f
 #define PH_GAMMA_EPSILON 0.001f
+
+/* Upper bound on gamma, chosen as the reciprocal of PH_GAMMA_EPSILON so that the
+ * exponent actually used by the LUT, 1.0/gamma, spans a range symmetric about 1.0:
+ * [1/1000, 1000]. Measured LUT degeneracy is symmetric too -- the 256-entry LUT holds
+ * 78 distinct values at gamma = 0.1 and 79 at gamma = 10, and 3 distinct values at
+ * gamma = 0.001 (already accepted before 2.0.0) against 4 at gamma = 1000. So this
+ * bound does not make the low and high ends behave differently; its job is to keep
+ * 1.0/gamma a meaningful exponent and, together with the isfinite() check in
+ * ph_context_set_gamma(), to reject the values that used to poison the whole LUT. */
+#define PH_GAMMA_MAX 1000.0f
+
+/* Upper bound on r + g + b in ph_context_set_gray_weights(). The weights are
+ * normalized to sum to 128 via (w * 128) / sum, and with sum <= INT_MAX / 255 the
+ * product w * 128 (w <= sum) stays well inside int. Expressed against 255 rather than
+ * 128 so that the un-normalized weights are also safe to multiply by a full-range
+ * 8-bit sample, should any future code path do so. */
+#define PH_GRAY_WEIGHT_MAX_SUM ((long long)INT_MAX / 255)
 
 /* Default cap on width*height before decoding a pixel buffer (decompression-bomb
  * protection). Overridable via ph_context_set_max_pixels(); 0 disables it. */

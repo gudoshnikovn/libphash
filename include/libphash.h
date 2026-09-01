@@ -157,23 +157,63 @@ PH_API PH_NODISCARD ph_error_t ph_create(ph_context_t **out_ctx);
 PH_API void ph_free(ph_context_t *ctx);
 
 /**
+ * @name Configuration setters
+ *
+ * Since 2.0.0 every `ph_context_set_*` function returns @c ph_error_t instead of
+ * `void`, with one contract shared by all of them:
+ *
+ *   - a valid argument (and a non-NULL @c ctx) returns @c PH_SUCCESS;
+ *   - anything else returns @c PH_ERR_INVALID_ARGUMENT and leaves the configuration
+ *     **completely unchanged** — values are never clamped into range, never partially
+ *     applied, and never replaced by defaults.
+ *
+ * Before 2.0.0 these functions returned `void` and ignored invalid input silently, so a
+ * caller could hash a whole batch with a configuration it never asked for. Each upper
+ * bound below is a hard limit of the implementation (digest capacity, hash width, the
+ * supported pixel ceiling), not a style preference.
+ *
+ * @note These setters are intentionally not `warn_unused_result`: they are commonly
+ *       called with compile-time-constant arguments where the result carries no
+ *       information. Check the return value whenever the argument comes from outside
+ *       your code.
+ * @{
+ */
+
+/**
  * @brief Sets the gamma correction value for the context.
  *
- * Recomputes the internal lookup table (LUT).
- * Default value is 2.2.
+ * Recomputes the internal lookup table (LUT), which is built as
+ * `pow(value, 1.0 / gamma)`. Default value is 2.2.
  *
  * @param ctx The context.
- * @param gamma The gamma value (e.g., 2.2). Must be > 0.
+ * @param gamma The gamma value (e.g., 2.2). Must be finite and in (0.001, 1000].
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
+ *         out-of-range @p gamma.
+ *
+ * @note Since 2.0.0 non-finite values (NaN, +/-infinity) are rejected. They used to pass
+ *       validation — every comparison against NaN is false — and filled the LUT with
+ *       NaN, after which all hashes were garbage while the call reported success.
  */
-PH_API void ph_context_set_gamma(ph_context_t *ctx, float gamma);
+PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma);
 
 /**
  * @brief Sets custom RGB-to-Grayscale weights.
  *
- * Input values are automatically normalized to sum to 128 for optimized internal processing.
- * Default is PH_GRAY_R=38, PH_GRAY_G=75, PH_GRAY_B=15.
+ * Input values are automatically normalized to sum to 128 for optimized internal
+ * processing. Default is PH_GRAY_R=38, PH_GRAY_G=75, PH_GRAY_B=15.
+ *
+ * @param ctx The context.
+ * @param r,g,b Relative channel weights. Each must be >= 0, their sum must be > 0 and
+ *              at most INT_MAX / 255 (8421504), so that the normalization stays inside
+ *              `int`.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx, a negative
+ *         weight, or a sum outside the range above.
+ *
+ * @note Since 2.0.0 a zero sum is an error. It used to silently reset the weights to the
+ *       BT.601 defaults, changing the configuration to something the caller had not asked
+ *       for and reporting nothing.
  */
-PH_API void ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, int b);
+PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, int b);
 
 /**
  * @brief Sets pHash parameters.
@@ -192,29 +232,55 @@ PH_API void ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, int b);
  * @param dct_size Size of the DCT matrix, 1..32 (default 32).
  * @param reduction_size Size of the low-frequency coefficient block to keep,
  *                       1..8 and <= @p dct_size (default 8).
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
+ *         out-of-range pair.
  */
-PH_API void ph_context_set_phash_params(ph_context_t *ctx, int dct_size, int reduction_size);
+PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, int reduction_size);
 
 /**
  * @brief Sets Radial Hash parameters.
- * @param projections Number of angular projections (default 40).
- * @param samples Number of radial samples (default 128).
+ *
+ * @param ctx The context.
+ * @param projections Number of angular projections, 1..64 (default 40). The radial hash
+ *        emits one @c ph_digest_t byte per projection, so 64 (PH_DIGEST_MAX_BYTES) is the
+ *        digest's capacity. Above it, the digest used to be silently truncated to 64
+ *        bytes while the call still returned @c PH_SUCCESS.
+ * @param samples Number of samples per projection, 1..65536 (default 128). Samples are
+ *        taken along a straight line across the image, and 65536 covers the diagonal of
+ *        the largest square image the library will process (46340 x 46340, from the
+ *        INT_MAX pixel ceiling); more samples only re-visit pixels already sampled.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
+ *         out-of-range value.
  */
-PH_API void ph_context_set_radial_params(ph_context_t *ctx, int projections, int samples);
+PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projections, int samples);
 
 /**
- * @brief Sets Block-based hash parameters (BMH/mHash).
- * @param block_size Resolution of the grid (default 16).
+ * @brief Sets the grid resolution for the Block Mean Hash (BMH).
+ *
+ * @param ctx The context.
+ * @param block_size Resolution of the grid, 1..22 (default 16). BMH packs one bit per
+ *        block, i.e. `block_size * block_size` bits, into a @c ph_digest_t of at most
+ *        PH_DIGEST_MAX_BYTES (64) bytes: 22x22 = 484 bits = 61 bytes fits, 23x23 = 529
+ *        bits = 67 bytes does not. Above the bound, ph_compute_bmh() used to truncate the
+ *        digest to 64 bytes, hash the full grid anyway and return @c PH_SUCCESS — a
+ *        partial result indistinguishable from a complete one.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
+ *         out-of-range @p block_size.
+ *
+ * @note This affects BMH only. mHash uses a fixed 18x18 grid and ignores this setting
+ *       (the parameter was previously documented as "BMH/mHash", which was inaccurate).
  */
-PH_API void ph_context_set_block_params(ph_context_t *ctx, int block_size);
+PH_API ph_error_t ph_context_set_block_params(ph_context_t *ctx, int block_size);
 
 /**
  * @brief Sets the operating mode for Wavelet Hash (wHash).
  *
  * @param ctx The context.
  * @param mode PH_WHASH_FAST (0) for 15x speedup, PH_WHASH_FULL (1) for maximum accuracy.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or a @p mode that
+ *         is not one of the declared enumerators.
  */
-PH_API void ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t mode);
+PH_API ph_error_t ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t mode);
 
 /**
  * @brief Controls whether images are loaded as grayscale by default.
@@ -229,8 +295,11 @@ PH_API void ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t mode);
  *
  * @param ctx The context.
  * @param enable 1 to enable grayscale loading, 0 to disable (load native channels).
+ *               Any non-zero value enables it.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT only for a NULL @p ctx — every
+ *         @c int is a valid flag value.
  */
-PH_API void ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
+PH_API ph_error_t ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
 
 /**
  * @brief Controls whether EXIF/metadata orientation is applied automatically
@@ -250,9 +319,11 @@ PH_API void ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
  * needed" rather than an error — this never causes a load to fail.
  * @param ctx The context.
  * @param enable 1 to auto-orient using EXIF metadata (default), 0 to hash the
- * raw decoded buffer as-is.
+ * raw decoded buffer as-is. Any non-zero value enables it.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT only for a NULL @p ctx — every
+ *         @c int is a valid flag value.
  */
-PH_API void ph_context_set_auto_orient(ph_context_t *ctx, int enable);
+PH_API ph_error_t ph_context_set_auto_orient(ph_context_t *ctx, int enable);
 
 /**
  * @brief Sets the maximum number of pixels (width * height) an image is allowed to
@@ -275,8 +346,15 @@ PH_API void ph_context_set_auto_orient(ph_context_t *ctx, int enable);
  *       caused undefined behaviour and a heap overflow rather than an error. The
  *       default limit is eight times below the ceiling, so this only affects callers
  *       that deliberately raise or disable the limit.
+ *
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT only for a NULL @p ctx. Every
+ *         @c uint64_t is accepted, including values above the implementation ceiling:
+ *         the ceiling is applied when an image is loaded, not when the limit is set, so
+ *         such an image is refused with @c PH_ERR_IMAGE_TOO_LARGE.
  */
-PH_API void ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixels);
+PH_API ph_error_t ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixels);
+
+/** @} */
 
 /**
  * @brief Returns the dimensions of the currently loaded image.

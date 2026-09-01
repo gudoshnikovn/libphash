@@ -49,29 +49,32 @@ void test_core_setters_happy_and_edge(void) {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
 
-    // Happy Paths
-    ph_context_set_gamma(ctx, 1.0f);              // Hits precompute loop
-    ph_context_set_gamma(ctx, 2.2f);              // Hits precompute loop again
-    ph_context_set_gray_weights(ctx, 30, 60, 10); // Hits normalization
-    ph_context_set_phash_params(ctx, 64, 16);
-    ph_context_set_radial_params(ctx, 60, 256);
-    ph_context_set_block_params(ctx, 8);
-    ph_context_set_load_grayscale(ctx, 1);
-    ph_context_set_whash_mode(ctx, PH_WHASH_FULL);
+    /* Happy paths. Every setter returns ph_error_t since 2.0.0 (R04), so the expected
+     * outcome is asserted rather than discarded -- `ph_context_set_phash_params(ctx, 64,
+     * 16)` sat in this list as a "happy path" while actually being rejected. */
+    ASSERT_OK(ph_context_set_gamma(ctx, 1.0f));              // Hits precompute loop
+    ASSERT_OK(ph_context_set_gamma(ctx, 2.2f));              // Hits precompute loop again
+    ASSERT_OK(ph_context_set_gray_weights(ctx, 30, 60, 10)); // Hits normalization
+    ASSERT_OK(ph_context_set_phash_params(ctx, 32, 8));
+    ASSERT_OK(ph_context_set_radial_params(ctx, 60, 256));
+    ASSERT_OK(ph_context_set_block_params(ctx, 8));
+    ASSERT_OK(ph_context_set_load_grayscale(ctx, 1));
+    ASSERT_OK(ph_context_set_whash_mode(ctx, PH_WHASH_FULL));
 
-    // Edge Cases (NULL or invalid)
-    ph_context_set_gamma(NULL, 2.2f);
-    ph_context_set_gamma(ctx, 0.0f);
-    ph_context_set_gray_weights(NULL, 1, 1, 1);
-    ph_context_set_gray_weights(ctx, 0, 0, 0); // Fallback path
-    ph_context_set_phash_params(NULL, 32, 8);
-    ph_context_set_phash_params(ctx, 0, 8);
-    ph_context_set_radial_params(NULL, 40, 128);
-    ph_context_set_radial_params(ctx, 0, 128);
-    ph_context_set_block_params(NULL, 16);
-    ph_context_set_block_params(ctx, 0);
-    ph_context_set_load_grayscale(NULL, 1);
-    ph_context_set_whash_mode(NULL, PH_WHASH_FULL);
+    // Edge Cases (NULL or invalid) -- all reported, none applied
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_gamma(NULL, 2.2f));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_gamma(ctx, 0.0f));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_gray_weights(NULL, 1, 1, 1));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_gray_weights(ctx, 0, 0, 0));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(NULL, 32, 8));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, 0, 8));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, 64, 16));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(NULL, 40, 128));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(ctx, 0, 128));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(NULL, 16));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, 0));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_load_grayscale(NULL, 1));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_whash_mode(NULL, PH_WHASH_FULL));
 
     int w, h, c;
     ph_context_get_dimensions(ctx, &w, &h, &c);
@@ -165,7 +168,7 @@ void test_hashes_extra_coverage(void) {
     ph_median_bitpack(vals, 2); // Hits insertion sort while
 
     // Out-of-range reduction_size is rejected by the setter, config unchanged (R02)
-    ph_context_set_phash_params(ctx, 32, 16);
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, 32, 16));
     ASSERT_INT_EQ(PH_DCT_REDUCTION_SIZE, ctx->config.phash_reduction_size);
     ASSERT_OK(ph_compute_phash(ctx, &hash));
 

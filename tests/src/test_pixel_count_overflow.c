@@ -64,7 +64,14 @@ static ph_context_t *make_ctx_with_tiny_image(int w, int h, int channels) {
 }
 
 /* H6, the exact repro from the review: 46341 * 46341 overflows int.
- * The product is now size_t, so the request is simply too big for the arena. */
+ * The product is now size_t, so the request is simply too big for the arena.
+ *
+ * Since R04 these values can no longer reach ph_compute_bmh() through the public API --
+ * ph_context_set_block_params() rejects anything above PH_BLOCK_MAX_SIZE. The config field
+ * is therefore poisoned directly here, exactly as test_phash.c does for the pHash guard:
+ * the point of this file is that the *arithmetic* is well-defined whatever the field
+ * holds, which is defence in depth behind the setter and outlives it. That the setter now
+ * closes the door is asserted separately, in test_setter_bounds_reject_out_of_range(). */
 void test_bmh_block_size_overflows_int(void) {
     /* Squares that no allocator will ever serve (2^60 and ~2^62 bytes), so the
      * expected outcome is identical in every build configuration. */
@@ -72,7 +79,7 @@ void test_bmh_block_size_overflows_int(void) {
 
     for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
         ph_context_t *ctx = make_ctx_with_tiny_image(8, 8, 3);
-        ph_context_set_block_params(ctx, sizes[i]);
+        ctx->config.block_size = sizes[i]; /* bypasses the setter on purpose */
 
         ph_digest_t d;
         ph_error_t err = ph_compute_bmh(ctx, &d);
@@ -87,7 +94,7 @@ void test_bmh_block_size_overflows_int(void) {
      * build this really does allocate 2 GB and box-resize 2.1 gigapixels. */
     {
         ph_context_t *ctx = make_ctx_with_tiny_image(8, 8, 3);
-        ph_context_set_block_params(ctx, 46341);
+        ctx->config.block_size = 46341;
         ph_digest_t d;
         ASSERT_INT_EQ(PH_ERR_ALLOCATION_FAILED, ph_compute_bmh(ctx, &d));
         ph_free(ctx);
@@ -95,6 +102,39 @@ void test_bmh_block_size_overflows_int(void) {
 #endif
 
     PASS("test_bmh_block_size_overflows_int");
+}
+
+/* R04: the values above are unreachable through the public API now. The setter refuses
+ * them and leaves the configuration exactly as it was -- no clamping to the ceiling. */
+void test_setter_bounds_reject_out_of_range(void) {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+
+    const int bad_blocks[] = {1 << 30, INT_MAX, 46341, PH_BLOCK_MAX_SIZE + 1};
+    for (size_t i = 0; i < sizeof(bad_blocks) / sizeof(bad_blocks[0]); i++) {
+        ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, bad_blocks[i]));
+        ASSERT_INT_EQ(PH_BLOCK_SIZE, ctx->config.block_size);
+    }
+    /* And the ceiling itself is accepted: (22*22 + 7) / 8 == 61 bytes still fits. */
+    ASSERT_OK(ph_context_set_block_params(ctx, PH_BLOCK_MAX_SIZE));
+    ASSERT_INT_EQ(PH_BLOCK_MAX_SIZE, ctx->config.block_size);
+
+    const int bad_projections[] = {257, 4096, 200000, INT_MAX, PH_RADIAL_MAX_PROJECTIONS + 1};
+    for (size_t i = 0; i < sizeof(bad_projections) / sizeof(bad_projections[0]); i++) {
+        ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
+                      ph_context_set_radial_params(ctx, bad_projections[i], 64));
+        ASSERT_INT_EQ(PH_RADIAL_PROJECTIONS, ctx->config.radial_projections);
+        ASSERT_INT_EQ(PH_RADIAL_SAMPLES, ctx->config.radial_samples);
+    }
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
+                  ph_context_set_radial_params(ctx, 40, PH_RADIAL_MAX_SAMPLES + 1));
+    ASSERT_INT_EQ(PH_RADIAL_SAMPLES, ctx->config.radial_samples);
+    ASSERT_OK(ph_context_set_radial_params(ctx, PH_RADIAL_MAX_PROJECTIONS, PH_RADIAL_MAX_SAMPLES));
+    ASSERT_INT_EQ(PH_RADIAL_MAX_PROJECTIONS, ctx->config.radial_projections);
+    ASSERT_INT_EQ(PH_RADIAL_MAX_SAMPLES, ctx->config.radial_samples);
+
+    ph_free(ctx);
+    PASS("test_setter_bounds_reject_out_of_range");
 }
 
 /* Sanity: a legitimate block_size still works (the guard must not over-reject). */
@@ -108,7 +148,9 @@ void test_bmh_normal_block_size_still_works(void) {
     PASS("test_bmh_normal_block_size_still_works");
 }
 
-/* Radial: a huge projection count must fail cleanly, not wrap the byte count. */
+/* Radial: a huge projection count must fail cleanly, not wrap the byte count.
+ * As above, the config is poisoned directly since R04 -- the setter rejects these values,
+ * and this test is about the arithmetic behind it. */
 void test_radial_huge_projections(void) {
     /* Far more projections than the digest can hold: the byte count must be computed
      * in size_t (it is `projections * sizeof(double)`) and the digest size must stay
@@ -117,7 +159,8 @@ void test_radial_huge_projections(void) {
 
     for (size_t i = 0; i < sizeof(projections) / sizeof(projections[0]); i++) {
         ph_context_t *ctx = make_ctx_with_tiny_image(32, 32, 3);
-        ph_context_set_radial_params(ctx, projections[i], 64);
+        ctx->config.radial_projections = projections[i];
+        ctx->config.radial_samples = 64;
         ph_digest_t d;
         ASSERT_OK(ph_compute_radial_hash(ctx, &d));
         ASSERT_INT_EQ(PH_DIGEST_MAX_BYTES, d.size);
@@ -130,7 +173,8 @@ void test_radial_huge_projections(void) {
      * well get the mapping from the OS and then spin for hours. */
     {
         ph_context_t *ctx = make_ctx_with_tiny_image(32, 32, 3);
-        ph_context_set_radial_params(ctx, INT_MAX, 64);
+        ctx->config.radial_projections = INT_MAX;
+        ctx->config.radial_samples = 64;
         ph_digest_t d;
         ASSERT_INT_EQ(PH_ERR_ALLOCATION_FAILED, ph_compute_radial_hash(ctx, &d));
         ph_free(ctx);
@@ -302,6 +346,7 @@ void test_tiny_images_grayscale(void) {
 
 int main(void) {
     test_bmh_block_size_overflows_int();
+    test_setter_bounds_reject_out_of_range();
     test_bmh_normal_block_size_still_works();
     test_radial_huge_projections();
     test_load_from_pixels_respects_max_pixels();

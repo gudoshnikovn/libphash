@@ -70,13 +70,18 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
         return PH_ERR_INVALID_ARGUMENT;
 
     /* projections * sizeof(double) does not overflow size_t on a 64-bit target, but it
-     * does on a 32-bit one (projections is an unbounded int -- the ceiling belongs to
-     * the setter, R04). Refuse rather than wrap (R03/H6). */
+     * does on a 32-bit one. Since 2.0.0 ph_context_set_radial_params() caps projections
+     * at PH_DIGEST_MAX_BYTES, so this cannot trigger through the public API either;
+     * kept as defence in depth. Refuse rather than wrap (R03/H6). */
     if ((size_t)projections > SIZE_MAX / sizeof(double))
         return PH_ERR_ALLOCATION_FAILED;
 
     memset(out_digest, 0, sizeof(ph_digest_t));
-    /* Clamp size to the max supported by ph_digest_t */
+    /* Clamp size to the max supported by ph_digest_t.
+     * Unreachable through the public API since 2.0.0: the setter rejects
+     * projections > PH_DIGEST_MAX_BYTES, precisely because this clamp used to hand back
+     * PH_SUCCESS with a digest quietly shorter than the caller had configured. Kept for a
+     * config field written by some other route (tests do exactly that). */
     out_digest->size =
         (uint8_t)(projections > PH_DIGEST_MAX_BYTES ? PH_DIGEST_MAX_BYTES : projections);
 
