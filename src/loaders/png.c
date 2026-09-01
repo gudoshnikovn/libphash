@@ -69,21 +69,36 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     if (!png_ptr)
         return NULL;
 
-    png_infop info_ptr = png_create_info_struct(png_ptr);
-    if (!info_ptr) {
-        png_destroy_read_struct(&png_ptr, NULL, NULL);
-        return NULL;
-    }
+    /* setjmp() must be armed before ANY other libpng call on png_ptr: png_error_fn
+     * unconditionally longjmp()s to png_jmpbuf(png_ptr), and libpng can raise a fatal
+     * error from inside png_create_info_struct() itself (allocation failure). With the
+     * setjmp() placed after that call, such a failure jumped through an uninitialized
+     * jmp_buf -- undefined behaviour (R18/M3).
+     *
+     * info_for_cleanup is volatile because it is assigned after setjmp() and read in
+     * the longjmp branch: a non-volatile local modified between setjmp and longjmp has
+     * an indeterminate value there (C11 7.13.2.1p3). It exists only so the jump branch
+     * can free an info struct that may or may not have been created yet; the rest of
+     * the function keeps using the plain info_ptr below. */
+    volatile png_infop info_for_cleanup = NULL;
 
     if (setjmp(png_jmpbuf(png_ptr))) {
         // png_error_fn already captured the message and/or code (PH_ERR_IMAGE_TOO_LARGE
         // sites below set *out_err before their own longjmp-free early returns; this
         // path is libpng's own fatal errors, which are always a malformed bitstream).
+        png_infop jumped_info = info_for_cleanup;
         if (out_err && *out_err == PH_SUCCESS)
             *out_err = PH_ERR_CORRUPT_DATA;
-        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        png_destroy_read_struct(&png_ptr, jumped_info ? &jumped_info : NULL, NULL);
         return NULL;
     }
+
+    png_infop info_ptr = png_create_info_struct(png_ptr);
+    if (!info_ptr) {
+        png_destroy_read_struct(&png_ptr, NULL, NULL);
+        return NULL;
+    }
+    info_for_cleanup = info_ptr;
 
     // Zero-copy memory reading from mmap'd buffer
     PngMemReader reader = {.data = buffer, .size = size, .offset = 0};
