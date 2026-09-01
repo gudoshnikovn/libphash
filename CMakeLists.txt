@@ -10,6 +10,41 @@ else()
     set(PHASH_IS_TOP_LEVEL OFF)
 endif()
 
+# BUILD_SHARED_LIBS and BUILD_TESTING are global CMake variables, not options of the
+# vendored subprojects -- but those subprojects have to see them OFF while they
+# configure. Forcing them into the cache and walking away silently reconfigured any
+# parent project that pulled libphash in via add_subdirectory() (R11/H3), turning off
+# its shared build and its ctest. So: force them, then put the parent's values back.
+#
+# Macros, not functions: cache edits are global, but these also read and write plain
+# variables in the caller's scope, which a function() would not see.
+macro(phash_push_global_build_flags)
+    if(NOT PHASH_IS_TOP_LEVEL)
+        foreach(phash_gflag BUILD_SHARED_LIBS BUILD_TESTING)
+            set(PHASH_SAVED_${phash_gflag} "${${phash_gflag}}")
+            if(DEFINED CACHE{${phash_gflag}})
+                set(PHASH_HAD_${phash_gflag} ON)
+            else()
+                set(PHASH_HAD_${phash_gflag} OFF)
+            endif()
+        endforeach()
+    endif()
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+endmacro()
+
+macro(phash_pop_global_build_flags)
+    if(NOT PHASH_IS_TOP_LEVEL)
+        foreach(phash_gflag BUILD_SHARED_LIBS BUILD_TESTING)
+            if(PHASH_HAD_${phash_gflag})
+                set(${phash_gflag} "${PHASH_SAVED_${phash_gflag}}" CACHE BOOL "" FORCE)
+            else()
+                unset(${phash_gflag} CACHE)
+            endif()
+        endforeach()
+    endif()
+endmacro()
+
 # --- Version header (single source of truth: the project() VERSION above) ---
 set(PH_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
 set(PH_VERSION_MINOR ${PROJECT_VERSION_MINOR})
@@ -172,26 +207,59 @@ endif()
 
 # --- Bundled zlib-ng (zlib-compat inflate/deflate used by libpng/spng) ---
 set(PHASH_ZLIB_TARGET z)
+# When libphash is pulled in via add_subdirectory(), the parent project owns its own
+# build settings and its own zlib. Forcing ours into the cache silently reconfigured
+# the parent: BUILD_SHARED_LIBS and BUILD_TESTING are global CMake variables, and
+# ZLIB::ZLIB / ZLIB_INCLUDE_DIR / ZLIB_LIBRARY are how the parent's find_package(ZLIB)
+# reports its result (R11/H3). So: if the parent already brought its own zlib, step
+# aside and use it; otherwise configure zlib-ng but leave the parent's cache intact.
+if(NOT PHASH_IS_TOP_LEVEL AND PHASH_USE_ZLIB_NG)
+    if(TARGET ZLIB::ZLIB OR DEFINED CACHE{ZLIB_LIBRARY})
+        message(STATUS
+            "phash: parent project already provides zlib; using it instead of the "
+            "bundled zlib-ng (set PHASH_USE_ZLIB_NG=OFF to silence this).")
+        set(PHASH_USE_ZLIB_NG OFF)
+    endif()
+endif()
+
 if(PHASH_USE_ZLIB_NG AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/zlib-ng/CMakeLists.txt")
+    # zlib-ng's own options: scoped to it, harmless to a parent.
     set(ZLIB_COMPAT ON CACHE BOOL "" FORCE)
     set(ZLIB_ALIASES ON CACHE BOOL "" FORCE)
-    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
     set(WITH_GTEST OFF CACHE BOOL "" FORCE)
     set(WITH_FUZZERS OFF CACHE BOOL "" FORCE)
     set(WITH_BENCHMARKS OFF CACHE BOOL "" FORCE)
     set(WITH_BENCHMARK_APPS OFF CACHE BOOL "" FORCE)
+
+    # BUILD_SHARED_LIBS and BUILD_TESTING are NOT zlib-ng's own -- they are global.
+    # zlib-ng must see them OFF while it configures, so remember what the parent had
+    # and put it back immediately afterwards. At top level there is nothing to
+    # preserve, so the plain forced value is fine.
+    phash_push_global_build_flags()
     add_subdirectory(vendor/zlib-ng EXCLUDE_FROM_ALL)
+    phash_pop_global_build_flags()
+
     # Predefine ZLIB::ZLIB before libpng's find_package(ZLIB) runs: FindZLIB.cmake
     # skips creating its own imported target when one already exists, so libpng
     # links against zlib-ng instead of the system zlib it would otherwise find.
-    add_library(ZLIB::ZLIB ALIAS zlib-ng)
+    # Guarded: creating a target that already exists is a hard error, and the parent
+    # may well have defined it (that case is handled above by standing down).
+    if(NOT TARGET ZLIB::ZLIB)
+        add_library(ZLIB::ZLIB ALIAS zlib-ng)
+    endif()
     # find_package(ZLIB) also short-circuits its own find_path()/find_library()
     # searches once these are already set, so pin them to zlib-ng's generated
     # zlib.h and static lib. Without this, libpng's pnglibconf.h gets baked with
     # the system zlib's ZLIB_VERNUM while the actual compile picks up zlib-ng's
     # zlib.h through the include path, and the two disagree at compile time.
     set(ZLIB_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/vendor/zlib-ng" CACHE PATH "" FORCE)
+    # NOTE (R51): this hardcoded archive name only holds while zlib-ng builds statically.
+    # A parent project with BUILD_SHARED_LIBS=ON -- which R11 now correctly preserves --
+    # makes zlib-ng produce a shared library instead, and this path stops existing
+    # ("No rule to make target .../libz.a"). Substituting the target name here does not
+    # work either: it reaches the parent's own link line as a plain file dependency.
+    # Wiring the vendored codecs for a shared parent is tracked as R51; a static parent
+    # (the common case) builds and links correctly today.
     set(ZLIB_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/vendor/zlib-ng/libz.a" CACHE FILEPATH "" FORCE)
     target_compile_definitions(phash PRIVATE PH_USE_ZLIB_NG)
     set(PHASH_ZLIB_TARGET zlib-ng)
@@ -279,10 +347,13 @@ if(PHASH_USE_WEBP)
     set(WEBP_BUILD_LIBWEBPMUX OFF CACHE BOOL "" FORCE)
     set(WEBP_BUILD_WEBPMUX OFF CACHE BOOL "" FORCE)
     set(WEBP_BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
-    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
     set(WEBP_LINK_STATIC ON CACHE BOOL "" FORCE)
 
+    # Same global-flag hazard as the zlib-ng block above; the review only named that
+    # one, but libwebp forced BUILD_SHARED_LIBS just as unconditionally.
+    phash_push_global_build_flags()
     add_subdirectory(vendor/libwebp EXCLUDE_FROM_ALL)
+    phash_pop_global_build_flags()
 
     # We only need the decoder part for phash
     target_link_libraries(phash PRIVATE $<BUILD_INTERFACE:webpdecoder>)
