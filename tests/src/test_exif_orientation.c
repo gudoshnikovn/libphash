@@ -332,6 +332,99 @@ void test_apply_orientation_roundtrip(void) {
     PASS("test_apply_orientation_roundtrip");
 }
 
+/* Reference implementation: the straightforward per-pixel transform, kept here
+ * verbatim so the optimized row-wise/tiled version in src/image/orient.c can be
+ * held to bit-exact equality with it. Deliberately naive — it is the spec, not
+ * the fast path. */
+static uint8_t *reference_orient(const uint8_t *src, int W, int H, int channels, int orientation,
+                                 int *out_w, int *out_h) {
+    int Wd = (orientation >= 5) ? H : W;
+    int Hd = (orientation >= 5) ? W : H;
+    uint8_t *out = (uint8_t *)malloc((size_t)Wd * Hd * channels);
+    ASSERT_PTR_NOT_NULL(out);
+
+    for (int oy = 0; oy < Hd; oy++) {
+        for (int ox = 0; ox < Wd; ox++) {
+            int sx, sy;
+            switch (orientation) {
+                case 2:
+                    sx = W - 1 - ox, sy = oy;
+                    break;
+                case 3:
+                    sx = W - 1 - ox, sy = H - 1 - oy;
+                    break;
+                case 4:
+                    sx = ox, sy = H - 1 - oy;
+                    break;
+                case 5:
+                    sx = oy, sy = ox;
+                    break;
+                case 6:
+                    sx = oy, sy = H - 1 - ox;
+                    break;
+                case 7:
+                    sx = W - 1 - oy, sy = H - 1 - ox;
+                    break;
+                case 8:
+                    sx = W - 1 - oy, sy = ox;
+                    break;
+                default:
+                    sx = ox, sy = oy;
+                    break;
+            }
+            memcpy(out + ((size_t)oy * Wd + ox) * channels, src + ((size_t)sy * W + sx) * channels,
+                   (size_t)channels);
+        }
+    }
+    *out_w = Wd;
+    *out_h = Hd;
+    return out;
+}
+
+/* Every orientation, over sizes that straddle the 32x32 tile edge of the
+ * transposing path (1xN, Nx1, odd, exactly one tile, one tile plus a remainder)
+ * and over every channel count the loaders can hand in. */
+void test_apply_orientation_matches_reference(void) {
+    static const struct {
+        int w, h;
+    } sizes[] = {{1, 1},   {1, 7},   {7, 1},   {3, 5},   {5, 3},    {31, 33},
+                 {32, 32}, {33, 31}, {64, 64}, {65, 63}, {17, 129}, {129, 17}};
+    static const int channel_counts[] = {1, 2, 3, 4};
+
+    for (size_t s = 0; s < sizeof(sizes) / sizeof(sizes[0]); s++) {
+        for (size_t c = 0; c < sizeof(channel_counts) / sizeof(channel_counts[0]); c++) {
+            const int W = sizes[s].w, H = sizes[s].h, ch = channel_counts[c];
+            const size_t n = (size_t)W * H * ch;
+
+            uint8_t *original = (uint8_t *)malloc(n);
+            ASSERT_PTR_NOT_NULL(original);
+            for (size_t i = 0; i < n; i++)
+                original[i] = (uint8_t)(i * 31u + 7u); // Distinct-ish, catches index swaps.
+
+            for (int o = 1; o <= 8; o++) {
+                int ref_w = 0, ref_h = 0;
+                uint8_t *ref = reference_orient(original, W, H, ch, o, &ref_w, &ref_h);
+
+                uint8_t *got = (uint8_t *)malloc(n);
+                ASSERT_PTR_NOT_NULL(got);
+                memcpy(got, original, n);
+                int w = W, h = H;
+                ph_apply_exif_orientation(&got, &w, &h, ch, o);
+
+                if (w != ref_w || h != ref_h || memcmp(got, ref, n) != 0) {
+                    fprintf(stderr, "[FAIL] orientation %d, %dx%d x%d: got %dx%d, expected %dx%d\n",
+                            o, W, H, ch, w, h, ref_w, ref_h);
+                    exit(1);
+                }
+                free(got);
+                free(ref);
+            }
+            free(original);
+        }
+    }
+    PASS("test_apply_orientation_matches_reference");
+}
+
 /* --- End-to-end: real JPEG + spliced-in synthetic EXIF -------------------- */
 
 void test_auto_orient_e2e(void) {
@@ -396,6 +489,7 @@ int main(void) {
     test_apply_orientation_known_values();
     test_apply_orientation_noop_and_invalid();
     test_apply_orientation_roundtrip();
+    test_apply_orientation_matches_reference();
     test_auto_orient_e2e();
     return 0;
 }
