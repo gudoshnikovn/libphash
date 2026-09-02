@@ -31,6 +31,37 @@ static int ph_can_read_stb(const uint8_t *magic, size_t len) {
  * value and reject a perfectly small image. Take the magnitude first. */
 static uint64_t ph_abs_dim(int v) { return (v < 0) ? (uint64_t)(-(int64_t)v) : (uint64_t)v; }
 
+/* stb_image has no error codes: a failure leaves a bare English sentence in
+ * stbi_failure_reason(), so mapping one back to a ph_error_t means comparing against
+ * string literals that live inside vendor/stb_image.h. That is a real coupling and it
+ * fails silently -- if a vendored update reworded one of these, the comparison would
+ * simply stop matching and every unrecognized buffer would be reported as corrupt
+ * instead of unsupported, with nothing to notice it.
+ *
+ * So the literals are collected here rather than spelled out at the comparison, with
+ * the vendored version they were read from, and test_stb_failure_classification() in
+ * tests/src/test_loader.c pins both halves of the mapping. That test is meant to break
+ * on a vendor bump: when it does, re-read the strings below out of the new header.
+ *
+ * Pinned to vendor/stb_image.h v2.30. These are the reasons that mean "nothing here
+ * looked like an image I know"; every other reason means a format was recognized and
+ * its bitstream was broken, which is PH_ERR_CORRUPT_DATA. */
+static const char *const ph_stb_unsupported_reasons[] = {
+    /* stbi__load_main() and stbi__info_main(), after every format test declined. */
+    "unknown image type",
+};
+
+static int ph_stb_reason_is_unsupported(const char *reason) {
+    if (!reason)
+        return 0;
+    for (size_t i = 0; i < sizeof(ph_stb_unsupported_reasons) / sizeof(*ph_stb_unsupported_reasons);
+         i++) {
+        if (strcmp(reason, ph_stb_unsupported_reasons[i]) == 0)
+            return 1;
+    }
+    return 0;
+}
+
 static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *h, int *ch,
                                   int req_comp, uint64_t max_pixels, ph_error_t *out_err,
                                   char *err_msg, size_t err_msg_cap) {
@@ -64,9 +95,8 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
         if (reason)
             ph_set_err_msg(err_msg, err_msg_cap, reason);
         if (out_err)
-            *out_err = (reason && strcmp(reason, "unknown image type") == 0)
-                           ? PH_ERR_UNSUPPORTED_FORMAT
-                           : PH_ERR_CORRUPT_DATA;
+            *out_err = ph_stb_reason_is_unsupported(reason) ? PH_ERR_UNSUPPORTED_FORMAT
+                                                            : PH_ERR_CORRUPT_DATA;
         return NULL;
     }
     if (req_comp != 0)

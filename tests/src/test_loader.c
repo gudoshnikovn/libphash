@@ -301,6 +301,48 @@ void test_bmp_extreme_aspect_ratio_rejected() {
     printf("test_bmp_extreme_aspect_ratio_rejected: PASSED\n");
 }
 
+// The stb_image fallback reports failures as an English sentence, not a code, so
+// src/loader.c has to recognize the sentence that means "nothing here looked like an
+// image" and separate it from every sentence that means "recognized, but broken". That
+// mapping is pinned to the literals in vendor/stb_image.h, and it fails silently: a
+// reworded string in a vendored update would quietly turn every unsupported buffer into
+// PH_ERR_CORRUPT_DATA.
+//
+// This test is therefore meant to break on a vendor bump. If it does, re-read the
+// strings out of the new stb_image.h and update ph_stb_unsupported_reasons[] in
+// src/loader.c -- do not relax the assertions.
+void test_stb_failure_classification() {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+
+    // Not any format stb_image tests for: "unknown image type" -> unsupported.
+    const uint8_t junk[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+                            0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
+    ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, ph_load_from_memory(ctx, junk, sizeof(junk)));
+
+    // A BMP whose DIB header size is nonsense stops looking like a BMP at all, so it
+    // reaches the same "unknown image type" and must land on the same code.
+    uint8_t bmp[sizeof(bmp_bottomup)];
+    memcpy(bmp, bmp_bottomup, sizeof(bmp));
+    bmp[14] = 0x99; // DIB header size
+    ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, ph_load_from_memory(ctx, bmp, sizeof(bmp)));
+
+    // The other half of the mapping, which is what a silent degradation would collapse
+    // into: a recognized format that cannot be decoded stays PH_ERR_CORRUPT_DATA. This
+    // BMP is well-formed down to its bit depth, which is 7.
+    memcpy(bmp, bmp_bottomup, sizeof(bmp));
+    bmp[28] = 7;
+    bmp[29] = 0;
+    ASSERT_INT_EQ(PH_ERR_CORRUPT_DATA, ph_load_from_memory(ctx, bmp, sizeof(bmp)));
+
+    // A failure always leaves a reason behind, whichever side of the mapping it took.
+    ASSERT(ph_get_last_error_message(ctx) != NULL);
+    ASSERT(ph_get_last_error_message(ctx)[0] != '\0');
+
+    ph_free(ctx);
+    printf("test_stb_failure_classification: PASSED\n");
+}
+
 static unsigned char *read_whole_file(const char *path, size_t *out_size) {
     FILE *f = fopen(path, "rb");
     ASSERT_PTR_NOT_NULL(f);
@@ -452,5 +494,6 @@ int main() {
     test_stb_fallback_formats();
     test_bmp_negative_height_not_too_large();
     test_bmp_extreme_aspect_ratio_rejected();
+    test_stb_failure_classification();
     return 0;
 }

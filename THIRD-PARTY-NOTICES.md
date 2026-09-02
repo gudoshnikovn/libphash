@@ -54,6 +54,7 @@ Redistribution and use in source and binary forms, with or without modification,
 
 * **Project:** [https://github.com/nothings/stb](https://github.com/nothings/stb)
 * **License:** Public Domain / MIT / Unlicense
+* **Vendored version:** v2.30 (`vendor/stb_image.h`, SHA-256 `f53ea8b6ed181beb245d4c43c97dca0bf03cd1408e4b6485afc605199bbc9d3f`)
 
 This software is dual-licensed to the public domain and under the following license: you are free to use this software under the terms of the MIT license or the Unlicense.
 
@@ -78,6 +79,7 @@ Redistribution and use in source and binary forms, with or without modification,
 
 * **Project:** [https://github.com/nothings/stb](https://github.com/nothings/stb)
 * **License:** Public Domain / MIT / Unlicense
+* **Vendored version:** v2.18 (`vendor/stb_image_resize2.h`, SHA-256 `173e654634f6ccaad98f603e686ea212eec1fe8ea6d2a5e5e8056efa10ae3880`)
 
 This software is dual-licensed to the public domain and under the following license: you are free to use this software under the terms of the MIT license or the Unlicense.
 
@@ -109,3 +111,11 @@ Permission is granted to anyone to use this software for any purpose, including 
 | **stb_image** | `vendor/stb_image.h` | Public Domain (MIT) |
 | **stb_image_resize2** | `vendor/stb_image_resize2.h` | Public Domain (MIT) |
 | **zlib-ng** | `vendor/zlib-ng` | zlib License |
+
+Everything except the two `stb_*.h` files is a git submodule, so its exact revision is
+recorded in the repository and `git submodule status` prints it. The two stb headers are
+copied into `vendor/` instead, which is why their versions and hashes are written out
+above: without them an update leaves no trace. They are not merely a licensing detail —
+`src/loader.c` classifies a decode failure by comparing against error strings that live
+inside `stb_image.h`, so replacing that file is a change that has to be reviewed against
+`ph_stb_unsupported_reasons[]` and `test_stb_failure_classification`.

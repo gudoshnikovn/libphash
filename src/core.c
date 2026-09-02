@@ -60,8 +60,28 @@ typedef struct stat ph_file_stat_t;
 #define PH_HAVE_MMAP 1
 #endif
 
+/* stb_image keeps its failure reason in one global, stbi__g_failure_reason, which
+ * src/loader.c reads through stbi_failure_reason() to classify a decode failure. The
+ * batch API decodes from several threads at once, so that global must be per-thread or
+ * one worker's message overwrites another's -- and the classification with it.
+ *
+ * stb_image does qualify it thread-local on its own, but through a fallback chain that
+ * quietly yields nothing on a toolchain it does not recognize, and not at all if
+ * STBI_NO_THREAD_LOCALS is defined. Neither is safe to leave implicit under a threaded
+ * API, so the outcome is asserted rather than assumed: the guard below turns a silent
+ * data race into a build failure, including after a vendor bump that reworks the chain.
+ * stb_image chooses the qualifier unconditionally (it does not honour a definition made
+ * before the include), so this checks its choice instead of making one. */
+#if defined(STBI_NO_THREAD_LOCALS)
+#error "libphash decodes from several threads; stb_image's failure reason must stay thread-local"
+#endif
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "../vendor/stb_image.h"
+
+#ifndef STBI_THREAD_LOCAL
+#error "stb_image left its failure reason non-thread-local; ph_batch_* would race on it"
+#endif
 
 PH_API const char *ph_version(void) { return PH_VERSION_STRING; }
 
