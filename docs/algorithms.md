@@ -14,6 +14,39 @@ Two companion documents carry the parts this one deliberately does not:
 Where an algorithm below is known to depart from its source, this page says so and links
 there rather than quietly describing the behaviour as if it were intended.
 
+## Threat model: what these hashes are not
+
+Every hash here is **deterministic and unkeyed**. The same image produces the same hash on
+any machine, with no shared secret — which is exactly what deduplication needs, and
+exactly what makes all of them trivial to defeat on purpose.
+
+An attacker who wants two visually different images to collide, or one image to stop
+matching its own copy, can arrange it. This is not a weakness of any particular algorithm
+in this library: it follows from being deterministic and public, and it has been
+demonstrated against traditional and neural hashes alike (see [DC20] in
+[`references.md`](references.md), which produces exact collisions between unrelated images
+under minimal perturbation and notes that an attacker can thereby poison a duplicate-image
+lookup table). Swapping in a neural embedding does not fix it either — those are not
+trained for adversarial robustness, and adversarial examples are that family's oldest
+known failure mode.
+
+**Use these hashes for:** finding duplicates and near-duplicates in a collection you
+control, clustering, cache keys, "have I seen this before" in a trusted pipeline.
+
+**Do not use them for:** anything where someone benefits from a wrong answer — copyright
+enforcement, content moderation, blocklists, authentication of an image's integrity. The
+academic literature has algorithms for that problem, and they look different: they are
+**keyed**, so that an attacker who cannot guess the key cannot aim at the hash. Venkatesan
+et al. 2000 is the canonical example, and its key is not an optional extra — the paper
+calls its randomized rounding "the crucial source of randomness in the hash function's
+output". No such algorithm is implemented here, and the honest reason is that a keyed hash
+solves a different problem from the one this library is for.
+
+If you need a filter in an adversarial setting, the usual shape is two stages: a fast
+deterministic hash like these to reduce a corpus to a candidate set, then a heavier and
+harder-to-steer comparison over those candidates. The first stage is what this library is
+good at; the second is not in scope.
+
 ## Attribution at a glance
 
 | Algorithm | Author | Source | Known to diverge |

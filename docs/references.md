@@ -161,6 +161,25 @@ Gives the three moment formulas and the weighted-L1 distance attributed to [SO95
 only because [SO95] itself could not be obtained. Any change made on the strength of
 these formulas should be re-checked against the paper first.
 
+### [DC20] Dolhansky & Canton Ferrer 2020 — why none of these resist an adversary
+
+B. Dolhansky, C. Canton Ferrer, **"Adversarial collision attacks on image hashing
+functions"**, arXiv:2011.09473, 2020.
+
+- <https://arxiv.org/abs/2011.09473>
+- Rank 2 · Abstract read
+
+Cited for the threat-model note in [`algorithms.md`](algorithms.md). It produces exact
+hash collisions between unrelated images through minimal, gradient-guided perturbations,
+and does so "across numerous image pairs and hash types, encompassing both deep learning
+and traditional hashing methods" — the authors point out that an attacker can thereby
+"poison the image lookup table of a duplicate image detection service".
+
+Worth citing precisely because it covers learned hashes too. Swapping a perceptual hash
+for a neural embedding does not buy adversarial robustness; a self-supervised vision
+backbone is not trained for it, and adversarial examples are that family's oldest known
+failure mode.
+
 ### [MH80] Marr & Hildreth 1980 — cited only as a negative
 
 D. Marr, E. Hildreth, **"Theory of edge detection"**, *Proceedings of the Royal Society of
