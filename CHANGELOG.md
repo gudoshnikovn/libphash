@@ -88,6 +88,17 @@ walkthrough.
   *Restore the old behaviour:* not possible, by design — the previous behaviour was
   undefined.
 
+- **A single image dimension may not exceed 1000000 pixels.** The cap applies to every
+  format and to both `ph_load_from_file()` and `ph_load_from_memory()`, on top of
+  `max_pixels` and independently of it — setting `max_pixels` higher, or to `0`, does
+  not lift it. An image beyond it is rejected with `PH_ERR_IMAGE_TOO_LARGE`. The area
+  limit on its own permits an absurd aspect ratio: a 268435456 × 1 image sits exactly
+  on the default 256 MP limit, yet makes the decoder size a single row of ~800 MB.
+  Real photographs are nowhere near this, so in practice only synthetic input is
+  affected. `ph_load_from_pixels()` is not subject to the cap.
+  *Restore the old behaviour:* not possible — split such an image yourself, or decode
+  it with your own decoder and pass the pixels to `ph_load_from_pixels()`.
+
 - **`PH_VERSION_NUMBER` uses a new scheme:** `major*1000000 + minor*1000 + patch`
   (2.0.0 → 2000000), replacing `major*10000 + minor*100 + patch`. The old scheme
   collided as soon as a minor or patch exceeded 99 — 1.100.0 and 2.0.0 both produced
@@ -273,8 +284,10 @@ walkthrough.
   `int` pixel-count arithmetic. Fixed by the ceiling and by `size_t` arithmetic.
 - **The mock decoder no longer ships in release builds.** It was registered ahead of
   the real catch-all backend and intercepted any input beginning with `DE AD`.
-- **PNG decoder hardening:** overflow-checked `row_ptrs` allocation, a dimension cap,
-  and `setjmp` armed before the info struct exists.
+- **Absurd aspect ratios** are rejected by a per-dimension cap of 1000000 pixels that
+  no `max_pixels` setting can lift, in every format and every build configuration.
+- **PNG decoder hardening:** overflow-checked `row_ptrs` allocation, the dimension cap
+  applied straight from the IHDR, and `setjmp` armed before the info struct exists.
 - The decode path is now fuzzed (libFuzzer) and built under ASan/UBSan in CI.
 
 ## [1.10.4] - 2026-04-19
