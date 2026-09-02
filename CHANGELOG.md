@@ -136,6 +136,13 @@ walkthrough.
 
 ### Added
 
+- **A stated scope and threat model.** The README now says what the library is for —
+  deduplicating a collection you control — and, more importantly, what it is not for.
+  Every hash here is deterministic and unkeyed, which is what makes deduplication work
+  and what makes the hashes straightforward to defeat deliberately. Do not use them as a
+  moderation filter, a copyright blocklist, or an integrity check on untrusted input.
+  Nothing about the code changed; the exclusion was always true and is now written down.
+
 - **`docs/algorithm-provenance.md`** traces each of the nine hashes to its primary
   source and records, per algorithm, where this implementation departs from it. It
   names the departures that are known to contradict a published formula — most of them
