@@ -501,8 +501,13 @@ misled this analysis on its first pass.
    `STBIR_FILTER_MITCHELL`; do not silently change the filter, which would move every
    aHash and dHash value.
 
-Items 1–5 all change stored hash values and therefore need a decision about whether they
-belong in 2.0.0 at all. Item 9 changes none, as long as the fix is to the name.
+Items 1–5 all change stored hash values. The decision taken on 2 September 2026 is that
+**all of them are fixed in 2.0.0**: a major release is the one cheap moment to move a hash
+value, the breaking-changes list already carries one such move, and the golden hashes are
+regenerated once for the lot. Item 9 changes no value at all, as long as the fix is to the
+name.
+
+All nine are filed as individual tasks, each with its own before/after measurement.
 
 ---
 
