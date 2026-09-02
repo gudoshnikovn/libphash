@@ -141,7 +141,8 @@ walkthrough.
   names the departures that are known to contradict a published formula — most of them
   in the radial hash — so that a choice of algorithm can be made with the gaps visible
   rather than discovered. Two attributions are corrected there: wHash has no primary
-  source, and mHash is not a Marr-Hildreth hash.
+  source, and mHash is not a Marr-Hildreth hash. `docs/references.md` is the matching
+  bibliography, and every `src/hashes/*.c` file now opens with its own citation.
 
 - **Batch API.** `ph_hash_files()` and `ph_hash_buffers()` hash a batch of files or
   in-memory buffers, optionally across an internal thread pool (`threads`: 0 = one
@@ -211,6 +212,12 @@ walkthrough.
   per-call `malloc()`/`free()` traffic from the hot path.
 - Thread defaults now match across build systems, and `libphash.pc` is relocatable.
 - `make debug` and `make coverage` inherit `CFLAGS` instead of replacing it.
+- **Documentation corrections that follow from the provenance work.** `docs/algorithms.md`
+  claimed the radial hash gives "unmatched robustness against rotation (up to 360°)". It
+  does not: that invariance comes from comparing two hashes by the peak of their
+  cross-correlation, and this library compares digests element-wise. The claim is
+  withdrawn until the comparison is implemented. The same page described mHash as
+  configurable through `ph_context_set_block_params`, which mHash ignores.
 - Documentation fix: the gamma setting affects the Radial hash and nothing else.
   Its default of 2.2 is under review for a future release; it is deliberately not
   changed in 2.0.0, since changing it would move Radial hashes.
