@@ -224,6 +224,11 @@ walkthrough.
   actually decoded.
 - Auto-orientation, the `max_pixels` limit and format detection now behave identically
   whether an image comes from a path or from a buffer, and are covered by a parity test.
+- Applying EXIF orientation is 1.3-7.5x faster, which matters because auto-orientation
+  is on by default: whole-row copies for the flips and a tiled walk for the four
+  transposing orientations, in place of a pixel-at-a-time copy. On a 20 Mp photo the
+  transposing orientations drop from 84-105 ms to 12-20 ms. The transformed pixels are
+  bit-for-bit what they were, so no hash moves.
 - Loading from a file holds the encoded bytes in memory (mapped where the platform
   allows it) alongside the decoded image, where some build configurations previously
   read them incrementally. For ordinary images the encoded bytes are a small fraction
