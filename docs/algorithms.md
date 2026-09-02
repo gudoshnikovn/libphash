@@ -54,7 +54,7 @@ good at; the second is not in scope.
 | aHash | Neal Krawetz | blog post, 2011 | no |
 | dHash | David Oftedal, described by Neal Krawetz | blog post, 2013 | no |
 | pHash | pHash project; documented by Zauner; coefficient rule from Coskun & Sankur | thesis, 2010 | **yes** — DC coefficient |
-| wHash | Johannes Buchner (ImageHash) | **none** | n/a — no source to diverge from |
+| wHash | this library, after ImageHash | **none** — see below | n/a — justified by measurement |
 | mHash | this library | **none** | n/a — the *name* is wrong, see below |
 | BMH | Yang, Gu & Niu | paper, 2006 | **yes** — mean instead of median |
 | Radial | De Roover, De Vleeschouwer, Lefèbvre & Macq | paper, 2005 | **yes** — three divergences |
@@ -115,11 +115,15 @@ because there is none.
   - `PH_WHASH_FAST` (default) — a fixed 16×16 scale, one decomposition level.
   - `PH_WHASH_FULL` — scale chosen as the largest power of two fitting the image,
     cascaded down to 8×8. Slower, more faithful to the reference implementation.
-- **⚠ No primary source.** wHash has no paper. It is a port of ImageHash's `whash`, and
-  it is *not* the ICIP 2000 algorithm of Venkatesan et al. that is often cited for
-  wavelet hashing. One known difference from ImageHash: that implementation zeroes the
-  coarsest LL band by default, so its hash describes local structure rather than overall
-  brightness; this one does not.
+- **No primary source, deliberately.** wHash has no paper, and it is *not* the ICIP 2000
+  algorithm of Venkatesan et al. that is often cited for wavelet hashing — that one is
+  keyed, and its key is not optional. No paper describes an unkeyed deterministic wavelet
+  hash because there is nothing for the security literature to prove about one. So wHash
+  is justified by measurement instead: separability 4.34 on the synthetic corpus, second
+  best of the nine. Kept on those grounds rather than replaced.
+- One known difference from ImageHash: that implementation zeroes the coarsest LL band by
+  default, so its hash describes local structure rather than overall brightness; this one
+  does not.
 
 ## 5. mHash
 

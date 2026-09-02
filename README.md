@@ -4,6 +4,29 @@ A high-performance, portable C library for Perceptual Image Hashing.
 
 `libphash` is designed for speed and efficiency, providing a robust set of algorithms for image fingerprinting with native, SIMD-accelerated decoders and a zero-fragmentation memory model.
 
+## What this library is for
+
+**Finding duplicate and near-duplicate images in a collection you control.** Deduplicating
+an archive, clustering a catalogue, keying a cache, answering "have I stored this before"
+inside a trusted pipeline. Every design decision in this library is made for that job.
+
+**It is not built to withstand someone trying to fool it.** Every hash here is
+deterministic and unkeyed — the same image gives the same value on any machine, with no
+shared secret — and that property, which is what makes deduplication work at all, is also
+what makes the hashes straightforward to attack on purpose. Anyone who benefits from a
+wrong answer can construct a visually different image with a matching hash, or perturb an
+image so it stops matching its own copy.
+
+So: do not use `libphash` as a content-moderation filter, a copyright blocklist, or an
+integrity check on untrusted input. Those are authentication problems, the literature
+solves them with **keyed** algorithms whose key is load-bearing rather than optional, and
+none is implemented here. Reaching for a neural embedding instead does not close the gap —
+published collision attacks cover learned hashes too.
+
+The reasoning, the citations, and what follows from this choice for how the algorithms are
+verified are in [`docs/algorithms.md`](docs/algorithms.md#threat-model-what-these-hashes-are-not)
+and [`docs/algorithm-provenance.md`](docs/algorithm-provenance.md).
+
 ## Language Bindings
 
 * **Python**: [python-libphash](https://github.com/gudoshnikovn/python-libphash) (`pip install python-libphash`)

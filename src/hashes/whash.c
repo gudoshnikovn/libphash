@@ -11,11 +11,17 @@
  * subbands under a secret key, followed by error-correction decoding. Related work,
  * not an attribution.
  *
- * Consequently wHash can only be judged by measurable properties -- robustness,
- * discrimination, separability -- never by conformance. One known difference from the
- * reference implementation: ImageHash zeroes the coarsest LL band by default
- * (remove_max_haar_ll=True) so the hash describes local structure rather than overall
- * brightness; this code does not. See docs/algorithm-provenance.md.
+ * Consequently wHash is judged by measurable properties -- robustness, discrimination,
+ * separability -- rather than by conformance, and under this library's threat model that
+ * is the right instrument rather than a fallback: no paper describes an unkeyed
+ * deterministic wavelet hash because the security literature has nothing to prove about
+ * one. Measured separability on the synthetic corpus is 4.34, second best of the nine
+ * (tests/src/test_hash_properties.c). Kept deliberately for that reason; see the premise
+ * section of docs/algorithm-provenance.md.
+ *
+ * One known difference from the reference implementation: ImageHash zeroes the coarsest
+ * LL band by default (remove_max_haar_ll=True) so the hash describes local structure
+ * rather than overall brightness; this code does not.
  *
  * The transform itself is the orthonormal Haar wavelet: sums and differences of
  * adjacent samples, both divided by sqrt(2).
