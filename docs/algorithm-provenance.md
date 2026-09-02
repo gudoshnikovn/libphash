@@ -228,9 +228,11 @@ to obtain a deterministic hash discards what the paper demonstrates.
 
 It belongs in a related-work list, not in an attribution header.
 
-**Decision (2 September 2026): keep the algorithm, name it honestly.** wHash stays as it
-is — an unkeyed Haar descriptor — and is described as an algorithm of this library
-justified by measurement, not as an implementation of anything. Removing a working
+**Decision (2 September 2026): keep the algorithm, name it honestly — and then improve it
+on its own terms.** wHash stays an unkeyed Haar descriptor, described as an algorithm of
+this library justified by measurement rather than as an implementation of anything. That
+is a decision about *provenance*, not a freeze: the one substantive difference from the
+reference implementation, the missing LL removal, is filed to be settled by measurement. Removing a working
 descriptor for want of a citation would trade a measured 4.34 separability, the second
 best of the nine, for nothing but tidier provenance. Adopting a keyed algorithm instead
 would break determinism, which is the premise this library is built on. The gap here is
@@ -256,7 +258,7 @@ remaining `hash_size × hash_size` low band; bit set when `value > median`.
 
 | Difference | Class | Note |
 |---|---|---|
-| `remove_max_haar_ll` not implemented | deliberate, undocumented until now | ImageHash removes the coarsest LL band so the hash describes local structure rather than overall brightness. Omitting it makes wHash more like aHash than intended. There is no source that says which is correct — this is a candidate for the measurable-property criterion, not for a formula check. |
+| `remove_max_haar_ll` not implemented | **to be decided by measurement** | ImageHash removes the coarsest LL band so the hash describes local structure rather than overall brightness. Omitting it makes wHash more like aHash than intended — and the per-transform figures are consistent with that: wHash's mean distance under a +25 brightness shift is 0.008, so today's hash barely notices brightness leaving the LL band in. No source says which is correct, so this is settled the only way it can be: implement both, measure, keep the better, and record both numbers. Filed separately; the change was previously deferred only because it moves hash values, which 2.0.0 does anyway. |
 | Default mode fixes the scale at 16×16 | deliberate | `PH_WHASH_FULL` implements the power-of-two rule. Speed/robustness trade-off. |
 | Box resampling, where the reference implementation resamples with PIL's `LANCZOS` | undefined | |
 
