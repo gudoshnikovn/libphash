@@ -234,8 +234,8 @@ void test_bmp_negative_height_not_too_large() {
     ph_error_t err = ph_load_from_memory(ctx, bmp_topdown, sizeof(bmp_topdown));
     ASSERT_INT_EQ(PH_SUCCESS, err);
 
-    // Same fixture via ph_load_from_file(), which has its own separate
-    // stbi_info() pre-check for the stb_image-only (no mmap) path.
+    // Same fixture via ph_load_from_file(), which since 2.0.0 reaches the very
+    // same pre-check through the shared decode path.
     const char *tmp_path = "/tmp/libphash_test_topdown.bmp";
     FILE *f = fopen(tmp_path, "wb");
     if (f) {
@@ -248,6 +248,57 @@ void test_bmp_negative_height_not_too_large() {
 
     ph_free(ctx);
     printf("test_bmp_negative_height_not_too_large: PASSED\n");
+}
+
+// The per-dimension cap is not a PNG matter: any format can declare an absurd aspect
+// ratio that slips under the area limit and still asks the decoder for a single
+// enormous row. BMP is the case reachable in every build -- it has no native backend,
+// so it always goes through stb_image, which is exactly the path that used to have no
+// dimension cap at all.
+static void patch_bmp_dimensions(uint8_t *hdr, int32_t w, int32_t h) {
+    for (int i = 0; i < 4; i++) {
+        hdr[18 + i] = (uint8_t)(((uint32_t)w >> (8 * i)) & 0xff);
+        hdr[22 + i] = (uint8_t)(((uint32_t)h >> (8 * i)) & 0xff);
+    }
+}
+
+void test_bmp_extreme_aspect_ratio_rejected() {
+    uint8_t bmp[sizeof(bmp_bottomup)];
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+
+    // 2000000 x 10 = 20 Mpix, comfortably inside the default 256 Mpix area limit,
+    // yet twice the per-dimension cap.
+    memcpy(bmp, bmp_bottomup, sizeof(bmp));
+    patch_bmp_dimensions(bmp, 2000000, 10);
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_memory(ctx, bmp, sizeof(bmp)));
+    ASSERT_INT_EQ(0, ph_is_loaded(ctx));
+
+    // Tall variant of the same shape.
+    memcpy(bmp, bmp_bottomup, sizeof(bmp));
+    patch_bmp_dimensions(bmp, 10, 2000000);
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_memory(ctx, bmp, sizeof(bmp)));
+
+    // Disabling the area limit must not lift the dimension cap with it.
+    ph_context_set_max_pixels(ctx, 0);
+    memcpy(bmp, bmp_bottomup, sizeof(bmp));
+    patch_bmp_dimensions(bmp, 2000000, 10);
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_memory(ctx, bmp, sizeof(bmp)));
+
+    // A top-down BMP declares a negative height; its magnitude is what the cap is
+    // applied to, so this must be rejected for its size and not for its sign.
+    memcpy(bmp, bmp_bottomup, sizeof(bmp));
+    patch_bmp_dimensions(bmp, 10, -2000000);
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_memory(ctx, bmp, sizeof(bmp)));
+
+    // Exactly at the cap is allowed through the size check; the load still fails,
+    // on the truncated pixel data, which is a different and honest complaint.
+    memcpy(bmp, bmp_bottomup, sizeof(bmp));
+    patch_bmp_dimensions(bmp, 1000000, 1);
+    ASSERT(ph_load_from_memory(ctx, bmp, sizeof(bmp)) != PH_ERR_IMAGE_TOO_LARGE);
+
+    ph_free(ctx);
+    printf("test_bmp_extreme_aspect_ratio_rejected: PASSED\n");
 }
 
 static unsigned char *read_whole_file(const char *path, size_t *out_size) {
@@ -400,5 +451,6 @@ int main() {
     test_loader_edge_cases();
     test_stb_fallback_formats();
     test_bmp_negative_height_not_too_large();
+    test_bmp_extreme_aspect_ratio_rejected();
     return 0;
 }

@@ -117,38 +117,29 @@ static void build_png_header(uint8_t *out, uint32_t w, uint32_t h) {
 void test_extreme_aspect_ratio_rejected() {
     uint8_t hdr[29];
     ph_context_t *ctx = NULL;
-    /* Returns 1 for both native PNG backends (libpng and spng), 0 when PNG is left to
-     * stb_image. The dimension cap lives in the native PNG decoder, so only those
-     * builds can promise the specific code; a stb-only build still rejects the input,
-     * just with its own complaint about the truncated stream. Extending the cap to
-     * every format and load path is R50. */
-    const int native_png = ph_can_use_libpng();
 
     ASSERT_OK(ph_create(&ctx));
 
+    /* No branching on the compiled-in backend: the per-dimension cap is applied by the
+     * dispatcher for PNG, so libpng, spng and stb_image builds all answer the same
+     * input with PH_ERR_IMAGE_TOO_LARGE. Before, the cap lived inside the native PNG
+     * decoder and a stb_image-only build had none, answering with its own complaint
+     * about the truncated stream instead. */
+
     /* Exactly the default area limit, but 268435456 pixels wide. */
     build_png_header(hdr, 268435456u, 1u);
-    ph_error_t err = ph_load_from_memory(ctx, hdr, sizeof(hdr));
-    ASSERT(err != PH_SUCCESS);
-    if (native_png)
-        ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, err);
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_memory(ctx, hdr, sizeof(hdr)));
     ASSERT_INT_EQ(0, ph_is_loaded(ctx));
 
     /* Tall variant of the same shape. */
     build_png_header(hdr, 1u, 268435456u);
-    err = ph_load_from_memory(ctx, hdr, sizeof(hdr));
-    ASSERT(err != PH_SUCCESS);
-    if (native_png)
-        ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, err);
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_memory(ctx, hdr, sizeof(hdr)));
 
     /* Raising max_pixels must not raise the per-dimension limit either -- that was
      * exactly the defect: the dimension cap is deliberate, not derived from area. */
     ph_context_set_max_pixels(ctx, 0);
     build_png_header(hdr, 268435456u, 1u);
-    err = ph_load_from_memory(ctx, hdr, sizeof(hdr));
-    ASSERT(err != PH_SUCCESS);
-    if (native_png)
-        ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, err);
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_memory(ctx, hdr, sizeof(hdr)));
 
     /* A dimension just inside the limit is not rejected for being too large; it fails
      * later, on its truncated data, which is a different and honest complaint. */
@@ -156,8 +147,7 @@ void test_extreme_aspect_ratio_rejected() {
     ASSERT(ph_load_from_memory(ctx, hdr, sizeof(hdr)) != PH_ERR_IMAGE_TOO_LARGE);
 
     ph_free(ctx);
-    printf("test_extreme_aspect_ratio_rejected: PASSED (native PNG backend: %s)\n",
-           native_png ? "yes" : "no");
+    printf("test_extreme_aspect_ratio_rejected: PASSED\n");
 }
 
 int main() {

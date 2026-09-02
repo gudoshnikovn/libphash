@@ -34,10 +34,22 @@ static uint64_t ph_abs_dim(int v) { return (v < 0) ? (uint64_t)(-(int64_t)v) : (
 static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *h, int *ch,
                                   int req_comp, uint64_t max_pixels, ph_error_t *out_err,
                                   char *err_msg, size_t err_msg_cap) {
-    if (max_pixels != 0) {
-        int iw, ih, icomp;
-        if (stbi_info_from_memory(data, (int)len, &iw, &ih, &icomp) &&
-            ph_exceeds_pixel_limit(ph_abs_dim(iw), ph_abs_dim(ih), max_pixels)) {
+    /* Run unconditionally, not only when max_pixels is set: the per-dimension cap and
+     * the implementation ceiling inside ph_exceeds_pixel_limit() apply even when the
+     * caller has disabled their own area limit with max_pixels == 0. Reading the header
+     * costs a header parse, which is negligible against the decode that follows. If
+     * stbi_info() cannot parse it, there is nothing to judge -- stbi_load() below fails
+     * on the same data and reports why. */
+    int iw, ih, icomp;
+    if (stbi_info_from_memory(data, (int)len, &iw, &ih, &icomp)) {
+        uint64_t w64 = ph_abs_dim(iw), h64 = ph_abs_dim(ih);
+        if (ph_exceeds_dimension_limit(w64, h64)) {
+            if (out_err)
+                *out_err = PH_ERR_IMAGE_TOO_LARGE;
+            ph_set_err_msg(err_msg, err_msg_cap, "Image dimension exceeds the supported maximum");
+            return NULL;
+        }
+        if (ph_exceeds_pixel_limit(w64, h64, max_pixels)) {
             if (out_err)
                 *out_err = PH_ERR_IMAGE_TOO_LARGE;
             ph_set_err_msg(err_msg, err_msg_cap,
@@ -115,6 +127,18 @@ uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int 
         *out_err = PH_SUCCESS;
     if (!buffer || length == 0)
         return NULL;
+
+    /* PNG is judged here rather than in a backend, so that the per-dimension cap holds
+     * in a stb_image-only build too and every configuration answers the same input with
+     * the same code. Every other format reaches the cap through its backend, which gets
+     * the dimensions from its own header parse. */
+    if (ph_magic_is_png(buffer, length) && !ph_png_dimensions_within_limit(buffer, length)) {
+        if (out_err)
+            *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        ph_set_err_msg(err_msg, err_msg_cap, "PNG dimension exceeds the supported maximum");
+        return NULL;
+    }
+
     for (int i = 0; backends[i].can_read != NULL; i++) {
         if (backends[i].can_read(buffer, length)) {
             ph_error_t err = PH_SUCCESS;

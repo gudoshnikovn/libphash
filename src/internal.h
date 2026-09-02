@@ -243,6 +243,29 @@ static inline int ph_safe_image_alloc_size(uint64_t w, uint64_t h, uint64_t chan
  * SIMD paths included -- see tasks/review/R48. */
 #define PH_MAX_SUPPORTED_PIXELS ((uint64_t)INT_MAX)
 
+/* Upper bound on a single image dimension, applied by every decode path.
+ *
+ * max_pixels bounds the *area*, which on its own permits an absurd aspect ratio: a
+ * 268435456 x 1 image passes the default area limit exactly, yet makes a decoder size
+ * a single row buffer of ~800 MB. libpng's own default per-dimension limit is 1000000,
+ * so this matches it -- the point being that libphash must only ever *lower* that
+ * limit, never raise it, which is what passing max_pixels straight into
+ * png_set_user_limits() did.
+ *
+ * The cap is deliberately *not* derived from max_pixels: raising or disabling the area
+ * limit must not raise the aspect-ratio ceiling with it. It lives here, next to the
+ * area check, so that the verdict and the error code (PH_ERR_IMAGE_TOO_LARGE) are the
+ * same for every format and in every build configuration -- before, it existed only
+ * inside the native PNG backend, so a stb_image-only build had no dimension cap at all
+ * and answered the same input with a different error. */
+#define PH_MAX_IMAGE_DIMENSION 1000000u
+
+/* Returns 1 if either dimension is beyond what the library will decode. Same contract
+ * as ph_exceeds_pixel_limit(): `w` and `h` must each fit in 32 bits. */
+static inline int ph_exceeds_dimension_limit(uint64_t w, uint64_t h) {
+    return w > PH_MAX_IMAGE_DIMENSION || h > PH_MAX_IMAGE_DIMENSION;
+}
+
 /* Returns 1 if decoding a w x h image is disallowed.
  *
  * Two limits apply, and the stricter one wins:

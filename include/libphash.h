@@ -380,6 +380,18 @@ PH_API ph_error_t ph_context_set_auto_orient(ph_context_t *ctx, int enable);
  *       default limit is eight times below the ceiling, so this only affects callers
  *       that deliberately raise or disable the limit.
  *
+ * @note Since 2.0.0 a per-dimension cap of 1000000 pixels also always applies, on top
+ *       of the area limit and independently of it: an image wider or taller than that
+ *       is rejected with PH_ERR_IMAGE_TOO_LARGE whatever @p max_pixels is set to,
+ *       including 0. The area limit alone permits an absurd aspect ratio -- a
+ *       268435456 x 1 image sits exactly on the default limit, yet makes a decoder size
+ *       a single row of ~800 MB -- and the cap closes that. It applies to every format
+ *       and to both decoding entry points (@c ph_load_from_file and
+ *       @c ph_load_from_memory); before 2.0.0 it existed only inside the native PNG
+ *       decoder, so the same input was answered differently depending on the build.
+ *       @c ph_load_from_pixels() is not subject to it -- there is no decoder there to
+ *       protect, and the area limit already bounds what the library will process.
+ *
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT only for a NULL @p ctx. Every
  *         @c uint64_t is accepted, including values above the implementation ceiling:
  *         the ceiling is applied when an image is loaded, not when the limit is set, so
