@@ -136,6 +136,13 @@ walkthrough.
 
 ### Added
 
+- **`docs/algorithm-provenance.md`** traces each of the nine hashes to its primary
+  source and records, per algorithm, where this implementation departs from it. It
+  names the departures that are known to contradict a published formula — most of them
+  in the radial hash — so that a choice of algorithm can be made with the gaps visible
+  rather than discovered. Two attributions are corrected there: wHash has no primary
+  source, and mHash is not a Marr-Hildreth hash.
+
 - **Batch API.** `ph_hash_files()` and `ph_hash_buffers()` hash a batch of files or
   in-memory buffers, optionally across an internal thread pool (`threads`: 0 = one
   worker per detected core, 1 = sequential on the calling thread, >1 = that many
