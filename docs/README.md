@@ -9,7 +9,13 @@ Welcome to the internal technical documentation for `libphash`. This directory c
 - [**Development Guide**](development.md)
   Build instructions, testing strategies, coding standards, and naming conventions.
 - [**Algorithms Depth**](algorithms.md)
-  Technical details on Hamming distance, pHash, aHash, dHash, and color-aware hashing.
+  What each of the nine hashes computes, how to tune it, and what it is good for.
+- [**Algorithm Provenance**](algorithm-provenance.md)
+  Where each algorithm comes from, what its source specifies against what this code
+  does, every known divergence, and the methodology this project verifies against.
+- [**References**](references.md)
+  The bibliography: full citations and links for every source the algorithms rest on,
+  with how far each one can be trusted and whether it was read directly.
 
 ---
 

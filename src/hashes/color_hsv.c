@@ -1,3 +1,18 @@
+/* ColorHash -- HSV histogram hash.
+ *
+ * NO PRIMARY SOURCE. This is Johannes Buchner's `colorhash` from the ImageHash library
+ * (https://github.com/JohannesBuchner/imagehash), for which that project gives no
+ * reference at all -- no paper, not even a blog post. The implementation is the
+ * specification, and it is a third-party implementation.
+ *
+ * It classifies each pixel by PIL's L intensity and PIL's HSV, in which H, S and V all
+ * run 0..255: black below intensity 32, grey below saturation 85, otherwise one of six
+ * hue bins, split into faint (saturation < 170) and bright. The 14 resulting fractions
+ * -- black and grey over all pixels, the twelve hue buckets over the coloured ones --
+ * are each quantised to 3 bits, giving 42 significant bits.
+ *
+ * Judged by measurable properties only. See docs/algorithm-provenance.md.
+ */
 #include "internal.h"
 #include <math.h>
 #include <stdio.h>

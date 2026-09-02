@@ -1,3 +1,25 @@
+/* wHash -- Haar wavelet hash.
+ *
+ * NO PRIMARY SOURCE. This algorithm has no paper. It is Johannes Buchner's `whash` from
+ * the ImageHash library (https://github.com/JohannesBuchner/imagehash), whose only
+ * reference is a blog post by Alexander Petrov. That implementation is the closest
+ * thing to a specification there is, and it is a third-party implementation, not one.
+ *
+ * It is NOT the algorithm of Venkatesan, Koon, Jakubowski and Moulin, "Robust Image
+ * Hashing", ICIP 2000 (doi:10.1109/ICIP.2000.899541), which is often named as the
+ * origin of wavelet hashing: that one builds a hash from statistics of randomly tiled
+ * subbands under a secret key, followed by error-correction decoding. Related work,
+ * not an attribution.
+ *
+ * Consequently wHash can only be judged by measurable properties -- robustness,
+ * discrimination, separability -- never by conformance. One known difference from the
+ * reference implementation: ImageHash zeroes the coarsest LL band by default
+ * (remove_max_haar_ll=True) so the hash describes local structure rather than overall
+ * brightness; this code does not. See docs/algorithm-provenance.md.
+ *
+ * The transform itself is the orthonormal Haar wavelet: sums and differences of
+ * adjacent samples, both divided by sqrt(2).
+ */
 #include "internal.h"
 #include <stdlib.h>
 

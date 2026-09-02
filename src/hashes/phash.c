@@ -1,3 +1,27 @@
+/* pHash -- DCT-based perceptual hash.
+ *
+ * Christoph Zauner, "Implementation and Benchmarking of Perceptual Image Hash
+ * Functions", Diplomarbeit, FH Hagenberg, July 2010, sections 3.1.1 and 3.2.1.
+ * https://www.phash.org/docs/pubs/thesis_zauner.pdf
+ * The coefficient selection originates in B. Coskun and B. Sankur, "Robust video hash
+ * extraction", IEEE SIU 2004, pp. 292-295 (Zauner's reference [9]). Neal Krawetz
+ * describes the same construction independently in "Looks Like It" (2011).
+ *
+ * The DCT matrix below is Zauner's definition 3.3, and the two-dimensional transform is
+ * his equation 3.4 computed as two passes of matrix multiplication.
+ *
+ * KNOWN DIVERGENCE FROM THE SOURCE: both sources take the 8x8 block starting at
+ * DCT(1,1) -- "64 low-frequency DCT coefficients, omitting the lowest frequency
+ * coefficients" (Zauner 3.2.1), and Starkweather of pHash quoted by Krawetz: "leaving
+ * out the first DC term". This code takes DCT(0,0)..DCT(7,7), so the DC coefficient is
+ * included in both the median and the hash bits. It is the image mean, is far larger
+ * than the AC terms, and drags the median. This matches ImageHash, which is why
+ * comparing against ImageHash could never have caught it. Tracked as a defect in
+ * docs/algorithm-provenance.md.
+ *
+ * Zauner's equation 3.10 also thresholds with >= where this code uses >; with float
+ * coefficients that only differs on degenerate input such as a solid-colour image.
+ */
 #include "internal.h"
 #include <math.h>
 #include <stdatomic.h>

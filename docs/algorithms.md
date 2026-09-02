@@ -1,59 +1,178 @@
 # Algorithmic Deep Dive
 
-This document explains the mathematical foundations and tuning parameters of the hashes implemented in `libphash`.
+What each hash in `libphash` computes, what it is good for, and how to tune it.
+
+Two companion documents carry the parts this one deliberately does not:
+
+- **[`references.md`](references.md)** — the sources. Full citations, links, and how far
+  each one can be trusted.
+- **[`algorithm-provenance.md`](algorithm-provenance.md)** — the analysis. What each
+  source specifies, what this code does, and every place the two differ, classified as a
+  defect, a deliberate choice, or something the source leaves open. It also records the
+  verification methodology this project works to.
+
+Where an algorithm below is known to depart from its source, this page says so and links
+there rather than quietly describing the behaviour as if it were intended.
+
+## Attribution at a glance
+
+| Algorithm | Author | Source | Known to diverge |
+|---|---|---|---|
+| aHash | Neal Krawetz | blog post, 2011 | no |
+| dHash | David Oftedal, described by Neal Krawetz | blog post, 2013 | no |
+| pHash | pHash project; documented by Zauner; coefficient rule from Coskun & Sankur | thesis, 2010 | **yes** — DC coefficient |
+| wHash | Johannes Buchner (ImageHash) | **none** | n/a — no source to diverge from |
+| mHash | this library | **none** | n/a — the *name* is wrong, see below |
+| BMH | Yang, Gu & Niu | paper, 2006 | **yes** — mean instead of median |
+| Radial | De Roover, De Vleeschouwer, Lefèbvre & Macq | paper, 2005 | **yes** — three divergences |
+| ColorHash | Johannes Buchner (ImageHash) | **none** | n/a |
+| ColorMoments | Stricker & Orengo | paper, 1995 | **yes** — skew sign, colour space |
+
+One cross-cutting caveat: `ph_resize_lanczos()`, used by aHash and dHash, does **not**
+resample with Lanczos — it takes stb_image_resize2's default, which is Mitchell for a
+downscale. No source specifies a filter, so nothing is violated, but the name is wrong
+and the filter is not the one ImageHash uses.
+
+Three of the nine have no primary source. For those, "correct" can only mean measured
+robustness, discrimination and separability — never conformance to a specification,
+because there is none.
+
+---
 
 ## 1. aHash (Average Hash)
-- **Concept**: Downscale to 8x8, convert to grayscale, compute average luminance, and set bits based on whether a pixel is above/below the average.
-- **Strength**: High speed, very simple.
-- **Weakness**: Sensitive to brightness/contrast shifts.
 
-## 2. pHash (Perceptual Hash)
-- **Concept**: Downscale to 32x32, perform a Discrete Cosine Transform (DCT), and use the top-left 8x8 coefficients.
-- **Tuning**: 
-    - `phash_dct_size`: Default 32. Larger sizes capture more detail but are slower.
-    - `phash_reduction_size`: Default 8. Determines final hash length (8x8=64 bits).
-- **Strength**: Highly robust against scaling, rotation (< 5°), and moderate compression.
+- **Concept**: downscale to 8×8, convert to grayscale, compute the mean luminance, set
+  one bit per pixel for above/below the mean.
+- **Output**: 64-bit.
+- **Strength**: the fastest thing here, and very good at finding a known image again.
+- **Weakness**: sensitive to anything that moves the mean — brightness, contrast, gamma.
+- **Conformance**: follows its source, including the bit order.
 
-## 3. dHash (Difference Hash)
-- **Concept**: Compares adjacent pixels horizontally or vertically.
-- **Strength**: Faster than pHash, better at detecting duplicates than aHash.
+## 2. dHash (Difference Hash)
+
+- **Concept**: downscale to 9×8 and compare each pixel with its right-hand neighbour,
+  giving 8 differences per row over 8 rows.
+- **Output**: 64-bit.
+- **Strength**: as fast as aHash and markedly better at it — gradients survive brightness
+  and contrast changes that defeat an average.
+- **Conformance**: follows its source exactly, including the direction of the comparison
+  (`1` means the left pixel is darker than the right).
+
+## 3. pHash (DCT-based)
+
+- **Concept**: downscale to 32×32, take the two-dimensional type-II DCT, keep the
+  low-frequency 8×8 block, and threshold against its median.
+- **Output**: 64-bit.
+- **Tuning**:
+  - `phash_dct_size` — default 32. Larger captures more detail and costs more.
+  - `phash_reduction_size` — default 8, giving 8×8 = 64 bits.
+- **Strength**: robust to scaling and moderate compression; the usual first choice when
+  aHash and dHash are not tolerant enough.
+- **⚠ Known divergence**: this implementation includes the DC coefficient DCT(0,0) in
+  both the median and the hash bits, where both sources exclude it by name. It is the
+  image mean, dwarfs the AC terms, and drags the median. See
+  [`algorithm-provenance.md`](algorithm-provenance.md) §3.
 
 ## 4. wHash (Wavelet Hash)
-- **Concept**: Uses Discrete Wavelet Transform (Haar) to analyze image in frequency and spatial domains simultaneously.
-- **Modes**:
-    - `PH_WHASH_FAST`: Single-level decomposition.
-    - `PH_WHASH_FULL`: Multi-level decomposition (more accurate, slower).
 
-## 5. mHash (Marr Hash)
-- **Concept**: Configurable block-based logical grid hash utilizing `ph_context_set_block_params`.
-- **Strength**: Strikes a robust balance between structural integrity and high comparison speed.
+- **Concept**: Haar wavelet decomposition; threshold the low-frequency band against its
+  median.
+- **Output**: 64-bit.
+- **Modes**:
+  - `PH_WHASH_FAST` (default) — a fixed 16×16 scale, one decomposition level.
+  - `PH_WHASH_FULL` — scale chosen as the largest power of two fitting the image,
+    cascaded down to 8×8. Slower, more faithful to the reference implementation.
+- **⚠ No primary source.** wHash has no paper. It is a port of ImageHash's `whash`, and
+  it is *not* the ICIP 2000 algorithm of Venkatesan et al. that is often cited for
+  wavelet hashing. One known difference from ImageHash: that implementation zeroes the
+  coarsest LL band by default, so its hash describes local structure rather than overall
+  brightness; this one does not.
+
+## 5. mHash
+
+- **Concept**: the sign of a 3×3 four-neighbour discrete Laplacian, sampled on a stride-2
+  grid of an 18×18 reduction. Structure only — it responds to edges, not to levels.
+- **Output**: 64-bit.
+- **Tuning**: none. It uses a fixed 18×18 grid and **ignores** `ph_context_set_block_params`,
+  which affects BMH only.
+- **⚠ The name is wrong and is kept only for API compatibility.** mHash is *not* a
+  Marr–Hildreth hash: there is no Gaussian, no scale parameter and no zero-crossing
+  detection, which is what Marr–Hildreth means. It is also not pHash's
+  `ph_mh_imagehash()`, which is a genuinely different algorithm producing 576 bits. This
+  hash is original to this library and has no source; judge it by measurement.
 
 ## 6. BMH (Block Mean Hash)
-- **Concept**: Divides the image into blocks (default 16x16 or configurable) and computes the mean luminance for each, yielding a highly detailed 256-bit digest (`ph_digest_t`).
-- **Use Case**: Need significantly higher entropy and low collision rates compared to standard 64-bit bounds.
 
-## 7. ColorHash & Color Moments Hash
-- **Concept**: 
-  - `ColorHash` (`ph_compute_color_hash`): Compresses color distribution into a 64-bit numerical representation limit. 
-  - `Color Moments` (`ph_compute_color_moments_hash`): Comprehensive statistical digest capturing invariant spatial color statistics.
-- **Use Case**: Detecting identical geometric shapes layered with diverse color grading (e.g., recolored product photography).
+- **Concept**: divide the image into a grid of blocks, take the mean of each, and
+  threshold the block values.
+- **Output**: `ph_digest_t`, `block_size²` bits — 256 bits at the default 16×16.
+- **Tuning**: `block_size` via `ph_context_set_block_params`, 1..22 (22×22 bits is the
+  largest grid that fits a digest).
+- **Use case**: when 64 bits are not enough entropy and a lower collision rate is worth
+  the extra bytes.
+- **⚠ Known divergence**: the source thresholds against the **median** of the block
+  means; this implementation uses their arithmetic mean. The median is what makes the bit
+  distribution balanced by construction, which is the property the paper relies on. See
+  [`algorithm-provenance.md`](algorithm-provenance.md) §6.
+
+## 7. ColorHash and ColorMoments
+
+Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
+
+- **ColorHash** (`ph_compute_color_hash`) — classifies every pixel as black, grey, or one
+  of six hue bins split into faint and bright, then encodes the 14 resulting fractions in
+  3 bits each. 64-bit output, 42 significant bits. No primary source; it is ImageHash's
+  `colorhash`, for which even ImageHash cites nothing.
+- **ColorMoments** (`ph_compute_color_moments_hash`) — the mean, standard deviation and
+  skewness of each channel, 9 bytes. Follows the formulas of Stricker & Orengo.
+  **⚠ Known divergence**: the sign of the skewness is discarded, which is the direction
+  of the asymmetry — half of what the third moment tells you. The moments are also taken
+  on RGB where the source uses HSV.
+- **Use case**: telling apart images that are structurally identical but coloured
+  differently — recoloured product photography, for instance — where the luminance hashes
+  agree by design.
 
 ## 8. Radial Hash
-- **Concept**: Rotationally invariant spatial sampling that captures the distribution of variance along angular projections.
+
+- **Concept**: the variance of pixel values along projection lines through the image
+  centre, at a series of angles.
+- **Output**: `ph_digest_t`, one byte per projection.
 - **Tuning**:
-    - `radial_projections`: Number of angular slices (default 40).
-    - `radial_samples`: Number of radial samples per projection (default 128).
-- **Strength**: Unmatched robustness against rotation (up to 360°) and flipping.
-- **Use Case**: Applications where image orientation is unpredictable (e.g., user-uploaded photos, satellite imagery).
+  - `radial_projections` — default 40.
+  - `radial_samples` — default 128 samples per projection.
+- **⚠ This is the algorithm furthest from its source**, with three divergences, and the
+  claim previously made on this page — robustness to rotation up to 360° — **does not
+  hold today**:
+  - The source applies a DCT to the radial variance vector and keeps the first 40
+    coefficients of 180 angles. This implementation takes 40 *angles* and no DCT; the
+    40 was transplanted from the wrong place.
+  - The source compares two hashes by the peak of cross-correlation, which is precisely
+    what turns a rotation — a cyclic shift of the vector — into a match. `libphash`
+    compares digests element-wise, so **rotation invariance is not delivered**.
+  - The default gamma is 2.2 where the pHash authors suggest 1.
 
-## Comparison Summary
+  Until those are fixed, treat Radial as a variance-profile descriptor, not as a
+  rotation-invariant hash. See [`algorithm-provenance.md`](algorithm-provenance.md) §7.
 
-| Algorithm | Speed | Rotation | Noise | Scaling | Output Format |
+## Comparison summary
+
+Ratings are relative and qualitative — they come from experience with the library, not
+from a measured benchmark. Where a rating depends on a divergence noted above, it is
+marked. For measured numbers, see the property tests described in the verification
+methodology.
+
+| Algorithm | Speed | Rotation | Noise | Scaling | Output |
 |---|---|---|---|---|---|
-| aHash | ⭐⭐⭐⭐⭐ | ❌ | ⭐ | ⭐⭐⭐ | 64-bit |
-| dHash | ⭐⭐⭐⭐⭐ | ❌ | ⭐⭐ | ⭐⭐⭐⭐ | 64-bit |
-| pHash | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | 64-bit |
-| mHash | ⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | 64-bit |
-| wHash | ⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | 64-bit |
-| Radial| ⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐ | ⭐⭐⭐ | Digest |
-| BMH   | ⭐⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | Digest (256-bit) |
+| aHash | ★★★★★ | ✗ | ★ | ★★★ | 64-bit |
+| dHash | ★★★★★ | ✗ | ★★ | ★★★★ | 64-bit |
+| pHash | ★★★ | ★★★ | ★★★★ | ★★★★★ | 64-bit |
+| mHash | ★★★★ | ★ | ★★★ | ★★★★ | 64-bit |
+| wHash | ★★ | ★ | ★★★ | ★★★★ | 64-bit |
+| Radial | ★ | ✗ — see §8 | ★★ | ★★★ | digest |
+| BMH | ★★★ | ★ | ★★★ | ★★★★ | digest, 256-bit default |
+| ColorHash | ★★★ | ★★★★ | ★★★ | ★★★★★ | 64-bit (42 used) |
+| ColorMoments | ★★★ | ★★★★ | ★★★ | ★★★★★ | digest, 9 bytes |
+
+The two colour hashes are insensitive to rotation and scaling for a reason that is worth
+stating: they discard spatial layout entirely. That makes them robust and, on their own,
+weak discriminators — use them alongside a structural hash, not instead of one.

@@ -1,3 +1,27 @@
+/* BMH -- Block Mean Value based image perceptual hash.
+ *
+ * Bian Yang, Fan Gu, Xiamu Niu, "Block Mean Value Based Image Perceptual Hashing",
+ * IIH-MSP 2006, pp. 167-172, doi:10.1109/IIH-MSP.2006.265125. The paper is paywalled;
+ * the steps followed here are Zauner's reproduction of its method 1 (Diplomarbeit,
+ * FH Hagenberg 2010, section 3.1.4), whose author implemented that method into pHash.
+ *
+ * Method 1: grayscale, normalise to a preset size, divide into N non-overlapping
+ * blocks, take the mean of each, and threshold against the MEDIAN of the mean sequence
+ * (equation 3.9: h(i) = 1 for M_i >= M_d, 0 otherwise). Step (c) of the paper, which
+ * permutes the block order under a secret key, is omitted here as it is in pHash: it is
+ * a security property, not a perceptual one, and the paper names no cipher.
+ *
+ * KNOWN DIVERGENCE FROM THE SOURCE: this code thresholds against the arithmetic MEAN of
+ * the block values, not their median. The median is what makes the bit distribution
+ * balanced by construction -- exactly half ones -- which is the property the paper
+ * relies on; with the mean, a dark image with a few bright blocks yields a lopsided
+ * hash. Tracked as a defect in docs/algorithm-provenance.md.
+ *
+ * Second, smaller divergence: the source normalises the image to a preset size and then
+ * averages blocks of it. Box-resampling straight to the block grid equals that only
+ * when the source dimensions are a multiple of the grid; otherwise source pixels are
+ * weighted across block boundaries.
+ */
 #include "internal.h"
 #include <stdlib.h>
 #include <string.h>

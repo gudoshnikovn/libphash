@@ -1,3 +1,19 @@
+/* dHash -- Difference Hash.
+ *
+ * Proposed by David Oftedal as a comment on Krawetz's 2011 post; named, described and
+ * evaluated by Neal Krawetz in "Kind of Like That", The Hacker Factor Blog,
+ * 21 January 2013.
+ * https://www.hackerfactor.com/blog/index.php?/archives/529-Kind-of-Like-That.html
+ *
+ * A blog post rather than a paper, and the only description by the people responsible.
+ * It prescribes a 9x8 reduction, grayscale, and 64 bits from the 8 horizontal
+ * differences of each of the 8 rows, with "a '1' to indicate that P[x] < P[x+1]" and
+ * the bits set "from left to right, top to bottom using big-endian". This code follows
+ * that exactly, including the direction of the comparison. The resampling filter is not
+ * specified by the source; see ahash.c on ph_resize_lanczos() being misnamed.
+ *
+ * See docs/algorithm-provenance.md and docs/references.md.
+ */
 #include "internal.h"
 #include <stdlib.h>
 

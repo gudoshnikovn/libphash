@@ -75,7 +75,8 @@ The post specifies no resampling filter, no grayscale coefficients, and no rule 
 pixel exactly equal to the mean.
 
 **What this implementation does** (`src/hashes/ahash.c`): grayscale via BT.601-approximate
-integer weights (38/75/15 over 128, configurable), Lanczos resize to 8×8, mean of the
+integer weights (38/75/15 over 128, configurable), resize to 8×8 through
+`ph_resize_lanczos()`, mean of the
 64 bytes truncated to `uint8_t`, bit set when `pixel > avg`, bit index `63 - i` in
 row-major order — that is, MSB first, left to right, top to bottom, big-endian.
 
@@ -83,7 +84,7 @@ row-major order — that is, MSB first, left to right, top to bottom, big-endian
 
 | Difference | Class | Note |
 |---|---|---|
-| Lanczos resampling | undefined | Source says only "shrink". Lanczos matches ImageHash, so cross-checks stay meaningful. |
+| Resampling filter | undefined | Source says only "shrink". Note that `ph_resize_lanczos()` **does not use Lanczos**: it calls `stbir_resize_uint8_linear()`, which for a downscale resolves to stb's `STBIR_DEFAULT_FILTER_DOWNSAMPLE` — **Mitchell**. The name is wrong and so is the assumption that this matches ImageHash's `LANCZOS`. Nothing in the source is violated, but see the naming defect below. |
 | Grayscale coefficients | undefined | Source says only "convert to a grayscale". |
 | Ties (`pixel == avg` → 0) | undefined | "Above or below" leaves the tie unstated. |
 | Average truncated to `uint8_t` before comparison | undefined | Loses at most one level; source does not specify precision. |
@@ -111,14 +112,14 @@ description by the people responsible for the algorithm.
 4. "I use a '1' to indicate that P[x] < P[x+1] and set the bits from left to right, top
    to bottom using big-endian."
 
-**What this implementation does** (`src/hashes/dhash.c`): Lanczos resize to 9×8, bit set
-when `row[col] < row[col+1]`, bit index `63 - (row*8 + col)`.
+**What this implementation does** (`src/hashes/dhash.c`): resize to 9×8 through
+`ph_resize_lanczos()` (Mitchell — see aHash), bit set when `row[col] < row[col+1]`, bit index `63 - (row*8 + col)`.
 
 **Delta:**
 
 | Difference | Class | Note |
 |---|---|---|
-| Lanczos resampling | undefined | As for aHash. |
+| Resampling filter | undefined | As for aHash, including the misnamed helper. |
 | Grayscale coefficients | undefined | As for aHash. |
 
 **Verdict: conforms**, down to the direction of the comparison and the bit order, both
@@ -192,7 +193,7 @@ those 64, bit set when `value > median`.
 | No 7×7 mean prefilter before the resize | deliberate | `ph_resize_box()` already averages over each source region, which is a low-pass step of a similar kind. Not identical to a 7×7 mean at full resolution; worth measuring rather than assuming. |
 | Threshold is the median | deliberate | The two sources disagree; the rank-1 source (Zauner/pHash) says median. |
 | `>` rather than `≥` | undefined in effect | Zauner's 3.10 says `≥`. With floating-point coefficients an exact tie against the median only occurs for an even count where two middle values are equal, so this changes a bit only on degenerate input (e.g. a solid-colour image, where all AC terms are 0). Real but negligible; fold into the DC-term fix. |
-| Box resampling rather than Lanczos | undefined | No source specifies a filter. |
+| Box resampling | undefined | No source specifies a filter. Zauner's account of pHash has a 7×7 mean filter and then a resize, so a box filter is at least the same kind of operation. |
 
 ---
 
@@ -236,7 +237,7 @@ remaining `hash_size × hash_size` low band; bit set when `value > median`.
 |---|---|---|
 | `remove_max_haar_ll` not implemented | deliberate, undocumented until now | ImageHash removes the coarsest LL band so the hash describes local structure rather than overall brightness. Omitting it makes wHash more like aHash than intended. There is no source that says which is correct — this is a candidate for the measurable-property criterion, not for a formula check. |
 | Default mode fixes the scale at 16×16 | deliberate | `PH_WHASH_FULL` implements the power-of-two rule. Speed/robustness trade-off. |
-| Box resampling rather than Lanczos | undefined | |
+| Box resampling, where the reference implementation resamples with PIL's `LANCZOS` | undefined | |
 
 ---
 
@@ -463,7 +464,9 @@ value is then written into one byte of a 9-byte digest as `mean`, `min(255, σ)`
 
 ## Defects found, to be filed as separate tasks
 
-Ordered by how strongly the primary source contradicts the code.
+Ordered by how strongly the primary source contradicts the code. The last is not a
+contradiction of any source but of the code's own naming, and is listed because it
+misled this analysis on its first pass.
 
 1. **Radial: the DCT of the radial variance vector is missing, and `radial_projections`
    defaults to 40 angles instead of 180 angles reduced to 40 coefficients.** Contradicts
@@ -488,6 +491,116 @@ Ordered by how strongly the primary source contradicts the code.
    maths is unaffected.
 8. **BMH: no preset normalisation size**, so the block means are only true block means
    when the image dimensions are a multiple of the grid. Lower severity than the others.
+9. **`ph_resize_lanczos()` does not use Lanczos.** It calls `stbir_resize_uint8_linear()`,
+   which resolves an unspecified filter to stb's default — Mitchell when downscaling,
+   Catmull-Rom when upscaling, point sampling at 1:1. Every use in this library is a
+   downscale, so it is Mitchell throughout. No source specifies a filter, so no formula
+   is contradicted, but the name asserts something false about aHash and dHash to anyone
+   reading the code, and it is the reason the resampling was assumed to match ImageHash
+   (which uses PIL's `LANCZOS`) when it does not. Rename it, or make it actually pass
+   `STBIR_FILTER_MITCHELL`; do not silently change the filter, which would move every
+   aHash and dHash value.
 
 Items 1–5 all change stored hash values and therefore need a decision about whether they
-belong in 2.0.0 at all.
+belong in 2.0.0 at all. Item 9 changes none, as long as the fix is to the name.
+
+---
+
+# Verification methodology
+
+Agreed 2 September 2026. This half of the document is a *decision*, not a finding: it
+says what this project will treat as correct, and how it will check it. It exists so
+that the next disagreement about a hash value has somewhere to be resolved.
+
+## The criterion for a defect
+
+A difference is a defect when it **contradicts a formula or step stated by the primary
+source**, or when it **measurably worsens one of the properties below**.
+
+A difference from a third-party implementation is not, on its own, a defect. ImageHash,
+OpenCV and pHash are implementations; none of them is a specification, and none has been
+verified against the papers it implements. The DC coefficient in pHash is the worked
+example of why this matters: the code here agrees with ImageHash exactly and contradicts
+both Zauner and Krawetz, so an ImageHash comparison could only ever have confirmed the
+defect.
+
+The corollary is uncomfortable and is accepted: fixing a defect will make this library
+*disagree* more with ImageHash. That is the expected direction of travel.
+
+For the three algorithms with no primary source — wHash, mHash, ColorHash — only the
+second half of the criterion can ever apply. They are judged by measurable properties
+alone, and the attribution headers say so rather than implying a specification exists.
+
+## Checking formulas, not outputs
+
+Where a source states a formula, the check is on the **intermediate quantity**, on
+synthetic input whose correct answer is computed by hand or by an independent
+definition. A mismatch there is unambiguous. A mismatch in the final bits of a hash of a
+photograph is not: it could be the resampler, the grayscale weights, rounding, or the
+algorithm.
+
+Implemented as `tests/src/test_formula_conformance.c`:
+
+- **DCT (pHash).** The type-II DCT matrix from Zauner's definition 3.3 is checked for
+  orthonormality, and `ph_dct2_partial()` is checked against a direct O(N⁴) evaluation
+  of the 2-D definition on a fixed pseudo-random 32×32 input, plus inputs whose
+  transform is known in closed form (a constant image, where every AC coefficient is
+  zero and DCT(0,0) = N·mean; and a single cosine at a known frequency, which must put
+  all its energy in one coefficient).
+- **Haar (wHash).** `ph_haar_1d_float()` is checked for orthonormality and against a
+  step signal whose coefficients are known by hand, and the 2-D level is checked against
+  a separable reference.
+- **Block means (BMH).** On an input whose dimensions are an exact multiple of the grid,
+  each output value must equal the arithmetic mean of its block, computed independently.
+  This is the check that pins the "no preset normalisation size" gap: it can only pass
+  on exact multiples, which is the point.
+- **Colour moments.** Mean, standard deviation and skewness are checked against a
+  distribution with hand-computed moments, including a deliberately skewed one where the
+  third moment is negative — the case that the discarded sign destroys.
+
+These tests are written against the *sources'* formulas. Where the code currently
+contradicts a source, the test documents the contradiction with an explicit
+`KNOWN DIVERGENCE` marker naming the task that will fix it, and asserts today's
+behaviour so the fix is a visible, deliberate change rather than a silent one.
+
+## Measurable properties
+
+For everything a source does not specify, and for the three algorithms that have no
+source, correctness is replaced by three measurable properties:
+
+- **Robustness** — the same image after a benign transformation must hash close by.
+- **Discrimination** — different images must hash far apart.
+- **Separability** — the two distributions above must not overlap. This is the property
+  that actually matters; either of the first two is trivially satisfiable alone (a
+  constant hash is perfectly robust).
+
+Separability is reported as the gap between the two distributions in units of their
+spread, and a threshold is only ever set from a measurement, never chosen by eye — the
+same rule as the benchmark methodology task.
+
+## The corpus
+
+A **generated synthetic corpus**, produced deterministically by a script in the
+repository from a fixed seed. No external dataset, no manifest of URLs: it works with no
+network, adds nothing to the repository's size, reproduces identically in CI and on a
+developer's machine, and cannot rot.
+
+The cost is accepted and stated here: synthetic images do not represent photographs. A
+number measured on this corpus describes the algorithm's behaviour on the corpus. It is
+suitable for detecting a regression and for comparing two implementations of the same
+algorithm against each other — which is what these tests are for. It is **not** evidence
+about real-world recall, and no such claim should be made from it.
+
+## The boundary with `python-libphash`
+
+Fixed by the earlier decision that the ImageHash comparison lives in the bindings
+repository. Restating it in the terms above:
+
+- **Here:** conformance to the primary sources, formula checks, and property
+  measurements. These may fail the build.
+- **There:** cross-checking against ImageHash, as a *signal* — useful for noticing that
+  something moved, never a criterion for whether it should have.
+
+When a defect from this document is fixed, the cross-check in `python-libphash` is
+expected to start disagreeing. That disagreement is the fix working. The correct
+response is to update the expectation there and record why, not to revert the fix.

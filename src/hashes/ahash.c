@@ -1,3 +1,21 @@
+/* aHash -- Average Hash.
+ *
+ * Neal Krawetz, "Looks Like It", The Hacker Factor Blog, 26 May 2011.
+ * https://www.hackerfactor.com/blog/index.php?/archives/432-Looks-Like-It.html
+ *
+ * The source is a blog post, not a paper: there is no academic publication of aHash,
+ * and this is the author's own description. It prescribes an 8x8 reduction, grayscale,
+ * the mean of the 64 values, and one bit per pixel for "above or below the mean". The
+ * bit order is explicitly left free ("as long as you are consistent"); the order used
+ * here -- MSB first, left to right, top to bottom -- is the one the post itself uses.
+ *
+ * The resampling filter, the grayscale coefficients and the handling of a pixel exactly
+ * equal to the mean are not specified by the source. Note that ph_resize_lanczos() does
+ * NOT use Lanczos: it lets stb_image_resize2 pick its default, which for a downscale is
+ * Mitchell. The name is wrong; the behaviour violates nothing, but it is not the filter
+ * ImageHash uses either. See docs/algorithm-provenance.md
+ * for the full comparison and docs/references.md for the citation.
+ */
 #include "internal.h"
 #include <stdlib.h>
 

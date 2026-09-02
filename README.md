@@ -13,7 +13,7 @@ A high-performance, portable C library for Perceptual Image Hashing.
 
 ## Core Features
 
-* **Multiple Algorithms**: `aHash`, `dHash`, `pHash` (DCT-based), `wHash` (Wavelet), `mHash`, `BMH`, `Radial`, and `ColorHash`.
+* **Multiple Algorithms**: `aHash`, `dHash`, `pHash` (DCT-based), `wHash` (Wavelet), `mHash`, `BMH`, `Radial`, `ColorHash`, and `ColorMoments`. Every one of them is traced to its source in [`docs/references.md`](docs/references.md), and every known divergence from that source is written down in [`docs/algorithm-provenance.md`](docs/algorithm-provenance.md).
 * **High-Performance Decoders**: Built-in support for `libjpeg-turbo`, `libpng`, `spng`, and `libwebp` with SIMD acceleration (NEON/SSE) and `mmap` optimization.
 * **Broad Format Fallback**: JPEG/PNG/WebP are decoded by the SIMD-accelerated native backends above; anything else — BMP, GIF, TGA, PSD, HDR, PIC, PNM — falls back to the bundled `stb_image` decoder automatically, no configuration needed. Not covered: TIFF (unsupported by `stb_image`) and animated GIF/WebP beyond the first frame (only the first frame is hashed).
 * **Fast Grayscale Loading**: Native decoders can perform grayscale conversion during decompression, significantly reducing CPU cycles and memory overhead.

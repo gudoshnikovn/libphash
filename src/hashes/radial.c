@@ -1,3 +1,35 @@
+/* Radial -- radial variance hash.
+ *
+ * C. De Roover, C. De Vleeschouwer, F. Lefebvre, B. Macq, "Robust image hashing based
+ * on radial variance of pixels", ICIP 2005, vol. 3, pp. 77-80,
+ * doi:10.1109/ICIP.2005.1530575. This is the algorithm pHash implements. Its
+ * predecessor, RASH (Lefebvre, Macq, Legat, EUSIPCO 2002), was reported by its own
+ * authors as troubled and superseded by the above; cite it as background only.
+ * Both papers are paywalled; the description followed here is Zauner's (Diplomarbeit,
+ * FH Hagenberg 2010, sections 3.1.3 and 3.2.3).
+ *
+ * The variance formula below is the source's definition 3.6 exactly:
+ *   R[a] = E[I^2] - (E[I])^2 over the pixels on the projection line at angle a.
+ *
+ * KNOWN DIVERGENCES FROM THE SOURCE, all tracked as defects in
+ * docs/algorithm-provenance.md:
+ *
+ *   1. The source computes R[a] for a = 0..179 -- 180 angles -- and then applies a DCT
+ *      to that vector, keeping the FIRST 40 COEFFICIENTS as the hash, which is what
+ *      decorrelates it. This code takes 40 angles and no DCT: the 40 was transplanted
+ *      from the coefficient count to the angle count.
+ *   2. The source compares two hashes by the peak of cross-correlation, which is what
+ *      turns a rotation -- a cyclic shift of the radial vector -- into a match. This
+ *      library compares digests element-wise, so no rotation invariance is delivered.
+ *   3. pHash's authors suggest sigma = 1 and gamma = 1; PH_DEFAULT_GAMMA is 2.2, so the
+ *      reference and this code see different pixels before the variance is computed.
+ *
+ * Deliberate differences: a fixed sample count per projection with bilinear
+ * interpolation, rather than summing the pixels of a one-pixel-wide strip whose length
+ * varies with angle and resolution; a radius capped at min(w,h)/2 to keep every
+ * projection inside the image; and normalisation by the maximum variance followed by a
+ * square root, which exists only to fit the values into bytes.
+ */
 #include "internal.h"
 #include <math.h>
 #include <stdlib.h>

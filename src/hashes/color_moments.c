@@ -1,3 +1,28 @@
+/* ColorMoments -- the first three central moments of each colour channel.
+ *
+ * Markus Stricker, Markus Orengo, "Similarity of color images", Proc. SPIE 2420,
+ * Storage and Retrieval for Image and Video Databases III, 1995, pp. 381-392,
+ * doi:10.1117/12.205308.
+ *
+ * CAVEAT ON THE SOURCE: the paper is paywalled and no rank-1 restatement of it was
+ * found. The formulas below come from N. Keen, "Color Moments", University of Edinburgh
+ * CVonline course notes, 2005 -- student coursework, the weakest evidence anywhere in
+ * this library's documentation. Re-check against the paper before changing anything on
+ * the strength of it.
+ *
+ * The three moments per channel, over N pixels:
+ *   mean     E = (1/N) * sum(p)
+ *   std dev  s = sqrt( (1/N) * sum((p - E)^2) )
+ *   skewness k = cbrt( (1/N) * sum((p - E)^3) )
+ * computed below exactly as stated, in double, with cbrt() rather than pow(x, 1.0/3.0)
+ * so that a negative third moment is handled correctly.
+ *
+ * Two divergences, both in docs/algorithm-provenance.md: the source computes the
+ * moments in HSV where this code uses the raw RGB channels; and the digest stores
+ * fabs(skew), DISCARDING THE SIGN -- which is the direction of the asymmetry, half of
+ * what the third moment says. Two images with mirrored channel distributions currently
+ * produce identical bytes.
+ */
 #include "internal.h"
 #include <math.h>
 #include <stdlib.h>
