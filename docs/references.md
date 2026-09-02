@@ -24,6 +24,11 @@ look; it is never the basis for a claim that this code is correct.
 and SPIE paywalls; for those, the restatement actually used is named. Nothing in this
 repository claims to follow a paper that nobody here has read without saying so.
 
+The papers themselves are not committed. They are copyrighted by IEEE, SPIE and others,
+and putting a PDF in a public repository redistributes it. Keep local copies in `papers/`,
+which is git-ignored; this file holds the citation and the DOI so anyone can fetch their
+own.
+
 ---
 
 ## Primary sources
@@ -175,13 +180,45 @@ R. Venkatesan, S.-M. Koon, M. H. Jakubowski, P. Moulin, **"Robust Image Hashing"
 ICIP*, vol. 3, IEEE, 2000, pp. 664–666.
 
 - <https://doi.org/10.1109/ICIP.2000.899541>
-- Rank 1 · **Not read**
+- Rank 1 · **Read in full**
 
-Listed to record a rejected hypothesis. This is the foundational paper on wavelet-based
-image hashing and is frequently named as the origin of "wHash", but it describes a
-*different* algorithm: statistics of randomly tiled wavelet subbands under a secret key,
-followed by error-correction decoding. None of that appears in our wHash or in the
-implementation ours was ported from. Related work; not an attribution.
+Listed first to record a rejected hypothesis: this is the paper usually named as the
+origin of "wHash", and it is not. It describes a *keyed* algorithm — `h = H(I, K)`, where
+"the key is kept secret, and the hash value of a given image cannot be computed or
+verified by an unauthorized party". Neither our wHash nor ImageHash's `whash` has a key.
+
+Read in full because of a later question: could it replace our source-less wHash? What it
+specifies is four steps —
+
+1. a three-level Haar wavelet decomposition, each subband **randomly tiled into
+   rectangles** under the key; averages of coefficients in the coarse subband, variances
+   in the others, giving a length-*l* statistics vector;
+2. **randomized rounding** of that vector to 3-bit values, `x = Q(m, K) ∈ {0..7}^l`;
+3. decoding `x` with a **first-order Reed–Muller decoder** under an "exponential
+   pseudo-norm" metric, giving the binary hash;
+4. **"another decoding stage of a linear code with random parameters"**, shortening it
+   further.
+
+and what it does not specify is most of what an implementer needs: the tiling
+distribution and rectangle count, the quantizer's step and distribution, the Reed–Muller
+parameters, the pseudo-norm's parameter, and step 4 in its entirety. The paper says
+outright that "a formal analysis of the steps involved in the hash computation will
+appear elsewhere". It is three pages of ICIP proceedings, and it is a description, not a
+specification.
+
+Two further mismatches with what this library does. The randomization is not incidental —
+"randomized rounding is the crucial source of randomness (or entropy) in the hash
+function's output" — so fixing the key to a public constant to obtain determinism removes
+the property the paper exists to demonstrate. And the intended comparison is **exact
+equality** of the final hash ("we can compare two images by checking two bit strings for
+exact equality"); the fuzzy, Hamming-distance comparison this library uses corresponds to
+the paper's *intermediate* hash, which is the thing its experiments actually measure
+(the "equality percentage").
+
+Conclusion: citable as related work and as the origin of the idea. Not implementable as a
+conformant algorithm — anything built from it would be "inspired by", which is precisely
+the kind of claim [`algorithm-provenance.md`](algorithm-provenance.md) exists to keep out
+of this repository.
 
 ---
 
@@ -230,7 +267,7 @@ source" is a checkable statement rather than an assertion.
 | aHash | [K11] | 3 | yes | [IH] |
 | dHash | [K13] (algorithm by David Oftedal) | 3 | yes | [IH] |
 | pHash | [Z10] §3.2.1, [K11]; origin [CS04] | 1 | [Z10] yes, [CS04] no | [pHash], [IH] |
-| wHash | **none** | — | — | [IH], via [Pe16] |
+| wHash | **none** — [VKJM00] read and rejected as a candidate | — | — | [IH], via [Pe16] |
 | mHash | **none** — see [MH80] for the name it wrongly claims | — | — | none |
 | BMH | [YGN06] | 1 | no — via [Z10] §3.1.4 | [pHash] |
 | Radial | [DR05]; background [LML02], [St05] | 1 | no — via [Z10] §3.1.3, §3.2.3 | [pHash] |

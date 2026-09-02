@@ -207,14 +207,26 @@ Alexander Petrov, not a paper. No academic publication describes this constructi
 Rank 4 is the best available, and the honest statement is that wHash has no primary
 source.
 
-**Hypothesis rejected.** Venkatesan, Koon, Jakubowski and Moulin, "Robust Image
-Hashing", *ICIP 2000*, vol. 3, pp. 664–666, DOI
-[10.1109/ICIP.2000.899541](https://doi.org/10.1109/ICIP.2000.899541), is a real paper
-and is often named as the origin of wavelet-based image hashing. It is **not** the
-source of this algorithm: it builds a hash from statistics of randomly tiled wavelet
-subbands under a secret key, followed by error-correction decoding. None of that —
-keying, random tiling, ECC — appears in ImageHash's `whash` or here. It belongs in a
-related-work list, not in an attribution header.
+**Hypothesis rejected, and the paper was then read.** Venkatesan, Koon, Jakubowski and
+Moulin, "Robust Image Hashing", *ICIP 2000*, vol. 3, pp. 664–666, DOI
+[10.1109/ICIP.2000.899541](https://doi.org/10.1109/ICIP.2000.899541), is a real paper and
+is often named as the origin of wavelet-based image hashing. It is **not** the source of
+this algorithm: it builds a hash from statistics of randomly tiled wavelet subbands under
+a secret key, followed by error-correction decoding. None of that — keying, random tiling,
+ECC — appears in ImageHash's `whash` or here.
+
+It was later read in full to answer a different question: could it *replace* our
+source-less wHash, so that the library would rest on a published algorithm? The answer is
+no, for reasons recorded in [`references.md`](references.md) under [VKJM00]. In short: the
+paper specifies the shape of the algorithm but not the constants — the tiling
+distribution, the quantizer, the Reed–Muller parameters and the whole of its fourth step
+are absent, and it says so itself ("a formal analysis of the steps involved in the hash
+computation will appear elsewhere"). Implementing it would mean inventing half of it and
+then citing a paper for the result, which is the exact failure this document exists to
+prevent. Its randomization is also load-bearing rather than incidental, so pinning the key
+to obtain a deterministic hash discards what the paper demonstrates.
+
+It belongs in a related-work list, not in an attribution header.
 
 **What the reference implementation does** (ImageHash `whash`, the thing this was ported
 from, rank 4): grayscale; resize to `image_scale`, the largest power of two not

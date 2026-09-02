@@ -44,3 +44,9 @@ src/**/*.gcno
 tasks/
 CLAUDE.md
 REVIEW_v2.0.0.md
+
+# Downloaded papers (see docs/references.md). Kept out of git deliberately: these are
+# copyrighted by IEEE, SPIE and others, and committing a PDF to a public repository
+# redistributes it. The repository holds the citation and the DOI; the reader fetches
+# the paper from the publisher.
+papers/
