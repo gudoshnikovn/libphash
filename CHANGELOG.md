@@ -194,6 +194,9 @@ walkthrough.
 ### Changed
 
 - Vendored decoder submodules bumped to their latest stable tags.
+- `THIRD-PARTY-NOTICES.md` now names the exact version of the two copied stb headers
+  (`stb_image` v2.30, `stb_image_resize2` v2.18) with their hashes. Everything else
+  under `vendor/` is a submodule, whose revision the repository already records.
 - The library version has a single source of truth: `project(libphash VERSION ...)`
   in `CMakeLists.txt`, from which `phash_version.h` is generated. There are no
   version literals in sources, scripts, CI or the README any more.
