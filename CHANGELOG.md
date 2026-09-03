@@ -19,6 +19,26 @@ walkthrough.
 
 ### BREAKING CHANGES
 
+- **Radial digests must now be compared with `ph_radial_similarity()`.** The algorithm's
+  source compares two radial hashes by the peak of their cross-correlation over cyclic
+  shifts, and that function exposes it, with the source's threshold available as
+  `PH_RADIAL_PCC_THRESHOLD` (0.9). `ph_similarity_digest()`, `ph_hamming_distance_digest()`
+  and `ph_l2_distance()` still accept a radial digest and still return a number, but that
+  number treats quantised DCT coefficients as a bit vector or a point in space and does not
+  mean what it appears to. Radial values also change once more in this release: the
+  variance vector is standardised before the transform, as the reference implementation
+  does — without it one byte of every digest was a constant 255, carrying no information
+  and inflating the correlation between every pair of digests.
+  *Restore the old behaviour:* not possible; recompute any stored radial digests.
+
+  Please read this alongside the note in `docs/algorithms.md` §8: **the Radial hash is not
+  rotation invariant**, and this release did not make it so. The invariance exists in the
+  vector of per-angle variances — a quarter turn shifts it cleanly — and the DCT that turns
+  that vector into the hash does not survive a shift, so no comparison of the resulting
+  coefficients can recover it. Only 180° rotations are absorbed. The reference
+  implementation behaves the same way; the measurement is in
+  `docs/algorithm-provenance.md` §7.
+
 - **The Radial hash now applies the DCT its source specifies, and every radial value
   changes.** The algorithm (De Roover et al. 2005, as pHash implements it) computes the
   variance along one projection line per degree over 180°, then takes a 1-D DCT of that
