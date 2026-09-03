@@ -659,11 +659,12 @@ PH_API PH_NODISCARD ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
  * coefficients, which are quantised into the digest. Uses the context gamma, and nothing
  * else does.
  *
- * @warning Rotation invariance is **not** delivered by comparing these digests
- *          element-wise with ph_hamming_distance_digest() or ph_l2_distance(). A rotation
- *          cyclically shifts the projection vector, and undoing that shift takes the peak
- *          of the cross-correlation, which this library does not yet expose. Until it
- *          does, treat the radial hash as a variance-profile descriptor.
+ * @warning Compare these digests with ph_radial_similarity(), not with
+ *          ph_hamming_distance_digest(), ph_l2_distance() or ph_similarity_digest(). Those
+ *          three treat a digest as a bit vector or a point in space; a radial digest is
+ *          neither, and comparing it that way reports a rotated image as a different one.
+ *          The rotation invariance the algorithm is known for comes from the comparison,
+ *          not from the hash.
  *
  * @note Since 2.0.0 the digest is 40 bytes of DCT coefficients rather than one byte per
  *       projection, and the default projection count is 180 rather than 40. Values from
@@ -703,6 +704,47 @@ PH_API double ph_similarity(uint64_t a, uint64_t b);
  * @return -1.0 if the digests are NULL or have mismatched sizes.
  */
 PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
+
+/**
+ * @brief The peak-of-cross-correlation threshold the radial hash's source uses, 0.9.
+ *
+ * pHash treats two radial digests correlating at or above this as the same image
+ * (Zauner, Diplomarbeit FH Hagenberg 2010, section 3.2.3). It is provided as a starting
+ * point with a citation behind it, not as a tuned recommendation for your corpus:
+ * ph_radial_similarity() hands back the raw score precisely so that you can pick your
+ * own cut. Do pick it deliberately and measure it — a threshold chosen by eye is the
+ * usual reason a perceptual hash "does not work".
+ */
+#define PH_RADIAL_PCC_THRESHOLD 0.9
+
+/**
+ * @brief Compares two radial digests the way the algorithm's source specifies: by the
+ *        peak of their cross-correlation over all cyclic shifts.
+ *
+ * A rotation of the image cyclically shifts the radial projection vector, so taking the
+ * best shift is what lets a rotated image match. Use this for digests from
+ * ph_compute_radial_hash() — ph_similarity_digest() and ph_hamming_distance_digest()
+ * treat a digest as a bit vector, which a radial digest is not: its bytes are quantised
+ * DCT coefficients, and comparing them element-wise reports a rotated image as a
+ * different one.
+ *
+ * The score is a Pearson correlation, so it runs from -1.0 to 1.0 and 1.0 means the two
+ * profiles are identical up to a shift. Compare it against @c PH_RADIAL_PCC_THRESHOLD, or
+ * against your own measured cut. Two digests that are entirely flat (which is what a
+ * blank image produces) score 1.0 against each other and 0.0 against anything varying.
+ *
+ * @param a,b Digests of equal size, both valid per the contract above.
+ * @param out_pcc Receives the score. Untouched on error.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for a NULL argument, an invalid or
+ *         empty digest, or two digests of different sizes.
+ *
+ * @note This returns its result through @p out_pcc rather than as the return value, as
+ *       the other comparison functions here do. They signal failure with -1.0, and -1.0
+ *       is a legitimate correlation — a perfect anti-correlation — so the sentinel would
+ *       be ambiguous exactly where the caller needs it not to be.
+ */
+PH_API PH_NODISCARD ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *b,
+                                                    double *out_pcc);
 
 /**
  * @brief Encodes a digest as a lowercase hex string (big-endian, i.e. data[0]

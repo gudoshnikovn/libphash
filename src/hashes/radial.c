@@ -33,15 +33,13 @@
  * not in the source, and a square root before a transform is not a scaling but a
  * different signal.
  *
- * A flat image is handled before any of that: if no projection has a variance above
- * PH_RADIAL_FLAT_VARIANCE the digest is all zeroes. Without that gate the min-max stretch
- * would scale the floating-point residue of a blank image up to the full byte range and
- * return a hash made of rounding noise.
- *
- * Observation, not a divergence: coefficient 0 is the sum of the variances over sqrt(N)
- * and every variance is non-negative, so it is in practice always the largest of the 40
- * and therefore always quantises to 255. One of the 40 bytes thus carries no
- * information. The source keeps it, so this code keeps it.
+ * Between the two steps the variance vector is standardised to zero mean and unit
+ * variance, which pHash's ph_feature_vector() does and which the reasoning at the code
+ * below spells out: it drops the overall contrast level, and it makes DCT coefficient 0
+ * zero instead of a constant 255 that would carry no information, waste the quantisation
+ * range and correlate every pair of digests together. A vector with no spread -- a flat
+ * image, or one radially symmetric enough that every angle sees the same variance -- has
+ * nothing for this descriptor to say and yields an all-zero digest.
  *
  * KNOWN DIVERGENCES FROM THE SOURCE, tracked as defects in
  * docs/algorithm-provenance.md:
@@ -201,7 +199,6 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     double min_side = (ctx->image.width < ctx->image.height) ? (double)ctx->image.width
                                                              : (double)ctx->image.height;
     double max_radius = min_side / 2.0;
-    double max_variance = 0.0;
 
     for (int i = 0; i < projections; i++) {
         double theta = (i * M_PI) / (double)projections;
@@ -211,21 +208,39 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
         projection_variances[i] =
             ph_projection_variance(blurred, ctx->image.width, ctx->image.height, centerX, centerY,
                                    max_radius, cos_t, sin_t, samples);
-
-        if (projection_variances[i] > max_variance)
-            max_variance = projection_variances[i];
     }
 
-    /* A flat image has no radial structure to describe, and what is left in the variance
-     * vector at that point is floating-point residue. The quantisation below is a
-     * per-image min-max stretch, so it would amplify that residue to the full 0..255
-     * range and hand back a hash decided by rounding noise. Answer with zeroes instead --
-     * the same threshold, and the same answer, as before the DCT was introduced. */
-    if (max_variance <= PH_RADIAL_FLAT_VARIANCE) {
+    /* Standardise the vector to zero mean and unit variance before transforming it, as
+     * pHash's ph_feature_vector() does. This is not cosmetic:
+     *
+     *   - it removes the overall level of the variances, which is a property of the
+     *     image's contrast rather than of its radial structure, so the digest survives a
+     *     contrast change;
+     *   - it forces DCT coefficient 0 to zero. Without it that coefficient is the sum of
+     *     the variances, always the largest of the 40 and therefore always quantised to
+     *     255 -- a byte carrying no information, which also pins the top of the
+     *     quantisation range and squeezes every other coefficient into what is left, and
+     *     which correlates every pair of digests towards each other under the comparison
+     *     the source uses.
+     *
+     * A vector with no spread at all -- a flat image, or one radially symmetric enough
+     * that every angle sees the same variance -- has nothing to standardise and nothing
+     * for this descriptor to say. It yields an all-zero digest, again as pHash does. */
+    double sum_v = 0.0, sum_v_sq = 0.0;
+    for (int i = 0; i < projections; i++) {
+        sum_v += projection_variances[i];
+        sum_v_sq += projection_variances[i] * projection_variances[i];
+    }
+    double mean_v = sum_v / (double)projections;
+    double spread_sq = sum_v_sq / (double)projections - mean_v * mean_v;
+    if (spread_sq <= PH_RADIAL_FLAT_VARIANCE) {
         ctx->arena.offset = saved_offset;
         free(blurred);
         return PH_SUCCESS;
     }
+    double spread = sqrt(spread_sq);
+    for (int i = 0; i < projections; i++)
+        projection_variances[i] = (projection_variances[i] - mean_v) / spread;
 
     /* The transform, and the whole point of it: it decorrelates neighbouring angles and
      * compresses 180 numbers into the 40 that carry the shape of the profile. */

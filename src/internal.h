@@ -133,9 +133,11 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
 #define PH_RADIAL_COEFFS 40
 #define PH_RADIAL_SAMPLES 128
 
-/* Below this variance on every projection an image counts as flat and the radial digest
- * is all zeroes rather than a stretch of floating-point residue. The value predates
- * 2.0.0 and no source specifies one; it is one of the constants R68 pins down. */
+/* Below this spread across the projection variances an image has no radial structure to
+ * describe -- it is flat, or radially symmetric -- and the digest is all zeroes rather
+ * than a standardisation of floating-point residue. No source specifies the value; it is
+ * the one that was already in this code for the same job before 2.0.0, and it is one of
+ * the constants R68 pins down. */
 #define PH_RADIAL_FLAT_VARIANCE 0.001
 
 /* Hard upper bounds for the pHash DCT: ph_dct2_partial() uses a fixed

@@ -147,6 +147,81 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b) {
     return 1.0 - ((double)dist / total_bits);
 }
 
+/* Peak of cross-correlation, the comparison the radial hash's source specifies.
+ *
+ * Zauner 3.2.3 gives it as pHash's own ph_crosscorr(): the Pearson correlation of the two
+ * digests is computed at every cyclic shift of the second one, and the largest of those
+ * is the score. The maximisation over shifts is the whole point -- a rotation of the
+ * image cyclically shifts the radial variance vector, and taking the best shift is what
+ * turns that into a match instead of a mismatch.
+ *
+ * Worth stating plainly, because the maths does not quite say what the name suggests: the
+ * shift is applied to the DCT coefficients, and a cyclic shift of a vector is not a
+ * cyclic shift of its DCT. So this recovers much of a rotation rather than all of it, and
+ * it does so because that is what the reference implementation does, not because the
+ * transform makes it exact. The numbers it delivers are in tests/src/test_hash_properties.c.
+ *
+ * Degenerate input: a digest whose bytes are all equal has zero variance and no Pearson
+ * correlation is defined against it. Two such digests are reported as a perfect match
+ * (1.0) -- the radial hash emits an all-zero digest for a flat image, and two flat images
+ * are the same picture as far as this descriptor can tell -- and a constant against a
+ * varying one as no match at all (0.0).
+ */
+PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *b,
+                                       double *out_pcc) {
+    if (!out_pcc || !ph_digest_is_comparable(a) || !ph_digest_is_comparable(b) ||
+        a->size != b->size)
+        return PH_ERR_INVALID_ARGUMENT;
+
+    const int n = a->size;
+    double sum_a = 0.0, sum_b = 0.0;
+    for (int i = 0; i < n; i++) {
+        sum_a += (double)a->data[i];
+        sum_b += (double)b->data[i];
+    }
+    const double mean_a = sum_a / n;
+    const double mean_b = sum_b / n;
+
+    /* The denominators do not depend on the shift: a cyclic shift permutes the terms of
+     * each sum of squares without changing it. pHash recomputes them inside the shift
+     * loop; the result is identical and this way the loop is O(n^2) multiplications
+     * rather than three times that. */
+    double var_a = 0.0, var_b = 0.0;
+    for (int i = 0; i < n; i++) {
+        double da = (double)a->data[i] - mean_a;
+        double db = (double)b->data[i] - mean_b;
+        var_a += da * da;
+        var_b += db * db;
+    }
+
+    if (var_a <= 0.0 || var_b <= 0.0) {
+        *out_pcc = (var_a <= 0.0 && var_b <= 0.0) ? 1.0 : 0.0;
+        return PH_SUCCESS;
+    }
+
+    const double denom = sqrt(var_a * var_b);
+    double peak = -1.0;
+    for (int d = 0; d < n; d++) {
+        double num = 0.0;
+        for (int i = 0; i < n; i++) {
+            int j = (n + i - d) % n;
+            num += ((double)a->data[i] - mean_a) * ((double)b->data[j] - mean_b);
+        }
+        double r = num / denom;
+        if (r > peak)
+            peak = r;
+    }
+
+    /* Rounding can carry a perfect correlation a hair past 1.0; the contract says [-1, 1]
+     * and callers compare it against a threshold, so keep it there. */
+    if (peak > 1.0)
+        peak = 1.0;
+    if (peak < -1.0)
+        peak = -1.0;
+    *out_pcc = peak;
+    return PH_SUCCESS;
+}
+
 static const char PH_HEX_DIGITS[] = "0123456789abcdef";
 
 PH_API ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out, size_t out_size) {

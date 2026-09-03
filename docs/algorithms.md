@@ -172,27 +172,31 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
 ## 8. Radial Hash
 
 - **Concept**: the variance of pixel values along projection lines through the image
-  centre, one per degree over 180°, then a 1-D DCT of that 180-element vector of which
-  the first 40 coefficients are the hash. The transform is the source's own final step:
-  it drops the redundancy between neighbouring angles and decorrelates what is left.
-- **Output**: `ph_digest_t`, 40 bytes — the coefficients, mapped affinely onto 0–255 by
-  their own minimum and maximum, as pHash's `ph_dct()` does.
+  centre, one per degree over 180°; that 180-element vector is standardised, transformed
+  with a 1-D DCT, and its first 40 coefficients are the hash.
+- **Output**: `ph_digest_t`, 40 bytes.
+- **Compare with `ph_radial_similarity()`**, not with `ph_similarity_digest()` or the
+  distance functions: the digest is quantised coefficients, not a bit vector. The score is
+  the peak of the cross-correlation, and `PH_RADIAL_PCC_THRESHOLD` (0.9) is the source's
+  cut — a documented starting point, not a tuned recommendation for your corpus.
 - **Tuning**:
   - `radial_projections` — number of **angles**, default 180, 40–131072.
   - `radial_samples` — default 128 samples per projection.
-- **Changed in 2.0.0**: before this release the DCT was missing and the 40 sat on the
-  angle count instead — 40 angles, no transform. Radial digests from 1.x do not carry
-  over, and `radial_projections` no longer sets the digest width.
-- **Remaining divergences** (see
-  [`algorithm-provenance.md`](algorithm-provenance.md) §7):
-  - The source compares two hashes by the peak of cross-correlation, which is what turns
-    a rotation — a cyclic shift of the projection vector — into a match. `libphash`
-    compares digests element-wise, so **full rotation invariance is still not delivered**.
-    The transform absorbs a good part of it on its own: a quarter turn moves a digest
-    about a fifth as far as an unrelated image does, measured in
-    `tests/src/test_hash_properties.c`, against about a half before the DCT. Treat it as
-    rotation-*tolerant*, not rotation-invariant.
-  - The default gamma is 2.2 where the pHash authors suggest 1.
+- **Changed in 2.0.0**: the DCT the source specifies is now applied and the 40 is back on
+  the coefficient count rather than the angle count; the variance vector is standardised
+  before the transform; and the source's comparison is exposed. Radial digests from 1.x do
+  not carry over.
+- **⚠ It is not rotation invariant, and cannot be made so by comparing these digests.**
+  The invariance is real in the variance vector — a quarter turn shifts it by exactly a
+  quarter of the circle, correlation 0.9997 — and it is destroyed by the DCT, which does
+  not survive a cyclic shift. Measured: a quarter turn scores 0.19, a half turn 0.9951, an
+  unrelated image 0.33. pHash behaves the same way. Only 180° rotations are absorbed, and
+  that is a property of the projection geometry rather than of the hash. See
+  [`algorithm-provenance.md`](algorithm-provenance.md) §7.
+- **Remaining divergence**: the default gamma is 2.2 where the pHash authors suggest 1.
+- **Blind spot worth knowing**: an image whose variance is the same at every angle — a
+  radially symmetric one — has no angular structure for this descriptor, and hashes to all
+  zeroes. Two such images compare as identical.
 
 ## Comparison summary
 
@@ -208,7 +212,7 @@ methodology.
 | pHash | ★★★ | ★★★ | ★★★★ | ★★★★★ | 64-bit |
 | mHash | ★★★★ | ★ | ★★★ | ★★★★ | 64-bit |
 | wHash | ★★ | ★ | ★★★ | ★★★★ | 64-bit |
-| Radial | ★ | ★★★ — see §8 | ★★ | ★★★ | digest, 40 bytes |
+| Radial | ★ | ✗ — see §8 | ★★ | ★★★ | digest, 40 bytes |
 | BMH | ★★★ | ★ | ★★★ | ★★★★ | digest, 256-bit default |
 | ColorHash | ★★★ | ★★★★ | ★★★ | ★★★★★ | 64-bit (42 used) |
 | ColorMoments | ★★★ | ★★★★ | ★★★ | ★★★★★ | digest, 9 bytes |

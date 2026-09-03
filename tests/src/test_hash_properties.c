@@ -30,6 +30,7 @@
  * distributions instead of spot-checking them.
  */
 
+#include "internal.h"
 #include "libphash.h"
 #include "test_macros.h"
 #include <math.h>
@@ -303,11 +304,12 @@ typedef enum {
     A_BMH,
     A_COLOR,
     A_RADIAL,
+    A_RADIAL_PCC,
     A_COUNT
 } algo_t;
 
-static const char *ALGO_NAMES[A_COUNT] = {"aHash", "dHash", "pHash",     "wHash",
-                                          "mHash", "BMH",   "ColorHash", "Radial"};
+static const char *ALGO_NAMES[A_COUNT] = {"aHash", "dHash",     "pHash",  "wHash",  "mHash",
+                                          "BMH",   "ColorHash", "Radial", "Rad/PCC"};
 
 typedef struct {
     uint64_t bits;   /* the 64-bit algorithms */
@@ -327,6 +329,7 @@ static void hash_image(const image_t *im, hash_set_t out[A_COUNT]) {
     ASSERT_OK(ph_compute_bmh(ctx, &out[A_BMH].dig));
     ASSERT_OK(ph_compute_color_hash(ctx, &out[A_COLOR].bits));
     ASSERT_OK(ph_compute_radial_hash(ctx, &out[A_RADIAL].dig));
+    out[A_RADIAL_PCC].dig = out[A_RADIAL].dig;
 
     ph_free(ctx);
 }
@@ -335,6 +338,14 @@ static double distance(algo_t a, const hash_set_t *x, const hash_set_t *y) {
     /* Radial is the one algorithm here whose digest is not a bit vector: its bytes are
      * quantised DCT coefficients, so Hamming distance over them means nothing and the
      * comparison is L2, normalised by the largest L2 two 40-byte digests can be apart. */
+    /* The same radial digest under the comparison its source specifies: the peak of the
+     * cross-correlation, mapped from [-1, 1] onto a distance in [0, 1] so that it sits on
+     * the same scale as every other row here. */
+    if (a == A_RADIAL_PCC) {
+        double pcc = 0.0;
+        ASSERT_OK(ph_radial_similarity(&x[a].dig, &y[a].dig, &pcc));
+        return (1.0 - pcc) / 2.0;
+    }
     if (a == A_RADIAL) {
         double d = ph_l2_distance(&x[a].dig, &y[a].dig);
         ASSERT(d >= 0.0);
@@ -411,14 +422,15 @@ typedef struct {
 
 static const bounds_t BOUNDS[A_COUNT] = {
     /*             sep.  intra  inter        measured: sep / mean intra / mean inter   */
-    [A_AHASH] = {2.50, 0.100, 0.400},  /* 3.54 / 0.052 / 0.488 */
-    [A_DHASH] = {2.50, 0.120, 0.380},  /* 3.60 / 0.066 / 0.469 */
-    [A_PHASH] = {1.80, 0.260, 0.400},  /* 2.48 / 0.177 / 0.490 */
-    [A_WHASH] = {3.00, 0.080, 0.390},  /* 4.34 / 0.036 / 0.480 */
-    [A_MHASH] = {1.80, 0.200, 0.380},  /* 2.54 / 0.124 / 0.470 */
-    [A_BMH] = {3.50, 0.070, 0.390},    /* 5.21 / 0.031 / 0.478 */
-    [A_COLOR] = {1.30, 0.070, 0.090},  /* 1.89 / 0.031 / 0.123 */
-    [A_RADIAL] = {1.60, 0.020, 0.120}, /* 2.12 / 0.007 / 0.188 */
+    [A_AHASH] = {2.50, 0.100, 0.400},      /* 3.54 / 0.052 / 0.488 */
+    [A_DHASH] = {2.50, 0.120, 0.380},      /* 3.60 / 0.066 / 0.469 */
+    [A_PHASH] = {1.80, 0.260, 0.400},      /* 2.48 / 0.177 / 0.490 */
+    [A_WHASH] = {3.00, 0.080, 0.390},      /* 4.34 / 0.036 / 0.480 */
+    [A_MHASH] = {1.80, 0.200, 0.380},      /* 2.54 / 0.124 / 0.470 */
+    [A_BMH] = {3.50, 0.070, 0.390},        /* 5.21 / 0.031 / 0.478 */
+    [A_COLOR] = {1.30, 0.070, 0.090},      /* 1.89 / 0.031 / 0.123 */
+    [A_RADIAL] = {1.80, 0.100, 0.300},     /* 2.39 / 0.063 / 0.392 */
+    [A_RADIAL_PCC] = {1.80, 0.070, 0.180}, /* 2.46 / 0.032 / 0.263 */
 };
 
 /* Three things the measurement says that are worth reading off it rather than assuming.
@@ -563,63 +575,154 @@ static void radial_of(const image_t *im, ph_digest_t *out) {
     ph_free(ctx);
 }
 
-static void test_radial_absorbs_a_quarter_turn(void) {
-    /* The source compares two radial hashes by the peak of cross-correlation, which is
-     * what turns a rotation -- a cyclic shift of the radial variance vector -- into a
-     * match. libphash still compares digests element-wise (docs/algorithm-provenance.md,
-     * defect 2), so full rotation invariance is not delivered and this test does not
-     * assert it.
-     *
-     * What it does assert is what the DCT gives on its own. A quarter turn shifts the
-     * 180-element variance vector by exactly 90 places, and a shift by half the period
-     * leaves half of the DCT coefficients unchanged up to sign, so the rotated image has
-     * to land far nearer than an unrelated one. The transform is what buys that: on this
-     * pair the rotated-to-unrelated ratio was 0.46 (361.4 against 788.4) when the digest
-     * was the raw variance profile, and is 0.19 (40.6 against 212.9) now.
-     *
-     * Square images with strong directional structure, rotated by exactly 90 degrees so
-     * that no resampling is involved: whatever distance shows up is the algorithm's, not
-     * the interpolator's. */
+/* Raw projection variances, before the transform -- the vector a rotation acts on. */
+static void variance_vector(const image_t *im, double *out, int n) {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_load_from_pixels(ctx, im->px, im->w, im->h, 3, 0));
+    /* Same geometry as src/hashes/radial.c, on the plain grayscale buffer: this is about
+     * the projection geometry, not about the blur and gamma in front of it. */
+    uint8_t *gray = (uint8_t *)malloc((size_t)im->w * im->h);
+    ASSERT_PTR_NOT_NULL(gray);
+    for (int i = 0; i < im->w * im->h; i++) {
+        const uint8_t *p = &im->px[(size_t)i * 3];
+        gray[i] = (uint8_t)((38 * p[0] + 75 * p[1] + 15 * p[2]) >> 7);
+    }
+    double cx = im->w / 2.0, cy = im->h / 2.0;
+    double mr = (im->w < im->h ? im->w : im->h) / 2.0;
+    for (int i = 0; i < n; i++) {
+        double t = i * M_PI / n;
+        out[i] = ph_projection_variance(gray, im->w, im->h, cx, cy, mr, (float)cos(t),
+                                        (float)sin(t), 128);
+    }
+    free(gray);
+    ph_free(ctx);
+}
+
+static double best_cyclic_correlation(const double *a, const double *b, int n, int *out_shift) {
+    double ma = 0.0, mb = 0.0;
+    for (int i = 0; i < n; i++) {
+        ma += a[i];
+        mb += b[i];
+    }
+    ma /= n;
+    mb /= n;
+    double va = 0.0, vb = 0.0;
+    for (int i = 0; i < n; i++) {
+        va += (a[i] - ma) * (a[i] - ma);
+        vb += (b[i] - mb) * (b[i] - mb);
+    }
+    double best = -2.0;
+    for (int d = 0; d < n; d++) {
+        double num = 0.0;
+        for (int i = 0; i < n; i++)
+            num += (a[i] - ma) * (b[(n + i - d) % n] - mb);
+        double r = num / sqrt(va * vb);
+        if (r > best) {
+            best = r;
+            *out_shift = d;
+        }
+    }
+    return best;
+}
+
+/* KNOWN DIVERGENCE, and the one this library cannot close by following its source.
+ *
+ * The literature credits the radial variance hash with rotation invariance, and the
+ * mechanism is real: a rotation cyclically shifts the vector of per-angle variances, so
+ * maximising a correlation over shifts undoes it. The first half of this test measures
+ * exactly that and finds it intact -- a quarter turn shifts the 180-element variance
+ * vector by exactly 90 places and the two vectors correlate at 0.9997.
+ *
+ * But the hash is not that vector. It is 40 DCT coefficients of it, and the DCT is not
+ * shift-equivariant: a cyclic shift of a signal is not a cyclic shift of its transform.
+ * pHash's ph_crosscorr(), which ph_radial_similarity() implements, maximises over shifts
+ * of the coefficients, which is the wrong group. The second half of this test measures
+ * what that costs: a half turn still matches (a projection line at alpha and at
+ * alpha+180 is the same line, so a half turn is the identity on the variance vector), and
+ * a quarter turn does not -- it scores below an unrelated image.
+ *
+ * So the invariance is lost in the representation, not in the comparison, and no
+ * comparison of these 40 coefficients can recover it. Closing it means storing something
+ * a shift does not destroy. This test pins the measured state so that any such change has
+ * to come through here. */
+static void test_radial_rotation_survives_the_projections_not_the_transform(void) {
     image_t im = image_new(128, 128);
     for (int y = 0; y < 128; y++)
         for (int x = 0; x < 128; x++) {
             int on = ((x / 6) & 1); /* vertical stripes -- maximally direction-dependent */
             put(&im, x, y, on ? 240 : 15, on ? 240 : 15, on ? 240 : 15);
         }
-    image_t rot = rotate_90(&im);
+    image_t r90 = rotate_90(&im);
+    image_t r180 = rotate_90(&r90);
+    image_t r270 = rotate_90(&r180);
     image_t other = make_base(4); /* a different family entirely */
 
-    ph_digest_t a, b, c;
-    radial_of(&im, &a);
-    radial_of(&rot, &b);
-    radial_of(&other, &c);
-
-    double rotated = ph_l2_distance(&a, &b);
-    double unrelated = ph_l2_distance(&a, &c);
-    ASSERT(rotated >= 0.0 && unrelated > 0.0);
-
-    /* Measured: rotated 40.6, unrelated 212.9 -- a ratio of 0.19. The bound is a third,
-     * outside both that and the 0.46 the previous digest gave, and it is a ratio rather
-     * than an absolute so that it keeps meaning if the quantisation scale changes. */
-    if (rotated >= unrelated / 3.0) {
+    /* 1. The variance vector still carries the rotation, as a clean cyclic shift. */
+    const int N = 180;
+    double va[180], vb[180];
+    variance_vector(&im, va, N);
+    variance_vector(&r90, vb, N);
+    int shift = -1;
+    double raw = best_cyclic_correlation(va, vb, N, &shift);
+    printf("\n  radial rotation\n");
+    printf("    variance vector, quarter turn: correlation %.4f at shift %d of %d\n", raw, shift,
+           N);
+    if (raw < 0.95 || shift != N / 4 * 2) {
         fprintf(stderr,
-                "[FAIL] a quarter turn moves the radial digest %.1f, an unrelated image only "
-                "%.1f -- the transform is no longer absorbing the shift\n",
-                rotated, unrelated);
+                "[FAIL] a quarter turn no longer shifts the variance vector by a quarter of the "
+                "circle (%.4f at shift %d, expected ~1.0 at %d) -- the projection geometry "
+                "changed\n",
+                raw, shift, N / 2);
         exit(1);
     }
 
-    printf("test_radial_absorbs_a_quarter_turn: PASSED (rotated %.1f, unrelated %.1f)\n", rotated,
-           unrelated);
+    /* 2. The transform does not carry it, and the source's comparison cannot get it back. */
+    ph_digest_t a, b90, b180, b270, c;
+    radial_of(&im, &a);
+    radial_of(&r90, &b90);
+    radial_of(&r180, &b180);
+    radial_of(&r270, &b270);
+    radial_of(&other, &c);
+
+    double p90 = 0, p180 = 0, p270 = 0, punrel = 0;
+    ASSERT_OK(ph_radial_similarity(&a, &b90, &p90));
+    ASSERT_OK(ph_radial_similarity(&a, &b180, &p180));
+    ASSERT_OK(ph_radial_similarity(&a, &b270, &p270));
+    ASSERT_OK(ph_radial_similarity(&a, &c, &punrel));
+    printf("    digest: 90 %.4f  180 %.4f  270 %.4f   unrelated %.4f\n", p90, p180, p270, punrel);
+
+    /* A half turn is the identity on the projections, so it must match. Measured 0.9951. */
+    if (p180 < PH_RADIAL_PCC_THRESHOLD) {
+        fprintf(stderr, "[FAIL] a half turn scores %.4f, below the source's threshold %.2f\n", p180,
+                PH_RADIAL_PCC_THRESHOLD);
+        exit(1);
+    }
+    /* And the quarter turns do not. Measured 0.19 and 0.13 against 0.33 for an unrelated
+     * image. Asserted as the current, defective behaviour: if a representation that
+     * survives a shift is ever adopted, this has to be replaced by a test of invariance. */
+    if (p90 >= PH_RADIAL_PCC_THRESHOLD || p270 >= PH_RADIAL_PCC_THRESHOLD) {
+        fprintf(stderr,
+                "[FAIL] quarter turns now score %.4f / %.4f, at or above the threshold -- if the "
+                "representation was changed to survive a shift, replace this test with one "
+                "asserting invariance\n",
+                p90, p270);
+        exit(1);
+    }
+
+    printf("test_radial_rotation_survives_the_projections_not_the_transform: PASSED (divergence "
+           "pinned)\n");
 
     image_free(&im);
-    image_free(&rot);
+    image_free(&r90);
+    image_free(&r180);
+    image_free(&r270);
     image_free(&other);
 }
 
 int main(void) {
     test_robustness_discrimination_separability();
-    test_radial_absorbs_a_quarter_turn();
+    test_radial_rotation_survives_the_projections_not_the_transform();
     printf("ALL HASH PROPERTY TESTS PASSED\n");
     return 0;
 }
