@@ -19,6 +19,21 @@ walkthrough.
 
 ### BREAKING CHANGES
 
+- **The Radial hash now applies the DCT its source specifies, and every radial value
+  changes.** The algorithm (De Roover et al. 2005, as pHash implements it) computes the
+  variance along one projection line per degree over 180°, then takes a 1-D DCT of that
+  vector and keeps the first 40 coefficients as the hash. This library was taking 40
+  *angles* and no transform — the 40 had been transplanted from the coefficient count
+  onto the angle count — so the digest was a raw, still-correlated variance profile at
+  4.5× coarser angular resolution. The digest is now always 40 bytes of quantised
+  coefficients, `ph_context_set_radial_params()`'s first argument is the number of
+  angles (40..131072, default 180) and no longer sets the digest width, and a value of
+  40 does **not** reproduce the old hashes. Rotation tolerance improves as a
+  side-effect — a quarter turn now moves a digest about a fifth as far as an unrelated
+  image does, against about a half before — but full rotation invariance still needs
+  the source's cross-correlation comparison, which this release does not add.
+  *Restore the old behaviour:* not possible; recompute any stored radial digests.
+
 - **Automatic EXIF orientation is now on by default.** Images carrying an
   `Orientation` tag other than 1 (most photos straight from phones and cameras) are
   rotated/mirrored before hashing, so a hash now describes what a viewer displays
