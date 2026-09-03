@@ -31,13 +31,13 @@ walkthrough.
   and inflating the correlation between every pair of digests.
   *Restore the old behaviour:* not possible; recompute any stored radial digests.
 
-  Please read this alongside the note in `docs/algorithms.md` §8: **the Radial hash is not
-  rotation invariant**, and this release did not make it so. The invariance exists in the
-  vector of per-angle variances — a quarter turn shifts it cleanly — and the DCT that turns
-  that vector into the hash does not survive a shift, so no comparison of the resulting
-  coefficients can recover it. Only 180° rotations are absorbed. The reference
-  implementation behaves the same way; the measurement is in
-  `docs/algorithm-provenance.md` §7.
+  One correction to earlier documentation while you are here: the Radial hash tolerates a
+  **few degrees** of rotation, plus an exact half turn — not the "up to 360°" this
+  project's own docs used to claim. Measured on a photograph: 1° → 0.993, 3° → 0.944,
+  5° → 0.870, 15° → 0.437, 90° → 0.243, 180° → 0.993, against 0.69 for an unrelated image.
+  That is what the algorithm's source delivers, and the reference implementation behaves
+  the same way; `docs/algorithm-provenance.md` §7 explains why the transform does not carry
+  a larger rotation.
 
 - **The Radial hash now applies the DCT its source specifies, and every radial value
   changes.** The algorithm (De Roover et al. 2005, as pHash implements it) computes the

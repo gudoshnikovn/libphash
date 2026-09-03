@@ -663,8 +663,9 @@ PH_API PH_NODISCARD ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
  *          ph_hamming_distance_digest(), ph_l2_distance() or ph_similarity_digest(). Those
  *          three treat a digest as a bit vector or a point in space; a radial digest is
  *          neither, and comparing it that way reports a rotated image as a different one.
- *          The rotation invariance the algorithm is known for comes from the comparison,
- *          not from the hash.
+ *          The rotation tolerance the algorithm is known for comes from the comparison,
+ *          not from the hash -- and it is a few degrees plus an exact half turn, not
+ *          invariance to an arbitrary rotation. See docs/algorithms.md section 8.
  *
  * @note Since 2.0.0 the digest is 40 bytes of DCT coefficients rather than one byte per
  *       projection, and the default projection count is 180 rather than 40. Values from
@@ -722,8 +723,10 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
  *        peak of their cross-correlation over all cyclic shifts.
  *
  * A rotation of the image cyclically shifts the radial projection vector, so taking the
- * best shift is what lets a rotated image match. Use this for digests from
- * ph_compute_radial_hash() — ph_similarity_digest() and ph_hamming_distance_digest()
+ * best shift is what lets a rotated image match. On a photograph that holds for a few
+ * degrees of rotation, and exactly for a half turn; it is not invariance to an arbitrary
+ * rotation, and docs/algorithm-provenance.md section 7 has the measured profile. Use this for
+ * digests from ph_compute_radial_hash() — ph_similarity_digest() and ph_hamming_distance_digest()
  * treat a digest as a bit vector, which a radial digest is not: its bytes are quantised
  * DCT coefficients, and comparing them element-wise reports a rotated image as a
  * different one.

@@ -156,10 +156,10 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b) {
  * turns that into a match instead of a mismatch.
  *
  * Worth stating plainly, because the maths does not quite say what the name suggests: the
- * shift is applied to the DCT coefficients, and a cyclic shift of a vector is not a
- * cyclic shift of its DCT. So this recovers much of a rotation rather than all of it, and
- * it does so because that is what the reference implementation does, not because the
- * transform makes it exact. The numbers it delivers are in tests/src/test_hash_properties.c.
+ * shift is applied to the DCT coefficients, and a cyclic shift of a vector is not a cyclic
+ * shift of its DCT. What that buys in practice is tolerance to a few degrees of rotation
+ * and an exact match on a half turn -- not invariance to an arbitrary one. Measured in
+ * tests/src/test_radial.c and docs/algorithm-provenance.md section 7.
  *
  * Degenerate input: a digest whose bytes are all equal has zero variance and no Pearson
  * correlation is defined against it. Two such digests are reported as a perfect match

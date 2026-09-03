@@ -626,26 +626,140 @@ static double best_cyclic_correlation(const double *a, const double *b, int n, i
     return best;
 }
 
-/* KNOWN DIVERGENCE, and the one this library cannot close by following its source.
+/* Rotation about the centre with bilinear resampling. The radial hash only samples
+ * within min(w,h)/2 of the centre, so every point it reads comes from inside the source's
+ * own inscribed disc and the corners the rotation leaves empty are never looked at. */
+static image_t rotate_by(const image_t *s, double deg) {
+    image_t o = image_new(s->w, s->h);
+    memset(o.px, 0, (size_t)s->w * s->h * 3);
+    double a = deg * M_PI / 180.0, ca = cos(a), sa = sin(a);
+    double cx = (s->w - 1) / 2.0, cy = (s->h - 1) / 2.0;
+    for (int y = 0; y < s->h; y++)
+        for (int x = 0; x < s->w; x++) {
+            double dx = x - cx, dy = y - cy;
+            double sx = cx + dx * ca + dy * sa;
+            double sy = cy - dx * sa + dy * ca;
+            if (sx < 0 || sy < 0 || sx >= s->w - 1 || sy >= s->h - 1)
+                continue;
+            int x0 = (int)sx, y0 = (int)sy;
+            double fx = sx - x0, fy = sy - y0;
+            for (int c = 0; c < 3; c++) {
+                double p = s->px[((size_t)y0 * s->w + x0) * 3 + c] * (1 - fx) * (1 - fy) +
+                           s->px[((size_t)y0 * s->w + x0 + 1) * 3 + c] * fx * (1 - fy) +
+                           s->px[((size_t)(y0 + 1) * s->w + x0) * 3 + c] * (1 - fx) * fy +
+                           s->px[((size_t)(y0 + 1) * s->w + x0 + 1) * 3 + c] * fx * fy;
+                o.px[((size_t)y * o.w + x) * 3 + c] = (uint8_t)(p + 0.5);
+            }
+        }
+    return o;
+}
+
+/* The rotation profile over the corpus.
  *
- * The literature credits the radial variance hash with rotation invariance, and the
- * mechanism is real: a rotation cyclically shifts the vector of per-angle variances, so
- * maximising a correlation over shifts undoes it. The first half of this test measures
- * exactly that and finds it intact -- a quarter turn shifts the 180-element variance
- * vector by exactly 90 places and the two vectors correlate at 0.9997.
+ * Read this as a lower bound, not as the algorithm's behaviour on photographs. Every
+ * image here is 128x128 and deliberately high-frequency -- 3-pixel stripes, 4-pixel
+ * checkerboards, additive noise -- and on that content a one-degree resampling changes
+ * the pixels enough to move the variance profile on its own. The same measurement on the
+ * real photographs in tests/data (tests/src/test_radial.c) gives 0.99 at 1 degree and
+ * 0.94 at 3. Both are worth having: this one says what happens when the content is all
+ * detail, that one says what happens on a picture. */
+static void test_radial_rotation_profile(void) {
+    static const double ANGLES[] = {1, 2, 5, 10, 15, 30, 45, 90, 180};
+    const int NA = (int)(sizeof(ANGLES) / sizeof(ANGLES[0]));
+
+    image_t base[NUM_BASE];
+    ph_digest_t ref[NUM_BASE];
+    for (int i = 0; i < NUM_BASE; i++) {
+        base[i] = make_base(i);
+        /* The reference goes through the same resampler at 0 degrees, so the numbers
+         * below measure the rotation and not the interpolator. */
+        image_t r0 = rotate_by(&base[i], 0.0);
+        radial_of(&r0, &ref[i]);
+        image_free(&r0);
+    }
+
+    /* Baseline: what an unrelated image scores. A rotation is only "absorbed" if it
+     * scores clearly above this. */
+    stats_t unrel;
+    stats_init(&unrel);
+    for (int i = 0; i < NUM_BASE; i++)
+        for (int j = i + 1; j < NUM_BASE; j++) {
+            double p = 0.0;
+            ASSERT_OK(ph_radial_similarity(&ref[i], &ref[j], &p));
+            stats_add(&unrel, p);
+        }
+
+    printf("\n  radial: peak cross-correlation against rotation (%d images)\n", NUM_BASE);
+    printf("    unrelated images: mean %.3f, max %.3f\n", stats_mean(&unrel), unrel.max);
+    printf("    %8s %8s %8s %8s\n", "angle", "mean", "min", ">=0.9");
+
+    double mean_at[16];
+    for (int a = 0; a < NA; a++) {
+        stats_t st;
+        stats_init(&st);
+        int matched = 0;
+        for (int i = 0; i < NUM_BASE; i++) {
+            image_t r = rotate_by(&base[i], ANGLES[a]);
+            ph_digest_t d;
+            radial_of(&r, &d);
+            double p = 0.0;
+            ASSERT_OK(ph_radial_similarity(&ref[i], &d, &p));
+            stats_add(&st, p);
+            if (p >= PH_RADIAL_PCC_THRESHOLD)
+                matched++;
+            image_free(&r);
+        }
+        mean_at[a] = stats_mean(&st);
+        printf("    %6.0f\u00b0 %8.3f %8.3f %6d/%d\n", ANGLES[a], stats_mean(&st), st.min, matched,
+               NUM_BASE);
+    }
+
+    for (int i = 0; i < NUM_BASE; i++)
+        image_free(&base[i]);
+
+    /* A half turn is the identity on the projections -- the line at alpha and at
+     * alpha+180 is the same line -- so it must match on every image, whatever the
+     * content. Measured: mean 0.986, worst 0.943. */
+    if (mean_at[NA - 1] < PH_RADIAL_PCC_THRESHOLD) {
+        fprintf(stderr, "[FAIL] a half turn averages %.3f, below the threshold %.2f\n",
+                mean_at[NA - 1], PH_RADIAL_PCC_THRESHOLD);
+        exit(1);
+    }
+    /* And a small rotation still has to beat an unrelated image even here. Measured:
+     * 0.764 at one degree against 0.599 for an unrelated pair. */
+    if (mean_at[0] <= stats_mean(&unrel)) {
+        fprintf(stderr,
+                "[FAIL] a one-degree rotation averages %.3f, no better than the %.3f an "
+                "unrelated image scores\n",
+                mean_at[0], stats_mean(&unrel));
+        exit(1);
+    }
+
+    printf("test_radial_rotation_profile: PASSED\n");
+}
+
+/* Where the rotation tolerance comes from, and where it stops.
  *
- * But the hash is not that vector. It is 40 DCT coefficients of it, and the DCT is not
+ * The mechanism the literature describes is real and this implementation has it: a
+ * rotation cyclically shifts the vector of per-angle variances. The first half of this
+ * test measures that directly -- a quarter turn shifts the 180-element vector by exactly
+ * 90 places, and the two vectors correlate at 0.9997.
+ *
+ * The hash is not that vector. It is 40 DCT coefficients of it, and the DCT is not
  * shift-equivariant: a cyclic shift of a signal is not a cyclic shift of its transform.
- * pHash's ph_crosscorr(), which ph_radial_similarity() implements, maximises over shifts
- * of the coefficients, which is the wrong group. The second half of this test measures
- * what that costs: a half turn still matches (a projection line at alpha and at
- * alpha+180 is the same line, so a half turn is the identity on the variance vector), and
- * a quarter turn does not -- it scores below an unrelated image.
+ * So the tolerance the algorithm actually delivers is the tolerance of a transform to a
+ * small perturbation -- a few degrees, measured in test_radial_rotation_profile() and on
+ * real photographs in tests/src/test_radial.c -- and not invariance to an arbitrary
+ * rotation. A quarter turn is not absorbed, and no comparison of these 40 coefficients
+ * can absorb it, pHash's peak of cross-correlation included; that comparison maximises
+ * over shifts of the coefficients, which is not the group a rotation acts through.
  *
- * So the invariance is lost in the representation, not in the comparison, and no
- * comparison of these 40 coefficients can recover it. Closing it means storing something
- * a shift does not destroy. This test pins the measured state so that any such change has
- * to come through here. */
+ * A half turn is the exception and it has nothing to do with the transform: a projection
+ * line at alpha and at alpha+180 is the same line, so a half turn is the identity on the
+ * variance vector before the DCT ever runs.
+ *
+ * The second half pins that boundary, so that a change of representation -- to something
+ * a cyclic shift does not destroy -- has to come through this test. */
 static void test_radial_rotation_survives_the_projections_not_the_transform(void) {
     image_t im = image_new(128, 128);
     for (int y = 0; y < 128; y++)
@@ -668,7 +782,7 @@ static void test_radial_rotation_survives_the_projections_not_the_transform(void
     printf("\n  radial rotation\n");
     printf("    variance vector, quarter turn: correlation %.4f at shift %d of %d\n", raw, shift,
            N);
-    if (raw < 0.95 || shift != N / 4 * 2) {
+    if (raw < 0.95 || shift != N / 2) {
         fprintf(stderr,
                 "[FAIL] a quarter turn no longer shifts the variance vector by a quarter of the "
                 "circle (%.4f at shift %d, expected ~1.0 at %d) -- the projection geometry "
@@ -722,6 +836,7 @@ static void test_radial_rotation_survives_the_projections_not_the_transform(void
 
 int main(void) {
     test_robustness_discrimination_separability();
+    test_radial_rotation_profile();
     test_radial_rotation_survives_the_projections_not_the_transform();
     printf("ALL HASH PROPERTY TESTS PASSED\n");
     return 0;

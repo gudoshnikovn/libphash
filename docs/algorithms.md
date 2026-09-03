@@ -186,13 +186,13 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
   the coefficient count rather than the angle count; the variance vector is standardised
   before the transform; and the source's comparison is exposed. Radial digests from 1.x do
   not carry over.
-- **⚠ It is not rotation invariant, and cannot be made so by comparing these digests.**
-  The invariance is real in the variance vector — a quarter turn shifts it by exactly a
-  quarter of the circle, correlation 0.9997 — and it is destroyed by the DCT, which does
-  not survive a cyclic shift. Measured: a quarter turn scores 0.19, a half turn 0.9951, an
-  unrelated image 0.33. pHash behaves the same way. Only 180° rotations are absorbed, and
-  that is a property of the projection geometry rather than of the hash. See
-  [`algorithm-provenance.md`](algorithm-provenance.md) §7.
+- **Rotation: a few degrees, plus an exact half turn — not arbitrary rotation.** Measured
+  on `tests/data/photo.jpeg` against a 0.69 baseline for an unrelated image: 1° → 0.993,
+  3° → 0.944, 5° → 0.870, 15° → 0.437, 90° → 0.243, 180° → 0.993. That is what the
+  algorithm's source delivers and what this page's earlier "up to 360°" claim got wrong;
+  the half turn matches because a projection line at α and at α+180 is the same line. See
+  [`algorithm-provenance.md`](algorithm-provenance.md) §7 for why the transform does not
+  carry a larger rotation.
 - **Remaining divergence**: the default gamma is 2.2 where the pHash authors suggest 1.
 - **Blind spot worth knowing**: an image whose variance is the same at every angle — a
   radially symmetric one — has no angular structure for this descriptor, and hashes to all
@@ -212,7 +212,7 @@ methodology.
 | pHash | ★★★ | ★★★ | ★★★★ | ★★★★★ | 64-bit |
 | mHash | ★★★★ | ★ | ★★★ | ★★★★ | 64-bit |
 | wHash | ★★ | ★ | ★★★ | ★★★★ | 64-bit |
-| Radial | ★ | ✗ — see §8 | ★★ | ★★★ | digest, 40 bytes |
+| Radial | ★ | ★★ — small angles, see §8 | ★★ | ★★★ | digest, 40 bytes |
 | BMH | ★★★ | ★ | ★★★ | ★★★★ | digest, 256-bit default |
 | ColorHash | ★★★ | ★★★★ | ★★★ | ★★★★★ | 64-bit (42 used) |
 | ColorMoments | ★★★ | ★★★★ | ★★★ | ★★★★★ | digest, 9 bytes |
