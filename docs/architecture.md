@@ -26,7 +26,7 @@ Divided into specific implementations corresponding to unique theoretical proper
 - `mhash.c`: Marr-Hildreth or structured block-based logical grid approach.
 - `whash.c`: Wavelet-based (DWT Haar) hash supporting fast and full-academic decompositions.
 - `bmh.c`: Block Mean Hash, producing high-resolution (256-bit) digest fingerprints.
-- `radial.c`: Rotationally invariant spatial sampling.
+- `radial.c`: variance along projection lines through the centre, reduced by a 1-D DCT.
 - `color_moments.c`: Statistical distribution of colors for distinguishing color-unique identical geometry.
 
 ## Data Flow

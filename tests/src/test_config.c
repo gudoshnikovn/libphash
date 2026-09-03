@@ -1,6 +1,7 @@
 #include "libphash.h"
 #include "test_macros.h"
 #include <stdio.h>
+#include <string.h>
 
 void test_config_gray_weights() {
     ph_context_t *ctx;
@@ -52,14 +53,23 @@ void test_config_radial_params() {
     ph_digest_t d1, d2;
     ASSERT_OK(ph_compute_radial_hash(ctx, &d1));
 
-    // Increase projections
-    ph_context_set_radial_params(ctx, 60, 128);
+    // Fewer angles. Since 2.0.0 the digest is always the 40 DCT coefficients, so the
+    // width does not follow the projection count -- but the hash still has to react to
+    // it, or the setting would be doing nothing.
+    ASSERT_OK(ph_context_set_radial_params(ctx, 60, 128));
     ASSERT_OK(ph_compute_radial_hash(ctx, &d2));
 
-    if (d1.size != 40 || d2.size != 60) {
+    if (d1.size != 40 || d2.size != 40) {
         fprintf(stderr, "Radial size test failed: %d vs %d\n", d1.size, d2.size);
         exit(1);
     }
+    if (memcmp(d1.data, d2.data, d1.size) == 0) {
+        fprintf(stderr, "Radial hash ignored the projection count\n");
+        exit(1);
+    }
+
+    // Below the coefficient count there is no hash to compute, and the setter says so.
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(ctx, 39, 128));
 
     ph_free(ctx);
     printf("  [PASS] Radial Parameters\n");

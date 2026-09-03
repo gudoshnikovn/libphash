@@ -269,10 +269,14 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
  * @brief Sets Radial Hash parameters.
  *
  * @param ctx The context.
- * @param projections Number of angular projections, 1..64 (default 40). The radial hash
- *        emits one @c ph_digest_t byte per projection, so 64 (PH_DIGEST_MAX_BYTES) is the
- *        digest's capacity. Above it, the digest used to be silently truncated to 64
- *        bytes while the call still returned @c PH_SUCCESS.
+ * @param projections Number of angular projections over [0, pi), 40..131072
+ *        (default 180). Since 2.0.0 this is the number of **angles** only: the digest is
+ *        always 40 bytes, being the first 40 coefficients of a DCT of the projection
+ *        vector, as the algorithm's source specifies. Before 2.0.0 the projection count
+ *        was also the digest width, and the DCT was missing entirely; a value of 40 no
+ *        longer reproduces the old hashes. The lower bound is the coefficient count (a
+ *        DCT of an n-element vector has n coefficients); the upper bound is the angular
+ *        resolution the largest supported image can distinguish.
  * @param samples Number of samples per projection, 1..65536 (default 128). Samples are
  *        taken along a straight line across the image, and 65536 covers the diagonal of
  *        the largest square image the library will process (46340 x 46340, from the
@@ -648,7 +652,22 @@ PH_API PH_NODISCARD ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
                                                              ph_digest_t *out_digest);
 
 /**
- * @brief Computes Radial Hash. Robust against rotation. Uses context Gamma.
+ * @brief Computes the Radial variance hash. Returns a 40-byte digest.
+ *
+ * The variance of the pixels along each of `radial_projections` lines through the image
+ * centre (default 180, one per degree), reduced by a 1-D DCT to its first 40
+ * coefficients, which are quantised into the digest. Uses the context gamma, and nothing
+ * else does.
+ *
+ * @warning Rotation invariance is **not** delivered by comparing these digests
+ *          element-wise with ph_hamming_distance_digest() or ph_l2_distance(). A rotation
+ *          cyclically shifts the projection vector, and undoing that shift takes the peak
+ *          of the cross-correlation, which this library does not yet expose. Until it
+ *          does, treat the radial hash as a variance-profile descriptor.
+ *
+ * @note Since 2.0.0 the digest is 40 bytes of DCT coefficients rather than one byte per
+ *       projection, and the default projection count is 180 rather than 40. Values from
+ *       earlier releases do not carry over.
  */
 PH_API PH_NODISCARD ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_digest);
 

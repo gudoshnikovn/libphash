@@ -184,10 +184,10 @@ static image_t make_base(int index) {
 /* ---------------------------------------------------------------------------
  * Benign transformations
  *
- * Deliberately no rotation: only pHash claims any rotation tolerance, and Radial's
- * rotation invariance is a known defect (see the dedicated test at the end). Mixing a
- * rotation into the "benign" set would make every algorithm look bad for a reason that
- * has nothing to do with the property being measured.
+ * Deliberately no rotation: only pHash and Radial tolerate one at all, and Radial's is
+ * partial until the comparison from its source lands (see the dedicated test at the
+ * end). Mixing a rotation into the "benign" set would make every algorithm look bad for
+ * a reason that has nothing to do with the property being measured.
  * ------------------------------------------------------------------------ */
 
 static image_t xf_identity(const image_t *s) {
@@ -294,14 +294,24 @@ static const char *TRANSFORM_NAMES[] = {"scale 0.5", "scale 1.75", "crop 4%",   
  * different hash widths: a 64-bit Hamming distance over 64, a digest's over its bits.
  * ------------------------------------------------------------------------ */
 
-typedef enum { A_AHASH, A_DHASH, A_PHASH, A_WHASH, A_MHASH, A_BMH, A_COLOR, A_COUNT } algo_t;
+typedef enum {
+    A_AHASH,
+    A_DHASH,
+    A_PHASH,
+    A_WHASH,
+    A_MHASH,
+    A_BMH,
+    A_COLOR,
+    A_RADIAL,
+    A_COUNT
+} algo_t;
 
-static const char *ALGO_NAMES[A_COUNT] = {"aHash", "dHash", "pHash",    "wHash",
-                                          "mHash", "BMH",   "ColorHash"};
+static const char *ALGO_NAMES[A_COUNT] = {"aHash", "dHash", "pHash",     "wHash",
+                                          "mHash", "BMH",   "ColorHash", "Radial"};
 
 typedef struct {
     uint64_t bits;   /* the 64-bit algorithms */
-    ph_digest_t dig; /* BMH */
+    ph_digest_t dig; /* BMH, Radial */
 } hash_set_t;
 
 static void hash_image(const image_t *im, hash_set_t out[A_COUNT]) {
@@ -316,11 +326,20 @@ static void hash_image(const image_t *im, hash_set_t out[A_COUNT]) {
     ASSERT_OK(ph_compute_mhash(ctx, &out[A_MHASH].bits));
     ASSERT_OK(ph_compute_bmh(ctx, &out[A_BMH].dig));
     ASSERT_OK(ph_compute_color_hash(ctx, &out[A_COLOR].bits));
+    ASSERT_OK(ph_compute_radial_hash(ctx, &out[A_RADIAL].dig));
 
     ph_free(ctx);
 }
 
 static double distance(algo_t a, const hash_set_t *x, const hash_set_t *y) {
+    /* Radial is the one algorithm here whose digest is not a bit vector: its bytes are
+     * quantised DCT coefficients, so Hamming distance over them means nothing and the
+     * comparison is L2, normalised by the largest L2 two 40-byte digests can be apart. */
+    if (a == A_RADIAL) {
+        double d = ph_l2_distance(&x[a].dig, &y[a].dig);
+        ASSERT(d >= 0.0);
+        return d / (255.0 * sqrt((double)x[a].dig.size));
+    }
     if (a == A_BMH) {
         int d = ph_hamming_distance_digest(&x[a].dig, &y[a].dig);
         ASSERT(d >= 0);
@@ -392,16 +411,17 @@ typedef struct {
 
 static const bounds_t BOUNDS[A_COUNT] = {
     /*             sep.  intra  inter        measured: sep / mean intra / mean inter   */
-    [A_AHASH] = {2.50, 0.100, 0.400}, /* 3.54 / 0.052 / 0.488 */
-    [A_DHASH] = {2.50, 0.120, 0.380}, /* 3.60 / 0.066 / 0.469 */
-    [A_PHASH] = {1.80, 0.260, 0.400}, /* 2.48 / 0.177 / 0.490 */
-    [A_WHASH] = {3.00, 0.080, 0.390}, /* 4.34 / 0.036 / 0.480 */
-    [A_MHASH] = {1.80, 0.200, 0.380}, /* 2.54 / 0.124 / 0.470 */
-    [A_BMH] = {3.50, 0.070, 0.390},   /* 5.21 / 0.031 / 0.478 */
-    [A_COLOR] = {1.30, 0.070, 0.090}, /* 1.89 / 0.031 / 0.123 */
+    [A_AHASH] = {2.50, 0.100, 0.400},  /* 3.54 / 0.052 / 0.488 */
+    [A_DHASH] = {2.50, 0.120, 0.380},  /* 3.60 / 0.066 / 0.469 */
+    [A_PHASH] = {1.80, 0.260, 0.400},  /* 2.48 / 0.177 / 0.490 */
+    [A_WHASH] = {3.00, 0.080, 0.390},  /* 4.34 / 0.036 / 0.480 */
+    [A_MHASH] = {1.80, 0.200, 0.380},  /* 2.54 / 0.124 / 0.470 */
+    [A_BMH] = {3.50, 0.070, 0.390},    /* 5.21 / 0.031 / 0.478 */
+    [A_COLOR] = {1.30, 0.070, 0.090},  /* 1.89 / 0.031 / 0.123 */
+    [A_RADIAL] = {1.60, 0.020, 0.120}, /* 2.12 / 0.007 / 0.188 */
 };
 
-/* Two things the measurement says that are worth reading off it rather than assuming.
+/* Three things the measurement says that are worth reading off it rather than assuming.
  *
  * ColorHash's inter-distance is low in absolute terms -- 0.123 where the structural
  * hashes sit near 0.48 -- and its floor is set accordingly. That is the algorithm, not a
@@ -410,6 +430,16 @@ static const bounds_t BOUNDS[A_COUNT] = {
  * 1.89 because its intra-distance is correspondingly tiny. Judge it by the gap, not by
  * the absolute distance, and do not compare its raw distances against a structural
  * hash's.
+ *
+ * Radial's distances are not bits but quantised DCT coefficients compared by L2, so its
+ * row is on a different footing from the rest even after normalisation; read its
+ * separability, and do not compare its absolute distances with anyone else's. Its inter
+ * mean is low for the same reason ColorHash's is -- one byte of its digest (coefficient
+ * 0) is 255 for every image, and the affine quantisation squeezes the rest of the
+ * coefficients into whatever range is left under it. Applying the DCT of the source in
+ * 2.0.0 moved it from 0.021 / 0.344 / 2.80 to 0.007 / 0.188 / 2.12: three times more
+ * robust, less well discriminated, and measured under a comparison the source does not
+ * use -- see docs/algorithm-provenance.md section 7.
  *
  * pHash has the worst robustness of the structural hashes here -- mean intra-distance
  * 0.177 against 0.03-0.07 for the others -- and the second-lowest separability. That is
@@ -512,7 +542,7 @@ static void test_robustness_discrimination_separability(void) {
 }
 
 /* ---------------------------------------------------------------------------
- * Radial: the rotation invariance that is documented but not delivered
+ * Radial: how much of a rotation the transform absorbs on its own
  * ------------------------------------------------------------------------ */
 
 static image_t rotate_90(const image_t *s) {
@@ -533,19 +563,23 @@ static void radial_of(const image_t *im, ph_digest_t *out) {
     ph_free(ctx);
 }
 
-static void test_radial_is_not_rotation_invariant_today(void) {
-    /* KNOWN DIVERGENCE (docs/algorithm-provenance.md, defect 2): the source compares two
-     * radial hashes by the peak of cross-correlation, which is what turns a rotation --
-     * a cyclic shift of the radial variance vector -- into a match. libphash compares
-     * digests element-wise, so the shift is not undone and the rotation is not absorbed.
+static void test_radial_absorbs_a_quarter_turn(void) {
+    /* The source compares two radial hashes by the peak of cross-correlation, which is
+     * what turns a rotation -- a cyclic shift of the radial variance vector -- into a
+     * match. libphash still compares digests element-wise (docs/algorithm-provenance.md,
+     * defect 2), so full rotation invariance is not delivered and this test does not
+     * assert it.
      *
-     * This test asserts the CURRENT, defective behaviour, so that implementing the
-     * comparison from the source has to change it. It is the counter-example to the
-     * claim docs/algorithms.md used to make.
+     * What it does assert is what the DCT gives on its own. A quarter turn shifts the
+     * 180-element variance vector by exactly 90 places, and a shift by half the period
+     * leaves half of the DCT coefficients unchanged up to sign, so the rotated image has
+     * to land far nearer than an unrelated one. The transform is what buys that: on this
+     * pair the rotated-to-unrelated ratio was 0.46 (361.4 against 788.4) when the digest
+     * was the raw variance profile, and is 0.19 (40.6 against 212.9) now.
      *
-     * A square image with strong directional structure is used, rotated by exactly 90
-     * degrees so that no resampling is involved: whatever distance shows up is the
-     * algorithm's, not the interpolator's. */
+     * Square images with strong directional structure, rotated by exactly 90 degrees so
+     * that no resampling is involved: whatever distance shows up is the algorithm's, not
+     * the interpolator's. */
     image_t im = image_new(128, 128);
     for (int y = 0; y < 128; y++)
         for (int x = 0; x < 128; x++) {
@@ -553,36 +587,39 @@ static void test_radial_is_not_rotation_invariant_today(void) {
             put(&im, x, y, on ? 240 : 15, on ? 240 : 15, on ? 240 : 15);
         }
     image_t rot = rotate_90(&im);
+    image_t other = make_base(4); /* a different family entirely */
 
-    ph_digest_t a, b;
+    ph_digest_t a, b, c;
     radial_of(&im, &a);
     radial_of(&rot, &b);
+    radial_of(&other, &c);
 
-    double d = ph_l2_distance(&a, &b);
-    ASSERT(d >= 0.0);
+    double rotated = ph_l2_distance(&a, &b);
+    double unrelated = ph_l2_distance(&a, &c);
+    ASSERT(rotated >= 0.0 && unrelated > 0.0);
 
-    /* Rotating stripes by 90 degrees moves every projection's variance to a different
-     * angle. Under the source's comparison this is a match; element-wise it is a large
-     * distance. Measured at ~1100 over 40 bytes; the floor is set well below that. */
-    if (d < 200.0) {
+    /* Measured: rotated 40.6, unrelated 212.9 -- a ratio of 0.19. The bound is a third,
+     * outside both that and the 0.46 the previous digest gave, and it is a ratio rather
+     * than an absolute so that it keeps meaning if the quantisation scale changes. */
+    if (rotated >= unrelated / 3.0) {
         fprintf(stderr,
-                "[FAIL] radial L2 distance under 90-degree rotation is only %.1f -- if this "
-                "now matches, the cross-correlation comparison was implemented and this "
-                "test should be replaced by one asserting invariance\n",
-                d);
+                "[FAIL] a quarter turn moves the radial digest %.1f, an unrelated image only "
+                "%.1f -- the transform is no longer absorbing the shift\n",
+                rotated, unrelated);
         exit(1);
     }
 
-    printf("test_radial_is_not_rotation_invariant_today: PASSED (L2 = %.1f, divergence pinned)\n",
-           d);
+    printf("test_radial_absorbs_a_quarter_turn: PASSED (rotated %.1f, unrelated %.1f)\n", rotated,
+           unrelated);
 
     image_free(&im);
     image_free(&rot);
+    image_free(&other);
 }
 
 int main(void) {
     test_robustness_discrimination_separability();
-    test_radial_is_not_rotation_invariant_today();
+    test_radial_absorbs_a_quarter_turn();
     printf("ALL HASH PROPERTY TESTS PASSED\n");
     return 0;
 }

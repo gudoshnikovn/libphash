@@ -380,29 +380,51 @@ for which "the authors suggest 1 for both variables"; N = 180 angles by default;
 **comparison by peak of cross-correlation (PCC)** with a default threshold of 0.9; and,
 uniquely among the four hashes in the thesis, **no normalisation of image resolution**.
 
-**What this implementation does** (`src/hashes/radial.c`): 3×3 Gaussian blur, gamma
-correction with a default of **2.2**, then for each of `radial_projections` angles
-(**default 40**) spread over [0, π), sample `radial_samples` points (**default 128**)
-bilinearly along the line through the image centre out to `min(w,h)/2`, compute the
-variance with exactly the source's formula, then normalise each variance by the maximum
-across projections, take the square root, and quantise to a byte. Digests are compared
-by `ph_hamming_distance_digest()` or `ph_l2_distance()`.
+**What this implementation does** (`src/hashes/radial.c`), since 2.0.0: 3×3 Gaussian
+blur, gamma correction with a default of **2.2**, then for each of `radial_projections`
+angles (**default 180**) spread over [0, π), sample `radial_samples` points (**default
+128**) bilinearly along the line through the image centre out to `min(w,h)/2` and compute
+the variance with exactly the source's formula. A 1-D DCT-II of that vector follows, and
+its **first 40 coefficients** are the hash, mapped affinely onto 0–255 by their own
+minimum and maximum — the quantisation pHash's `ph_dct()` uses. An image with no variance
+on any projection short-circuits to an all-zero digest, so that a blank image produces
+zeroes rather than a min-max stretch of floating-point residue. Digests are compared by
+`ph_hamming_distance_digest()` or `ph_l2_distance()`.
+
+Before 2.0.0 the transform was absent and the 40 was the number of angles. Fixing it
+changed every radial hash. Measured on the synthetic corpus of
+`tests/src/test_hash_properties.c`, using L2 over the digest normalised to [0,1]:
+
+| | mean intra | mean inter | separability |
+|---|---|---|---|
+| 40 angles, no DCT | 0.021 | 0.344 | 2.80 |
+| 180 angles, DCT-40 | 0.007 | 0.188 | **2.12** |
+
+Robustness improves threefold and discrimination falls by about as much, so the
+standardised gap between the two distributions narrows. Two things are worth saying about
+that number rather than only quoting it. First, it is measured under the element-wise
+comparison the source does *not* use; the peak of cross-correlation is the second half of
+this fix, and the honest re-measurement is the one taken after it lands. Second, most of
+the compression comes from the quantiser: coefficient 0 is the sum of the variances, so it
+is always the maximum and always 255, and it sets the top of the range every other
+coefficient is squeezed under. Taking the minimum and maximum over coefficients 1–39
+instead measures 0.062 / 0.388 / **2.40** — better separated, three times less robust, and
+no longer what pHash computes. The source's own quantisation was kept.
 
 **Delta:**
 
 | Difference | Class | Note |
 |---|---|---|
-| **The DCT of the radial variance vector is not applied** | **defect** | The final and, per the source, the *improving* step of the algorithm is missing. Without it the output is the raw variance profile, still correlated across neighbouring angles, and the decorrelation the paper credits for the improvement never happens. |
-| **40 projections instead of 180** | **defect** | The 40 in the source is the number of **DCT coefficients kept from a 180-element vector**, not the number of angles. The constant was transplanted to the wrong place: `PH_RADIAL_PROJECTIONS = 40` produces a 40-element hash by sampling only 40 angles, which is a coarser angular resolution *and* skips the transform. Fixing the previous row should fix this one. |
-| **Comparison is element-wise (Hamming or L2), not the peak of cross-correlation** | **defect** | A rotation cyclically shifts the radial variance vector; PCC over shifts is precisely what turns that into invariance. With element-wise distance there is no rotation invariance at all — which makes `docs/algorithms.md`'s "Unmatched robustness against rotation (up to 360°)" a false claim, and one no current test checks. |
+| DCT of the radial variance vector, first 40 coefficients | **fixed in 2.0.0** | Was the algorithm's missing final step — the one the paper credits for the improvement. Now applied, over 180 angles, with the 40 back where the source puts it: the coefficient count. |
+| **Comparison is element-wise (Hamming or L2), not the peak of cross-correlation** | **defect** | A rotation cyclically shifts the radial variance vector; PCC over shifts is precisely what turns that into invariance. With element-wise distance, full rotation invariance is not delivered. The DCT absorbs part of it on its own — a quarter turn is a shift by half the vector, and half the coefficients survive that up to sign, measured as a fifth of the distance to an unrelated image — but "tolerant" is not "invariant", and `docs/algorithms.md`'s former "Unmatched robustness against rotation (up to 360°)" remains a claim this library does not support. |
 | **Default gamma 2.2 where the pHash authors suggest 1** | **defect** | Already filed as its own task. The thesis is direct: "the authors suggest 1 for both variables". Applying a 2.2 correction by default means the reference and this library see different pixel values before the variance is even computed. |
 | 128 samples per projection, bilinearly interpolated | deliberate | The source integrates over the pixels of a one-pixel-wide strip, whose count varies with the angle and the image size; a fixed sample count is a different estimator of the same quantity. Cheaper and resolution-independent, but it is an approximation, not the definition. |
 | Radius capped at `min(w,h)/2` | deliberate | Keeps every projection inside the image. The source does not normalise resolution and does not discuss the cap. |
-| Normalise by the maximum and take the square root | deliberate | Not in the source. It exists to fit the variances into bytes. Note it also destroys the absolute scale that the DCT step would otherwise act on. |
+| Coefficients quantised by their own min and max | deliberate, and pHash's | Not in the paper, which says nothing about quantisation. It is what pHash's `ph_dct()` does, it keeps the sign, and it makes the digest invariant to a rescaling of the whole variance vector. The pre-DCT "normalise by the maximum, then take the square root" of earlier versions is gone: a square root before a transform is a different signal, not a scaling. |
+| All-zero digest below a variance of 0.001 on every projection | undefined | Not in the source. Without it the min-max quantiser stretches the residue of a blank image across the whole byte range. The threshold predates 2.0.0 and is one of the constants pinned down separately. |
 | 3×3 box-weight Gaussian, not a σ-parameterised one | undefined | The source has σ as a parameter; here the kernel is fixed. |
 
-Radial is the algorithm furthest from its source, and the only one where the source's
-own comparison function is missing.
+Radial is still the one algorithm where the source's own comparison function is missing.
 
 ---
 
@@ -493,7 +515,8 @@ misled this analysis on its first pass.
 
 1. **Radial: the DCT of the radial variance vector is missing, and `radial_projections`
    defaults to 40 angles instead of 180 angles reduced to 40 coefficients.** Contradicts
-   De Roover et al. via Zauner §3.1.3. Changes every radial hash.
+   De Roover et al. via Zauner §3.1.3. Changes every radial hash. — **fixed in 2.0.0**;
+   the before/after measurement is in §7.
 2. **Radial: digests are compared element-wise, so there is no rotation invariance**,
    while the source compares by peak of cross-correlation and `docs/algorithms.md`
    advertises rotation robustness up to 360°. Either implement PCC or withdraw the claim.

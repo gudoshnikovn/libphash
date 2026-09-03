@@ -250,6 +250,69 @@ static void test_dct2_concentrates_a_single_cosine(void) {
  * Haar -- no primary source, so this checks the transform's defining properties
  * ========================================================================= */
 
+/* ---------------------------------------------------------------------------
+ * The 1-D DCT the radial hash applies to its variance vector
+ * ------------------------------------------------------------------------ */
+
+static double dct1_direct(const double *x, int n, int k) {
+    double sum = 0.0;
+    for (int i = 0; i < n; i++)
+        sum += x[i] * cos(M_PI * (2.0 * i + 1.0) * k / (2.0 * n));
+    return sum * (k == 0 ? 1.0 / sqrt((double)n) : sqrt(2.0 / (double)n));
+}
+
+static void test_dct1_partial_matches_direct_definition(void) {
+    /* The transform the source calls for -- "applying the DCT to the radial variance
+     * vector", of which "the first 40 coefficients ... form the radial hash vector"
+     * ([Z10] 3.1.3) -- against DCT-II written straight out, on a vector the size the
+     * algorithm actually uses. */
+    const int N = 180, K = 40;
+    double in[180];
+
+    uint32_t state = 0x9E3779B9u;
+    for (int i = 0; i < N; i++) {
+        state = state * 1664525u + 1013904223u;
+        in[i] = (double)(state >> 8) / 4096.0; /* non-negative, like a variance */
+    }
+
+    double out[40];
+    ASSERT_OK(ph_dct1d_partial(in, N, K, out));
+    for (int k = 0; k < K; k++)
+        assert_close(out[k], dct1_direct(in, N, k), 1e-9, "ph_dct1d_partial vs the definition");
+
+    printf("test_dct1_partial_matches_direct_definition: PASSED\n");
+}
+
+static void test_dct1_of_a_constant_vector(void) {
+    /* All the energy in coefficient 0, nothing anywhere else -- the property that makes
+     * a flat image produce an all-zero radial digest rather than quantisation noise. */
+    const int N = 180, K = 40;
+    double in[180];
+    for (int i = 0; i < N; i++)
+        in[i] = 7.5;
+
+    double out[40];
+    ASSERT_OK(ph_dct1d_partial(in, N, K, out));
+    assert_close(out[0], 7.5 * sqrt((double)N), 1e-9, "coefficient 0 of a constant vector");
+    for (int k = 1; k < K; k++)
+        assert_close(out[k], 0.0, 1e-9, "AC coefficient of a constant vector");
+
+    printf("test_dct1_of_a_constant_vector: PASSED\n");
+}
+
+static void test_dct1_rejects_more_coefficients_than_it_has(void) {
+    /* A DCT of an n-element vector has n coefficients; asking for more is refused rather
+     * than answered with whatever is past the end of the input. */
+    double in[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    double out[16] = {0};
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_dct1d_partial(in, 8, 9, out));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_dct1d_partial(in, 8, 0, out));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_dct1d_partial(NULL, 8, 4, out));
+    ASSERT_FLOAT_EQ(0.0, out[0], 1e-12); /* nothing written on any of them */
+
+    printf("test_dct1_rejects_more_coefficients_than_it_has: PASSED\n");
+}
+
 static void test_haar_is_orthonormal(void) {
     /* An orthonormal transform preserves energy. For the normalisation used here --
      * both the sum and the difference divided by sqrt(2) -- this holds exactly:
@@ -443,6 +506,9 @@ int main(void) {
     test_dct2_of_constant_image();
     test_dct_dc_coefficient_dominates_and_its_bit_is_constant();
     test_dct2_concentrates_a_single_cosine();
+    test_dct1_partial_matches_direct_definition();
+    test_dct1_of_a_constant_vector();
+    test_dct1_rejects_more_coefficients_than_it_has();
     test_haar_is_orthonormal();
     test_haar_on_a_step_signal();
     test_block_means_on_an_exact_multiple();

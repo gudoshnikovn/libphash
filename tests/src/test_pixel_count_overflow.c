@@ -119,7 +119,9 @@ void test_setter_bounds_reject_out_of_range(void) {
     ASSERT_OK(ph_context_set_block_params(ctx, PH_BLOCK_MAX_SIZE));
     ASSERT_INT_EQ(PH_BLOCK_MAX_SIZE, ctx->config.block_size);
 
-    const int bad_projections[] = {257, 4096, 200000, INT_MAX, PH_RADIAL_MAX_PROJECTIONS + 1};
+    /* Both ends: fewer angles than the DCT has coefficients is as invalid as more angles
+     * than the largest supported image can resolve. */
+    const int bad_projections[] = {1, 39, 200000, INT_MAX, PH_RADIAL_MAX_PROJECTIONS + 1};
     for (size_t i = 0; i < sizeof(bad_projections) / sizeof(bad_projections[0]); i++) {
         ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
                       ph_context_set_radial_params(ctx, bad_projections[i], 64));
@@ -127,7 +129,7 @@ void test_setter_bounds_reject_out_of_range(void) {
         ASSERT_INT_EQ(PH_RADIAL_SAMPLES, ctx->config.radial_samples);
     }
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
-                  ph_context_set_radial_params(ctx, 40, PH_RADIAL_MAX_SAMPLES + 1));
+                  ph_context_set_radial_params(ctx, 180, PH_RADIAL_MAX_SAMPLES + 1));
     ASSERT_INT_EQ(PH_RADIAL_SAMPLES, ctx->config.radial_samples);
     ASSERT_OK(ph_context_set_radial_params(ctx, PH_RADIAL_MAX_PROJECTIONS, PH_RADIAL_MAX_SAMPLES));
     ASSERT_INT_EQ(PH_RADIAL_MAX_PROJECTIONS, ctx->config.radial_projections);
@@ -152,9 +154,10 @@ void test_bmh_normal_block_size_still_works(void) {
  * As above, the config is poisoned directly since R04 -- the setter rejects these values,
  * and this test is about the arithmetic behind it. */
 void test_radial_huge_projections(void) {
-    /* Far more projections than the digest can hold: the byte count must be computed
-     * in size_t (it is `projections * sizeof(double)`) and the digest size must stay
-     * clamped to PH_DIGEST_MAX_BYTES instead of wrapping through the uint8_t cast. */
+    /* Far more projections than the digest could ever hold: the byte count must be
+     * computed in size_t (it is `projections * sizeof(double)`) and must not wrap. Since
+     * 2.0.0 the digest is the DCT coefficients, so its size is PH_RADIAL_COEFFS whatever
+     * the angle count -- no truncation, nothing to wrap through the uint8_t cast. */
     const int projections[] = {257, 4096, 200000};
 
     for (size_t i = 0; i < sizeof(projections) / sizeof(projections[0]); i++) {
@@ -163,7 +166,18 @@ void test_radial_huge_projections(void) {
         ctx->config.radial_samples = 64;
         ph_digest_t d;
         ASSERT_OK(ph_compute_radial_hash(ctx, &d));
-        ASSERT_INT_EQ(PH_DIGEST_MAX_BYTES, d.size);
+        ASSERT_INT_EQ(PH_RADIAL_COEFFS, d.size);
+        ph_free(ctx);
+    }
+
+    /* And the other end: too few angles to transform is refused outright rather than
+     * answered with a short digest. */
+    {
+        ph_context_t *ctx = make_ctx_with_tiny_image(32, 32, 3);
+        ctx->config.radial_projections = PH_RADIAL_COEFFS - 1;
+        ctx->config.radial_samples = 64;
+        ph_digest_t d;
+        ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_compute_radial_hash(ctx, &d));
         ph_free(ctx);
     }
 
@@ -183,10 +197,10 @@ void test_radial_huge_projections(void) {
 
     /* And the normal path is untouched. */
     ph_context_t *ctx = make_ctx_with_tiny_image(32, 32, 3);
-    ph_context_set_radial_params(ctx, 40, 64);
+    ASSERT_OK(ph_context_set_radial_params(ctx, 180, 64));
     ph_digest_t d;
     ASSERT_OK(ph_compute_radial_hash(ctx, &d));
-    ASSERT_INT_EQ(40, d.size);
+    ASSERT_INT_EQ(PH_RADIAL_COEFFS, d.size);
     ph_free(ctx);
     PASS("test_radial_huge_projections");
 }

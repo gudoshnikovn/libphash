@@ -85,6 +85,14 @@ float ph_get_pixel_bilinear(const uint8_t *img, int w, int h, float x, float y);
 double ph_projection_variance(const uint8_t *img, int w, int h, double cx, double cy,
                               double max_radius, float cos_t, float sin_t, int samples);
 
+/* Partial 1D DCT-II: computes the first `coeffs` coefficients of the `n`-element
+ * signal `in`, orthonormally scaled -- X[0] = sum / sqrt(n), X[k>0] = sum * sqrt(2/n).
+ * This is the transform the radial hash applies to the variance vector.
+ *
+ * Bounds: n >= 1 and coeffs in [1, n]. On violation nothing is written to `out` and
+ * PH_ERR_INVALID_ARGUMENT is returned. */
+PH_NODISCARD ph_error_t ph_dct1d_partial(const double *in, int n, int coeffs, double *out);
+
 void ph_haar_1d_float(float *data, int n, float *temp);
 void ph_haar_2d_level(float *data, int size, int stride, float *temp_row, float *temp_col);
 
@@ -117,8 +125,18 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
 #define PH_CORE_HASH_SIZE 8         // Standard 8x8 grid for ahash/dhash/phash
 #define PH_BLOCK_SIZE 16            // 16x16 grid for BMH (mHash uses a fixed 18x18)
 #define PH_HAAR_SCALE 1.41421356237 // sqrt(2) for Haar wavelet normalization
-#define PH_RADIAL_PROJECTIONS 40
+/* Radial: 180 angles over [0, pi) -- the Radon transform is symmetric, so 180 covers the
+ * whole circle -- reduced by a 1D DCT to 40 coefficients, which are the hash. Both
+ * numbers come from the source (De Roover et al. via Zauner 3.1.3); before 2.0.0 the 40
+ * sat on the angle count instead, which is a different algorithm. */
+#define PH_RADIAL_PROJECTIONS 180
+#define PH_RADIAL_COEFFS 40
 #define PH_RADIAL_SAMPLES 128
+
+/* Below this variance on every projection an image counts as flat and the radial digest
+ * is all zeroes rather than a stretch of floating-point residue. The value predates
+ * 2.0.0 and no source specifies one; it is one of the constants R68 pins down. */
+#define PH_RADIAL_FLAT_VARIANCE 0.001
 
 /* Hard upper bounds for the pHash DCT: ph_dct2_partial() uses a fixed
  * 32*8 stack scratch buffer, and the resulting hash must fit into 64 bits
@@ -141,9 +159,21 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
  * block_size affects BMH only -- mHash uses a fixed 18x18 grid (src/hashes/mhash.c). */
 #define PH_BLOCK_MAX_SIZE 22
 
-/* Radial writes one byte per projection into the same digest, so the projection count
- * cannot usefully exceed its capacity in bytes. */
-#define PH_RADIAL_MAX_PROJECTIONS PH_DIGEST_MAX_BYTES
+/* Since 2.0.0 the projection count is the number of ANGLES, and the digest width no
+ * longer follows it: the hash is always PH_RADIAL_COEFFS DCT coefficients. So the bound
+ * is no longer the digest's capacity but the angular resolution beyond which more angles
+ * carry no new information -- two neighbouring projections have to differ by at least one
+ * pixel at the far end of the longest one. The largest square image the library will
+ * process is 46340 x 46340 (PH_MAX_SUPPORTED_PIXELS), whose projection radius is
+ * min(w,h)/2 = 23170 pixels; the finest useful angular step is therefore 1/23170 rad and
+ * the useful angle count over [0, pi) is pi * 23170 = 72792. 131072 is the first power of
+ * two above that. Same caveat as PH_RADIAL_MAX_SAMPLES: a degenerate strip could in
+ * principle want more, and carries no radial structure to want it for.
+ *
+ * The lower bound is a hard one: a DCT of an n-element vector has n coefficients, so
+ * fewer angles than PH_RADIAL_COEFFS cannot produce the hash at all. */
+#define PH_RADIAL_MIN_PROJECTIONS PH_RADIAL_COEFFS
+#define PH_RADIAL_MAX_PROJECTIONS 131072
 
 /* Radial samples are taken along a straight line across the image, so more samples
  * than the image's diagonal add no information -- they only re-sample pixels already
@@ -162,8 +192,11 @@ _Static_assert((PH_BLOCK_MAX_SIZE * PH_BLOCK_MAX_SIZE + 7) / 8 <= PH_DIGEST_MAX_
                "PH_BLOCK_MAX_SIZE bits must fit into a ph_digest_t");
 _Static_assert(((PH_BLOCK_MAX_SIZE + 1) * (PH_BLOCK_MAX_SIZE + 1) + 7) / 8 > PH_DIGEST_MAX_BYTES,
                "PH_BLOCK_MAX_SIZE must be the largest block size that fits, not smaller");
-_Static_assert(PH_RADIAL_MAX_PROJECTIONS <= PH_DIGEST_MAX_BYTES,
-               "one digest byte per radial projection");
+_Static_assert(PH_RADIAL_COEFFS <= PH_DIGEST_MAX_BYTES,
+               "the radial DCT coefficients must fit into a ph_digest_t");
+_Static_assert(PH_RADIAL_PROJECTIONS >= PH_RADIAL_MIN_PROJECTIONS &&
+                   PH_RADIAL_PROJECTIONS <= PH_RADIAL_MAX_PROJECTIONS,
+               "the default angle count must be inside the accepted range");
 #endif
 
 #define PH_COLOR_MOMENTS 3

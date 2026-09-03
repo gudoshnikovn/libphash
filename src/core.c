@@ -218,11 +218,14 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
 }
 
 PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projections, int samples) {
-    /* projections: one digest byte each, so PH_DIGEST_MAX_BYTES is the real capacity.
+    /* projections: the number of angles. At least PH_RADIAL_COEFFS of them, because the
+     * hash is that many DCT coefficients of the vector they form; at most as many as the
+     * angular resolution of the largest supported image can distinguish.
      * samples: bounded by the diagonal of the largest image the library will process.
-     * Derivations are next to PH_RADIAL_MAX_PROJECTIONS / PH_RADIAL_MAX_SAMPLES. */
-    if (!ctx || projections <= 0 || projections > PH_RADIAL_MAX_PROJECTIONS || samples <= 0 ||
-        samples > PH_RADIAL_MAX_SAMPLES)
+     * Derivations are next to PH_RADIAL_MIN_PROJECTIONS / PH_RADIAL_MAX_PROJECTIONS /
+     * PH_RADIAL_MAX_SAMPLES. */
+    if (!ctx || projections < PH_RADIAL_MIN_PROJECTIONS ||
+        projections > PH_RADIAL_MAX_PROJECTIONS || samples <= 0 || samples > PH_RADIAL_MAX_SAMPLES)
         return PH_ERR_INVALID_ARGUMENT;
     ctx->config.radial_projections = projections;
     ctx->config.radial_samples = samples;

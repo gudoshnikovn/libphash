@@ -8,27 +8,54 @@
  * Both papers are paywalled; the description followed here is Zauner's (Diplomarbeit,
  * FH Hagenberg 2010, sections 3.1.3 and 3.2.3).
  *
- * The variance formula below is the source's definition 3.6 exactly:
- *   R[a] = E[I^2] - (E[I])^2 over the pixels on the projection line at angle a.
+ * The algorithm is two steps, and both are the source's:
  *
- * KNOWN DIVERGENCES FROM THE SOURCE, all tracked as defects in
+ *   1. The radial variance vector, definition 3.6 exactly, for a = 0..179 -- 180 angles,
+ *      because the Radon transform is symmetric and 180 therefore covers the circle:
+ *        R[a] = E[I^2] - (E[I])^2 over the pixels on the projection line at angle a.
+ *   2. A 1D DCT of that vector, of which the first 40 coefficients are the hash. Zauner
+ *      3.1.3: "the perceptual image hash function was further improved by applying the
+ *      DCT to the radial variance vector. The first 40 coefficients of the transformed
+ *      radial variance vector form the so-called radial hash vector in the end. This
+ *      omits redundant components of the radial variance vector and efficiently
+ *      decorrelates it."
+ *
+ * Before 2.0.0 step 2 was missing and the 40 sat on the angle count instead: 40 angles,
+ * no transform. That is a different algorithm -- 4.5x coarser angularly, and correlated
+ * across neighbouring elements, which is the redundancy the DCT exists to remove.
+ *
+ * Quantisation follows pHash's own ph_dct(): the 40 coefficients are mapped affinely
+ * onto 0..255 by their own minimum and maximum. That is what keeps the sign -- the most
+ * negative coefficient is 0, not a wrapped byte -- and it makes the digest invariant to
+ * a positive rescaling of the whole variance vector, which is what a contrast change
+ * mostly does to it. The pre-DCT "divide by the maximum variance, then take the square
+ * root" of earlier versions is gone: it existed only to fit variances into bytes, it is
+ * not in the source, and a square root before a transform is not a scaling but a
+ * different signal.
+ *
+ * A flat image is handled before any of that: if no projection has a variance above
+ * PH_RADIAL_FLAT_VARIANCE the digest is all zeroes. Without that gate the min-max stretch
+ * would scale the floating-point residue of a blank image up to the full byte range and
+ * return a hash made of rounding noise.
+ *
+ * Observation, not a divergence: coefficient 0 is the sum of the variances over sqrt(N)
+ * and every variance is non-negative, so it is in practice always the largest of the 40
+ * and therefore always quantises to 255. One of the 40 bytes thus carries no
+ * information. The source keeps it, so this code keeps it.
+ *
+ * KNOWN DIVERGENCES FROM THE SOURCE, tracked as defects in
  * docs/algorithm-provenance.md:
  *
- *   1. The source computes R[a] for a = 0..179 -- 180 angles -- and then applies a DCT
- *      to that vector, keeping the FIRST 40 COEFFICIENTS as the hash, which is what
- *      decorrelates it. This code takes 40 angles and no DCT: the 40 was transplanted
- *      from the coefficient count to the angle count.
- *   2. The source compares two hashes by the peak of cross-correlation, which is what
+ *   1. The source compares two hashes by the peak of cross-correlation, which is what
  *      turns a rotation -- a cyclic shift of the radial vector -- into a match. This
  *      library compares digests element-wise, so no rotation invariance is delivered.
- *   3. pHash's authors suggest sigma = 1 and gamma = 1; PH_DEFAULT_GAMMA is 2.2, so the
+ *   2. pHash's authors suggest sigma = 1 and gamma = 1; PH_DEFAULT_GAMMA is 2.2, so the
  *      reference and this code see different pixels before the variance is computed.
  *
  * Deliberate differences: a fixed sample count per projection with bilinear
  * interpolation, rather than summing the pixels of a one-pixel-wide strip whose length
- * varies with angle and resolution; a radius capped at min(w,h)/2 to keep every
- * projection inside the image; and normalisation by the maximum variance followed by a
- * square root, which exists only to fit the values into bytes.
+ * varies with angle and resolution; and a radius capped at min(w,h)/2 to keep every
+ * projection inside the image.
  */
 #include "internal.h"
 #include <math.h>
@@ -92,30 +119,55 @@ double ph_projection_variance(const uint8_t *img, int w, int h, double cx, doubl
     return 0.0;
 }
 
+/* DCT-II, orthonormally scaled, first `coeffs` coefficients only:
+ *
+ *   X[k] = c(k) * sum_{n=0}^{N-1} x[n] * cos(pi * (2n + 1) * k / (2N))
+ *   c(0) = 1/sqrt(N), c(k>0) = sqrt(2/N)
+ *
+ * Computed straight from the definition rather than through a fast transform: the
+ * partial output (40 of 180 coefficients) is what the algorithm wants, N is small, and
+ * the projection sampling above it costs several times more. */
+ph_error_t ph_dct1d_partial(const double *in, int n, int coeffs, double *out) {
+    if (!in || !out || n < 1 || coeffs < 1 || coeffs > n)
+        return PH_ERR_INVALID_ARGUMENT;
+
+    const double scale = M_PI / (2.0 * (double)n);
+    const double c0 = 1.0 / sqrt((double)n);
+    const double ck = sqrt(2.0 / (double)n);
+
+    for (int k = 0; k < coeffs; k++) {
+        double sum = 0.0;
+        for (int i = 0; i < n; i++)
+            sum += in[i] * cos(scale * (double)(2 * i + 1) * (double)k);
+        out[k] = sum * (k == 0 ? c0 : ck);
+    }
+    return PH_SUCCESS;
+}
+
 PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_digest) {
     if (!ctx || !ctx->image.is_loaded || !out_digest)
         return PH_ERR_INVALID_ARGUMENT;
 
     int projections = ctx->config.radial_projections;
     int samples = ctx->config.radial_samples;
-    if (projections <= 0 || samples <= 0)
+    /* Fewer angles than coefficients is not a coarser hash, it is no hash: a DCT of an
+     * n-element vector has n coefficients. The setter rejects it; refuse here too rather
+     * than hand back a digest quietly shorter than the caller configured, which is what
+     * the old clamp against PH_DIGEST_MAX_BYTES did. */
+    if (projections < PH_RADIAL_COEFFS || samples <= 0)
         return PH_ERR_INVALID_ARGUMENT;
 
     /* projections * sizeof(double) does not overflow size_t on a 64-bit target, but it
      * does on a 32-bit one. Since 2.0.0 ph_context_set_radial_params() caps projections
-     * at PH_DIGEST_MAX_BYTES, so this cannot trigger through the public API either;
+     * at PH_RADIAL_MAX_PROJECTIONS, so this cannot trigger through the public API either;
      * kept as defence in depth. Refuse rather than wrap (R03/H6). */
     if ((size_t)projections > SIZE_MAX / sizeof(double))
         return PH_ERR_ALLOCATION_FAILED;
 
     memset(out_digest, 0, sizeof(ph_digest_t));
-    /* Clamp size to the max supported by ph_digest_t.
-     * Unreachable through the public API since 2.0.0: the setter rejects
-     * projections > PH_DIGEST_MAX_BYTES, precisely because this clamp used to hand back
-     * PH_SUCCESS with a digest quietly shorter than the caller had configured. Kept for a
-     * config field written by some other route (tests do exactly that). */
-    out_digest->size =
-        (uint8_t)(projections > PH_DIGEST_MAX_BYTES ? PH_DIGEST_MAX_BYTES : projections);
+    /* The digest is the DCT coefficients, so its width no longer follows the angle
+     * count: it is PH_RADIAL_COEFFS whatever the configuration. */
+    out_digest->size = (uint8_t)PH_RADIAL_COEFFS;
 
     size_t img_size = (size_t)ctx->image.width * (size_t)ctx->image.height;
 
@@ -164,17 +216,52 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
             max_variance = projection_variances[i];
     }
 
-    /* Normalize and write to digest */
-    for (int i = 0; i < out_digest->size; i++) {
-        if (max_variance > 0.001) {
-            out_digest->data[i] = (uint8_t)(sqrt(projection_variances[i] / max_variance) * 255.0);
-        } else {
-            out_digest->data[i] = 0;
-        }
+    /* A flat image has no radial structure to describe, and what is left in the variance
+     * vector at that point is floating-point residue. The quantisation below is a
+     * per-image min-max stretch, so it would amplify that residue to the full 0..255
+     * range and hand back a hash decided by rounding noise. Answer with zeroes instead --
+     * the same threshold, and the same answer, as before the DCT was introduced. */
+    if (max_variance <= PH_RADIAL_FLAT_VARIANCE) {
+        ctx->arena.offset = saved_offset;
+        free(blurred);
+        return PH_SUCCESS;
     }
+
+    /* The transform, and the whole point of it: it decorrelates neighbouring angles and
+     * compresses 180 numbers into the 40 that carry the shape of the profile. */
+    double coefficients[PH_RADIAL_COEFFS];
+    ph_error_t err =
+        ph_dct1d_partial(projection_variances, projections, PH_RADIAL_COEFFS, coefficients);
 
     ctx->arena.offset = saved_offset;
     free(blurred);
+
+    if (err != PH_SUCCESS)
+        return err;
+
+    /* Quantise as pHash does: affine map from [min, max] over the 40 coefficients onto
+     * 0..255. */
+    double min_c = coefficients[0];
+    double max_c = coefficients[0];
+    for (int k = 1; k < PH_RADIAL_COEFFS; k++) {
+        if (coefficients[k] < min_c)
+            min_c = coefficients[k];
+        if (coefficients[k] > max_c)
+            max_c = coefficients[k];
+    }
+
+    double span = max_c - min_c;
+    if (span <= 0.0) {
+        /* Unreachable for a non-flat image -- coefficient 0 is the sum of the variances
+         * and the rest are differences -- but the map is undefined here, so say so
+         * rather than divide by zero. */
+        memset(out_digest->data, 0, PH_RADIAL_COEFFS);
+        return PH_SUCCESS;
+    }
+    for (int k = 0; k < PH_RADIAL_COEFFS; k++) {
+        double q = 255.0 * (coefficients[k] - min_c) / span;
+        out_digest->data[k] = (uint8_t)(q < 0.0 ? 0.0 : q > 255.0 ? 255.0 : q);
+    }
 
     return PH_SUCCESS;
 }
