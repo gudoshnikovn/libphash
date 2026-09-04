@@ -12,11 +12,8 @@
  *
  * The DC coefficient does not decide anything. The block taken is DCT(0,0)..DCT(7,7),
  * but the median that thresholds it is taken over the 63 AC coefficients only, which is
- * what pHash's ph_dct_imagehash() does:
- *
- *     CImg<float> subsec = dctImage.crop(0,0,7,7).unroll('x');
- *     CImg<float> ac = subsec.get_crop(1,0,0,0,63,0,0,0);
- *     float median = ac.median();
+ * what pHash's ph_dct_imagehash() does: it crops the 8x8 block at (0,0), then takes the
+ * median of that block's elements 1 through 63 and thresholds all 64 against it.
  *
  * DC is the image mean and runs 10-100x larger than any AC term, so leaving it in the
  * median drags the threshold that decides the other 63 bits -- which is what this code

@@ -41,14 +41,20 @@
  * image, or one radially symmetric enough that every angle sees the same variance -- has
  * nothing for this descriptor to say and yields an all-zero digest.
  *
- * KNOWN DIVERGENCES FROM THE SOURCE, tracked as defects in
+ * Comparison is ph_radial_similarity(), the peak of the cross-correlation over cyclic
+ * shifts, which is what the source uses. What that delivers is a few degrees of rotation
+ * tolerance and an exact match on a half turn, not invariance to an arbitrary rotation:
+ * the invariance lives in the variance vector, and the DCT does not survive a shift. The
+ * measured profile is in docs/algorithm-provenance.md section 7.
+ *
+ * KNOWN DIVERGENCE FROM THE SOURCE, tracked as a defect in
  * docs/algorithm-provenance.md:
  *
- *   1. The source compares two hashes by the peak of cross-correlation, which is what
- *      turns a rotation -- a cyclic shift of the radial vector -- into a match. This
- *      library compares digests element-wise, so no rotation invariance is delivered.
- *   2. pHash's authors suggest sigma = 1 and gamma = 1; PH_DEFAULT_GAMMA is 2.2, so the
- *      reference and this code see different pixels before the variance is computed.
+ *      pHash defaults gamma to 1.0 and the blur sigma to 3.5 (ph_compare_images() in its
+ *      public header; the thesis reports sigma = 1, which the header contradicts). Here
+ *      PH_DEFAULT_GAMMA is 2.2 and the blur is a fixed 3x3 kernel, sigma about 0.707, not
+ *      parameterised at all -- so the reference and this code see different pixels before
+ *      the variance is ever computed.
  *
  * Deliberate differences: a fixed sample count per projection with bilinear
  * interpolation, rather than summing the pixels of a one-pixel-wide strip whose length

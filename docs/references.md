@@ -8,6 +8,31 @@ does, and where they differ — is in
 [`algorithm-provenance.md`](algorithm-provenance.md). The two are meant to be read
 together: this file is what we cite, that file is what we concluded from it.
 
+## Reading other people's code, and the licences on it
+
+Several algorithms here have no paper, so the only way to know what they are is to read an
+implementation. Three appear throughout this document: **pHash** (GPL-3.0, with a separate
+commercial licence), **OpenCV**'s `img_hash` module (Apache-2.0) and **ImageHash** (BSD).
+
+This library is MIT and contains **no third-party hashing code**. Every hash in
+`src/hashes/` is written from the specification; where the specification is somebody's
+program, it is written from a description of that program's behaviour, not from its text.
+Those projects are read the way a paper is read.
+
+What is taken from them: what the method is, which constants it uses, what its defaults
+are, what it does on an edge case. Those are facts, they carry no copyright, and each is
+cited here precisely enough to be checked — file, function, and the parameter or the
+behaviour in question.
+
+What is not taken: source text, the structure of a function, or documentation prose. Where
+this repository needs to state what another implementation does, it states it in words.
+Short attributed quotations from *papers and theses* are ordinary scholarly citation and
+appear throughout; quotations of *code* do not.
+
+The vendored decoders under `vendor/` are a separate matter with their own licences and are
+not covered here.
+
+
 ## How to read the rank column
 
 | Rank | Meaning |
@@ -248,12 +273,45 @@ correct, and where one of them disagrees with a primary source above, the source
 
 ### [pHash] The pHash library
 
-Evan Klinger, David Starkweather. <https://www.phash.org/>
+Evan Klinger, David Starkweather. <https://www.phash.org/>, source at
+<https://github.com/aetilius/pHash>. GPL-3.0, with a separate commercial licence.
 
-The reference implementation for **pHash**, **Radial** and the Marr–Hildreth hash.
-Documented from the inside by [Z10] §3.2, which is how we know what it computes without
-reading its source. Its authors' suggested defaults (σ = 1 and γ = 1 for the radial hash)
-are recorded in [Z10] §3.2.3.
+For the **DCT hash** this is not a reference implementation but the algorithm itself:
+there is no paper behind it, so Klinger and Starkweather's code is the primary source and
+everything written about it — including [Z10] §3.2.1 — is a third-party account. For
+**Radial** it is the implementation of [DR05] that [Z10] §3.2.3 says it is, and the closest
+thing available to that paywalled paper. It also carries the **Marr–Hildreth** hash.
+
+Its own design page, <https://phash.org/docs/design.html> (© 2008–2010 Klinger &
+Starkweather), states the radial hash as "the variances of 180 lines drawn through the
+center of the image", compacted "with the discrete cosine transform", compared by
+correlation with "a good threshold" of 0.91; the DCT hash as 64 bits matched at a Hamming
+distance of 22; and the Marr–Hildreth hash as "a fixed length hash of 72 bytes". It cites
+no papers.
+
+The defaults are in the public header, `src/pHash.h.cmake`, and are worth quoting because
+[Z10] gets one of them wrong:
+
+- `ph_image_digest(..., int N = 180)` — 180 projections.
+- `ph_crosscorr(..., double threshold = 0.90)` — the radial match threshold. The 0.91 on
+  the design page is advice; 0.90 is the code.
+- `ph_compare_images(..., double sigma = 3.5, double gamma = 1.0, ...)` — **σ = 3.5**, not
+  the σ = 1 that [Z10] §3.2.3 reports as the authors' suggestion. γ = 1.0 does match.
+- `ph_mh_imagehash(..., float alpha = 2.0f, float lvl = 1.0f)`.
+
+There is **no block-mean hash** in pHash today, although [Z10] says its author contributed
+one; see §6 of `algorithm-provenance.md`.
+
+### [CV] OpenCV `img_hash`
+
+<https://github.com/opencv/opencv_contrib/tree/master/modules/img_hash>. Apache-2.0.
+
+Carries the only widely used implementation of **BMH** ([YGN06]) — pHash has none. It is a
+third-party implementation, rank 4, and §6 of
+[`algorithm-provenance.md`](algorithm-provenance.md) follows the paper against it: it
+normalises to 256×256 and then thresholds each block against the arithmetic **mean** of the
+image, in a variable it names `median`. The paper specifies the median. Consequently this
+library's BMH values differ from OpenCV's, deliberately.
 
 ### [IH] ImageHash
 

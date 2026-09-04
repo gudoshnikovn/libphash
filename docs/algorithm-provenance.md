@@ -23,17 +23,44 @@ its own before/after measurement. This document ends at the finding.
 
 ### Source trust ranking
 
-Applied when sources disagree, strongest first:
+The question a rank answers is **who defined this algorithm**, not what genre the
+document belongs to. A thesis is not automatically above a source file; a thesis by the
+algorithm's author is, and a thesis describing somebody else's program is a third-party
+account of it. Applied when sources disagree, strongest first:
 
-1. Peer-reviewed paper or thesis by the algorithm's author.
-2. Technical report or preprint.
-3. Code published by the algorithm's author.
-4. Any third-party implementation (ImageHash, OpenCV, a blog restatement).
+1. Peer-reviewed paper, thesis or technical report **by the algorithm's author**.
+2. Preprint or unrefereed write-up by the author.
+3. **Code published by the author** — which is the top rank whenever there is no paper,
+   as for pHash's DCT hash, aHash and dHash, where the implementation *is* the algorithm.
+4. Third-party description or implementation: ImageHash, OpenCV, a blog restatement, or a
+   thesis analysing code the author of the thesis did not write.
 
-A third-party implementation is a hint about where to look. It is never itself the
-basis for a claim of correctness. Where a paper could not be read directly (IEEE and
-SPIE paywalls), the restatement used is named inline and its rank is stated, so the
-weight of each claim stays visible.
+Getting this wrong is not hypothetical. Zauner's thesis sat at rank 1 in an earlier draft
+of this document because it is a thesis, and it is rank 4 for the DCT hash because it is
+one careful reader's account of Klinger and Starkweather's program. Two of its statements
+about that program turn out not to match it, and a task was written against one of them
+before anyone checked (§3).
+
+A third-party implementation is a hint about where to look, never itself the basis for a
+claim of correctness — §6 follows the BMH paper against OpenCV, which is far more widely
+used than this library. Where a paper could not be read directly (IEEE and SPIE
+paywalls), the restatement used is named inline and its rank is stated, so the weight of
+each claim stays visible.
+
+### On reading other people's implementations
+
+Several of the algorithms here are pinned down by reading code: pHash is GPL-3.0, OpenCV's
+`img_hash` is Apache-2.0, ImageHash is BSD. This library is MIT and contains **no third-party
+hashing code at all**. Those projects are read the way a paper is read — to establish what
+the method is, what constants it uses and what its defaults are. Methods, parameter values
+and defaults are facts; they carry no copyright, and they are quoted here with a precise
+citation so a reader can check them.
+
+What is *not* done: copying source, transcribing a function's structure, or reproducing
+documentation prose. Where this document needs to say what another implementation does, it
+says so in words. Every hash in `src/hashes/` is written from the specification, and where
+the specification is somebody's program, from a description of that program's behaviour —
+not from its text.
 
 ### What could not be read directly
 
@@ -180,19 +207,23 @@ directly:
 The two sources disagree on the threshold: Krawetz says **mean**, Zauner/pHash says
 **median**. They agree, independently, that the **DC term is excluded** — but they do not
 agree with pHash's code, which is the third thing in the room and the one that actually
-defines the algorithm. `ph_dct_imagehash()` reads:
-
-```c
-CImg<float> subsec = dctImage.crop(0, 0, 7, 7).unroll('x');   // block at (0,0): DC is in
-CImg<float> ac = subsec.get_crop(1, 0, 0, 0, 63, 0, 0, 0);    // median over the 63 AC only
-float median = ac.median();
-for (int i = 0; i < 64; i++) { if (subsec(i) > median) hash |= 0x01; if (i < 63) hash <<= 1; }
-```
+defines the algorithm. `ph_dct_imagehash()` crops the 8×8 block at **(0,0)**, so the DC
+term is among the 64 values; takes the median of **elements 1 through 63 only**, so DC has
+no say in the threshold; and thresholds all 64 against that median with a strict `>`,
+packing the bits most-significant first.
 
 So DC keeps its bit and loses its vote. Zauner's "the coefficient DCT(1,1) being the
 upper left corner" is his reading of that code, not what it does; Starkweather's "leaving
-out the first DC term" describes the median and not the block. Where prose and code
-disagree, this library follows the code — the same rule that settled the radial hash.
+out the first DC term" describes the median and not the block.
+
+The code decides here, and it is worth being exact about why, because the reason is not
+"code beats prose". **This algorithm has no paper.** Its authors are Evan Klinger and
+David Starkweather, and what they authored is the pHash implementation; there is nothing
+behind it to appeal to. Zauner's thesis and Krawetz's post are third parties describing
+someone else's program, however carefully. Where an algorithm *does* have a paper by its
+author — Yang, Gu and Niu for BMH, Stricker and Orengo for the colour moments — the paper
+outranks every implementation, including implementations more popular than this library
+will ever be. §6 follows the BMH paper against OpenCV for exactly that reason.
 
 **What this implementation does** (`src/hashes/phash.c`): grayscale, box resize to 32×32,
 type-II DCT by matrix multiplication with the same matrix definition as Zauner's
@@ -378,14 +409,9 @@ resulting values, bit set when `value >= median`, packed LSB-first within each b
 There is no reference implementation to check the prose against, which is the situation
 this document keeps running into from the other side. pHash carries no block-mean hash
 today, although Zauner says he contributed one. The other implementation in wide use,
-OpenCV's `cv::img_hash::BlockMeanHash`, resizes to 256×256 and then thresholds on
-
-```cpp
-double const median = cv::mean(grayImg_)[0];
-```
-
-— the arithmetic mean, in a variable named `median`. The name says the intent and the code
-says the slip, and it is very likely where this library's own mean came from. The paper is
+OpenCV's `cv::img_hash::BlockMeanHash`, resizes to 256×256 and then thresholds against the
+arithmetic mean of the image — which it stores in a variable it names `median`. The name
+says the intent and the value says the slip, and it is very likely where this library's own mean came from. The paper is
 followed here; expect BMH values to differ from OpenCV's.
 
 **Delta:**
@@ -465,7 +491,9 @@ one-pixel-wide strip of pixels on the projection line through the image centre:
 > redundant components of the radial variance vector and efficiently decorrelates it.
 
 pHash's implementation, per §3.2.3: 40-byte hash; Gaussian blur σ and gamma correction,
-for which "the authors suggest 1 for both variables"; N = 180 angles by default;
+for which [Z10] reports that "the authors suggest 1 for both variables" — though pHash's
+own header defaults σ to **3.5** and γ to 1.0, so the thesis is right about γ and wrong
+about σ; N = 180 angles by default;
 **comparison by peak of cross-correlation (PCC)** with a default threshold of 0.9; and,
 uniquely among the four hashes in the thesis, **no normalisation of image resolution**.
 
@@ -513,7 +541,8 @@ separability under cross-correlation was 1.75 instead of 2.46.
 | DCT of the radial variance vector, first 40 coefficients | **fixed in 2.0.0** | Was the algorithm's missing final step — the one the paper credits for the improvement. Now applied, over 180 angles, with the 40 back where the source puts it: the coefficient count. |
 | Comparison by the peak of cross-correlation, threshold 0.9 | **fixed in 2.0.0** | `ph_radial_similarity()`, pHash's `ph_crosscorr()`. One deliberate difference: pHash divides by the first digest's variance alone, which makes its score asymmetric — `crosscorr(x,y)` and `crosscorr(y,x)` disagree. This uses the symmetric Pearson correlation. |
 | Rotation robustness is a few degrees, not arbitrary | not a defect — a property of the algorithm | Measured below. The source is not contradicted; `docs/algorithms.md`'s former "unmatched robustness against rotation (up to 360°)" was this project's own wording and is withdrawn. |
-| **Default gamma 2.2 where the pHash authors suggest 1** | **defect** | Already filed as its own task. The thesis is direct: "the authors suggest 1 for both variables". Applying a 2.2 correction by default means the reference and this library see different pixel values before the variance is even computed. |
+| **Default gamma 2.2 where pHash defaults to 1.0** | **defect** | Already filed as its own task. `ph_compare_images()` defaults `gamma` to 1.0, and [Z10] agrees. Applying a 2.2 correction by default means the reference and this library see different pixel values before the variance is even computed. |
+| Blur is a fixed 3×3 kernel, σ ≈ 0.707, where pHash defaults σ to 3.5 | **defect, larger than previously recorded** | [Z10] reports the authors as suggesting σ = 1, and that was what this document said; pHash's own header defaults `sigma` to **3.5**. Either way the kernel here is not σ-parameterised at all, and the gap to the reference is wider than a factor of one and a half. Belongs with the gamma task. |
 | 128 samples per projection, bilinearly interpolated | deliberate | The source integrates over the pixels of a one-pixel-wide strip, whose count varies with the angle and the image size; a fixed sample count is a different estimator of the same quantity. Cheaper and resolution-independent, but it is an approximation, not the definition. |
 | Radius capped at `min(w,h)/2` | deliberate | Keeps every projection inside the image. The source does not normalise resolution and does not discuss the cap. |
 | Coefficients quantised by their own min and max | deliberate, and pHash's | Not in the paper, which says nothing about quantisation. It is what pHash's `ph_dct()` does, it keeps the sign, and it makes the digest invariant to a rescaling of the whole variance vector. The pre-DCT "normalise by the maximum, then take the square root" of earlier versions is gone: a square root before a transform is a different signal, not a scaling. |
@@ -672,7 +701,8 @@ misled this analysis on its first pass.
    also does. And the prediction here was wrong on both counts: no pHash value changes on
    any fixture, so ImageHash parity is *not* broken, and the DC term is not what hurts
    pHash's robustness. §3 has the numbers.
-5. **Radial: `PH_DEFAULT_GAMMA` is 2.2 where the pHash authors suggest 1.** Already
+5. **Radial: `PH_DEFAULT_GAMMA` is 2.2 where pHash defaults to 1.0, and the blur kernel is
+   fixed at σ ≈ 0.707 where pHash defaults to σ = 3.5.** Already
    filed separately; this document is the evidence for it.
 6. **ColorMoments: the sign of the skewness is discarded.** Half of the third moment's
    information is thrown away.

@@ -17,10 +17,10 @@
  * image with a few bright blocks yields a lopsided hash.
  *
  * Note that this puts the library at odds with OpenCV's BlockMeanHash, the other
- * implementation of this paper in wide use. It resizes to 256x256 and then thresholds on
- * `double const median = cv::mean(grayImg_)[0]` -- the arithmetic mean, stored in a
- * variable called median. The name says the intent and the code says the mistake; the
- * paper is followed here, not OpenCV. pHash carries no block-mean hash at all today,
+ * implementation of this paper in wide use. It resizes to 256x256 and then thresholds
+ * against the arithmetic mean of the image -- which it stores in a variable it names
+ * `median`. The name says the intent and the value says the slip; the paper is followed
+ * here, not OpenCV. pHash carries no block-mean hash at all today,
  * although Zauner says he contributed one, so there is no reference implementation by the
  * source's own author to check against.
  *

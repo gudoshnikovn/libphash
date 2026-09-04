@@ -199,7 +199,8 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
   the half turn matches because a projection line at α and at α+180 is the same line. See
   [`algorithm-provenance.md`](algorithm-provenance.md) §7 for why the transform does not
   carry a larger rotation.
-- **Remaining divergence**: the default gamma is 2.2 where the pHash authors suggest 1.
+- **Remaining divergence**: the default gamma is 2.2 where pHash defaults to 1.0, and the
+  blur is a fixed 3×3 kernel (σ ≈ 0.707) where pHash defaults σ to 3.5.
 - **Blind spot worth knowing**: an image whose variance is the same at every angle — a
   radially symmetric one — has no angular structure for this descriptor, and hashes to all
   zeroes. Two such images compare as identical.
