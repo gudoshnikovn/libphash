@@ -142,31 +142,31 @@ static void test_dct2_of_constant_image(void) {
     for (int i = 1; i < R * R; i++)
         assert_close(out[i], 0.0, 0.05, "AC coefficient of a constant image");
 
-    /* What the DC term does to the hash, at its most extreme: DC is 6400 and every AC
-     * coefficient is 0, so the 64 values the median is taken over are one huge number
-     * and 63 numerical zeros. The median lands on zero and every remaining bit is then
-     * decided by float rounding noise rather than by the image -- Starkweather's
-     * "completely flat image information" leaking into the hash, exactly as quoted in
-     * docs/references.md. */
-    uint64_t hash = ph_median_bitpack(out, R * R);
+    /* The degenerate case, at its most extreme: DC is 6400 and all 63 AC coefficients
+     * are 0, so the median -- taken over the AC terms alone, as pHash does -- is 0, and
+     * every AC bit is then decided by float rounding noise rather than by the image.
+     * Leaving DC out of the median does not help here and is not meant to: a solid
+     * colour has no structure to hash, which is Starkweather's "completely flat image
+     * information" as quoted in docs/references.md. The DC bit is set, as always. */
+    uint64_t hash = ph_median_bitpack_from(out, R * R, 1);
     ASSERT(hash & 1u); /* bit 0 is DC, and it is set */
 
     printf("test_dct2_of_constant_image: PASSED\n");
 }
 
 static void test_dct_dc_coefficient_dominates_and_its_bit_is_constant(void) {
-    /* KNOWN DIVERGENCE (docs/algorithm-provenance.md, defect 4): [Z10] 3.2.1 and
-     * Krawetz independently take the 8x8 block starting at DCT(1,1), leaving the DC
-     * term out. This code takes DCT(0,0)..DCT(7,7).
+    /* DC is sqrt(N)*N times the mean brightness, so it is non-negative and, for any image
+     * that is not pathological, larger in magnitude than every AC coefficient. It is
+     * therefore above the median every time and its bit is 1 every time: one of the 64
+     * bits carries no information, and the hash is effectively 63 bits wide.
      *
-     * Why that costs a bit: DC is sqrt(N)*N times the mean brightness, so it is
-     * non-negative and, for any image that is not pathological, larger in magnitude than
-     * every AC coefficient. It is therefore above the median every time, its bit is 1
-     * every time, and one of the 64 bits carries no information at all -- while also
-     * dragging the median that decides the other 63.
+     * That is pHash's behaviour too -- it crops the block at (0,0) and thresholds all 64
+     * values -- so it is a property of the algorithm rather than a divergence, and the
+     * two ways of removing the dead bit were both measured before this was left alone.
+     * See test_dct_median_ignores_dc_without_changing_the_hash() below and
+     * docs/algorithm-provenance.md section 3.
      *
-     * Asserted here over three unrelated synthetic images. This test must be updated
-     * when the defect is fixed; that is the point of it. */
+     * Asserted over three unrelated synthetic images. */
     const int N = 32, R = 8;
     uint8_t input[32 * 32];
 
@@ -202,12 +202,75 @@ static void test_dct_dc_coefficient_dominates_and_its_bit_is_constant(void) {
             }
         }
 
-        uint64_t hash = ph_median_bitpack(out, R * R);
+        uint64_t hash = ph_median_bitpack_from(out, R * R, 1);
         ASSERT(hash & 1u);
     }
 
-    printf(
-        "test_dct_dc_coefficient_dominates_and_its_bit_is_constant: PASSED (divergence pinned)\n");
+    printf("test_dct_dc_coefficient_dominates_and_its_bit_is_constant: PASSED\n");
+}
+
+static void test_dct_median_ignores_dc_without_changing_the_hash(void) {
+    /* pHash takes the median over the 63 AC coefficients, not over all 64, and this code
+     * now does the same. This pins how little that changes, because the usual argument
+     * for it -- that including DC "drags the median" -- is false. A median is not dragged
+     * by an outlier.
+     *
+     * With the 64 values sorted ascending as v0..v63 and DC the largest, the median of
+     * all 64 is (v31 + v32) / 2 and the median of the 63 without DC is v31. Nothing lies
+     * strictly between them, so the same values clear the threshold and the hash is
+     * identical -- unless v31 and v32 are so close that the float average of the two
+     * rounds to v32 itself, at which point v32 clears the lower threshold and not the
+     * higher one. That is the only way the two can disagree, and it costs one bit.
+     *
+     * Measured on the real fixtures in tests/data: identical on all of them. It shows up
+     * here only on the symmetric checkerboard, where two coefficients tie to within a
+     * float ulp. */
+    const int N = 32, R = 8;
+    uint8_t input[32 * 32];
+
+    for (int variant = 0; variant < 4; variant++) {
+        uint32_t state = 0x9E3779B9u + (uint32_t)variant * 2654435761u;
+        for (int i = 0; i < N * N; i++) {
+            state = state * 1664525u + 1013904223u;
+            switch (variant) {
+                case 0:
+                    input[i] = (uint8_t)(state >> 24);
+                    break; /* noise */
+                case 1:
+                    input[i] = (uint8_t)((i % N) * 255 / (N - 1));
+                    break; /* gradient */
+                case 2:
+                    input[i] = (uint8_t)(((i / N) / 3 + (i % N) / 3) % 2 ? 240 : 12);
+                    break; /* symmetric checkerboard -- ties */
+                default:
+                    input[i] = (uint8_t)(128 + (int)(60.0 * sin(i * 0.21)));
+                    break;
+            }
+        }
+
+        float out[8 * 8];
+        ASSERT_OK(ph_dct2_partial(ph_get_dct_matrix_32(), input, N, R, out));
+
+        uint64_t with_dc = ph_median_bitpack_from(out, R * R, 0);
+        uint64_t without_dc = ph_median_bitpack_from(out, R * R, 1);
+
+        uint64_t diff = with_dc ^ without_dc;
+        int changed = 0;
+        for (uint64_t d = diff; d; d &= d - 1)
+            changed++;
+        if (changed > 1) {
+            fprintf(stderr,
+                    "[FAIL] variant %d: leaving DC out of the median moved %d bits (%016llx vs "
+                    "%016llx). At most one bit can move, and only on a tie between the two "
+                    "middle coefficients -- check whether DC is still the maximum\n",
+                    variant, changed, (unsigned long long)with_dc, (unsigned long long)without_dc);
+            exit(1);
+        }
+        /* Whatever moved, it was not the DC bit: DC is above either threshold. */
+        ASSERT((diff & 1u) == 0);
+    }
+
+    printf("test_dct_median_ignores_dc_without_changing_the_hash: PASSED\n");
 }
 
 static void test_dct2_concentrates_a_single_cosine(void) {
@@ -505,6 +568,7 @@ int main(void) {
     test_dct2_partial_matches_direct_definition();
     test_dct2_of_constant_image();
     test_dct_dc_coefficient_dominates_and_its_bit_is_constant();
+    test_dct_median_ignores_dc_without_changing_the_hash();
     test_dct2_concentrates_a_single_cosine();
     test_dct1_partial_matches_direct_definition();
     test_dct1_of_a_constant_vector();

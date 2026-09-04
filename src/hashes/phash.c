@@ -10,17 +10,31 @@
  * The DCT matrix below is Zauner's definition 3.3, and the two-dimensional transform is
  * his equation 3.4 computed as two passes of matrix multiplication.
  *
- * KNOWN DIVERGENCE FROM THE SOURCE: both sources take the 8x8 block starting at
- * DCT(1,1) -- "64 low-frequency DCT coefficients, omitting the lowest frequency
- * coefficients" (Zauner 3.2.1), and Starkweather of pHash quoted by Krawetz: "leaving
- * out the first DC term". This code takes DCT(0,0)..DCT(7,7), so the DC coefficient is
- * included in both the median and the hash bits. It is the image mean, is far larger
- * than the AC terms, and drags the median. This matches ImageHash, which is why
- * comparing against ImageHash could never have caught it. Tracked as a defect in
- * docs/algorithm-provenance.md.
+ * The DC coefficient does not decide anything. The block taken is DCT(0,0)..DCT(7,7),
+ * but the median that thresholds it is taken over the 63 AC coefficients only, which is
+ * what pHash's ph_dct_imagehash() does:
  *
- * Zauner's equation 3.10 also thresholds with >= where this code uses >; with float
- * coefficients that only differs on degenerate input such as a solid-colour image.
+ *     CImg<float> subsec = dctImage.crop(0,0,7,7).unroll('x');
+ *     CImg<float> ac = subsec.get_crop(1,0,0,0,63,0,0,0);
+ *     float median = ac.median();
+ *
+ * DC is the image mean and runs 10-100x larger than any AC term, so leaving it in the
+ * median drags the threshold that decides the other 63 bits -- which is what this code
+ * used to do, and what ImageHash still does, which is why comparing against ImageHash
+ * could never have caught it.
+ *
+ * The written descriptions of pHash go further than its code and disagree with each
+ * other about how far. Zauner 3.2.1 reads the block as starting at DCT(1,1) -- "64
+ * low-frequency DCT coefficients, omitting the lowest frequency coefficients" -- and
+ * Starkweather of pHash, quoted by Krawetz, says the hash is "based on the low 2D DCT
+ * coefficients starting at the second from lowest, leaving out the first DC term". The
+ * reference implementation does neither literally: DC keeps its bit, and since it is
+ * always above a median taken without it, that bit is always 1 and carries nothing. The
+ * code is followed here rather than the prose, and the cost -- one dead bit, an
+ * effective width of 63 -- is measured in docs/algorithm-provenance.md section 3.
+ *
+ * Zauner's equation 3.10 thresholds with >=; pHash's code, and this code, use >. With
+ * float coefficients that differs only on degenerate input such as a solid colour.
  */
 #include "internal.h"
 #include <math.h>
@@ -172,7 +186,9 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
         return err;
     }
 
-    *out_hash = ph_median_bitpack(dct_out, reduction_size * reduction_size);
+    /* median_from = 1: the DC coefficient is thresholded like the others but takes no
+     * part in choosing the threshold. See the note at the top of this file. */
+    *out_hash = ph_median_bitpack_from(dct_out, reduction_size * reduction_size, 1);
 
     ctx->arena.offset = saved_offset;
     return PH_SUCCESS;
@@ -229,16 +245,22 @@ ph_error_t ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_s
 }
 
 uint64_t ph_median_bitpack(const float *values, int n) {
-    if (n <= 0 || n > 64)
+    return ph_median_bitpack_from(values, n, 0);
+}
+
+uint64_t ph_median_bitpack_from(const float *values, int n, int median_from) {
+    if (n <= 0 || n > 64 || median_from < 0 || median_from >= n)
         return 0;
 
+    /* Every value gets a bit; only values[median_from..n-1] get a say in the median. */
+    int m = n - median_from;
     float sorted[64];
-    for (int i = 0; i < n; i++) {
-        sorted[i] = values[i];
+    for (int i = 0; i < m; i++) {
+        sorted[i] = values[median_from + i];
     }
 
     // Sort to find median (insertion sort)
-    for (int i = 1; i < n; i++) {
+    for (int i = 1; i < m; i++) {
         float key = sorted[i];
         int j = i - 1;
         while (j >= 0 && sorted[j] > key) {
@@ -249,10 +271,10 @@ uint64_t ph_median_bitpack(const float *values, int n) {
     }
 
     float median;
-    if (n % 2 == 0) {
-        median = (sorted[n / 2 - 1] + sorted[n / 2]) * 0.5f;
+    if (m % 2 == 0) {
+        median = (sorted[m / 2 - 1] + sorted[m / 2]) * 0.5f;
     } else {
-        median = sorted[n / 2];
+        median = sorted[m / 2];
     }
 
     uint64_t hash = 0;

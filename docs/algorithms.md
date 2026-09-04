@@ -53,7 +53,7 @@ good at; the second is not in scope.
 |---|---|---|---|
 | aHash | Neal Krawetz | blog post, 2011 | no |
 | dHash | David Oftedal, described by Neal Krawetz | blog post, 2013 | no |
-| pHash | pHash project; documented by Zauner; coefficient rule from Coskun & Sankur | thesis, 2010 | **yes** — DC coefficient |
+| pHash | pHash project; documented by Zauner; coefficient rule from Coskun & Sankur | thesis, 2010 | no — follows the reference implementation |
 | wHash | this library, after ImageHash | **none** — see below | n/a — justified by measurement |
 | mHash | this library | **none** | n/a — the *name* is wrong, see below |
 | BMH | Yang, Gu & Niu | paper, 2006 | **yes** — mean instead of median |
@@ -101,10 +101,14 @@ because there is none.
   - `phash_reduction_size` — default 8, giving 8×8 = 64 bits.
 - **Strength**: robust to scaling and moderate compression; the usual first choice when
   aHash and dHash are not tolerant enough.
-- **⚠ Known divergence**: this implementation includes the DC coefficient DCT(0,0) in
-  both the median and the hash bits, where both sources exclude it by name. It is the
-  image mean, dwarfs the AC terms, and drags the median. See
-  [`algorithm-provenance.md`](algorithm-provenance.md) §3.
+- **The DC coefficient**: DCT(0,0) is thresholded like the other 63 but takes no part in
+  choosing the threshold, which is what pHash's `ph_dct_imagehash()` does. Since DC is
+  above that threshold for any ordinary image, its bit is always 1 and the hash is
+  effectively 63 bits wide — again as pHash. Changed in 2.0.0, and it changed no hash
+  value on any test fixture: contrary to the usual explanation, a median is not dragged by
+  an outlier. See [`algorithm-provenance.md`](algorithm-provenance.md) §3, which also
+  records why the 8×8 block was *not* moved to DCT(1,1) despite both written descriptions
+  saying so.
 
 ## 4. wHash (Wavelet Hash)
 

@@ -454,11 +454,12 @@ static const bounds_t BOUNDS[A_COUNT] = {
  * use -- see docs/algorithm-provenance.md section 7.
  *
  * pHash has the worst robustness of the structural hashes here -- mean intra-distance
- * 0.177 against 0.03-0.07 for the others -- and the second-lowest separability. That is
- * consistent with the DC-coefficient defect (docs/algorithm-provenance.md, defect 4):
- * including a term that is always above the median wastes a bit and drags the threshold
- * for the other 63. Consistent with, not proof of; the numbers to compare it against are
- * the ones this test prints after that defect is fixed. */
+ * 0.177 against 0.03-0.07 for the others -- and the second-lowest separability. The DC
+ * coefficient was the suspect and has been ruled out: taking it out of the median leaves
+ * this number at 0.177 to three decimals, and taking it out of the hash entirely (the
+ * 8x8 block at DCT(1,1)) makes it worse, 0.190 with separability 2.27. A median is not
+ * dragged by an outlier, whatever the received explanation says. The cause is elsewhere
+ * and has not been found; docs/algorithm-provenance.md section 3 has the measurement. */
 
 static void test_robustness_discrimination_separability(void) {
     image_t base[NUM_BASE];

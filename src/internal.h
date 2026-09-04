@@ -54,6 +54,12 @@ PH_NODISCARD ph_error_t ph_dct2_partial(const float *dct_mat, const uint8_t *inp
 
 uint64_t ph_median_bitpack(const float *values, int n);
 
+/* As above, but the median is taken over values[median_from..n-1] only, while every one
+ * of the n values still gets a bit. pHash thresholds its 8x8 DCT block against the median
+ * of its 63 AC coefficients, leaving the DC term out of the decision but not out of the
+ * hash; median_from = 1 is that. median_from = 0 is ph_median_bitpack(). */
+uint64_t ph_median_bitpack_from(const float *values, int n, int median_from);
+
 /* Structural validity of a caller-supplied ph_digest_t.
  *
  * ph_digest_t is a flat public struct that FFI bindings (Python, C#, Rust) fill in

@@ -178,22 +178,68 @@ directly:
 > information (i.e. solid colors) from being included in the hash description."
 
 The two sources disagree on the threshold: Krawetz says **mean**, Zauner/pHash says
-**median**. They agree, independently, that the **DC term is excluded**.
+**median**. They agree, independently, that the **DC term is excluded** — but they do not
+agree with pHash's code, which is the third thing in the room and the one that actually
+defines the algorithm. `ph_dct_imagehash()` reads:
+
+```c
+CImg<float> subsec = dctImage.crop(0, 0, 7, 7).unroll('x');   // block at (0,0): DC is in
+CImg<float> ac = subsec.get_crop(1, 0, 0, 0, 63, 0, 0, 0);    // median over the 63 AC only
+float median = ac.median();
+for (int i = 0; i < 64; i++) { if (subsec(i) > median) hash |= 0x01; if (i < 63) hash <<= 1; }
+```
+
+So DC keeps its bit and loses its vote. Zauner's "the coefficient DCT(1,1) being the
+upper left corner" is his reading of that code, not what it does; Starkweather's "leaving
+out the first DC term" describes the median and not the block. Where prose and code
+disagree, this library follows the code — the same rule that settled the radial hash.
 
 **What this implementation does** (`src/hashes/phash.c`): grayscale, box resize to 32×32,
 type-II DCT by matrix multiplication with the same matrix definition as Zauner's
-equation 3.3, coefficients **(0,0) through (7,7) — the DC term included** — median of
-those 64, bit set when `value > median`.
+equation 3.3, coefficients (0,0) through (7,7), **median over the 63 AC coefficients**,
+bit set when `value > median` — pHash's construction exactly.
 
 **Delta:**
 
 | Difference | Class | Note |
 |---|---|---|
-| **DC coefficient DCT(0,0) included in both the median and the hash bits** | **defect** | Contradicts both sources, which exclude it for the same stated reason: the DC term is the image mean, is far larger than the AC terms, and drags the median. One of the 64 bits is also close to determined — DCT(0,0) is non-negative and usually the largest value, so its bit is almost always 1. Matches ImageHash exactly, which is why comparing against ImageHash could never have revealed it. |
+| DC excluded from the median | **fixed in 2.0.0** | Was included in it, which is neither what pHash's code does nor what either description asks for. See the measurement below: the effect turned out to be almost nothing, which is itself the result. |
+| DC keeps its bit, so one bit of the 64 is constant | deliberate — pHash's own behaviour | DCT(0,0) is non-negative and larger than every AC term, so it is above the median every time and its bit is 1 every time. The hash is effectively 63 bits. Removing the dead bit means moving the block to (1,1), which the prose describes and the code does not; measured below and rejected. |
 | No 7×7 mean prefilter before the resize | deliberate | `ph_resize_box()` already averages over each source region, which is a low-pass step of a similar kind. Not identical to a 7×7 mean at full resolution; worth measuring rather than assuming. |
 | Threshold is the median | deliberate | The two sources disagree; the rank-1 source (Zauner/pHash) says median. |
-| `>` rather than `≥` | undefined in effect | Zauner's 3.10 says `≥`. With floating-point coefficients an exact tie against the median only occurs for an even count where two middle values are equal, so this changes a bit only on degenerate input (e.g. a solid-colour image, where all AC terms are 0). Real but negligible; fold into the DC-term fix. |
+| `>` rather than `≥` | matches pHash's code | Zauner's 3.10 says `≥`; `ph_dct_imagehash()` writes `>`, and so does this. With floating-point coefficients the two differ only on an exact tie against the median, i.e. on degenerate input such as a solid colour. |
 | Box resampling | undefined | No source specifies a filter. Zauner's account of pHash has a 7×7 mean filter and then a resize, so a box filter is at least the same kind of operation. |
+
+**What the DC term actually costs, measured.** The received explanation — that including
+DC "drags the median that decides the other 63 bits" — is false, and worth writing down
+because it is repeated everywhere. A median is not dragged by an outlier. With the 64
+values sorted ascending as v0..v63 and DC the largest, the median of all 64 is
+(v31 + v32)/2 and the median of the 63 without DC is v31; nothing lies strictly between
+them, so the same coefficients clear the threshold either way. The two can only disagree
+when v31 and v32 are so close that the float average rounds onto v32, and then by one bit.
+
+Measured, not argued: after excluding DC from the median, the pHash value is **identical
+on every fixture in `tests/data`**, and separability across the synthetic corpus is
+unchanged at 2.48. The change is conformance, and its behavioural effect is a single bit
+on tied input.
+
+The other reading — take the 8×8 block at DCT(1,1), so all 64 bits carry information — was
+implemented and measured too, because it is the only version of this fix that does
+anything:
+
+| | mean intra | mean inter | separability |
+|---|---|---|---|
+| block at (0,0), median over AC (pHash) | 0.177 | 0.490 | **2.48** |
+| block at (1,1), median over all 64 | 0.190 | 0.499 | 2.27 |
+
+It is worse. Trading the dead DC bit for one more row and column of higher-frequency
+coefficients buys a bit of width and loses more robustness than it gains. So the block
+stays at (0,0), matching pHash.
+
+Which leaves the hypothesis this task was built on — that the DC coefficient is why pHash
+has the worst robustness of the structural hashes here, mean intra-distance 0.177 against
+0.03–0.07 — **refuted**. Neither treatment of DC moves that number. The cause is
+elsewhere, and `tests/src/test_hash_properties.c` no longer suggests otherwise.
 
 ---
 
@@ -578,7 +624,11 @@ misled this analysis on its first pass.
    Contradicts Zauner §3.2.1 and Krawetz/Starkweather independently. Changes every pHash
    value; note that it makes us agree with ImageHash, so the cross-check in
    `python-libphash` will start disagreeing when this is fixed — that is the expected
-   outcome, not a regression.
+   outcome, not a regression. — **partly fixed in 2.0.0, and the rest deliberately not.**
+   DC is out of the median, as pHash's code does it. It keeps its bit, as pHash's code
+   also does. And the prediction here was wrong on both counts: no pHash value changes on
+   any fixture, so ImageHash parity is *not* broken, and the DC term is not what hurts
+   pHash's robustness. §3 has the numbers.
 5. **Radial: `PH_DEFAULT_GAMMA` is 2.2 where the pHash authors suggest 1.** Already
    filed separately; this document is the evidence for it.
 6. **ColorMoments: the sign of the skewness is discarded.** Half of the third moment's
