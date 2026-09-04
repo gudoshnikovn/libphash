@@ -19,6 +19,21 @@ walkthrough.
 
 ### BREAKING CHANGES
 
+- **`ph_digest_t` is 136 bytes, not 72, and carries a `kind` tag.** `PH_DIGEST_MAX_BYTES`
+  is now 128: the Marr-Hildreth hash is 576 bits and did not fit in 64, and the remaining
+  room is headroom taken once rather than twice. The byte after `size` is now `kind`, a
+  `ph_digest_kind_t` saying what the bytes are — a bit vector, transform coefficients, a
+  feature vector, a histogram — so that a comparison meant for one can **refuse** the
+  others instead of returning a plausible number that means nothing.
+  `ph_hamming_distance_digest()` and `ph_similarity_digest()` return -1 for a radial or
+  colour-moments digest; `ph_l2_distance()` returns -1 for a BMH digest. The tag never
+  chooses a metric for you. `PH_DIGEST_KIND_UNSPECIFIED` is zero, so a hand-filled struct
+  behaves exactly as before and simply gets no protection.
+  As a knock-on, `ph_context_set_block_params()` accepts up to 32 rather than 22: the
+  bound is the largest grid whose bits fit a digest, and it followed the capacity.
+  *Restore the old behaviour:* rebuild any FFI binding that hardcodes the layout; where a
+  comparison now returns -1, switch to the metric for that digest.
+
 - **The Block Mean Hash thresholds against the median of the block means, not their
   arithmetic mean, so every BMH value changes.** That is what Yang, Gu and Niu's method 1
   specifies (step d and equation 3.9), and the median is what makes the bit distribution
