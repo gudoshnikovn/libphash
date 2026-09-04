@@ -19,6 +19,20 @@ walkthrough.
 
 ### BREAKING CHANGES
 
+- **`ph_compute_mhash()` is a real Marr-Hildreth hash now, returns a 72-byte digest, and
+  `PH_HASH_MHASH` is gone.** What it used to compute was the sign of a four-neighbour
+  discrete Laplacian on an 18×18 grid — 64 bits, no Gaussian, no scale — under a name it
+  had no claim to. It now normalises the image to 512×512, equalises it, correlates it
+  with the Laplacian-of-Gaussian operator of Marr and Hildreth, and emits 576 bits, which
+  is the construction the reference implementation defines. The signature takes a
+  `ph_digest_t*`; stored values do not carry over; and 576 bits cannot travel through a
+  bitfield API that hands back `uint64_t`, so the multi-hash flag is removed and
+  `PH_HASH_FLAGS_COUNT` is 5 — call the function directly.
+  New: `ph_context_set_mhash_params()` exposes the kernel's scale (`alpha`, `level` — the
+  reference's own parameters) and the size the image is normalised to. The defaults are
+  the reference's and were kept after being measured against 23 alternatives.
+  *Restore the old behaviour:* not possible; recompute any stored mHash values.
+
 - **`ph_digest_t` is 136 bytes, not 72, and carries a `kind` tag.** `PH_DIGEST_MAX_BYTES`
   is now 128: the Marr-Hildreth hash is 576 bits and did not fit in 64, and the remaining
   room is headroom taken once rather than twice. The byte after `size` is now `kind`, a
