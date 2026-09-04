@@ -19,6 +19,17 @@ walkthrough.
 
 ### BREAKING CHANGES
 
+- **The Block Mean Hash thresholds against the median of the block means, not their
+  arithmetic mean, so every BMH value changes.** That is what Yang, Gu and Niu's method 1
+  specifies (step d and equation 3.9), and the median is what makes the bit distribution
+  balanced by construction — under the mean, a dark image with a few bright blocks
+  produces a lopsided hash. On photographs the two rules almost agree, so most values move
+  by a bit or two; on images with skewed block values, which is the case the median exists
+  to handle, they move a great deal. Note this also puts the library at odds with OpenCV's
+  `BlockMeanHash`, which thresholds on the mean (in a variable it calls `median`) — expect
+  BMH values to differ from OpenCV's.
+  *Restore the old behaviour:* not possible; recompute any stored BMH digests.
+
 - **Radial digests must now be compared with `ph_radial_similarity()`.** The algorithm's
   source compares two radial hashes by the peak of their cross-correlation over cyclic
   shifts, and that function exposes it, with the source's threshold available as
