@@ -56,7 +56,7 @@ good at; the second is not in scope.
 | pHash | pHash project; documented by Zauner; coefficient rule from Coskun & Sankur | thesis, 2010 | no — follows the reference implementation |
 | wHash | this library, after ImageHash | **none** — see below | n/a — justified by measurement |
 | mHash | this library | **none** | n/a — the *name* is wrong, see below |
-| BMH | Yang, Gu & Niu | paper, 2006 | **yes** — mean instead of median |
+| BMH | Yang, Gu & Niu | paper, 2006 | **yes** — no preset normalisation size |
 | Radial | De Roover, De Vleeschouwer, Lefèbvre & Macq | paper, 2005 | **yes** — two divergences |
 | ColorHash | Johannes Buchner (ImageHash) | **none** | n/a |
 | ColorMoments | Stricker & Orengo | paper, 1995 | **yes** — skew sign, colour space |
@@ -151,9 +151,11 @@ because there is none.
   largest grid that fits a digest).
 - **Use case**: when 64 bits are not enough entropy and a lower collision rate is worth
   the extra bytes.
-- **⚠ Known divergence**: the source thresholds against the **median** of the block
-  means; this implementation uses their arithmetic mean. The median is what makes the bit
-  distribution balanced by construction, which is the property the paper relies on. See
+- **Threshold**: the **median** of the block means, as the paper specifies, which is what
+  makes the bit distribution balanced by construction. Changed in 2.0.0 — it was the
+  arithmetic mean, so every BMH value moves. Note that this puts the library at odds with
+  OpenCV's `BlockMeanHash`, which thresholds on the mean (in a variable it calls `median`);
+  expect BMH values to differ from OpenCV's. See
   [`algorithm-provenance.md`](algorithm-provenance.md) §6.
 
 ## 7. ColorHash and ColorMoments

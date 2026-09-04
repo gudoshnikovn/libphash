@@ -372,14 +372,28 @@ are out of scope. Step 3 is omitted by pHash's own implementation too, and the p
 does not name an encryption algorithm.
 
 **What this implementation does** (`src/hashes/bmh.c`): grayscale, `ph_resize_box()`
-straight to `block_size × block_size` (default 16×16 → 256 bits), **arithmetic mean** of
-the resulting values, bit set when `value >= avg`, packed LSB-first within each byte.
+straight to `block_size × block_size` (default 16×16 → 256 bits), **median** of the
+resulting values, bit set when `value >= median`, packed LSB-first within each byte.
+
+There is no reference implementation to check the prose against, which is the situation
+this document keeps running into from the other side. pHash carries no block-mean hash
+today, although Zauner says he contributed one. The other implementation in wide use,
+OpenCV's `cv::img_hash::BlockMeanHash`, resizes to 256×256 and then thresholds on
+
+```cpp
+double const median = cv::mean(grayImg_)[0];
+```
+
+— the arithmetic mean, in a variable named `median`. The name says the intent and the code
+says the slip, and it is very likely where this library's own mean came from. The paper is
+followed here; expect BMH values to differ from OpenCV's.
 
 **Delta:**
 
 | Difference | Class | Note |
 |---|---|---|
-| **Threshold is the arithmetic mean, not the median of the block means** | **defect** | Directly contradicts step 4 and equation 3.9. The median is what makes the bit distribution balanced by construction — exactly 50% ones — which is the property the paper relies on. With the mean, a dark image with a few bright blocks produces a lopsided hash and loses discriminative power. |
+| Threshold is the median of the block means | **fixed in 2.0.0** | Was the arithmetic mean, contradicting step 4 and equation 3.9. Measured on the synthetic corpus: separability 5.21 → 5.24, mean intra 0.031 → 0.035, mean inter 0.478 → 0.482. Barely moves, which is expected — on ordinary images the mean and the median of a block-value distribution sit close together. The change is for conformance and for the balance property the paper depends on, not for a number. |
+| Median of an even count taken as the upper of the two central values | undefined | The paper does not say. This is the choice that preserves its property: with `≥`, exactly half the blocks clear the upper central value. Ties among block values can still unbalance it — they are bytes, and a flat image has many — and nothing in the method addresses that. |
 | No preset normalisation size; the image is resampled straight to the block grid | deliberate | The paper says "normalize the original image into a preset size" and then block-average; pHash uses 256×256. A box resample to 16×16 equals the block means only when the source dimensions are a multiple of 16 — otherwise source pixels are weighted across block boundaries. Fixing this means adding the intermediate normalisation step. |
 | Key-permuted block order omitted | deliberate | Also omitted by pHash. It is a security feature (unpredictability under a key), not a perceptual one, and the paper leaves the cipher unspecified. |
 | `≥` at the threshold | conforms | Matches equation 3.9. |

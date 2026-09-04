@@ -455,55 +455,71 @@ static void test_block_means_on_an_exact_multiple(void) {
     printf("test_block_means_on_an_exact_multiple: PASSED\n");
 }
 
-static void test_bmh_thresholds_on_the_mean_not_the_median(void) {
-    /* KNOWN DIVERGENCE (docs/algorithm-provenance.md, defect 3): [Z10] equation 3.9
-     * thresholds each block against the MEDIAN of the block means, which makes the bit
-     * distribution balanced by construction -- half the bits set, whatever the image.
-     * This library uses the arithmetic mean.
-     *
-     * The input below is what makes the two rules differ: mostly dark, with a few very
-     * bright blocks. The median rule would set exactly half the bits; the mean is
-     * dragged upwards by the bright blocks, so far fewer are set. This test asserts the
-     * present, divergent behaviour so that fixing it must change this test. */
+static int bmh_bits_set(const uint8_t *pixels, int w, int h, int block_size) {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_context_set_block_params(ctx, block_size));
+    ASSERT_OK(ph_load_from_pixels(ctx, pixels, w, h, 3, 0));
+    ph_digest_t d;
+    ASSERT_OK(ph_compute_bmh(ctx, &d));
+    int bits = 0;
+    for (int i = 0; i < d.size * 8; i++)
+        bits += (d.data[i / 8] >> (i % 8)) & 1;
+    ph_free(ctx);
+    return bits;
+}
+
+static void test_bmh_thresholds_on_the_median(void) {
+    /* [Z10] equation 3.9 thresholds each block against the MEDIAN of the block means,
+     * which is what makes the bit distribution balanced by construction. Until 2.0.0 this
+     * library used the arithmetic mean; so does OpenCV's BlockMeanHash, in a variable it
+     * calls `median`. Two inputs, because the balance holds exactly on one and not on the
+     * other, and the difference is worth pinning rather than discovering later. */
     const int W = 64, H = 64;
     uint8_t *pixels = (uint8_t *)malloc((size_t)W * H * 3);
     ASSERT_PTR_NOT_NULL(pixels);
 
-    for (int y = 0; y < H; y++) {
+    /* 1. Distinct block values: a staircase, one step per block row and column, so the
+     * 64 blocks of an 8x8 grid take 64 different values. Here the median splits the
+     * blocks exactly in half -- 32 bits set, whatever the values are. */
+    for (int y = 0; y < H; y++)
         for (int x = 0; x < W; x++) {
-            /* The top 8 rows are white, everything else near-black. */
+            int block = (y / 8) * 8 + (x / 8);
+            uint8_t v = (uint8_t)(2 + block * 3); /* 2..191, all distinct */
+            size_t o = ((size_t)y * W + x) * 3;
+            pixels[o] = pixels[o + 1] = pixels[o + 2] = v;
+        }
+    int bits = bmh_bits_set(pixels, W, H, 8);
+    if (bits != 32) {
+        fprintf(stderr, "[FAIL] BMH set %d of 64 bits on distinct block values, expected 32\n",
+                bits);
+        exit(1);
+    }
+
+    /* 2. The input that used to pin the mean: the top 8 rows white, the rest near-black.
+     * The mean is dragged to about 40 by the 8 bright blocks and only those 8 clear it.
+     * The median is 10, and every block is >= 10, so all 64 bits are set. Both hashes are
+     * degenerate on this image -- the point is which rule produced it, and that ties are
+     * what stop the median from balancing. Fifty-six blocks share one value here; no
+     * threshold can split them. */
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) {
             uint8_t v = (y < 8) ? 255 : 10;
             size_t o = ((size_t)y * W + x) * 3;
             pixels[o] = pixels[o + 1] = pixels[o + 2] = v;
         }
+    bits = bmh_bits_set(pixels, W, H, 8);
+    if (bits != 64) {
+        fprintf(stderr,
+                "[FAIL] BMH set %d of 64 bits on the tie-heavy image; the median rule sets all "
+                "64, the arithmetic mean would set 8\n",
+                bits);
+        exit(1);
     }
 
-    ph_context_t *ctx = NULL;
-    ASSERT_OK(ph_create(&ctx));
-    ASSERT_OK(ph_context_set_block_params(ctx, 8));
-    ASSERT_OK(ph_load_from_pixels(ctx, pixels, W, H, 3, 0));
-
-    ph_digest_t d;
-    ASSERT_OK(ph_compute_bmh(ctx, &d));
-
-    int bits = 0;
-    for (int i = 0; i < d.size * 8; i++)
-        bits += (d.data[i / 8] >> (i % 8)) & 1;
-
-    /* 8 of the 64 blocks are white. Mean = (8*255 + 56*10) / 64 ~= 40, so only the 8
-     * white blocks clear it. The median would be 10, and every block with value >= 10 --
-     * all 64 of them -- would be set. Either way the hash is degenerate here; the point
-     * is that the two rules disagree, and which one this code follows. */
-    ASSERT_INT_EQ(8, bits);
-
-    ph_free(ctx);
     free(pixels);
-    printf("test_bmh_thresholds_on_the_mean_not_the_median: PASSED (divergence pinned)\n");
+    printf("test_bmh_thresholds_on_the_median: PASSED\n");
 }
-
-/* ============================================================================
- * Colour moments -- [SO95] via the restatement in docs/references.md
- * ========================================================================= */
 
 static void test_colour_moments_match_the_definitions(void) {
     /* Four values in one channel: {0, 0, 0, 100}. By hand:
@@ -576,7 +592,7 @@ int main(void) {
     test_haar_is_orthonormal();
     test_haar_on_a_step_signal();
     test_block_means_on_an_exact_multiple();
-    test_bmh_thresholds_on_the_mean_not_the_median();
+    test_bmh_thresholds_on_the_median();
     test_colour_moments_match_the_definitions();
     test_colour_moments_digest_discards_the_skew_sign();
     printf("ALL FORMULA CONFORMANCE TESTS PASSED\n");

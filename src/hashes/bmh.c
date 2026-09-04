@@ -11,13 +11,20 @@
  * permutes the block order under a secret key, is omitted here as it is in pHash: it is
  * a security property, not a perceptual one, and the paper names no cipher.
  *
- * KNOWN DIVERGENCE FROM THE SOURCE: this code thresholds against the arithmetic MEAN of
- * the block values, not their median. The median is what makes the bit distribution
- * balanced by construction -- exactly half ones -- which is the property the paper
- * relies on; with the mean, a dark image with a few bright blocks yields a lopsided
- * hash. Tracked as a defect in docs/algorithm-provenance.md.
+ * The threshold is the median, which is what makes the bit distribution balanced by
+ * construction -- half ones, whatever the image -- and that balance is the property the
+ * paper relies on. Until 2.0.0 this code used the arithmetic mean, under which a dark
+ * image with a few bright blocks yields a lopsided hash.
  *
- * Second, smaller divergence: the source normalises the image to a preset size and then
+ * Note that this puts the library at odds with OpenCV's BlockMeanHash, the other
+ * implementation of this paper in wide use. It resizes to 256x256 and then thresholds on
+ * `double const median = cv::mean(grayImg_)[0]` -- the arithmetic mean, stored in a
+ * variable called median. The name says the intent and the code says the mistake; the
+ * paper is followed here, not OpenCV. pHash carries no block-mean hash at all today,
+ * although Zauner says he contributed one, so there is no reference implementation by the
+ * source's own author to check against.
+ *
+ * Remaining divergence: the source normalises the image to a preset size and then
  * averages blocks of it. Box-resampling straight to the block grid equals that only
  * when the source dimensions are a multiple of the grid; otherwise source pixels are
  * weighted across block boundaries.
@@ -69,15 +76,35 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     ph_resize_box(full_gray, ctx->image.width, ctx->image.height, block_data, block_size,
                   block_size);
 
-    uint64_t total_sum = 0;
-    for (size_t i = 0; i < total_pixels; i++) {
-        total_sum += block_data[i];
+    /* The median of the block values, by counting sort: they are bytes, so 256 buckets
+     * settle it in one pass over the data instead of sorting up to 484 values.
+     *
+     * "The median" for an even count is the n/2-th order statistic, zero-indexed -- the
+     * upper of the two central values. The paper does not say which to take, and this is
+     * the choice that keeps its property: with the >= of equation 3.9, exactly half the
+     * blocks clear the upper central value, so the hash has as many ones as zeroes.
+     * Averaging the two central values would select the same blocks whenever they differ,
+     * so this is the cheaper way to say the same thing. Equal block values are the one
+     * thing that can still tip the balance, and nothing can be done about that: they are
+     * bytes, and ties are common on flat images. */
+    size_t histogram[256] = {0};
+    for (size_t i = 0; i < total_pixels; i++)
+        histogram[block_data[i]]++;
+
+    size_t median_rank = total_pixels / 2;
+    size_t seen = 0;
+    uint8_t median = 255;
+    for (int v = 0; v < 256; v++) {
+        seen += histogram[v];
+        if (seen > median_rank) {
+            median = (uint8_t)v;
+            break;
+        }
     }
-    uint8_t avg = (uint8_t)(total_sum / total_pixels);
 
     size_t max_bits = (size_t)out_digest->size * 8;
     for (size_t i = 0; i < total_pixels && i < max_bits; i++) {
-        if (block_data[i] >= avg) {
+        if (block_data[i] >= median) {
             out_digest->data[i / 8] |= (1 << (i % 8));
         }
     }
