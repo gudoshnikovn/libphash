@@ -109,7 +109,8 @@ static uint8_t *make_jpeg_with_orientation(const uint8_t *jpeg, size_t jpeg_len,
 typedef struct {
     ph_error_t err;
     int width, height, channels;
-    uint64_t ahash, dhash, phash, mhash, color;
+    uint64_t ahash, dhash, phash, color;
+    ph_digest_t mhash;
 } load_result_t;
 
 static load_result_t describe(ph_context_t *ctx, ph_error_t err) {
@@ -123,6 +124,7 @@ static load_result_t describe(ph_context_t *ctx, ph_error_t err) {
     ASSERT_OK(ph_compute_dhash(ctx, &r.dhash));
     ASSERT_OK(ph_compute_phash(ctx, &r.phash));
     ASSERT_OK(ph_compute_mhash(ctx, &r.mhash));
+    /* A digest, so it is compared by bytes below rather than by the CHECK macro. */
     if (r.channels >= 3)
         ASSERT_OK(ph_compute_color_hash(ctx, &r.color));
     return r;
@@ -151,7 +153,11 @@ static void expect_same(const load_result_t *a, const load_result_t *b, const ch
     CHECK(ahash, "%llu")
     CHECK(dhash, "%llu")
     CHECK(phash, "%llu")
-    CHECK(mhash, "%llu")
+    if (a->mhash.size != b->mhash.size ||
+        memcmp(a->mhash.data, b->mhash.data, a->mhash.size) != 0) {
+        fprintf(stderr, "[FAIL] %s: file and memory disagree on mhash\n", what);
+        exit(1);
+    }
     CHECK(color, "%llu")
 #undef CHECK
 }

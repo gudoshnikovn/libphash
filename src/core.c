@@ -232,6 +232,28 @@ PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projection
     return PH_SUCCESS;
 }
 
+PH_API ph_error_t ph_context_set_mhash_params(ph_context_t *ctx, float alpha, float level,
+                                              int size) {
+    /* alpha and level are pHash's own two parameters and set the kernel's scale through
+     * sigma = 4 * alpha^level; the kernel is 2*sigma+1 on a side and must stay inside the
+     * fixed buffer, which is what caps them. size is the preset the image is normalised
+     * to, at least two pixels per block of the 31x31 grid and at most 4096 -- above that
+     * the correlation stops being worth its cost long before it stops being meaningful.
+     * Rejected values leave the configuration untouched, as everywhere else. */
+    if (!ctx || !(alpha > 1.0f) || !(level >= 0.0f) || !isfinite(alpha) || !isfinite(level) ||
+        size < PH_MH_MIN_IMAGE_SIZE || size > PH_MH_MAX_IMAGE_SIZE)
+        return PH_ERR_INVALID_ARGUMENT;
+
+    double sigma = 4.0 * pow((double)alpha, (double)level);
+    if (!(sigma >= 1.0) || 2.0 * sigma + 1.0 > (double)PH_MH_MAX_KERNEL_SIDE)
+        return PH_ERR_INVALID_ARGUMENT;
+
+    ctx->config.mhash_alpha = alpha;
+    ctx->config.mhash_level = level;
+    ctx->config.mhash_size = size;
+    return PH_SUCCESS;
+}
+
 PH_API ph_error_t ph_context_set_block_params(ph_context_t *ctx, int block_size) {
     /* block_size^2 bits have to fit into a ph_digest_t; see PH_BLOCK_MAX_SIZE. */
     if (!ctx || block_size <= 0 || block_size > PH_BLOCK_MAX_SIZE)
@@ -304,6 +326,9 @@ PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     ctx->config.gray_b = PH_GRAY_B;
     ctx->config.phash_dct_size = PH_DCT_SIZE;
     ctx->config.phash_reduction_size = PH_DCT_REDUCTION_SIZE;
+    ctx->config.mhash_alpha = PH_MH_ALPHA;
+    ctx->config.mhash_level = PH_MH_LEVEL;
+    ctx->config.mhash_size = PH_MH_IMAGE_SIZE;
     ctx->config.radial_projections = PH_RADIAL_PROJECTIONS;
     ctx->config.radial_samples = PH_RADIAL_SAMPLES;
     ctx->config.block_size = PH_BLOCK_SIZE;

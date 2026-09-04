@@ -1,7 +1,7 @@
 /*
  * test_hash_properties.c
  *
- * Three of the nine hashes -- wHash, mHash and ColorHash -- have no primary source
+ * Two of the nine hashes -- wHash and ColorHash -- have no primary source
  * (docs/references.md). For those, "correct" cannot mean conformance to a specification,
  * because there is none. It can only mean that the hash does the job a perceptual hash
  * exists to do, measured:
@@ -312,7 +312,7 @@ static const char *ALGO_NAMES[A_COUNT] = {"aHash", "dHash",     "pHash",  "wHash
 
 typedef struct {
     uint64_t bits;   /* the 64-bit algorithms */
-    ph_digest_t dig; /* BMH, Radial */
+    ph_digest_t dig; /* BMH, mHash, Radial */
 } hash_set_t;
 
 static void hash_image(const image_t *im, hash_set_t out[A_COUNT]) {
@@ -324,7 +324,7 @@ static void hash_image(const image_t *im, hash_set_t out[A_COUNT]) {
     ASSERT_OK(ph_compute_dhash(ctx, &out[A_DHASH].bits));
     ASSERT_OK(ph_compute_phash(ctx, &out[A_PHASH].bits));
     ASSERT_OK(ph_compute_whash(ctx, &out[A_WHASH].bits));
-    ASSERT_OK(ph_compute_mhash(ctx, &out[A_MHASH].bits));
+    ASSERT_OK(ph_compute_mhash(ctx, &out[A_MHASH].dig));
     ASSERT_OK(ph_compute_bmh(ctx, &out[A_BMH].dig));
     ASSERT_OK(ph_compute_color_hash(ctx, &out[A_COLOR].bits));
     ASSERT_OK(ph_compute_radial_hash(ctx, &out[A_RADIAL].dig));
@@ -347,7 +347,7 @@ static double distance(algo_t a, const hash_set_t *x, const hash_set_t *y) {
         ASSERT_OK(ph_radial_similarity(&x[a].dig, &y[a].dig, &pcc));
         return (1.0 - pcc) / 2.0;
     }
-    if (a == A_BMH) {
+    if (a == A_BMH || a == A_MHASH) {
         int d = ph_hamming_distance_digest(&x[a].dig, &y[a].dig);
         ASSERT(d >= 0);
         return (double)d / (x[a].dig.size * 8.0);
@@ -422,13 +422,24 @@ static const bounds_t BOUNDS[A_COUNT] = {
     [A_DHASH] = {2.50, 0.120, 0.380},  /* 3.60 / 0.066 / 0.469 */
     [A_PHASH] = {1.80, 0.260, 0.400},  /* 2.48 / 0.177 / 0.490 */
     [A_WHASH] = {3.00, 0.080, 0.390},  /* 4.34 / 0.036 / 0.480 */
-    [A_MHASH] = {1.80, 0.200, 0.380},  /* 2.54 / 0.124 / 0.470 */
+    [A_MHASH] = {1.80, 0.200, 0.380},  /* 2.49 / 0.165 / 0.487 -- but read the note */
     [A_BMH] = {3.50, 0.070, 0.390},    /* 5.21 / 0.031 / 0.478 */
     [A_COLOR] = {1.30, 0.070, 0.090},  /* 1.89 / 0.031 / 0.123 */
     [A_RADIAL] = {1.80, 0.070, 0.180}, /* 2.46 / 0.032 / 0.263, by cross-correlation */
 };
 
-/* Three things the measurement says that are worth reading off it rather than assuming.
+/* This corpus understates any algorithm that normalises to a fixed size larger than
+ * IMG_W. mHash normalises to 512 and these images are 128, so every one of them is
+ * upscaled fourfold before it is filtered, while the benign transformations resample them
+ * again on top of that. Measured: on this corpus mHash separates at 2.49; on the same
+ * corpus generated at 300x300 it separates at 2.70 and is second only to BMH, against
+ * aHash 2.31, dHash 2.07 and pHash 1.89. The absolute numbers of every algorithm move
+ * with the corpus size, so they are comparable within one run of this file and nowhere
+ * else -- which is what the thresholds below are for. Making the corpus resolution
+ * representative is filed separately; changing it here would move every number in this
+ * file and in the documentation at once.
+ *
+ * Three things the measurement says that are worth reading off it rather than assuming.
  *
  * ColorHash's inter-distance is low in absolute terms -- 0.123 where the structural
  * hashes sit near 0.48 -- and its floor is set accordingly. That is the algorithm, not a

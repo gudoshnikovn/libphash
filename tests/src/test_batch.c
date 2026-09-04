@@ -5,8 +5,7 @@
 
 /* Every combination of the 6 ph_hash_flags_t bits, including the empty and full sets. */
 #define ALL_FLAGS_MASK                                                                             \
-    (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_MHASH |               \
-     PH_HASH_COLOR_HASH)
+    (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_COLOR_HASH)
 
 static void reference_multi(const char *path, uint32_t flags, uint64_t out[PH_HASH_FLAGS_COUNT]) {
     ph_context_t *ctx = NULL;

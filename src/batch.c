@@ -12,8 +12,7 @@
 #endif
 
 #define PH_HASH_FLAGS_ALL                                                                          \
-    (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_MHASH |               \
-     PH_HASH_COLOR_HASH)
+    (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_COLOR_HASH)
 
 static int ph_flags_are_valid(uint32_t flags) {
     return flags != 0 && (flags & ~(uint32_t)PH_HASH_FLAGS_ALL) == 0;

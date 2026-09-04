@@ -27,7 +27,7 @@
  * is uneven and the last chunk of items is always claimed by an arbitrary worker. */
 #define STRESS_N 251
 
-#define STRESS_FLAGS (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_MHASH)
+#define STRESS_FLAGS (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH)
 /* ph_compute_multi() writes only one slot per set flag, densely from index 0; the tail of
  * hashes[] is left untouched, so only the first STRESS_NSET slots are comparable. */
 #define STRESS_NSET 4

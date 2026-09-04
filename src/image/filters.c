@@ -1,4 +1,5 @@
 #include "internal.h"
+#include <math.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -175,4 +176,111 @@ void ph_apply_laplacian_3x3(const uint8_t *src, int w, int h, uint8_t *dst) {
             }
         }
     }
+}
+
+/* Separable Gaussian blur at an arbitrary sigma, 8-bit in and out.
+ *
+ * ph_apply_gaussian_blur() above is a fixed 3x3 kernel and cannot express a sigma; the
+ * Marr-Hildreth hash needs the sigma its source specifies. The kernel is truncated at
+ * three standard deviations, where the tail it drops is under 0.3% of the mass, and
+ * renormalised so the sum is exactly one and a flat image stays flat. Edges clamp.
+ *
+ * `scratch` holds w*h floats for the intermediate horizontal pass and is the caller's:
+ * this function does no allocation of its own. */
+void ph_gaussian_blur_sigma(const uint8_t *src, int w, int h, float sigma, float *scratch,
+                            uint8_t *dst) {
+    if (!src || !dst || !scratch || w <= 0 || h <= 0 || !(sigma > 0.0f))
+        return;
+
+    int radius = (int)ceilf(3.0f * sigma);
+    if (radius < 1)
+        radius = 1;
+    if (radius > 64)
+        radius = 64;
+
+    float kernel[129];
+    float sum = 0.0f;
+    for (int i = -radius; i <= radius; i++) {
+        float v = expf(-(float)(i * i) / (2.0f * sigma * sigma));
+        kernel[i + radius] = v;
+        sum += v;
+    }
+    for (int i = 0; i <= 2 * radius; i++)
+        kernel[i] /= sum;
+
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            float acc = 0.0f;
+            for (int k = -radius; k <= radius; k++) {
+                int sx = x + k;
+                if (sx < 0)
+                    sx = 0;
+                if (sx >= w)
+                    sx = w - 1;
+                acc += kernel[k + radius] * (float)src[(size_t)y * w + sx];
+            }
+            scratch[(size_t)y * w + x] = acc;
+        }
+    }
+
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            float acc = 0.0f;
+            for (int k = -radius; k <= radius; k++) {
+                int sy = y + k;
+                if (sy < 0)
+                    sy = 0;
+                if (sy >= h)
+                    sy = h - 1;
+                acc += kernel[k + radius] * scratch[(size_t)sy * w + x];
+            }
+            int v = (int)(acc + 0.5f);
+            dst[(size_t)y * w + x] = (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v);
+        }
+    }
+}
+
+/* Histogram equalisation over `levels` buckets, in place.
+ *
+ * The textbook transform: build the histogram, walk its cumulative sum, and map each
+ * value onto the level its rank falls in. Used by the Marr-Hildreth hash, whose source
+ * equalises over 256 levels before filtering so that the response depends on the
+ * distribution of tones rather than on the exposure. */
+void ph_equalize_histogram(uint8_t *data, size_t n, int levels) {
+    if (!data || n == 0 || levels < 2 || levels > 256)
+        return;
+
+    size_t histogram[256] = {0};
+    for (size_t i = 0; i < n; i++)
+        histogram[data[i]]++;
+
+    /* The first non-empty bucket maps to 0, so a low-contrast image is stretched rather
+     * than merely shifted. */
+    size_t cdf_min = 0;
+    for (int v = 0; v < 256; v++) {
+        if (histogram[v] != 0) {
+            cdf_min = histogram[v];
+            break;
+        }
+    }
+
+    uint8_t map[256];
+    size_t cdf = 0;
+    double denom = (double)(n - cdf_min);
+    for (int v = 0; v < 256; v++) {
+        cdf += histogram[v];
+        double t = denom > 0.0 ? ((double)cdf - (double)cdf_min) / denom : 0.0;
+        if (t < 0.0)
+            t = 0.0;
+        int mapped = (int)(t * (double)(levels - 1) + 0.5);
+        if (mapped < 0)
+            mapped = 0;
+        if (mapped > levels - 1)
+            mapped = levels - 1;
+        /* Spread the `levels` buckets back over the full byte range. */
+        map[v] = (uint8_t)((mapped * 255) / (levels - 1));
+    }
+
+    for (size_t i = 0; i < n; i++)
+        data[i] = map[data[i]];
 }

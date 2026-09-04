@@ -4,8 +4,7 @@
 
 /* Every combination of the 6 ph_hash_flags_t bits, including the empty and full sets. */
 #define ALL_FLAGS_MASK                                                                             \
-    (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_MHASH |               \
-     PH_HASH_COLOR_HASH)
+    (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_COLOR_HASH)
 
 static uint64_t reference_hash(ph_context_t *ctx, uint32_t flag) {
     uint64_t h = 0;
@@ -22,9 +21,6 @@ static uint64_t reference_hash(ph_context_t *ctx, uint32_t flag) {
             break;
         case PH_HASH_WHASH:
             err = ph_compute_whash(ctx, &h);
-            break;
-        case PH_HASH_MHASH:
-            err = ph_compute_mhash(ctx, &h);
             break;
         case PH_HASH_COLOR_HASH:
             err = ph_compute_color_hash(ctx, &h);

@@ -147,8 +147,8 @@ static void hashes_of(const rgb_image_t *img, uint64_t out[PH_HASH_FLAGS_COUNT])
     ph_context_t *ctx;
     ASSERT_OK(ph_create(&ctx));
     ASSERT_OK(ph_load_from_pixels(ctx, img->pixels, img->w, img->h, 3, 0));
-    uint32_t flags = PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_MHASH |
-                     PH_HASH_COLOR_HASH;
+    uint32_t flags =
+        PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_COLOR_HASH;
     ASSERT_OK(ph_compute_multi(ctx, flags, out));
     ph_free(ctx);
 }

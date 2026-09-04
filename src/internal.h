@@ -27,10 +27,33 @@ void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h);
 /* Applies 3x3 Laplacian sharpening for edge preservation */
 void ph_apply_laplacian_3x3(const uint8_t *src, int w, int h, uint8_t *dst);
 
+/* Separable Gaussian blur at an arbitrary sigma, truncated at three standard deviations.
+ * `scratch` is w*h floats supplied by the caller; this allocates nothing. */
+void ph_gaussian_blur_sigma(const uint8_t *src, int w, int h, float sigma, float *scratch,
+                            uint8_t *dst);
+
+/* Histogram equalisation over `levels` buckets (2..256), in place. */
+void ph_equalize_histogram(uint8_t *data, size_t n, int levels);
+
 uint8_t *ph_get_gray(ph_context_t *ctx);
 
 /* mHash Laplacian scan helper */
-uint64_t ph_laplacian_scan(const uint8_t *grid, int size, int step);
+/* Builds the sampled Laplacian-of-Gaussian kernel of Marr & Hildreth, as pHash
+ * parameterises it: side 2*sigma+1 with sigma = 4*alpha^level, element
+ * (2 - A) * exp(-A/2) where A is the squared distance from the centre scaled by
+ * alpha^-level. Writes side*side floats and returns the side, or 0 on bad input. */
+int ph_mh_kernel(float alpha, float level, float *out, int max_side);
+
+/* Scratch bytes ph_mh_block_sums() needs for an n x n image and a kernel half-width. */
+size_t ph_mh_block_sums_scratch(int n, int half);
+
+/* Sums the correlation of `img` (n x n) with `kernel` (side x side, side odd) over each
+ * PH_MH_BLOCK_PIXELS-square block, writing PH_MH_GRID * PH_MH_GRID floats to `out`.
+ * Equivalent to correlating and then summing, but computed through an integral image:
+ * far cheaper, and far more accurate, since the LoG kernel nearly cancels. Edges
+ * replicate. */
+void ph_mh_block_sums(const uint8_t *img, int n, int block, const float *kernel, int side,
+                      uint8_t *scratch, float *out);
 
 typedef struct {
     double mean;
@@ -153,6 +176,38 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
  * whole circle -- reduced by a 1D DCT to 40 coefficients, which are the hash. Both
  * numbers come from the source (De Roover et al. via Zauner 3.1.3); before 2.0.0 the 40
  * sat on the angle count instead, which is a different algorithm. */
+/* Marr-Hildreth. The construction is pHash's ph_mh_imagehash(); the operator it applies
+ * is the Laplacian of Gaussian of Marr & Hildreth 1980. Every number here is that
+ * implementation's, taken as a fact about the algorithm:
+ *
+ *   alpha = 2, level = 1  ->  kernel radius sigma = 4 * alpha^level = 8, so a 17x17 kernel
+ *   the image is blurred at sigma 1, resized to 512x512 and equalised over 256 levels
+ *   the response is summed over 16x16 blocks, giving a 31x31 grid (31 * 16 = 496 <= 512)
+ *   3x3 windows of that grid, stride 4, give 8 * 8 = 64 windows of 9 values
+ *   64 * 9 = 576 bits = 72 bytes
+ */
+#define PH_MH_ALPHA 2.0f
+#define PH_MH_LEVEL 1.0f
+#define PH_MH_BLUR_SIGMA 1.0f
+#define PH_MH_EQUALIZE_LEVELS 256
+#define PH_MH_GRID 31
+
+/* The size the image is normalised to before filtering, and the resulting block size.
+ * pHash fixes this at 512, which makes the blocks 16 pixels; both are tunable here
+ * because the ratio between the kernel's scale and the block grid is the one thing in
+ * this algorithm that actually decides what it sees, and 512 is not the best value for
+ * it. The default is measured, not inherited -- see docs/algorithm-provenance.md. */
+#define PH_MH_IMAGE_SIZE 512
+#define PH_MH_MIN_IMAGE_SIZE (PH_MH_GRID * 2)
+#define PH_MH_MAX_IMAGE_SIZE 4096
+#define PH_MH_BLOCK_PIXELS 16
+#define PH_MH_MAX_KERNEL_SIDE 65
+#define PH_MH_WINDOW 3
+#define PH_MH_WINDOW_STRIDE 4
+#define PH_MH_WINDOWS_PER_AXIS 8
+#define PH_MH_BITS (PH_MH_WINDOWS_PER_AXIS * PH_MH_WINDOWS_PER_AXIS * PH_MH_WINDOW * PH_MH_WINDOW)
+#define PH_MH_BYTES (PH_MH_BITS / 8)
+
 #define PH_RADIAL_PROJECTIONS 180
 #define PH_RADIAL_COEFFS 40
 #define PH_RADIAL_SAMPLES 128
@@ -219,6 +274,14 @@ _Static_assert((PH_BLOCK_MAX_SIZE * PH_BLOCK_MAX_SIZE + 7) / 8 <= PH_DIGEST_MAX_
                "PH_BLOCK_MAX_SIZE bits must fit into a ph_digest_t");
 /* The tag is a uint8_t holding a ph_digest_kind_t; keep the two from drifting apart. */
 _Static_assert(PH_DIGEST_KIND_HISTOGRAM <= 255, "digest kinds must fit the tag byte");
+_Static_assert(PH_MH_BYTES == 72, "the Marr-Hildreth hash is 576 bits");
+_Static_assert(PH_MH_BYTES <= PH_DIGEST_MAX_BYTES, "the Marr-Hildreth hash must fit a digest");
+_Static_assert(PH_MH_GRID *PH_MH_BLOCK_PIXELS <= PH_MH_IMAGE_SIZE,
+               "the block grid must fit inside the normalised image");
+_Static_assert(PH_MH_MIN_IMAGE_SIZE >= PH_MH_GRID,
+               "the smallest normalised image must still hold one pixel per block");
+_Static_assert((PH_MH_GRID - PH_MH_WINDOW) / PH_MH_WINDOW_STRIDE + 1 == PH_MH_WINDOWS_PER_AXIS,
+               "the window count must follow from the grid and the stride");
 _Static_assert(((PH_BLOCK_MAX_SIZE + 1) * (PH_BLOCK_MAX_SIZE + 1) + 7) / 8 > PH_DIGEST_MAX_BYTES,
                "PH_BLOCK_MAX_SIZE must be the largest block size that fits, not smaller");
 _Static_assert(PH_RADIAL_COEFFS <= PH_DIGEST_MAX_BYTES,
@@ -386,6 +449,9 @@ struct ph_context {
         int auto_orient; // Off by default: see ph_context_set_auto_orient().
 
         // Various tunings for hashes
+        float mhash_alpha;
+        float mhash_level;
+        int mhash_size;
         int phash_dct_size;
         int phash_reduction_size;
         int radial_projections;

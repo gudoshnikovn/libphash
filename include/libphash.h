@@ -337,6 +337,35 @@ PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projection
 PH_API ph_error_t ph_context_set_block_params(ph_context_t *ctx, int block_size);
 
 /**
+ * @brief Sets the Marr-Hildreth hash's scale and normalisation size.
+ *
+ * @p alpha and @p level are the algorithm's own two parameters and set the scale of the
+ * Laplacian-of-Gaussian kernel: its half-width is `4 * alpha^level` samples, so the kernel
+ * is `2 * that + 1` on a side (17x17 at the defaults). Raising either widens the kernel
+ * and makes the hash describe coarser structure.
+ *
+ * @p size is the side the image is normalised to before filtering. The block grid stays
+ * 31x31 whatever it is, so the digest is always 576 bits; what changes is how many pixels
+ * a block covers, and therefore the scale of the kernel *relative to the picture* — which
+ * is the ratio that decides what the hash actually sees. It is also the cost: the work is
+ * roughly quadratic in @p size.
+ *
+ * The defaults are alpha 2, level 1 and size 512. The first two are the reference
+ * implementation's; the size is not, and neither is what it is set to — see
+ * `docs/algorithm-provenance.md` for the measurement behind it.
+ *
+ * @param ctx The context.
+ * @param alpha Scale base, > 1 and finite.
+ * @param level Scale exponent, >= 0 and finite. `4 * alpha^level` must be at least 1 and
+ *        must keep the kernel side at 65 or below.
+ * @param size Normalisation side, 62..4096.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or any value out of
+ *         range, with the configuration left untouched.
+ */
+PH_API ph_error_t ph_context_set_mhash_params(ph_context_t *ctx, float alpha, float level,
+                                              int size);
+
+/**
  * @brief Sets the operating mode for Wavelet Hash (wHash).
  *
  * @param ctx The context.
@@ -512,7 +541,6 @@ PH_API PH_NODISCARD ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out
 PH_API PH_NODISCARD ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out_hash);
 PH_API PH_NODISCARD ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash);
 PH_API PH_NODISCARD ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash);
-PH_API PH_NODISCARD ph_error_t ph_compute_mhash(ph_context_t *ctx, uint64_t *out_hash);
 
 /**
  * @brief Computes the HSV ColorHash of the loaded image.
@@ -533,12 +561,15 @@ typedef enum {
     PH_HASH_DHASH = 1 << 1,
     PH_HASH_PHASH = 1 << 2,
     PH_HASH_WHASH = 1 << 3,
-    PH_HASH_MHASH = 1 << 4,
+    /* Bit 4 is retired. It was PH_HASH_MHASH, removed in 2.0.0 when the Marr-Hildreth
+     * hash became 576 bits and could no longer be a uint64_t; call ph_compute_mhash()
+     * directly. As with the error codes, a retired bit is not handed to a new flag --
+     * an old caller's `1 << 4` would otherwise silently mean something else. */
     PH_HASH_COLOR_HASH = 1 << 5,
 } ph_hash_flags_t;
 
 /** Number of distinct bits defined in ph_hash_flags_t. Sizes ph_compute_multi's out[]. */
-#define PH_HASH_FLAGS_COUNT 6
+#define PH_HASH_FLAGS_COUNT 5
 
 /**
  * @brief Computes multiple uint64_t hash algorithms for the loaded image in one call.
@@ -558,7 +589,7 @@ typedef enum {
  * @param ctx The context. Must have an image already loaded.
  * @param flags Bitwise-OR of `ph_hash_flags_t` values selecting which hashes to compute.
  * @param[out] out Array written with one uint64_t per flag that was set, in ascending
- *                 bit order (e.g. for `PH_HASH_DHASH | PH_HASH_MHASH`, `out[0]` receives
+ *                 bit order (e.g. for `PH_HASH_DHASH | PH_HASH_COLOR_HASH`, `out[0]` receives
  *                 the dHash and `out[1]` the mHash). Must have room for at least as many
  *                 elements as bits set in `flags` (at most `PH_HASH_FLAGS_COUNT`).
  */
@@ -682,6 +713,31 @@ PH_API PH_NODISCARD ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *ou
  */
 PH_API PH_NODISCARD ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
                                                              ph_digest_t *out_digest);
+
+/**
+ * @brief Computes the Marr-Hildreth hash. Returns a 72-byte (576-bit) digest.
+ *
+ * The image is blurred at sigma 1, normalised to 512x512 and histogram-equalised over 256
+ * levels; the Laplacian-of-Gaussian operator of Marr and Hildreth (alpha = 2, level = 1)
+ * is correlated with it; the response is summed over 16x16 blocks into a 31x31 grid; and
+ * nine bits are emitted per 3x3 window of that grid at stride 4, each thresholded against
+ * its window's mean. That construction is pHash's `ph_mh_imagehash()`, which is its
+ * primary source — there is no paper for it. Values are close in spirit but not identical
+ * to pHash's; see docs/algorithm-provenance.md section 5.
+ *
+ * The digest is a bit vector: compare it with ph_hamming_distance_digest() or
+ * ph_similarity_digest().
+ *
+ * @note Changed completely in 2.0.0. This used to return a `uint64_t` holding 64 bits of
+ *       something that was not a Marr-Hildreth hash at all — the sign of a four-neighbour
+ *       discrete Laplacian on an 18x18 grid. Stored values do not carry over, the
+ *       signature is different, and `PH_HASH_MHASH` no longer exists: this is a hash the
+ *       multi-hash bitfield cannot express, so call it directly.
+ *
+ * @note It is by far the most expensive hash here — a 17x17 correlation over a 512x512
+ *       image — which is a property of the algorithm, not of this implementation.
+ */
+PH_API PH_NODISCARD ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest);
 
 /**
  * @brief Computes the Radial variance hash. Returns a 40-byte digest.

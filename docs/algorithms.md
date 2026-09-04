@@ -55,7 +55,7 @@ good at; the second is not in scope.
 | dHash | David Oftedal, described by Neal Krawetz | blog post, 2013 | no |
 | pHash | pHash project; documented by Zauner; coefficient rule from Coskun & Sankur | thesis, 2010 | no — follows the reference implementation |
 | wHash | this library, after ImageHash | **none** — see below | n/a — justified by measurement |
-| mHash | this library | **none** | n/a — the *name* is wrong, see below |
+| mHash | pHash (construction); Marr & Hildreth 1980 (operator) | implementation + paper | no |
 | BMH | Yang, Gu & Niu | paper, 2006 | no |
 | Radial | De Roover, De Vleeschouwer, Lefèbvre & Macq | paper, 2005 | **yes** — two divergences |
 | ColorHash | Johannes Buchner (ImageHash) | **none** | n/a |
@@ -66,7 +66,7 @@ resample with Lanczos — it takes stb_image_resize2's default, which is Mitchel
 downscale. No source specifies a filter, so nothing is violated, but the name is wrong
 and the filter is not the one ImageHash uses.
 
-Three of the nine have no primary source. For those, "correct" can only mean measured
+Two of the nine — wHash and ColorHash — have no primary source. For those, "correct" can only mean measured
 robustness, discrimination and separability — never conformance to a specification,
 because there is none.
 
@@ -129,18 +129,27 @@ because there is none.
   default, so its hash describes local structure rather than overall brightness; this one
   does not.
 
-## 5. mHash
+## 5. mHash (Marr–Hildreth)
 
-- **Concept**: the sign of a 3×3 four-neighbour discrete Laplacian, sampled on a stride-2
-  grid of an 18×18 reduction. Structure only — it responds to edges, not to levels.
-- **Output**: 64-bit.
-- **Tuning**: none. It uses a fixed 18×18 grid and **ignores** `ph_context_set_block_params`,
-  which affects BMH only.
-- **⚠ The name is wrong and is kept only for API compatibility.** mHash is *not* a
-  Marr–Hildreth hash: there is no Gaussian, no scale parameter and no zero-crossing
-  detection, which is what Marr–Hildreth means. It is also not pHash's
-  `ph_mh_imagehash()`, which is a genuinely different algorithm producing 576 bits. This
-  hash is original to this library and has no source; judge it by measurement.
+- **Concept**: normalise to 512×512, equalise the histogram, correlate with a
+  Laplacian-of-Gaussian kernel (the Mexican hat of Marr & Hildreth 1980), sum the response
+  over 16×16 blocks into a 31×31 grid, and emit nine bits per 3×3 window of that grid,
+  each thresholded against its window's mean.
+- **Output**: `ph_digest_t`, 72 bytes (576 bits). Compare with
+  `ph_hamming_distance_digest()`.
+- **Tuning**: `ph_context_set_mhash_params(alpha, level, size)` — `alpha` and `level` set
+  the kernel's scale (pHash's own two parameters), `size` the normalisation preset. The
+  defaults are 2, 1 and 512, and are the reference implementation's; a sweep over 24
+  combinations on two corpora found nothing that reliably beats them.
+- **Strength**: a coarse-structure edge descriptor, indifferent to colour — a colour shift
+  moves 25 of 576 bits on the test photograph where an unrelated image moves 288.
+- **Weakness**: the most expensive hash here (1.8 ms against 0.04 ms for aHash), and it
+  notices a small local edit *less* than it notices a rescale — see
+  [`algorithm-provenance.md`](algorithm-provenance.md) §5.
+- **Changed completely in 2.0.0.** This used to be 64 bits of something that was not a
+  Marr–Hildreth hash at all: the sign of a four-neighbour discrete Laplacian on an 18×18
+  grid, no Gaussian and no scale. The signature changed with it, and `PH_HASH_MHASH` is
+  gone from the multi-hash bitfield — 576 bits do not fit a `uint64_t`.
 
 ## 6. BMH (Block Mean Hash)
 
@@ -217,7 +226,7 @@ methodology.
 | aHash | ★★★★★ | ✗ | ★ | ★★★ | 64-bit |
 | dHash | ★★★★★ | ✗ | ★★ | ★★★★ | 64-bit |
 | pHash | ★★★ | ★★★ | ★★★★ | ★★★★★ | 64-bit |
-| mHash | ★★★★ | ★ | ★★★ | ★★★★ | 64-bit |
+| mHash | ★ | ★ | ★★★ | ★★★★ | digest, 576-bit |
 | wHash | ★★ | ★ | ★★★ | ★★★★ | 64-bit |
 | Radial | ★ | ★★ — small angles, see §8 | ★★ | ★★★ | digest, 40 bytes |
 | BMH | ★★★ | ★ | ★★★ | ★★★★ | digest, 256-bit default |

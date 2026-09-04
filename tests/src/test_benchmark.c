@@ -159,7 +159,6 @@ void benchmark_hashing(ph_context_t *ctx, int iterations) {
                                           {"pHash", ph_compute_phash},
                                           {"wHash (Fast)", ph_compute_whash_fast_wrapper},
                                           {"wHash (Full)", ph_compute_whash_full_wrapper},
-                                          {"mHash", ph_compute_mhash},
                                           {"ColorHash", ph_compute_color_hash},
                                           {NULL, NULL}};
 
@@ -186,9 +185,43 @@ void benchmark_hashing(ph_context_t *ctx, int iterations) {
         }
     }
 
-    /* Digest-based (Radial): an order of magnitude slower per op, so it gets
-     * 1/10 of the iterations. Warmup is still taken from the full count -- a
+    /* Digest-based (mHash, Radial): an order of magnitude or more slower per op, so they
+     * get 1/10 of the iterations. Warmup is still taken from the full count -- a
      * cheap warmup on the slowest algorithm is the wrong place to save time. */
+    {
+        int mh_iters = iterations / 10;
+        int mh_warmup;
+        ph_bench_stats st;
+
+        if (mh_iters < 1)
+            mh_iters = 1;
+        mh_warmup = PH_BENCH_WARMUP(mh_iters);
+
+        for (int i = 0; i < mh_warmup; i++) {
+            if (ph_compute_mhash(ctx, &digest) != PH_SUCCESS) {
+                /* ignore for benchmark */
+            }
+        }
+
+        samples.n = 0;
+        for (int i = 0; i < mh_iters; i++) {
+            start = get_time_sec();
+            if (ph_compute_mhash(ctx, &digest) != PH_SUCCESS) {
+                /* ignore for benchmark */
+            }
+            ph_bench_add(&samples, get_time_sec() - start);
+        }
+        st = ph_bench_summarize(&samples);
+
+        if (!g_json_output) {
+            ph_bench_print_row("mHash", &st, " (1/10 iter)");
+        } else {
+            printf(", {\"name\": \"mHash\", ");
+            ph_bench_print_json_stats(&st);
+            printf("}");
+        }
+    }
+
     {
         int radial_iters = iterations / 10;
         int radial_warmup;

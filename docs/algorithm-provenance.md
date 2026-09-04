@@ -341,40 +341,95 @@ remaining `hash_size × hash_size` low band; bit set when `value > median`.
 
 ---
 
-## 5. mHash
+## 5. mHash — Marr–Hildreth hash
 
-**Author:** this library. **Primary source: none.**
+**Two sources, covering different halves of it.**
 
-**The name is a misattribution and must change.** `mHash` was added in v1.2.0 in a
-commit titled "Introduce Marr-Hildreth Hash (mHash)", and `docs/algorithms.md` still
-calls it "Marr Hash". It is not a Marr–Hildreth hash, on two independent counts.
+The **operator** is the Laplacian of Gaussian of D. Marr and E. Hildreth, "Theory of edge
+detection", *Proc. R. Soc. Lond. B* 207:187–217, 1980 — rank 1. The kernel is the sampled
+Mexican hat, `(2 − A)·exp(−A/2)`, with `A` the squared distance from the centre in units
+of the scale.
 
-Marr–Hildreth means the Laplacian of Gaussian: per Zauner §3.1.2 and definition 3.5,
-∇²g is sampled at a chosen scale σ, convolved with the image, and **edges are the
-zero-crossings** of the result. What `src/hashes/mhash.c` computes is the *sign* of a
-3×3 four-neighbour discrete Laplacian, sampled on a stride-2 grid of an 18×18 box-resized
-image. There is no Gaussian, no scale parameter, and no zero-crossing detection — only
-`4·centre − (up + down + left + right) > 0`. The introducing commit says as much
-("a Laplacian kernel approximation"); the name overstates it.
+The **hash** built on it has no paper. It is pHash's `ph_mh_imagehash()`, by Evan Klinger
+and David Starkweather, and Zauner §3.2.2 says outright that the construction "has not
+been proposed previously". By the ranking above, that makes pHash's own code the primary
+source for the construction — not a reference implementation of something else — and the
+steps and constants below are taken from it as facts about the algorithm.
 
-Nor does it match the algorithm that actually bears the name in the library it was
-presumably taken from. Zauner §3.2.2 documents pHash's `ph_mh_imagehash()`: grayscale,
-Canny–Deriche blur with σ = 1.0, resize to **512×512**, histogram equalisation over 256
-levels, then an LoG kernel with scale α = 2 at level 1, producing a **576-bit** hash.
-Ours produces 64 bits from an 18×18 grid. These are different algorithms.
+**What the source specifies:** luminance, blur at σ = 1, resize to 512×512, histogram
+equalisation over 256 levels, correlation with the LoG kernel at α = 2 and level = 1, the
+response normalised and summed over 16×16 blocks into a 31×31 grid, and nine bits per 3×3
+window of that grid at stride 4, each thresholded against its window's mean — 64 windows,
+**576 bits, 72 bytes**. pHash's own page states the 72 bytes; its header states the α and
+level defaults.
 
-The plain 4-neighbour Laplacian itself is textbook (Zauner's definition 3.3, after
-Bovik's *The Essential Guide to Image Processing*). Marr and Hildreth's "Theory of edge
-detection" (1980) is the source for LoG and should be cited **only** if the
-implementation is changed to actually use it.
-
-**Delta:**
+**What this implementation does** (`src/hashes/mhash.c`), since 2.0.0: exactly that
+construction, with two differences in kind and one in arithmetic.
 
 | Difference | Class | Note |
 |---|---|---|
-| Documented and named as Marr–Hildreth | **defect (naming/documentation)** | The hash itself is self-consistent and may well be useful; the claim about what it is, is false. Fix is to rename or to re-describe honestly — not to change the maths. Public API compatibility makes `ph_compute_mhash` hard to rename in 2.0.0; the description is what has to change. |
-| `docs/algorithms.md` calls it "block-based […] utilizing `ph_context_set_block_params`" | **defect (documentation)** | Already contradicted by `include/libphash.h`, which correctly records that mHash uses a fixed 18×18 grid and ignores that setting. |
-| No primary source | — | To be evaluated only by measurable properties. |
+| Separable truncated Gaussian at σ = 1, not Deriche's recursive approximation | deliberate | CImg's `blur()` is a recursive filter; this is a direct kernel truncated at 3σ. Both approximate the same Gaussian. |
+| Resize through stb's default filter, not CImg's quintic | deliberate | Different interpolator, same step. |
+| Block sums computed through an integral image rather than by filtering every pixel | deliberate, and strictly better | See below. This is the one change that moves the numbers, and it moves them the right way. |
+| Values are not bit-identical to pHash's | consequence of the three above | Reproducing them would mean reimplementing CImg's blur, resize and equaliser, for a comparison nothing here can run: there is no pHash build to check against. The construction and every parameter of it are reproduced; the arithmetic is not. |
+| Zero-crossings are not detected | **not a divergence** | Worth stating because the name invites it: Marr and Hildreth find edges as the zero-crossings of the filtered image, and *neither* pHash nor this code looks for one. The response is block-summed and thresholded against a local mean. The operator is theirs; the edge detector is not being implemented, by either. |
+
+Before 2.0.0 `ph_compute_mhash()` computed something else entirely — the sign of a
+four-neighbour discrete Laplacian on a stride-2 grid of an 18×18 image, 64 bits, no
+Gaussian, no scale — under this name. That was the defect; it is gone.
+
+### Folding the block sum into the kernel: faster, and more accurate
+
+The definition filters every pixel and then sums the response over each 16×16 block. The
+kernel tap does not depend on the pixel, so it comes out of the inner sum:
+
+> B(by,bx) = Σ<sub>ky,kx</sub> K[ky][kx] · Σ<sub>(y,x) ∈ block</sub> I(y+ky−half, x+kx−half)
+
+and what is left inside is a 16×16 box over the edge-replicated image, which an integral
+image answers in four lookups. That is 31·31·289 multiply-adds instead of 496·496·289 —
+**1.75 ms instead of 50 ms**, measured on a 400×400 JPEG.
+
+The accuracy matters more than the speed. The LoG kernel sums to nearly zero, so
+evaluating it per pixel in single precision is a sum of large products that almost
+entirely cancel; the error survives into the block sum. Folded, the inner sums are exact
+integers and only 289 terms accumulate, in double. Measured on the property corpus:
+**separability 1.81 evaluating the definition directly in float, 2.49 this way.** The test
+`test_mh_block_sums_match_the_direct_definition()` checks the folded result against the
+definition evaluated in double.
+
+One step of the source is dropped, provably without effect: it normalises the response to
+[0,1] before summing. The block sums are affine in the response, the window mean is affine
+in the block sums, and `value > mean` is invariant under an affine map with positive
+scale, so no bit can change.
+
+### Parameters, and why the defaults were not retuned
+
+`ph_context_set_mhash_params()` exposes α and level — pHash's own two parameters, which
+set the kernel's scale — and the size the image is normalised to, which pHash fixes at
+512. The ratio between the kernel's scale and the picture is the only thing in this
+algorithm that decides what it sees, and both knobs move it, so it was worth asking
+whether 512 and α = 2, level = 1 are good values.
+
+They were swept, 4 levels × 6 sizes, on two corpora. On the 128×128 corpus the result
+looked emphatic: separability rose monotonically as the scale coarsened, from 2.49 at the
+defaults to 4.72 at level 2.5 and size 96. **It is an artefact.** The corpus images are
+128 pixels across, so at a normalisation size near 128 the base image is not resampled at
+all while its transformed copies are — the measurement rewards the setting that happens to
+match the corpus. Repeating the sweep on the same corpus generated at 300×300 flattens it
+completely: every one of the 24 settings lands between 2.46 and 3.03, with no trend in
+either parameter.
+
+So the defaults stay the source's. What the sweep did establish is worth keeping:
+
+- **This library's property corpus understates any algorithm that normalises to a size
+  larger than the corpus.** On the 300×300 corpus mHash separates at **2.70**, second only
+  to BMH (3.25) and ahead of wHash 2.88 aside, against aHash 2.31, dHash 2.07, pHash 1.89,
+  ColorHash 1.82 and Radial 2.72. On the 128×128 corpus the same algorithm reads 2.49.
+- **A small local edit moves this hash less than a rescale does.** A patch covering 4% of
+  the frame measures 0.06–0.09 away at the default scale, where the benign transformations
+  measure 0.12–0.17. For finding an edited copy of a picture, that ordering is the wrong
+  way round; coarser scales partly repair it, inconsistently. The algorithm is a
+  coarse-structure descriptor and should not be relied on to notice small edits.
 
 ---
 
@@ -763,7 +818,7 @@ destroy. Taking such an algorithm and pinning its key to a public constant does 
 it; it removes the thing the paper proves and leaves an unvalidated feature extractor
 wearing a citation. This repository does not do that.
 
-**What follows for the three algorithms with no primary source.** wHash, mHash and
+**What follows for the algorithms with no primary source.** wHash and
 ColorHash are judged by measured properties rather than by conformance, and under this
 premise that is not a compromise. There is no paper describing an unkeyed deterministic
 wavelet hash because, in the security literature's terms, there is nothing to prove about
@@ -794,7 +849,8 @@ defect.
 The corollary is uncomfortable and is accepted: fixing a defect will make this library
 *disagree* more with ImageHash. That is the expected direction of travel.
 
-For the three algorithms with no primary source — wHash, mHash, ColorHash — only the
+For the algorithms with no primary source — wHash and ColorHash; mHash acquired one in
+2.0.0 — only the
 second half of the criterion can ever apply. They are judged by measurable properties
 alone, and the attribution headers say so rather than implying a specification exists.
 

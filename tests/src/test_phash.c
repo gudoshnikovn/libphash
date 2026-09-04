@@ -196,7 +196,10 @@ void test_phash_dirty_arena_determinism() {
     ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
     ph_context_set_phash_params(ctx, 32, 8);
     ASSERT_OK(ph_compute_whash(ctx, &scratch));
-    ASSERT_OK(ph_compute_mhash(ctx, &scratch));
+    {
+        ph_digest_t mh;
+        ASSERT_OK(ph_compute_mhash(ctx, &mh));
+    }
     ASSERT_OK(ph_compute_ahash(ctx, &scratch));
     ASSERT_OK(ph_compute_phash(ctx, &after_many));
     ASSERT_UINT64_EQ(clean, after_many);
