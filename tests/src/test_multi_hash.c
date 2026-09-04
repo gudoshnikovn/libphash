@@ -3,8 +3,7 @@
 #include <stdio.h>
 
 /* Every combination of the 6 ph_hash_flags_t bits, including the empty and full sets. */
-#define ALL_FLAGS_MASK                                                                             \
-    (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_COLOR_HASH)
+#define ALL_FLAGS_MASK (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH)
 
 static uint64_t reference_hash(ph_context_t *ctx, uint32_t flag) {
     uint64_t h = 0;
@@ -21,9 +20,6 @@ static uint64_t reference_hash(ph_context_t *ctx, uint32_t flag) {
             break;
         case PH_HASH_WHASH:
             err = ph_compute_whash(ctx, &h);
-            break;
-        case PH_HASH_COLOR_HASH:
-            err = ph_compute_color_hash(ctx, &h);
             break;
         default:
             fprintf(stderr, "reference_hash: unexpected flag %u\n", flag);
@@ -52,7 +48,7 @@ static void test_multi_matches_individual_calls(const char *filepath) {
         ASSERT_OK(ph_compute_multi(ctx_multi, flags, multi_out));
 
         int idx = 0;
-        for (uint32_t bit = 1; bit <= PH_HASH_COLOR_HASH; bit <<= 1) {
+        for (uint32_t bit = 1; bit <= PH_HASH_WHASH; bit <<= 1) {
             if (!(flags & bit))
                 continue;
             uint64_t expected = reference_hash(ctx_ref, bit);

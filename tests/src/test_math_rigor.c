@@ -112,47 +112,54 @@ void test_median_stability() {
     PASS("test_median_stability");
 }
 
-void test_hsv_singularities() {
-    // Exactly Black Boundary (Intensity < 32)
-    // Intensity = (r*299 + g*587 + b*114) / 1000
-    // Try almost 32 but below: e.g. RGB = (31, 31, 31) -> Intensity = 31.0
-    ph_hsv_result_t black_res = ph_hsv_classify_pixel(31.0f, 31.0f, 31.0f);
-    ASSERT_INT_EQ(PH_HSV_BLACK, black_res.category);
+/* The boundaries of the colour quantiser, at the values where a nudge changes the bin.
+ *
+ * The HSV classifier this used to exercise went with the ImageHash port in 2.0.0. The
+ * opponent-axis quantiser that replaced it has the same kind of edge, and the same reason
+ * to be pinned: an off-by-one at an axis end silently moves every pixel of one colour into
+ * the neighbouring bin. */
+void test_colour_quantiser_singularities() {
+    /* The extremes of each axis land in the extreme bins, not one past them. */
+    ASSERT_INT_EQ(PH_COLOR_BINS_RG - 1,
+                  ph_color_histogram_bin(255, 0, 0) / (PH_COLOR_BINS_BY * PH_COLOR_BINS_WB));
+    ASSERT_INT_EQ(0, ph_color_histogram_bin(0, 255, 0) / (PH_COLOR_BINS_BY * PH_COLOR_BINS_WB));
+    ASSERT_INT_EQ(PH_COLOR_BINS_WB - 1, ph_color_histogram_bin(255, 255, 255) % PH_COLOR_BINS_WB);
+    ASSERT_INT_EQ(0, ph_color_histogram_bin(0, 0, 0) % PH_COLOR_BINS_WB);
 
-    // Try almost 32 but slightly above: RGB = (33, 33, 33) -> Intensity 33.0, but S = 0 -> Gray
-    ph_hsv_result_t gray_res = ph_hsv_classify_pixel(33.0f, 33.0f, 33.0f);
-    ASSERT_INT_EQ(PH_HSV_GRAY, gray_res.category);
+    /* Neutral grey sits on one chroma bin whatever its brightness -- rg and by are both
+     * zero for it -- and that bin is the one the zero of each axis maps to. With six bins
+     * over a span whose zero is at the centre, that is bin 2, not bin 3: the centre falls
+     * on a boundary and integer division rounds down. Derived rather than written out, so
+     * that changing the bin counts does not silently invalidate the check. */
+    int grey_rg = (0 + 255) * PH_COLOR_BINS_RG / 511;
+    int grey_by = (0 + 510) * PH_COLOR_BINS_BY / 1021;
+    for (int v = 0; v <= 255; v += 51) {
+        int bin = ph_color_histogram_bin(v, v, v);
+        ASSERT_INT_EQ(grey_rg, bin / (PH_COLOR_BINS_BY * PH_COLOR_BINS_WB));
+        ASSERT_INT_EQ(grey_by, (bin / PH_COLOR_BINS_WB) % PH_COLOR_BINS_BY);
+    }
 
-    // Completely White
-    ph_hsv_result_t white_res = ph_hsv_classify_pixel(255.0f, 255.0f, 255.0f);
-    ASSERT_INT_EQ(PH_HSV_GRAY, white_res.category);
+    /* Every colour in the cube lands inside the histogram -- walked exhaustively, since
+     * the quantiser is three integer divisions and the whole cube is cheap. */
+    for (int r = 0; r < 256; r++)
+        for (int g = 0; g < 256; g += 5)
+            for (int b = 0; b < 256; b += 5) {
+                int bin = ph_color_histogram_bin(r, g, b);
+                if (bin < 0 || bin >= PH_COLOR_BINS) {
+                    fprintf(stderr, "[FAIL] rgb(%d,%d,%d) -> bin %d, outside 0..%d\n", r, g, b, bin,
+                            PH_COLOR_BINS - 1);
+                    exit(1);
+                }
+            }
 
-    // Primary Colors Singularities
-    ph_hsv_result_t red_res = ph_hsv_classify_pixel(255.0f, 0.0f, 0.0f);
-    // h = (0-0)/255 * 42.5 = 0. Bin = 0
-    ASSERT_INT_EQ(0, red_res.hue_bin);
-    ASSERT_INT_EQ(PH_HSV_BRIGHT, red_res.category);
-
-    ph_hsv_result_t green_res = ph_hsv_classify_pixel(0.0f, 255.0f, 0.0f);
-    // h = (2.0 + (0-0)/255) * 42.5 = 2.0 * 42.5 = 85.0. hue_bin = 2
-    ASSERT_INT_EQ(2, green_res.hue_bin);
-    ASSERT_INT_EQ(PH_HSV_BRIGHT, green_res.category);
-
-    // Note: Pure blue (0,0,255) has intensity < 32 and is classified as BLACK!
-    // So we add a little R and G to pass the intensity threshold.
-    ph_hsv_result_t blue_res = ph_hsv_classify_pixel(10.0f, 10.0f, 255.0f);
-    // h = (4.0 + (10-10)/245) * 42.5 = 170. hue_bin = 4
-    ASSERT_INT_EQ(4, blue_res.hue_bin);
-    ASSERT_INT_EQ(PH_HSV_BRIGHT, blue_res.category);
-
-    PASS("test_hsv_singularities");
+    PASS("test_colour_quantiser_singularities");
 }
 
 int main() {
     test_dct_orthogonality();
     test_dct2_scalar_reference_parity();
     test_median_stability();
-    test_hsv_singularities();
+    test_colour_quantiser_singularities();
 
     printf("\nAll Math Rigor tests passed!\n");
     return 0;

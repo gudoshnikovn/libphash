@@ -37,13 +37,13 @@ static const char *FIXTURES[] = {
 };
 #define NUM_FIXTURES (sizeof(FIXTURES) / sizeof(FIXTURES[0]))
 
-static const char *UINT64_ALGO_NAMES[PH_HASH_FLAGS_COUNT] = {"aHash", "dHash", "pHash", "wHash",
-                                                             "ColorHash"};
+static const char *UINT64_ALGO_NAMES[PH_HASH_FLAGS_COUNT] = {"aHash", "dHash", "pHash", "wHash"};
 
 typedef ph_error_t (*digest_fn_t)(ph_context_t *, ph_digest_t *);
-static const char *DIGEST_ALGO_NAMES[] = {"BMH", "ColorMoments", "Radial", "mHash"};
+static const char *DIGEST_ALGO_NAMES[] = {"BMH", "ColorMoments", "Radial", "mHash", "ColorHash"};
 static const digest_fn_t DIGEST_FNS[] = {ph_compute_bmh, ph_compute_color_moments_hash,
-                                         ph_compute_radial_hash, ph_compute_mhash};
+                                         ph_compute_radial_hash, ph_compute_mhash,
+                                         ph_compute_color_hash};
 #define NUM_DIGEST_ALGOS (sizeof(DIGEST_ALGO_NAMES) / sizeof(DIGEST_ALGO_NAMES[0]))
 
 typedef struct {
@@ -194,8 +194,7 @@ static void process_fixture(const char *filename, FILE *update_out) {
     }
 
     uint64_t hashes[PH_HASH_FLAGS_COUNT];
-    uint32_t flags =
-        PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_COLOR_HASH;
+    uint32_t flags = PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH;
     ASSERT_OK(ph_compute_multi(ctx, flags, hashes));
     for (int i = 0; i < PH_HASH_FLAGS_COUNT; i++)
         check_uint64(filename, UINT64_ALGO_NAMES[i], hashes[i], update_out);

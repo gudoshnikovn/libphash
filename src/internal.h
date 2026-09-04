@@ -118,15 +118,9 @@ static inline int ph_digests_comparable_as(const ph_digest_t *a, const ph_digest
            ph_digest_kind_allows(a, kind) && ph_digest_kind_allows(b, kind);
 }
 
-typedef enum { PH_HSV_BLACK = 0, PH_HSV_GRAY, PH_HSV_FAINT, PH_HSV_BRIGHT } ph_hsv_category_t;
-
-typedef struct {
-    ph_hsv_category_t category;
-    int hue_bin; // 0..5, valid only for FAINT/BRIGHT
-} ph_hsv_result_t;
-
-ph_hsv_result_t ph_hsv_classify_pixel(float r, float g, float b);
-uint64_t ph_pack_3bit_values(const double *values, int n);
+/* Which of the colour histogram's bins a pixel falls in. Exposed for the conformance
+ * test, which checks the quantisation against the axis definitions by hand. */
+int ph_color_histogram_bin(int r, int g, int b);
 
 float ph_get_pixel_bilinear(const uint8_t *img, int w, int h, float x, float y);
 double ph_projection_variance(const uint8_t *img, int w, int h, double cx, double cy,
@@ -293,6 +287,21 @@ _Static_assert(PH_RADIAL_PROJECTIONS >= PH_RADIAL_MIN_PROJECTIONS &&
 
 #define PH_COLOR_MOMENTS 3
 #define PH_COLOR_CHANNELS 3
+
+/* ColorHash: the opponent colour axes of Swain & Ballard, quantised. The resolution is
+ * this library's, chosen by measurement over sixteen candidates rather than by citation --
+ * the paper could not be obtained. See the header of src/hashes/color_histogram.c and
+ * docs/algorithm-provenance.md for the table and for why two higher-scoring candidates
+ * were rejected. */
+#define PH_COLOR_BINS_RG 6
+#define PH_COLOR_BINS_BY 6
+#define PH_COLOR_BINS_WB 3
+#define PH_COLOR_BINS (PH_COLOR_BINS_RG * PH_COLOR_BINS_BY * PH_COLOR_BINS_WB)
+
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+_Static_assert(PH_COLOR_BINS <= PH_DIGEST_MAX_BYTES,
+               "the colour histogram must fit a digest, one byte per bin");
+#endif
 
 #define PH_DEFAULT_GAMMA 2.2f
 #define PH_GAMMA_EPSILON 0.001f

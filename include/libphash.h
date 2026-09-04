@@ -543,16 +543,6 @@ PH_API PH_NODISCARD ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out
 PH_API PH_NODISCARD ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash);
 
 /**
- * @brief Computes the HSV ColorHash of the loaded image.
- *
- * Requires a color image: the loaded image must have at least 3 channels. On a
- * single-channel image — one loaded while ph_context_set_load_grayscale() was
- * enabled, or handed to ph_load_from_pixels() with @c channels = 1 — this returns
- * @c PH_ERR_REQUIRES_COLOR and leaves @p out_hash untouched.
- */
-PH_API PH_NODISCARD ph_error_t ph_compute_color_hash(ph_context_t *ctx, uint64_t *out_hash);
-
-/**
  * @brief Flags selecting which uint64_t hash algorithms to compute in a single
  *        `ph_compute_multi()` call. Bitwise-OR any combination.
  */
@@ -561,15 +551,16 @@ typedef enum {
     PH_HASH_DHASH = 1 << 1,
     PH_HASH_PHASH = 1 << 2,
     PH_HASH_WHASH = 1 << 3,
-    /* Bit 4 is retired. It was PH_HASH_MHASH, removed in 2.0.0 when the Marr-Hildreth
-     * hash became 576 bits and could no longer be a uint64_t; call ph_compute_mhash()
-     * directly. As with the error codes, a retired bit is not handed to a new flag --
-     * an old caller's `1 << 4` would otherwise silently mean something else. */
-    PH_HASH_COLOR_HASH = 1 << 5,
+    /* Bits 4 and 5 are retired. It was PH_HASH_MHASH, removed in 2.0.0 when the Marr-Hildreth
+     * hash became 576 bits and could no longer be a uint64_t, and bit 5 was
+     * PH_HASH_COLOR_HASH, removed in the same release when ColorHash became a 108-bin
+     * histogram. Call ph_compute_mhash() and ph_compute_color_hash() directly. As with
+     * the error codes, a retired bit is not handed to a new flag -- an old caller's
+     * `1 << 4` would otherwise silently mean something else. */
 } ph_hash_flags_t;
 
 /** Number of distinct bits defined in ph_hash_flags_t. Sizes ph_compute_multi's out[]. */
-#define PH_HASH_FLAGS_COUNT 5
+#define PH_HASH_FLAGS_COUNT 4
 
 /**
  * @brief Computes multiple uint64_t hash algorithms for the loaded image in one call.
@@ -715,6 +706,34 @@ PH_API PH_NODISCARD ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
                                                              ph_digest_t *out_digest);
 
 /**
+ * @brief Computes the colour histogram hash. Returns a 108-byte digest.
+ *
+ * The image's pixels are counted into 108 bins of the opponent colour space — red against
+ * green, blue against yellow, light against dark, at 6 x 6 x 3 — and each bin is scaled
+ * against the largest. This is a colour histogram with histogram intersection, after
+ * Swain & Ballard (1991); the paper itself could not be obtained, so it is implemented
+ * from secondary descriptions and no conformance to it is claimed. The quantisation is
+ * this library's own, chosen by measurement.
+ *
+ * Compare with ph_histogram_intersection(), not with the bit or vector metrics.
+ *
+ * Requires a colour image: the loaded image must have at least 3 channels. On a
+ * single-channel image — one loaded while ph_context_set_load_grayscale() was enabled, or
+ * handed to ph_load_from_pixels() with @c channels = 1 — this returns
+ * @c PH_ERR_REQUIRES_COLOR and leaves @p out_digest untouched.
+ *
+ * @note Changed completely in 2.0.0, signature included. It used to return a `uint64_t`
+ *       holding 42 bits of quantised PIL-HSV category fractions, ported from ImageHash,
+ *       which cites no source for it. Stored values do not carry over, and
+ *       `PH_HASH_COLOR_HASH` is gone from the multi-hash bitfield.
+ *
+ * @note Like every colour histogram it discards spatial layout entirely: an image and a
+ *       shuffling of its pixels hash identically. Use it alongside a structural hash, not
+ *       instead of one.
+ */
+PH_API PH_NODISCARD ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_digest);
+
+/**
  * @brief Computes the Marr-Hildreth hash. Returns a 72-byte (576-bit) digest.
  *
  * The image is blurred at sigma 1, normalised to 512x512 and histogram-equalised over 256
@@ -847,6 +866,31 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
  */
 PH_API PH_NODISCARD ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *b,
                                                     double *out_pcc);
+
+/**
+ * @brief Compares two colour histograms by their intersection: `sum(min(a_i, b_i))` over
+ *        bins, each histogram normalised by its own total.
+ *
+ * The measure Swain & Ballard define, and the reason a histogram is worth keeping: it
+ * counts only what the two images have in common, so a change of background or a partial
+ * overlap costs only the part that differs.
+ *
+ * Runs from 0.0 (no colour in common) to 1.0 (identical distributions). Two empty
+ * histograms score 1.0; an empty one against a populated one scores 0.0.
+ *
+ * @note Swain & Ballard normalise by the reference histogram, which makes their score
+ *       asymmetric when the two images hold different pixel counts. This normalises each
+ *       side by its own total, which agrees with them whenever the counts match and is
+ *       symmetric when they do not.
+ *
+ * @param a,b Digests of equal size, both from ph_compute_color_hash() (or untagged).
+ * @param out_similarity Receives the score. Untouched on error.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for a NULL argument, an invalid or
+ *         empty digest, two digests of different sizes, or a digest tagged as something
+ *         other than a histogram.
+ */
+PH_API PH_NODISCARD ph_error_t ph_histogram_intersection(const ph_digest_t *a, const ph_digest_t *b,
+                                                         double *out_similarity);
 
 /**
  * @brief Encodes a digest as a lowercase hex string (big-endian, i.e. data[0]

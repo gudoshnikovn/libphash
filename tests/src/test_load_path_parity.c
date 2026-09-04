@@ -109,8 +109,8 @@ static uint8_t *make_jpeg_with_orientation(const uint8_t *jpeg, size_t jpeg_len,
 typedef struct {
     ph_error_t err;
     int width, height, channels;
-    uint64_t ahash, dhash, phash, color;
-    ph_digest_t mhash;
+    uint64_t ahash, dhash, phash;
+    ph_digest_t mhash, color;
 } load_result_t;
 
 static load_result_t describe(ph_context_t *ctx, ph_error_t err) {
@@ -158,7 +158,11 @@ static void expect_same(const load_result_t *a, const load_result_t *b, const ch
         fprintf(stderr, "[FAIL] %s: file and memory disagree on mhash\n", what);
         exit(1);
     }
-    CHECK(color, "%llu")
+    if (a->color.size != b->color.size ||
+        memcmp(a->color.data, b->color.data, a->color.size) != 0) {
+        fprintf(stderr, "[FAIL] %s: file and memory disagree on color\n", what);
+        exit(1);
+    }
 #undef CHECK
 }
 

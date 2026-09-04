@@ -58,7 +58,7 @@ good at; the second is not in scope.
 | mHash | pHash (construction); Marr & Hildreth 1980 (operator) | implementation + paper | no |
 | BMH | Yang, Gu & Niu | paper, 2006 | no |
 | Radial | De Roover, De Vleeschouwer, Lefèbvre & Macq | paper, 2005 | **yes** — two divergences |
-| ColorHash | Johannes Buchner (ImageHash) | **none** | n/a |
+| ColorHash | Swain & Ballard (method); this library (quantisation) | paper, 1991 — **not read** | n/a — no conformance claimed |
 | ColorMoments | Stricker & Orengo | paper, 1995 | **yes** — skew sign, colour space |
 
 One cross-cutting caveat: `ph_resize_lanczos()`, used by aHash and dHash, does **not**
@@ -66,7 +66,7 @@ resample with Lanczos — it takes stb_image_resize2's default, which is Mitchel
 downscale. No source specifies a filter, so nothing is violated, but the name is wrong
 and the filter is not the one ImageHash uses.
 
-Two of the nine — wHash and ColorHash — have no primary source. For those, "correct" can only mean measured
+One of the nine — wHash — has no primary source. For those, "correct" can only mean measured
 robustness, discrimination and separability — never conformance to a specification,
 because there is none.
 
@@ -171,10 +171,21 @@ because there is none.
 
 Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
 
-- **ColorHash** (`ph_compute_color_hash`) — classifies every pixel as black, grey, or one
-  of six hue bins split into faint and bright, then encodes the 14 resulting fractions in
-  3 bits each. 64-bit output, 42 significant bits. No primary source; it is ImageHash's
-  `colorhash`, for which even ImageHash cites nothing.
+- **ColorHash** (`ph_compute_color_hash`) — a colour histogram: every pixel is counted
+  into one of 108 bins of the opponent colour space (red–green × blue–yellow × light–dark,
+  6 × 6 × 3), and two of them are compared with **`ph_histogram_intersection()`**, not with
+  a bit or vector metric. A colour histogram with histogram intersection, after Swain &
+  Ballard (1991) — the paper could not be obtained, so it is implemented from secondary
+  descriptions and no conformance to it is claimed; the quantisation is this library's,
+  chosen by measurement over sixteen candidates.
+  **Changed completely in 2.0.0**, signature included: it used to be a 42-bit port of
+  ImageHash's `colorhash`, for which even ImageHash cites nothing. Separability on the
+  test corpus went from 1.89 to 3.95. `PH_HASH_COLOR_HASH` is gone from the multi-hash
+  bitfield — call the function directly.
+  **Blind spots**, both inherent to a histogram and both asserted in the tests: it ignores
+  where the colours are, so a 90° rotation does not move it at all and neither does
+  shuffling the pixels; and flat colours that share a chroma bin and an intensity third —
+  black against dark grey, light grey against white — are indistinguishable.
 - **ColorMoments** (`ph_compute_color_moments_hash`) — the mean, standard deviation and
   skewness of each channel, 9 bytes. Follows the formulas of Stricker & Orengo.
   **⚠ Known divergence**: the sign of the skewness is discarded, which is the direction
@@ -230,7 +241,7 @@ methodology.
 | wHash | ★★ | ★ | ★★★ | ★★★★ | 64-bit |
 | Radial | ★ | ★★ — small angles, see §8 | ★★ | ★★★ | digest, 40 bytes |
 | BMH | ★★★ | ★ | ★★★ | ★★★★ | digest, 256-bit default |
-| ColorHash | ★★★ | ★★★★ | ★★★ | ★★★★★ | 64-bit (42 used) |
+| ColorHash | ★★★★ | ★★★★★ | ★★★ | ★★★★★ | digest, 108 bytes |
 | ColorMoments | ★★★ | ★★★★ | ★★★ | ★★★★★ | digest, 9 bytes |
 
 The two colour hashes are insensitive to rotation and scaling for a reason that is worth

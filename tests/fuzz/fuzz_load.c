@@ -18,7 +18,7 @@ int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
         (void)ph_compute_phash(ctx, &hash64);
         (void)ph_compute_whash(ctx, &hash64);
         (void)ph_compute_mhash(ctx, &hash64);
-        (void)ph_compute_color_hash(ctx, &hash64);
+        (void)ph_compute_color_hash(ctx, &digest);
         (void)ph_compute_bmh(ctx, &digest);
         (void)ph_compute_color_moments_hash(ctx, &digest);
         (void)ph_compute_radial_hash(ctx, &digest);

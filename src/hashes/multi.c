@@ -1,7 +1,6 @@
 #include "internal.h"
 
-#define PH_HASH_FLAGS_ALL                                                                          \
-    (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH | PH_HASH_COLOR_HASH)
+#define PH_HASH_FLAGS_ALL (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH)
 
 PH_API ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flags, uint64_t out[]) {
     if (!ctx || !ctx->image.is_loaded || !out || flags == 0 ||
@@ -29,11 +28,6 @@ PH_API ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flags, uint64_t o
     }
     if (flags & PH_HASH_WHASH) {
         if ((err = ph_compute_whash(ctx, &out[idx])) != PH_SUCCESS)
-            return err;
-        idx++;
-    }
-    if (flags & PH_HASH_COLOR_HASH) {
-        if ((err = ph_compute_color_hash(ctx, &out[idx])) != PH_SUCCESS)
             return err;
         idx++;
     }

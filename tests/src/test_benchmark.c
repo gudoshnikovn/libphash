@@ -159,7 +159,6 @@ void benchmark_hashing(ph_context_t *ctx, int iterations) {
                                           {"pHash", ph_compute_phash},
                                           {"wHash (Fast)", ph_compute_whash_fast_wrapper},
                                           {"wHash (Full)", ph_compute_whash_full_wrapper},
-                                          {"ColorHash", ph_compute_color_hash},
                                           {NULL, NULL}};
 
     for (int i = 0; uint64_algos[i].label; i++) {
@@ -188,6 +187,31 @@ void benchmark_hashing(ph_context_t *ctx, int iterations) {
     /* Digest-based (mHash, Radial): an order of magnitude or more slower per op, so they
      * get 1/10 of the iterations. Warmup is still taken from the full count -- a
      * cheap warmup on the slowest algorithm is the wrong place to save time. */
+    {
+        ph_bench_stats st;
+        for (int i = 0; i < warmup; i++) {
+            if (ph_compute_color_hash(ctx, &digest) != PH_SUCCESS) {
+                /* ignore for benchmark */
+            }
+        }
+        samples.n = 0;
+        for (int i = 0; i < iterations; i++) {
+            start = get_time_sec();
+            if (ph_compute_color_hash(ctx, &digest) != PH_SUCCESS) {
+                /* ignore for benchmark */
+            }
+            ph_bench_add(&samples, get_time_sec() - start);
+        }
+        st = ph_bench_summarize(&samples);
+        if (!g_json_output) {
+            ph_bench_print_row("ColorHash", &st, "");
+        } else {
+            printf(", {\"name\": \"ColorHash\", ");
+            ph_bench_print_json_stats(&st);
+            printf("}");
+        }
+    }
+
     {
         int mh_iters = iterations / 10;
         int mh_warmup;

@@ -302,6 +302,25 @@ The defaults are in the public header, `src/pHash.h.cmake`, and are worth quotin
 There is **no block-mean hash** in pHash today, although [Z10] says its author contributed
 one; see §6 of `algorithm-provenance.md`.
 
+### [SB91] Swain & Ballard 1991 — colour indexing
+
+M. J. Swain, D. H. Ballard, **"Color Indexing"**, *International Journal of Computer
+Vision* 7(1):11–32, 1991. doi:10.1007/BF00130487.
+
+The source for **ColorHash** since 2.0.0: a colour histogram over quantised opponent axes,
+compared by histogram intersection.
+
+**Not read.** IJCV is closed, OpenAlex reports `oa_status: closed` and no repository holds
+the full text; Swain's Rochester technical report (TR 360, 1990) is not freely available
+either. The method is taken from several independent secondary restatements, which by the
+ranking in [`algorithm-provenance.md`](algorithm-provenance.md) is **rank 4**. Cite it as
+*"a colour histogram with histogram intersection, after Swain & Ballard (1991), implemented
+from secondary descriptions"* — never as a conformant implementation of the paper.
+
+The paper's own quantisation (16×16×8 = 2048 bins) does not fit a `ph_digest_t`; the
+resolution this library uses was chosen by measurement, and the table is in §8 of the
+analysis.
+
 ### [CV] OpenCV `img_hash`
 
 <https://github.com/opencv/opencv_contrib/tree/master/modules/img_hash>. Apache-2.0.

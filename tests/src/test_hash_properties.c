@@ -312,7 +312,7 @@ static const char *ALGO_NAMES[A_COUNT] = {"aHash", "dHash",     "pHash",  "wHash
 
 typedef struct {
     uint64_t bits;   /* the 64-bit algorithms */
-    ph_digest_t dig; /* BMH, mHash, Radial */
+    ph_digest_t dig; /* BMH, mHash, Radial, ColorHash */
 } hash_set_t;
 
 static void hash_image(const image_t *im, hash_set_t out[A_COUNT]) {
@@ -326,7 +326,7 @@ static void hash_image(const image_t *im, hash_set_t out[A_COUNT]) {
     ASSERT_OK(ph_compute_whash(ctx, &out[A_WHASH].bits));
     ASSERT_OK(ph_compute_mhash(ctx, &out[A_MHASH].dig));
     ASSERT_OK(ph_compute_bmh(ctx, &out[A_BMH].dig));
-    ASSERT_OK(ph_compute_color_hash(ctx, &out[A_COLOR].bits));
+    ASSERT_OK(ph_compute_color_hash(ctx, &out[A_COLOR].dig));
     ASSERT_OK(ph_compute_radial_hash(ctx, &out[A_RADIAL].dig));
 
     ph_free(ctx);
@@ -342,6 +342,13 @@ static double distance(algo_t a, const hash_set_t *x, const hash_set_t *y) {
      * the digest is tagged PH_DIGEST_KIND_COEFFICIENTS and ph_l2_distance() refuses it,
      * which is the point of the tag. The pre-2.0.0 L2 numbers are recorded in
      * docs/algorithm-provenance.md section 7 instead. */
+    /* ColorHash is a histogram: the measure is its intersection, turned into a distance
+     * so that it sits on the same scale as the rest. */
+    if (a == A_COLOR) {
+        double inter = 0.0;
+        ASSERT_OK(ph_histogram_intersection(&x[a].dig, &y[a].dig, &inter));
+        return 1.0 - inter;
+    }
     if (a == A_RADIAL) {
         double pcc = 0.0;
         ASSERT_OK(ph_radial_similarity(&x[a].dig, &y[a].dig, &pcc));
@@ -352,10 +359,7 @@ static double distance(algo_t a, const hash_set_t *x, const hash_set_t *y) {
         ASSERT(d >= 0);
         return (double)d / (x[a].dig.size * 8.0);
     }
-    /* ColorHash occupies 42 of its 64 bits; the rest are always zero and would only
-     * dilute the distance, so it is normalised over the bits it actually uses. */
-    double width = (a == A_COLOR) ? 42.0 : 64.0;
-    return ph_hamming_distance(x[a].bits, y[a].bits) / width;
+    return ph_hamming_distance(x[a].bits, y[a].bits) / 64.0;
 }
 
 /* ---------------------------------------------------------------------------
@@ -424,7 +428,7 @@ static const bounds_t BOUNDS[A_COUNT] = {
     [A_WHASH] = {3.00, 0.080, 0.390},  /* 4.34 / 0.036 / 0.480 */
     [A_MHASH] = {1.80, 0.200, 0.380},  /* 2.49 / 0.165 / 0.487 -- but read the note */
     [A_BMH] = {3.50, 0.070, 0.390},    /* 5.21 / 0.031 / 0.478 */
-    [A_COLOR] = {1.30, 0.070, 0.090},  /* 1.89 / 0.031 / 0.123 */
+    [A_COLOR] = {2.80, 0.130, 0.700},  /* 3.95 / 0.089 / 0.849 */
     [A_RADIAL] = {1.80, 0.070, 0.180}, /* 2.46 / 0.032 / 0.263, by cross-correlation */
 };
 
@@ -441,13 +445,14 @@ static const bounds_t BOUNDS[A_COUNT] = {
  *
  * Three things the measurement says that are worth reading off it rather than assuming.
  *
- * ColorHash's inter-distance is low in absolute terms -- 0.123 where the structural
- * hashes sit near 0.48 -- and its floor is set accordingly. That is the algorithm, not a
- * fault: it is a 42-bit quantised histogram in which most bins are empty for most
- * images, so two unrelated images agree on a lot of zeroes. Its separability is still
- * 1.89 because its intra-distance is correspondingly tiny. Judge it by the gap, not by
- * the absolute distance, and do not compare its raw distances against a structural
- * hash's.
+ * ColorHash's inter-distance is the highest here -- 0.849, where the structural hashes
+ * sit near 0.48 -- because its distance is one minus a histogram intersection, and two
+ * unrelated pictures share little colour. That is a different scale from a normalised
+ * Hamming distance, whose expectation between unrelated hashes is 0.5 by construction.
+ * Compare its separability with the others; do not compare its raw distances with
+ * theirs. Until 2.0.0 it read 1.89 / 0.031 / 0.123, when it was the 42-bit ImageHash
+ * port -- most of whose bins were empty for most images, so unrelated pictures agreed on
+ * a great many zeroes.
  *
  * Radial's distances are not bits but quantised DCT coefficients compared by L2, so its
  * row is on a different footing from the rest even after normalisation; read its

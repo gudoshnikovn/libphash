@@ -649,28 +649,93 @@ default.
 
 ---
 
-## 8. ColorHash — HSV histogram hash
+## 8. ColorHash — colour histogram
 
-**Author:** Johannes Buchner, as `colorhash` in ImageHash.
+**Authors:** Michael Swain and Dana Ballard, for the method. The quantisation is this
+library's.
 
-**Primary source: none.** ImageHash's README gives no reference for `colorhash` — no
-paper, not even a blog post. The implementation *is* the specification, and it is rank
-4. This should be stated plainly in the attribution rather than implied to be more.
+**Primary source:** M. Swain, D. Ballard, "Color Indexing", *International Journal of
+Computer Vision* 7(1):11–32, 1991. **Not read.** IJCV is closed, OpenAlex reports
+`oa_status: closed` and no repository holds the full text; Swain's Rochester technical
+report (TR 360, 1990) is not freely available either. The intersection formula is
+confirmed by several independent restatements, which by this document's own ranking leaves
+the basis at **rank 4**. No conformance to the paper is claimed. The honest description,
+used in the code and in `references.md` alike: *a colour histogram with histogram
+intersection, after Swain & Ballard (1991), implemented from secondary descriptions.*
 
-**What the reference implementation does:** convert to the PIL "L" intensity
-`(299R + 587G + 114B)/1000` and to PIL's HSV, in which H, S and V are all 0–255; classify
-each pixel as black if intensity < 32, else grey if saturation < 85, else into one of 6
-hue bins, split into "faint" (saturation < 170) and "bright"; produce 14 fractions —
-black and grey over all pixels, the 12 hue buckets over the coloured pixels only — and
-encode each in `binbits = 3` bits.
+**What the secondary descriptions agree on:** quantise the colour space, count pixels per
+bin, compare two histograms by their intersection
 
-**What this implementation does** (`src/hashes/color_hsv.c`): the same, computed inline
-from RGB with the same thresholds (32, 85, 170), the same 6 hue bins, the same 14
-values, and `ph_pack_3bit_values()` writing 42 bits MSB-first from bit index 41
-downwards.
+> H(t, r) = Σ min(t_i, r_i) / Σ r_i
 
-**Delta:** none identified against the reference implementation. There is no primary
-source against which to find one.
+which is 1.0 for identical distributions and falls towards 0 as they diverge. The property
+it is taken for is that it counts only what the two images have in common, so a change of
+background or a partial overlap costs only the part that differs. The axes the paper uses
+are the opponent ones: `rg = R − G`, `by = 2B − R − G`, `wb = R + G + B`.
+
+**What this implementation does** (`src/hashes/color_histogram.c`): those three axes at
+6 × 6 × 3 = **108 bins**, one byte per bin scaled against the largest bin, compared by
+`ph_histogram_intersection()` with each side normalised by its own total.
+
+**What replaced what.** Until 2.0.0 this was a port of ImageHash's `colorhash`, for which
+ImageHash cites nothing at all — no paper, not even a blog post — with thresholds of 32, 85
+and 170 that appear in no source, 14 category fractions quantised to 3 bits each, 42 bits
+in a `uint64_t`. That was the weakest provenance of the nine algorithms. It is now a named,
+repeatedly described method with a real citation, and it measures better: separability
+**3.95** against 1.89, and 3.87 against 1.82 on a second corpus at a different resolution.
+
+### Choosing the quantisation, since the paper cannot supply it
+
+This is the measured-property regime, the same one wHash is in, and the measurement is the
+justification. Sixteen candidates, on both corpora; the two agree throughout, which is
+expected — a histogram does not resample the image, so the resolution confound that
+distorts §5's numbers does not arise here.
+
+| quantisation | bins | separability |
+|---|---|---|
+| RGB 3×3×3 | 27 | 2.74 |
+| RGB 4×4×4 | 64 | 2.38 |
+| RGB 5×5×5 | 125 | 2.02 |
+| HSV 8×4×4 | 128 | 3.07 |
+| HSV 12×3×3 | 108 | 2.90 |
+| opponent 4×4×4 | 64 | 2.13 |
+| opponent 5×5×4 | 100 | 2.48 |
+| opponent 5×5×5 | 125 | 2.77 |
+| opponent 6×4×4 | 96 | 2.45 |
+| opponent 6×5×4 | 120 | 2.58 |
+| opponent 6×6×2 | 72 | 2.69 |
+| **opponent 6×6×3** | **108** | **3.95** |
+| opponent 8×4×4 | 128 | 2.51 |
+| opponent 9×9×1 | 81 | 3.94 |
+| opponent 6×6×1 | 36 | **4.28** |
+
+**The two highest scores were rejected.** `6×6×1` and `9×9×1` drop the light–dark axis,
+which buys invariance to exposure — and makes a black image and a white image produce the
+same hash, along with every other pair of flat greys. A corpus of colourful pictures never
+notices; `test_color_hash_separates_flat_colours()` does, and exists so that a future
+retuning cannot make that trade quietly. This is the second time in this review that the
+best number on the corpus was the wrong answer, and the reason the corpus is never the only
+instrument.
+
+A perceptually spaced intensity axis was tried instead of the uniform one and is worse
+(3.67, and *more* grey collisions).
+
+**What 6 × 6 × 3 still cannot separate**, from the same check: flat colours whose chroma
+matches and whose total intensity falls in the same third — black against dark grey, light
+grey against white. Three intensity bins is what fits beside 6 × 6 chroma inside
+`PH_DIGEST_MAX_BYTES`, and chroma resolution is worth more here than intensity resolution
+(5×5×5 has no such collisions and separates at 2.77). The limit is asserted as a limit in
+the tests rather than left to be discovered.
+
+**Delta:**
+
+| Difference | Class | Note |
+|---|---|---|
+| Quantisation is 6×6×3 of the opponent axes | this library's, justified by measurement | The paper's own resolution is 16×16×8 = 2048 bins, far past a 128-byte digest. |
+| Bins scaled against the largest bin, not the pixel count | deliberate | With 108 bins the average bin holds under 1% of the image, which as a fraction of the total quantises to two or three of 255 levels. The comparison renormalises each side by its own sum, so nothing depends on the choice. |
+| Intersection normalised by each side's own total | deliberate | The formula as stated normalises by the reference histogram, which makes the score asymmetric when the two images hold different pixel counts. A comparison that depends on the order of its arguments is a defect. The two agree whenever the counts match. |
+| Spatial layout discarded entirely | inherent to the method | An image and a shuffling of its pixels hash identically, and a 90° rotation does not move the hash at all — asserted in the tests, since it is the property the algorithm exists for. Use it alongside a structural hash. |
+| A small local edit barely moves it | inherent, measured | A patch covering 4% of the frame moves the distance by 0.03, where the benign transformations move it by 0.09. A global statistic notices a local change in proportion to its area. |
 
 ---
 
@@ -849,8 +914,8 @@ defect.
 The corollary is uncomfortable and is accepted: fixing a defect will make this library
 *disagree* more with ImageHash. That is the expected direction of travel.
 
-For the algorithms with no primary source — wHash and ColorHash; mHash acquired one in
-2.0.0 — only the
+For the algorithms with no primary source — wHash alone, since mHash and ColorHash both
+acquired one in 2.0.0 — only the
 second half of the criterion can ever apply. They are judged by measurable properties
 alone, and the attribution headers say so rather than implying a specification exists.
 
