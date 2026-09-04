@@ -19,6 +19,18 @@ walkthrough.
 
 ### BREAKING CHANGES
 
+- **`ph_compute_color_hash()` is a colour histogram now, returns a 108-byte digest, and
+  `PH_HASH_COLOR_HASH` is gone.** What it used to be was a port of ImageHash's `colorhash`,
+  for which ImageHash cites nothing at all, with thresholds that appear in no source. It is
+  now 108 bins of the opponent colour space compared by **`ph_histogram_intersection()`** —
+  a colour histogram with histogram intersection, after Swain & Ballard (1991), implemented
+  from secondary descriptions since the paper could not be obtained. Separability on the
+  test corpus went from 1.89 to 3.95; the quantisation was chosen by measuring sixteen
+  candidates. The signature takes a `ph_digest_t*`, stored values do not carry over, and
+  `PH_HASH_FLAGS_COUNT` is 4 — the bitfield multi-hash now covers only the four algorithms
+  that really are 64-bit.
+  *Restore the old behaviour:* not possible; recompute any stored ColorHash values.
+
 - **`ph_compute_mhash()` is a real Marr-Hildreth hash now, returns a 72-byte digest, and
   `PH_HASH_MHASH` is gone.** What it used to compute was the sign of a four-neighbour
   discrete Laplacian on an 18×18 grid — 64 bits, no Gaussian, no scale — under a name it
