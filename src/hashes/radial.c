@@ -172,6 +172,8 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     /* The digest is the DCT coefficients, so its width no longer follows the angle
      * count: it is PH_RADIAL_COEFFS whatever the configuration. */
     out_digest->size = (uint8_t)PH_RADIAL_COEFFS;
+    out_digest->kind = (uint8_t)PH_DIGEST_KIND_COEFFICIENTS; /* quantised DCT coefficients: compare
+                                                                with ph_radial_similarity() */
 
     size_t img_size = (size_t)ctx->image.width * (size_t)ctx->image.height;
 

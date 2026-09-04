@@ -215,8 +215,96 @@ void test_digest_hex_roundtrip_random_and_uppercase() {
     PASS("test_digest_hex_roundtrip_random_and_uppercase");
 }
 
+/* The kind tag: it refuses a metric, it never picks one.
+ *
+ * Added in 2.0.0 because five of the nine algorithms now return digests and three
+ * different metrics apply to them. Comparing quantised DCT coefficients by Hamming
+ * distance, or a histogram by L2, gives a plausible number that means nothing; this makes
+ * the call fail instead. */
+static void test_digest_kind_refuses_the_wrong_metric(void) {
+    ph_digest_t bits, coeffs, vec;
+    memset(&bits, 0, sizeof(bits));
+    memset(&coeffs, 0, sizeof(coeffs));
+    memset(&vec, 0, sizeof(vec));
+    bits.size = coeffs.size = vec.size = 8;
+    for (int i = 0; i < 8; i++) {
+        bits.data[i] = (uint8_t)(0x0F * i);
+        coeffs.data[i] = (uint8_t)(0x0F * i);
+        vec.data[i] = (uint8_t)(0x0F * i);
+    }
+    bits.kind = (uint8_t)PH_DIGEST_KIND_BITS;
+    coeffs.kind = (uint8_t)PH_DIGEST_KIND_COEFFICIENTS;
+    vec.kind = (uint8_t)PH_DIGEST_KIND_VECTOR;
+
+    /* Each metric accepts its own kind. */
+    ASSERT_INT_EQ(0, ph_hamming_distance_digest(&bits, &bits));
+    ASSERT_FLOAT_EQ(0.0, ph_l2_distance(&vec, &vec), 1e-9);
+    double pcc = -9.0;
+    ASSERT_OK(ph_radial_similarity(&coeffs, &coeffs, &pcc));
+    ASSERT_FLOAT_EQ(1.0, pcc, 1e-9);
+
+    /* And refuses the others, rather than returning a number about nothing. */
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&coeffs, &coeffs));
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&vec, &vec));
+    ASSERT_FLOAT_EQ(-1.0, ph_similarity_digest(&coeffs, &coeffs), 1e-9);
+    ASSERT_FLOAT_EQ(-1.0, ph_l2_distance(&bits, &bits), 1e-9);
+    ASSERT_FLOAT_EQ(-1.0, ph_l2_distance(&coeffs, &coeffs), 1e-9);
+    pcc = -9.0;
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_radial_similarity(&bits, &bits, &pcc));
+    ASSERT_FLOAT_EQ(-9.0, pcc, 1e-9); /* untouched on refusal */
+
+    /* A mismatched pair is refused even when one side would be acceptable. */
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&bits, &coeffs));
+
+    /* Unspecified -- the zero a hand-filled struct holds -- is accepted everywhere, so a
+     * binding that never learned about the field behaves exactly as it did before. */
+    ph_digest_t plain;
+    memset(&plain, 0, sizeof(plain));
+    plain.size = 8;
+    memcpy(plain.data, bits.data, 8);
+    ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_UNSPECIFIED, plain.kind);
+    ASSERT_INT_EQ(0, ph_hamming_distance_digest(&plain, &plain));
+    ASSERT_FLOAT_EQ(0.0, ph_l2_distance(&plain, &plain), 1e-9);
+    ASSERT_OK(ph_radial_similarity(&plain, &plain, &pcc));
+    ASSERT_INT_EQ(0, ph_hamming_distance_digest(&plain, &bits));
+
+    /* A tag that is not a valid kind is not treated as "unspecified". */
+    ph_digest_t garbage = bits;
+    garbage.kind = 0xFF;
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&garbage, &garbage));
+
+    PASS("test_digest_kind_refuses_the_wrong_metric");
+}
+
+static void test_computed_digests_carry_their_kind(void) {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    if (ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg") != PH_SUCCESS) {
+        fprintf(stderr, "Skip: fixture missing\n");
+        ph_free(ctx);
+        return;
+    }
+    ph_digest_t d;
+    ASSERT_OK(ph_compute_bmh(ctx, &d));
+    ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_BITS, d.kind);
+    ASSERT_OK(ph_compute_radial_hash(ctx, &d));
+    ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_COEFFICIENTS, d.kind);
+    ASSERT_OK(ph_compute_color_moments_hash(ctx, &d));
+    ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_VECTOR, d.kind);
+
+    /* Decoded from text, nothing is claimed about the bytes. */
+    ph_digest_t from_text;
+    ASSERT_OK(ph_digest_from_hex("00ff8040", &from_text));
+    ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_UNSPECIFIED, from_text.kind);
+
+    ph_free(ctx);
+    PASS("test_computed_digests_carry_their_kind");
+}
+
 int main() {
     test_hash_to_hex();
+    test_digest_kind_refuses_the_wrong_metric();
+    test_computed_digests_carry_their_kind();
     test_digest_hex_roundtrip();
     test_digest_hex_errors();
     test_similarity();

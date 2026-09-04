@@ -21,6 +21,9 @@
 #include <string.h>
 
 #define GOLDEN_TOLERANCE_BITS 2
+/* The same allowance for digests whose bytes are numbers rather than bits: two levels of
+ * decoder noise per byte, not two bits over the whole digest. */
+#define GOLDEN_TOLERANCE_LEVELS 2
 
 static const char *FIXTURES[] = {
     "photo.jpeg",
@@ -125,13 +128,47 @@ static void check_digest(const char *filename, const char *algo, const ph_digest
     }
     ph_digest_t expected;
     ASSERT_OK(ph_digest_from_hex(expected_hex, &expected));
-    int dist = ph_hamming_distance_digest(&expected, value);
     g_checked++;
-    if (dist > GOLDEN_TOLERANCE_BITS) {
-        fprintf(
-            stderr,
-            "[FAIL] test_golden_hashes - %s/%s changed: golden=%s actual=%s (dist=%d, max %d)\n",
-            filename, algo, expected_hex, hex, dist, GOLDEN_TOLERANCE_BITS);
+    if (expected.size != value->size) {
+        fprintf(stderr, "[FAIL] test_golden_hashes - %s/%s changed size: %d -> %d\n", filename,
+                algo, expected.size, value->size);
+        g_mismatches++;
+        return;
+    }
+    expected.kind = value->kind;
+
+    /* Only a bit vector has a Hamming distance. For the digests that are quantised
+     * numbers -- the radial coefficients, the colour moments -- the analogue of "a couple
+     * of bits of decoder noise" is a couple of levels per byte, and asking for a Hamming
+     * distance instead gets the comparison refused and -1 returned, which a
+     * `dist > tolerance` test reads as "unchanged". That is how this file passed while
+     * every radial hash in it was wrong. */
+    if (value->kind == (uint8_t)PH_DIGEST_KIND_BITS ||
+        value->kind == (uint8_t)PH_DIGEST_KIND_UNSPECIFIED) {
+        int dist = ph_hamming_distance_digest(&expected, value);
+        if (dist < 0 || dist > GOLDEN_TOLERANCE_BITS) {
+            fprintf(stderr,
+                    "[FAIL] test_golden_hashes - %s/%s changed: golden=%s actual=%s (dist=%d, "
+                    "max %d)\n",
+                    filename, algo, expected_hex, hex, dist, GOLDEN_TOLERANCE_BITS);
+            g_mismatches++;
+        }
+        return;
+    }
+
+    int worst = 0;
+    for (int i = 0; i < value->size; i++) {
+        int diff = (int)expected.data[i] - (int)value->data[i];
+        if (diff < 0)
+            diff = -diff;
+        if (diff > worst)
+            worst = diff;
+    }
+    if (worst > GOLDEN_TOLERANCE_LEVELS) {
+        fprintf(stderr,
+                "[FAIL] test_golden_hashes - %s/%s changed: golden=%s actual=%s (worst byte "
+                "differs by %d, max %d)\n",
+                filename, algo, expected_hex, hex, worst, GOLDEN_TOLERANCE_LEVELS);
         g_mismatches++;
     }
 }

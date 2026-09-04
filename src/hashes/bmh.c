@@ -47,12 +47,13 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     size_t total_pixels = (size_t)block_size * (size_t)block_size;
 
     memset(out_digest, 0, sizeof(ph_digest_t));
+    out_digest->kind = (uint8_t)PH_DIGEST_KIND_BITS; /* one bit per block */
     size_t req_bytes = (total_pixels + 7) / 8;
     if (req_bytes > PH_DIGEST_MAX_BYTES) {
         /* Unreachable through the public API since 2.0.0: ph_context_set_block_params()
-         * rejects block_size > PH_BLOCK_MAX_SIZE (22), and 22*22 bits = 61 bytes is the
-         * largest grid that fits a ph_digest_t. Kept as defence in depth for a config
-         * field written by some other route (tests do exactly that).
+         * rejects block_size > PH_BLOCK_MAX_SIZE (32 since the digest grew to 128 bytes),
+         * and 32*32 bits = 128 bytes is the largest grid that fits a ph_digest_t. Kept as defence
+         * in depth for a config field written by some other route (tests do exactly that).
          *
          * Note what this branch does, and why the setter bound matters: it truncates the
          * reported digest size to 64 bytes but keeps hashing all `total_pixels` blocks,

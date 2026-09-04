@@ -94,6 +94,9 @@ static void test_digest_hamming_full_flip(void) {
     memset(&d1, 0xFF, sizeof(d1));
     memset(&d2, 0x00, sizeof(d2));
     d1.size = d2.size = 8;
+    /* The 0xFF fill also lands in `kind`, which is not a valid tag and is refused.
+     * Say what these bytes are. */
+    d1.kind = d2.kind = (uint8_t)PH_DIGEST_KIND_BITS;
     ASSERT_INT_EQ(64, ph_hamming_distance_digest(&d1, &d2));
     PASS("test_digest_hamming_full_flip");
 }

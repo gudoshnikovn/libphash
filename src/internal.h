@@ -77,6 +77,24 @@ static inline int ph_digest_is_comparable(const ph_digest_t *d) {
     return ph_digest_is_valid(d) && d->size > 0;
 }
 
+/* Whether a digest may be compared with a metric meant for `kind`.
+ *
+ * PH_DIGEST_KIND_UNSPECIFIED passes everything: it is what a hand-filled struct holds,
+ * since it is zero, and an FFI binding that never learned about the tag has to keep
+ * working. Anything else must match, so that Hamming distance over quantised DCT
+ * coefficients -- a plausible number that means nothing -- is refused rather than
+ * returned. The tag never selects a metric; it only rules one out. */
+static inline int ph_digest_kind_allows(const ph_digest_t *d, ph_digest_kind_t kind) {
+    return d->kind == (uint8_t)PH_DIGEST_KIND_UNSPECIFIED || d->kind == (uint8_t)kind;
+}
+
+/* Both digests valid, non-empty, of equal size, and compatible with `kind`. */
+static inline int ph_digests_comparable_as(const ph_digest_t *a, const ph_digest_t *b,
+                                           ph_digest_kind_t kind) {
+    return ph_digest_is_comparable(a) && ph_digest_is_comparable(b) && a->size == b->size &&
+           ph_digest_kind_allows(a, kind) && ph_digest_kind_allows(b, kind);
+}
+
 typedef enum { PH_HSV_BLACK = 0, PH_HSV_GRAY, PH_HSV_FAINT, PH_HSV_BRIGHT } ph_hsv_category_t;
 
 typedef struct {
@@ -161,11 +179,12 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
  * the "silently wrong answer" anti-pattern that H5/M12 are about. */
 
 /* BMH packs one bit per block, i.e. block_size^2 bits, into a ph_digest_t of at most
- * PH_DIGEST_MAX_BYTES bytes. 22*22 = 484 bits = 61 bytes fits; 23*23 = 529 bits =
- * 67 bytes does not. The two _Static_asserts below keep this tied to
- * PH_DIGEST_MAX_BYTES rather than to the literal 22.
- * block_size affects BMH only -- mHash uses a fixed 18x18 grid (src/hashes/mhash.c). */
-#define PH_BLOCK_MAX_SIZE 22
+ * PH_DIGEST_MAX_BYTES bytes. At the 128 bytes of 2.0.0: 32*32 = 1024 bits = 128 bytes
+ * fits exactly; 33*33 = 1089 bits = 137 bytes does not. The two _Static_asserts below
+ * keep this tied to PH_DIGEST_MAX_BYTES rather than to the literal, which is how the
+ * bound moved from 22 to 32 by itself when the digest grew.
+ * block_size affects BMH only -- mHash has its own fixed geometry. */
+#define PH_BLOCK_MAX_SIZE 32
 
 /* Since 2.0.0 the projection count is the number of ANGLES, and the digest width no
  * longer follows it: the hash is always PH_RADIAL_COEFFS DCT coefficients. So the bound
@@ -198,6 +217,8 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 _Static_assert((PH_BLOCK_MAX_SIZE * PH_BLOCK_MAX_SIZE + 7) / 8 <= PH_DIGEST_MAX_BYTES,
                "PH_BLOCK_MAX_SIZE bits must fit into a ph_digest_t");
+/* The tag is a uint8_t holding a ph_digest_kind_t; keep the two from drifting apart. */
+_Static_assert(PH_DIGEST_KIND_HISTOGRAM <= 255, "digest kinds must fit the tag byte");
 _Static_assert(((PH_BLOCK_MAX_SIZE + 1) * (PH_BLOCK_MAX_SIZE + 1) + 7) / 8 > PH_DIGEST_MAX_BYTES,
                "PH_BLOCK_MAX_SIZE must be the largest block size that fits, not smaller");
 _Static_assert(PH_RADIAL_COEFFS <= PH_DIGEST_MAX_BYTES,

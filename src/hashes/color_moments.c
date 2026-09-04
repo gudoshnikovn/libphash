@@ -44,6 +44,8 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
 
     memset(out_digest, 0, sizeof(ph_digest_t));
     out_digest->size = PH_COLOR_CHANNELS * PH_COLOR_MOMENTS;
+    out_digest->kind = (uint8_t)
+        PH_DIGEST_KIND_VECTOR; /* nine real-valued moments: compare with ph_l2_distance() */
 
     /* size_t, not int: width * height overflows int above ~46340x46340 (R03/H6). */
     size_t num_pixels = (size_t)ctx->image.width * (size_t)ctx->image.height;

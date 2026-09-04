@@ -47,9 +47,15 @@ extern "C" {
 
 // --- Constants ---
 
-/** Maximum size in bytes for any digest supported by the library (64 bytes =
- * 512 bits). */
-#define PH_DIGEST_MAX_BYTES 64
+/** Maximum size in bytes for any digest supported by the library (128 bytes =
+ * 1024 bits).
+ *
+ * Raised from 64 in 2.0.0. The widest digest the library produces is the Marr-Hildreth
+ * hash at 576 bits (72 bytes), which did not fit; the rest of the room is headroom for
+ * the colour histogram's bin count and is deliberate, so that the ABI does not have to
+ * move again inside this major. Note that @c ph_digest_t is passed and stored by value,
+ * so it now costs 136 bytes wherever one lives. */
+#define PH_DIGEST_MAX_BYTES 128
 
 // --- Error Codes ---
 
@@ -127,15 +133,40 @@ typedef struct ph_context ph_context_t;
 PH_API const char *ph_get_last_error_message(const ph_context_t *ctx);
 
 /**
+ * @brief What a digest's bytes mean, and therefore how two of them may be compared.
+ *
+ * Not every digest is a bit vector. Comparing quantised DCT coefficients by Hamming
+ * distance, or a histogram by L2, returns a plausible number that means nothing. This
+ * tag exists so that such a call **fails** instead: it is never used to pick a metric
+ * for you, only to refuse the wrong one.
+ *
+ * @c PH_DIGEST_KIND_UNSPECIFIED is what a hand-filled struct contains, since it is zero.
+ * Every comparison function accepts it — an FFI binding that fills in `data` and `size`
+ * and nothing else keeps working exactly as before, and gets no protection.
+ */
+typedef enum {
+    PH_DIGEST_KIND_UNSPECIFIED = 0,  ///< Not stated. Accepted by every comparison.
+    PH_DIGEST_KIND_BITS = 1,         ///< A bit vector. Hamming distance, similarity. BMH, mHash.
+    PH_DIGEST_KIND_COEFFICIENTS = 2, ///< Quantised transform coefficients. Radial.
+    PH_DIGEST_KIND_VECTOR = 3,       ///< Real-valued features in a byte each. ColorMoments.
+    PH_DIGEST_KIND_HISTOGRAM = 4     ///< Bin counts. Histogram intersection. ColorHash.
+} ph_digest_kind_t;
+
+/**
  * @brief A flat structure representing a hash digest.
  *
  * @note This structure is FFI-safe and can be allocated on the stack.
  * It does not own any heap memory.
+ *
+ * @note Grew in 2.0.0: `data` is 128 bytes rather than 64, and the byte after `size`
+ * is now the @c kind tag rather than padding. The struct is 136 bytes; any binding
+ * that hardcoded 72 must be rebuilt.
  */
 typedef struct {
     uint8_t data[PH_DIGEST_MAX_BYTES]; ///< The raw hash bytes.
     uint8_t size;                      ///< Number of valid bytes in 'data'.
-    uint8_t reserved[7];               ///< Padding for 64-bit alignment.
+    uint8_t kind;                      ///< A @c ph_digest_kind_t. 0 when not stated.
+    uint8_t reserved[6];               ///< Padding for 64-bit alignment.
 } ph_digest_t;
 
 // --- Lifecycle & Configuration ---
@@ -290,12 +321,13 @@ PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projection
  * @brief Sets the grid resolution for the Block Mean Hash (BMH).
  *
  * @param ctx The context.
- * @param block_size Resolution of the grid, 1..22 (default 16). BMH packs one bit per
+ * @param block_size Resolution of the grid, 1..32 (default 16). BMH packs one bit per
  *        block, i.e. `block_size * block_size` bits, into a @c ph_digest_t of at most
- *        PH_DIGEST_MAX_BYTES (64) bytes: 22x22 = 484 bits = 61 bytes fits, 23x23 = 529
- *        bits = 67 bytes does not. Above the bound, ph_compute_bmh() used to truncate the
- *        digest to 64 bytes, hash the full grid anyway and return @c PH_SUCCESS — a
- *        partial result indistinguishable from a complete one.
+ *        PH_DIGEST_MAX_BYTES (128) bytes: 32x32 = 1024 bits = 128 bytes fits exactly,
+ *        33x33 = 1089 bits = 137 bytes does not. The bound was 22 before 2.0.0 and moved
+ *        with the digest capacity, not by choice. Above the bound, ph_compute_bmh() used to
+ * truncate the digest to 64 bytes, hash the full grid anyway and return @c PH_SUCCESS — a partial
+ * result indistinguishable from a complete one.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
  *         out-of-range @p block_size.
  *
@@ -684,9 +716,20 @@ PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
  * enforced rather than trusted -- code that relied on the previous leniency will
  * now get an error instead of a value read past the end of the array.
  *
+ * Since 2.0.0 the `kind` tag is checked too. Each comparison below states the kind it
+ * is for, and refuses a digest tagged as something else: Hamming distance over
+ * quantised DCT coefficients returns a plausible number that means nothing, and this
+ * is how that call fails instead. PH_DIGEST_KIND_UNSPECIFIED -- the zero a hand-filled
+ * struct holds -- is accepted everywhere, so a binding that does not know about the
+ * field behaves exactly as before and simply gets no protection.
+ *
  *   - functions returning ph_error_t: PH_ERR_INVALID_ARGUMENT;
  *   - distance/similarity functions: -1 (also for a size of 0, which carries no
  *     bits to compare -- reporting distance 0 there would read as "identical").
+ *
+ * ph_hamming_distance_digest() and ph_similarity_digest() are for
+ * PH_DIGEST_KIND_BITS; ph_l2_distance() is for PH_DIGEST_KIND_VECTOR;
+ * ph_radial_similarity() is for PH_DIGEST_KIND_COEFFICIENTS.
  */
 PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b);
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b);

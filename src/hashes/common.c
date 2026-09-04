@@ -33,7 +33,7 @@ PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2) {
 }
 
 PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b) {
-    if (!ph_digest_is_comparable(a) || !ph_digest_is_comparable(b) || a->size != b->size)
+    if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_BITS))
         return -1;
 
     size_t len = a->size;
@@ -119,7 +119,7 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
 }
 
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b) {
-    if (!ph_digest_is_comparable(a) || !ph_digest_is_comparable(b) || a->size != b->size)
+    if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_VECTOR))
         return -1.0;
 
     double sum = 0;
@@ -136,7 +136,7 @@ PH_API double ph_similarity(uint64_t a, uint64_t b) {
 }
 
 PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b) {
-    if (!ph_digest_is_comparable(a) || !ph_digest_is_comparable(b) || a->size != b->size)
+    if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_BITS))
         return -1.0;
 
     int dist = ph_hamming_distance_digest(a, b);
@@ -169,8 +169,7 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b) {
  */
 PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *b,
                                        double *out_pcc) {
-    if (!out_pcc || !ph_digest_is_comparable(a) || !ph_digest_is_comparable(b) ||
-        a->size != b->size)
+    if (!out_pcc || !ph_digests_comparable_as(a, b, PH_DIGEST_KIND_COEFFICIENTS))
         return PH_ERR_INVALID_ARGUMENT;
 
     const int n = a->size;
@@ -270,6 +269,8 @@ PH_API ph_error_t ph_digest_from_hex(const char *hex, ph_digest_t *out) {
     }
     memset(out->data + n_bytes, 0, PH_DIGEST_MAX_BYTES - n_bytes);
     out->size = (uint8_t)n_bytes;
+    /* Decoded from text: nothing says what the bytes mean, so nothing is claimed. */
+    out->kind = (uint8_t)PH_DIGEST_KIND_UNSPECIFIED;
     memset(out->reserved, 0, sizeof(out->reserved));
     return PH_SUCCESS;
 }

@@ -304,7 +304,6 @@ typedef enum {
     A_BMH,
     A_COLOR,
     A_RADIAL,
-    A_RADIAL_PCC,
     A_COUNT
 } algo_t;
 
@@ -329,7 +328,6 @@ static void hash_image(const image_t *im, hash_set_t out[A_COUNT]) {
     ASSERT_OK(ph_compute_bmh(ctx, &out[A_BMH].dig));
     ASSERT_OK(ph_compute_color_hash(ctx, &out[A_COLOR].bits));
     ASSERT_OK(ph_compute_radial_hash(ctx, &out[A_RADIAL].dig));
-    out[A_RADIAL_PCC].dig = out[A_RADIAL].dig;
 
     ph_free(ctx);
 }
@@ -338,18 +336,16 @@ static double distance(algo_t a, const hash_set_t *x, const hash_set_t *y) {
     /* Radial is the one algorithm here whose digest is not a bit vector: its bytes are
      * quantised DCT coefficients, so Hamming distance over them means nothing and the
      * comparison is L2, normalised by the largest L2 two 40-byte digests can be apart. */
-    /* The same radial digest under the comparison its source specifies: the peak of the
-     * cross-correlation, mapped from [-1, 1] onto a distance in [0, 1] so that it sits on
-     * the same scale as every other row here. */
-    if (a == A_RADIAL_PCC) {
+    /* Radial is compared the way its source specifies -- the peak of the
+     * cross-correlation -- mapped from [-1, 1] onto a distance in [0, 1] so that it sits
+     * on the same scale as every other row here. There is deliberately no L2 row for it:
+     * the digest is tagged PH_DIGEST_KIND_COEFFICIENTS and ph_l2_distance() refuses it,
+     * which is the point of the tag. The pre-2.0.0 L2 numbers are recorded in
+     * docs/algorithm-provenance.md section 7 instead. */
+    if (a == A_RADIAL) {
         double pcc = 0.0;
         ASSERT_OK(ph_radial_similarity(&x[a].dig, &y[a].dig, &pcc));
         return (1.0 - pcc) / 2.0;
-    }
-    if (a == A_RADIAL) {
-        double d = ph_l2_distance(&x[a].dig, &y[a].dig);
-        ASSERT(d >= 0.0);
-        return d / (255.0 * sqrt((double)x[a].dig.size));
     }
     if (a == A_BMH) {
         int d = ph_hamming_distance_digest(&x[a].dig, &y[a].dig);
@@ -422,15 +418,14 @@ typedef struct {
 
 static const bounds_t BOUNDS[A_COUNT] = {
     /*             sep.  intra  inter        measured: sep / mean intra / mean inter   */
-    [A_AHASH] = {2.50, 0.100, 0.400},      /* 3.54 / 0.052 / 0.488 */
-    [A_DHASH] = {2.50, 0.120, 0.380},      /* 3.60 / 0.066 / 0.469 */
-    [A_PHASH] = {1.80, 0.260, 0.400},      /* 2.48 / 0.177 / 0.490 */
-    [A_WHASH] = {3.00, 0.080, 0.390},      /* 4.34 / 0.036 / 0.480 */
-    [A_MHASH] = {1.80, 0.200, 0.380},      /* 2.54 / 0.124 / 0.470 */
-    [A_BMH] = {3.50, 0.070, 0.390},        /* 5.21 / 0.031 / 0.478 */
-    [A_COLOR] = {1.30, 0.070, 0.090},      /* 1.89 / 0.031 / 0.123 */
-    [A_RADIAL] = {1.80, 0.100, 0.300},     /* 2.39 / 0.063 / 0.392 */
-    [A_RADIAL_PCC] = {1.80, 0.070, 0.180}, /* 2.46 / 0.032 / 0.263 */
+    [A_AHASH] = {2.50, 0.100, 0.400},  /* 3.54 / 0.052 / 0.488 */
+    [A_DHASH] = {2.50, 0.120, 0.380},  /* 3.60 / 0.066 / 0.469 */
+    [A_PHASH] = {1.80, 0.260, 0.400},  /* 2.48 / 0.177 / 0.490 */
+    [A_WHASH] = {3.00, 0.080, 0.390},  /* 4.34 / 0.036 / 0.480 */
+    [A_MHASH] = {1.80, 0.200, 0.380},  /* 2.54 / 0.124 / 0.470 */
+    [A_BMH] = {3.50, 0.070, 0.390},    /* 5.21 / 0.031 / 0.478 */
+    [A_COLOR] = {1.30, 0.070, 0.090},  /* 1.89 / 0.031 / 0.123 */
+    [A_RADIAL] = {1.80, 0.070, 0.180}, /* 2.46 / 0.032 / 0.263, by cross-correlation */
 };
 
 /* Three things the measurement says that are worth reading off it rather than assuming.
