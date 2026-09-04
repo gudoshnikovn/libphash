@@ -56,7 +56,7 @@ good at; the second is not in scope.
 | pHash | pHash project; documented by Zauner; coefficient rule from Coskun & Sankur | thesis, 2010 | no — follows the reference implementation |
 | wHash | this library, after ImageHash | **none** — see below | n/a — justified by measurement |
 | mHash | this library | **none** | n/a — the *name* is wrong, see below |
-| BMH | Yang, Gu & Niu | paper, 2006 | **yes** — no preset normalisation size |
+| BMH | Yang, Gu & Niu | paper, 2006 | no |
 | Radial | De Roover, De Vleeschouwer, Lefèbvre & Macq | paper, 2005 | **yes** — two divergences |
 | ColorHash | Johannes Buchner (ImageHash) | **none** | n/a |
 | ColorMoments | Stricker & Orengo | paper, 1995 | **yes** — skew sign, colour space |

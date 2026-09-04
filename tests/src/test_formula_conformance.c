@@ -422,10 +422,9 @@ static void test_haar_on_a_step_signal(void) {
  * ========================================================================= */
 
 static void test_block_means_on_an_exact_multiple(void) {
-    /* The source normalises the image to a preset size and averages non-overlapping
-     * blocks. Resampling straight to the block grid equals that only when the dimensions
-     * are an exact multiple -- which is why this test uses 64x64 into 8x8, and why it is
-     * the check that pins defect 8. */
+    /* The easy case: the dimensions are an exact multiple of the grid, so "the mean of
+     * each block" is unambiguous and the resampler has to reproduce it exactly.
+     * test_block_means_on_a_non_multiple() below is the one that matters. */
     const int W = 64, H = 64, G = 8, B = W / G;
     uint8_t *src = (uint8_t *)malloc((size_t)W * H);
     ASSERT_PTR_NOT_NULL(src);
@@ -453,6 +452,76 @@ static void test_block_means_on_an_exact_multiple(void) {
 
     free(src);
     printf("test_block_means_on_an_exact_multiple: PASSED\n");
+}
+
+/* The step the source has and this library does not, and why it is not needed.
+ *
+ * Yang, Gu and Niu's step (a) normalises the image to a preset size before blocking, and
+ * both implementations of the paper do it at 256x256. This library resamples straight to
+ * the block grid instead, which is only equivalent if the resampler computes a true area
+ * average -- otherwise the block mean of a source whose dimensions are not a multiple of
+ * the grid is not a block mean at all.
+ *
+ * It does. ph_resize_box() is stb_image_resize2 with STBIR_FILTER_BOX, whose support
+ * scales with the ratio, so each output pixel is the coverage-weighted average of exactly
+ * the source region behind it, fractional edges included. This test states that as an
+ * invariant on deliberately awkward sizes, because it is what licenses skipping the
+ * normalisation step -- and it is the better end of the trade: going through a 256x256
+ * intermediate adds a resampling stage, and measured on the corpus it costs separability
+ * (5.11 against 5.24). It also constrains the grid to divisors of the preset, which the
+ * 22x22 maximum is not. */
+static double exact_fractional_block_mean(const uint8_t *img, int w, int h, int bx, int by,
+                                          int grid) {
+    double x0 = (double)bx * w / grid, x1 = (double)(bx + 1) * w / grid;
+    double y0 = (double)by * h / grid, y1 = (double)(by + 1) * h / grid;
+    double sum = 0.0, weight = 0.0;
+    for (int y = (int)floor(y0); y < (int)ceil(y1); y++) {
+        double wy = fmin(y + 1.0, y1) - fmax((double)y, y0);
+        if (wy <= 0.0)
+            continue;
+        for (int x = (int)floor(x0); x < (int)ceil(x1); x++) {
+            double wx = fmin(x + 1.0, x1) - fmax((double)x, x0);
+            if (wx <= 0.0)
+                continue;
+            sum += wx * wy * img[(size_t)y * w + x];
+            weight += wx * wy;
+        }
+    }
+    return weight > 0.0 ? sum / weight : 0.0;
+}
+
+static void test_block_means_on_a_non_multiple(void) {
+    static const int SIZES[][2] = {{100, 100}, {401, 239}, {37, 53}, {64, 64}};
+    const int G = 8;
+
+    for (size_t c = 0; c < sizeof(SIZES) / sizeof(SIZES[0]); c++) {
+        int w = SIZES[c][0], h = SIZES[c][1];
+        uint8_t *src = (uint8_t *)malloc((size_t)w * h);
+        ASSERT_PTR_NOT_NULL(src);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                src[(size_t)y * w + x] = (uint8_t)((x * 7 + y * 13 + ((x * y) % 29) * 3) & 0xFF);
+
+        uint8_t got[64];
+        ph_resize_box(src, w, h, got, G, G);
+
+        for (int by = 0; by < G; by++)
+            for (int bx = 0; bx < G; bx++) {
+                double want = exact_fractional_block_mean(src, w, h, bx, by, G);
+                /* Half a level: the resampler rounds the same mean into a byte. Note this
+                 * holds no less tightly for 401x239 than for 64x64. */
+                if (fabs((double)got[by * G + bx] - want) > 0.51) {
+                    fprintf(stderr,
+                            "[FAIL] %dx%d block (%d,%d): box resample gave %d, the exact "
+                            "area-weighted block mean is %.3f\n",
+                            w, h, bx, by, got[by * G + bx], want);
+                    exit(1);
+                }
+            }
+        free(src);
+    }
+
+    printf("test_block_means_on_a_non_multiple: PASSED\n");
 }
 
 static int bmh_bits_set(const uint8_t *pixels, int w, int h, int block_size) {
@@ -592,6 +661,7 @@ int main(void) {
     test_haar_is_orthonormal();
     test_haar_on_a_step_signal();
     test_block_means_on_an_exact_multiple();
+    test_block_means_on_a_non_multiple();
     test_bmh_thresholds_on_the_median();
     test_colour_moments_match_the_definitions();
     test_colour_moments_digest_discards_the_skew_sign();

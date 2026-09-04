@@ -394,10 +394,39 @@ followed here; expect BMH values to differ from OpenCV's.
 |---|---|---|
 | Threshold is the median of the block means | **fixed in 2.0.0** | Was the arithmetic mean, contradicting step 4 and equation 3.9. Measured on the synthetic corpus: separability 5.21 → 5.24, mean intra 0.031 → 0.035, mean inter 0.478 → 0.482. Barely moves, which is expected — on ordinary images the mean and the median of a block-value distribution sit close together. The change is for conformance and for the balance property the paper depends on, not for a number. |
 | Median of an even count taken as the upper of the two central values | undefined | The paper does not say. This is the choice that preserves its property: with `≥`, exactly half the blocks clear the upper central value. Ties among block values can still unbalance it — they are bytes, and a flat image has many — and nothing in the method addresses that. |
-| No preset normalisation size; the image is resampled straight to the block grid | deliberate | The paper says "normalize the original image into a preset size" and then block-average; pHash uses 256×256. A box resample to 16×16 equals the block means only when the source dimensions are a multiple of 16 — otherwise source pixels are weighted across block boundaries. Fixing this means adding the intermediate normalisation step. |
+| No preset normalisation size; the image is resampled straight to the block grid | deliberate, and measured better | See below. |
 | Key-permuted block order omitted | deliberate | Also omitted by pHash. It is a security feature (unpredictability under a key), not a perceptual one, and the paper leaves the cipher unspecified. |
 | `≥` at the threshold | conforms | Matches equation 3.9. |
 | Bit packing LSB-first within a byte | undefined | The paper defines a bit sequence, not a byte layout. |
+
+**The missing normalisation step, and why it stays missing.** Step (a) normalises the
+image to a preset size before blocking, and both implementations of the paper do it at
+256×256. This library resamples straight to the block grid. That was filed as a defect on
+the reasoning that a resample to 16×16 equals the block means only when the source
+dimensions are a multiple of 16 — which is true of a naive resampler and false of this
+one. `ph_resize_box()` is stb_image_resize2 with `STBIR_FILTER_BOX`, whose support scales
+with the ratio, so every output pixel is the coverage-weighted average of exactly the
+source region behind it, fractional edges included.
+
+Measured against the exact area-weighted block mean computed in double precision, the
+largest deviation over 64 blocks is:
+
+| source | 64×64 | 100×100 | 401×239 | 37×53 |
+|---|---|---|---|---|
+| max deviation from the exact block mean | 0.500 | 0.499 | 0.485 | 0.497 |
+
+That is byte rounding, and it is no worse for the awkward sizes than for the exact
+multiple. The one-step form already computes what the paper defines.
+
+Doing it the paper's way was implemented and measured too: normalise to the largest
+multiple of the grid at or below 256, then average integer blocks. Separability on the
+synthetic corpus falls from 5.24 to **5.11**, which is what an extra resampling stage
+costs — the intermediate is not an exact area average, so it adds error the direct box
+resample does not have. It would also tie the grid to divisors of the preset, and the
+maximum grid this library accepts, 22×22, does not divide 256.
+
+So the step is skipped deliberately, the invariant that licenses skipping it is pinned by
+`test_block_means_on_a_non_multiple()`, and the row above is not a defect.
 
 ---
 
