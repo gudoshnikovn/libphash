@@ -2588,6 +2588,14 @@ static const STBIR__SIMDI_CONST(STBIR_topscale,      0x02000000);
 #endif
 #define STBIR_MEMCPY stbir_simd_memcpy
 
+/* libphash local patch (not upstream): this SIMD path defines STBIR_MEMCPY
+ * above, which makes the "#ifndef STBIR_MEMCPY ... #include <string.h>" guard
+ * further down in this file a no-op on SIMD builds, so <string.h> never gets
+ * pulled in on its own. A local patch elsewhere in this file (search for
+ * "libphash local patch") calls memset() directly and needs a real
+ * declaration for it regardless of which memcpy path is active. */
+#include <string.h>
+
 // override normal use of memcpy with much simpler copy (faster and smaller with our sized copies)
 static void stbir_simd_memcpy( void * dest, void const * src, size_t bytes )
 {
@@ -6832,13 +6840,20 @@ static void stbir__free_internal_mem( stbir__info *info )
     }
     for( i = 0 ; i < info->splits ; i++ )
     {
-      for( j = 0 ; j < info->alloc_ring_buffer_num_entries ; j++ )
+      /* libphash local patch (not upstream): ring_buffers itself can be NULL here
+       * (its own allocation failed, or this split was never reached before an
+       * earlier allocation failed) -- indexing into it unconditionally, as upstream
+       * does, dereferences a NULL float** and segfaults. */
+      if ( info->split_info[i].ring_buffers )
       {
-        #ifdef STBIR_SIMD8
-        if ( info->effective_channels == 3 )
-          --info->split_info[i].ring_buffers[j]; // avx in 3 channel mode needs one float at the start of the buffer
-        #endif
-        STBIR__FREE_AND_CLEAR( info->split_info[i].ring_buffers[j] );
+        for( j = 0 ; j < info->alloc_ring_buffer_num_entries ; j++ )
+        {
+          #ifdef STBIR_SIMD8
+          if ( info->effective_channels == 3 )
+            --info->split_info[i].ring_buffers[j]; // avx in 3 channel mode needs one float at the start of the buffer
+          #endif
+          STBIR__FREE_AND_CLEAR( info->split_info[i].ring_buffers[j] );
+        }
       }
 
       #ifdef STBIR_SIMD8
@@ -7140,14 +7155,72 @@ static stbir__info * stbir__alloc_internal_mem_and_build_samplers( stbir__sample
     stbir__sampler * possibly_use_horizontal_for_pivot = 0;
 
 #ifdef STBIR__SEPARATE_ALLOCATIONS
-    #define STBIR__NEXT_PTR( ptr, size, ntype ) if ( alloced ) { void * p = STBIR_MALLOC( size, user_data); if ( p == 0 ) { stbir__free_internal_mem( info ); return 0; } (ptr) = (ntype*)p; }
+    /* libphash local patch (not upstream): `info == 0` inside the failure branch
+     * identifies exactly one call site -- the very first STBIR__NEXT_PTR in this
+     * function, the one that allocates `info` itself. Every later call in this
+     * function only runs (STBIR__NEXT_PTR is a no-op while `alloced` is still 0,
+     * i.e. during the size-counting first pass) once `info` has already been
+     * allocated, so this branch cannot fire for them. If that first allocation
+     * fails, stbir__free_internal_mem(info) is a no-op (info is NULL), and
+     * `alloced` -- a small dummy block from the first pass, kept only so it is
+     * truthy on the second pass -- has nowhere else to be freed from, so it
+     * leaks. Free it explicitly in that one case. */
+    #define STBIR__NEXT_PTR( ptr, size, ntype ) if ( alloced ) { void * p = STBIR_MALLOC( size, user_data); if ( p == 0 ) { if ( info == 0 ) STBIR_FREE( alloced, user_data ); stbir__free_internal_mem( info ); return 0; } (ptr) = (ntype*)p; }
 #else
     #define STBIR__NEXT_PTR( ptr, size, ntype ) advance_mem = (void*) ( ( ((size_t)advance_mem) + 15 ) & ~15 ); if ( alloced ) ptr = (ntype*)advance_mem; advance_mem = (char*)(((size_t)advance_mem) + (size));
 #endif
 
     STBIR__NEXT_PTR( info, sizeof( stbir__info ), stbir__info );
 
+    /* libphash local patch (not upstream): under STBIR__SEPARATE_ALLOCATIONS, `info`
+     * from the STBIR__NEXT_PTR above is raw, unzeroed malloc() memory -- none of its
+     * fields are meaningful yet. If the very next allocation (info->split_info) fails,
+     * the STBIR__NEXT_PTR macro calls stbir__free_internal_mem(info) before assigning
+     * that pointer, so every not-yet-initialized field of `info` (info->split_info,
+     * info->splits, info->vertical.gather_prescatter_contributors, ...) is still
+     * garbage. stbir__free_internal_mem() then reads that garbage to decide what to
+     * free, which can dereference a garbage pointer and segfault (observed: SEGV in
+     * stbir__free_internal_mem() dereferencing info->split_info[0]). Zeroing `info`
+     * here makes every not-yet-allocated field a real NULL/0, so an early failure in
+     * this function is freed correctly instead of crashing. This diverges from
+     * upstream stb_image_resize2 and must be re-applied (and re-verified against the
+     * allocation-failure test) whenever this vendored file is bumped. */
+    if ( info )
+    {
+      memset( info, 0, sizeof( *info ) );
+      /* libphash local patch (not upstream): under STBIR__SEPARATE_ALLOCATIONS,
+       * `alloced` here is not a real buffer -- it is a 15-byte dummy block
+       * allocated purely so `alloced` is truthy on the second pass through this
+       * loop's STBIR__NEXT_PTR checks (see "is this the first time through loop?"
+       * further down, where alloced_total collapses to exactly 15 because
+       * advance_mem, only used by the merged-allocation path, never advances
+       * here). Upstream only records it onto info->alloced_mem much later (in the
+       * "initialize info fields" block below, after info->split_info has already
+       * been allocated), so a failure at info->split_info -- the very next
+       * allocation -- frees `info` but never learns about this dummy block, which
+       * leaks. Attaching it here, as soon as `info` exists, means any failure
+       * from this point on frees it correctly via stbir__free_internal_mem(). */
+      info->alloced_mem = alloced;
+    }
+
     STBIR__NEXT_PTR( info->split_info, sizeof( stbir__per_split_info ) * splits, stbir__per_split_info );
+
+    /* libphash local patch (not upstream): same reasoning as the memset above, one
+     * level down. info->split_info is itself a fresh, unzeroed malloc() of an array
+     * of stbir__per_split_info structs; each element's fields (decode_buffer,
+     * ring_buffers, ring_buffer, vertical_buffer) are populated one at a time by the
+     * "get all the per-split buffers" loop below, across further STBIR__NEXT_PTR
+     * calls that can themselves fail partway through. Until a given field's
+     * STBIR__NEXT_PTR call has actually run, it is still garbage, and
+     * stbir__free_internal_mem() walks every split/ring-buffer slot (using
+     * info->splits and info->alloc_ring_buffer_num_entries, already set below)
+     * unconditionally on failure, regardless of how far the loop got -- so a
+     * mid-loop failure reads and frees garbage pointers (observed: SEGV in
+     * stbir__free_internal_mem() dereferencing split_info[i].ring_buffers[j]).
+     * Zeroing the whole array up front makes every not-yet-populated field a real
+     * NULL, so partial failure is freed correctly. */
+    if ( info && info->split_info )
+      memset( info->split_info, 0, sizeof( stbir__per_split_info ) * splits );
 
     if ( info )
     {
@@ -7228,6 +7301,14 @@ static stbir__info * stbir__alloc_internal_mem_and_build_samplers( stbir__sample
       #endif
 
       STBIR__NEXT_PTR( info->split_info[i].ring_buffers, alloc_ring_buffer_num_entries * sizeof(float*), float* );
+      /* libphash local patch (not upstream): ring_buffers is itself an array of
+       * pointers, freshly malloc()'d and therefore full of garbage; the loop right
+       * below fills its entries one at a time via further STBIR__NEXT_PTR calls that
+       * can fail partway through. Zero it up front so an entry not yet reached by
+       * that loop is a real NULL (which STBIR__FREE_AND_CLEAR in
+       * stbir__free_internal_mem() safely skips) instead of garbage. */
+      if ( info && info->split_info[i].ring_buffers )
+        memset( info->split_info[i].ring_buffers, 0, alloc_ring_buffer_num_entries * sizeof(float*) );
       {
         int j;
         for( j = 0 ; j < alloc_ring_buffer_num_entries ; j++ )
@@ -7279,12 +7360,36 @@ static stbir__info * stbir__alloc_internal_mem_and_build_samplers( stbir__sample
       {
         // ring+decode memory is too small, so allocate temp memory
         STBIR__NEXT_PTR( vertical->gather_prescatter_contributors, vertical->gather_prescatter_contributors_size, stbir__contributors );
+        /* libphash local patch (not upstream): info->vertical is not copied from
+         * `vertical` (the caller's local sampler) until STBIR_MEMCPY further down in
+         * this function, but stbir__free_internal_mem() only knows to free this
+         * allocation via info->vertical.gather_prescatter_contributors. If the very
+         * next allocation (gather_prescatter_coefficients, or anything later in this
+         * function) fails, the block just allocated above is reachable only through
+         * the local `vertical` struct and is never freed -- a leak on the
+         * allocation-failure path. Mirror it onto `info` immediately so a later
+         * failure frees it correctly; the later STBIR_MEMCPY overwrites this with the
+         * same value once `vertical` is otherwise complete, so this is a no-op on the
+         * success path. */
+        if ( info )
+          info->vertical.gather_prescatter_contributors = vertical->gather_prescatter_contributors;
         STBIR__NEXT_PTR( vertical->gather_prescatter_coefficients, vertical->gather_prescatter_coefficients_size, float );
+        if ( info )
+          info->vertical.gather_prescatter_coefficients = vertical->gather_prescatter_coefficients;
       }
     }
 
     STBIR__NEXT_PTR( horizontal->contributors, horizontal->contributors_size, stbir__contributors );
+    /* libphash local patch (not upstream): same reasoning as the gather_prescatter
+     * mirroring above -- info->horizontal is not populated from `horizontal` until
+     * the STBIR_MEMCPY further down, so a failure in the very next allocation
+     * (horizontal->coefficients) would otherwise leak this block instead of freeing
+     * it via stbir__free_internal_mem(). */
+    if ( info )
+      info->horizontal.contributors = horizontal->contributors;
     STBIR__NEXT_PTR( horizontal->coefficients, horizontal->coefficients_size, float );
+    if ( info )
+      info->horizontal.coefficients = horizontal->coefficients;
 
     // are the two filters identical?? (happens a lot with mipmap generation)
     if ( ( horizontal->filter_kernel == vertical->filter_kernel ) && ( horizontal->filter_support == vertical->filter_support ) && ( horizontal->edge == vertical->edge ) && ( horizontal->scale_info.output_sub_size == vertical->scale_info.output_sub_size ) )
@@ -7306,7 +7411,13 @@ static stbir__info * stbir__alloc_internal_mem_and_build_samplers( stbir__sample
     }
 
     STBIR__NEXT_PTR( vertical->contributors, vertical->contributors_size, stbir__contributors );
+    /* libphash local patch (not upstream): same reasoning as the horizontal mirror
+     * above. */
+    if ( info )
+      info->vertical.contributors = vertical->contributors;
     STBIR__NEXT_PTR( vertical->coefficients, vertical->coefficients_size, float );
+    if ( info )
+      info->vertical.coefficients = vertical->coefficients;
 
    no_vert_alloc:
 

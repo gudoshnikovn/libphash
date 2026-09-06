@@ -264,6 +264,49 @@ If you add another file that includes a vendored header with known UB, prefer th
 same shape (isolated TU + narrowest possible `-fno-sanitize=<check>`) over a
 blanket suppression, and document it here.
 
+**Known vendor patch — OOM handling in `vendor/stb_image_resize2.h`.**
+Under ASan/UBSan (and generally whenever `assert()`-style debug allocators are
+in play) `stbir__alloc_internal_mem_and_build_samplers()` switches to
+`STBIR__SEPARATE_ALLOCATIONS`, where every internal buffer is `malloc()`'d one
+at a time instead of via one merged block. Upstream's out-of-memory handling
+in that mode has three independent bugs, each patched in place in the vendored
+header with a `/* libphash local patch (not upstream): ... */` comment
+explaining the reasoning at the point of the change (search the file for that
+marker — there are five call sites):
+
+- `stbir__info` (and, one level down, its `split_info` array and each split's
+  `ring_buffers` pointer array) is raw, unzeroed memory right after its own
+  allocation. If a *later* allocation in the same call fails,
+  `stbir__free_internal_mem()` walks these structures by count
+  (`info->splits`, `info->alloc_ring_buffer_num_entries`) and frees whatever
+  garbage pointers it finds in not-yet-populated fields — a segfault. Fixed by
+  zeroing each of these blocks immediately after its own successful
+  allocation, so an unpopulated field is a real `NULL` the free path can skip.
+- `stbir__free_internal_mem()` itself indexes into a split's `ring_buffers`
+  array without checking whether that array's own allocation succeeded,
+  dereferencing a null `float**` when it did not. Fixed by guarding that loop.
+- A handful of intermediate buffers (`vertical`'s gather/prescatter
+  contributors and coefficients, `horizontal`/`vertical` contributors and
+  coefficients, and a small internal 15-byte sentinel block used only to keep
+  the two-pass allocation loop's bookkeeping truthy) are recorded onto the
+  persistent `info` struct — the thing `stbir__free_internal_mem()` actually
+  knows how to free — only long after they are allocated. If a *subsequent*
+  allocation fails in between, the block is unreachable from `info` and
+  leaks. Fixed by mirroring each of these onto `info` immediately after its
+  own successful allocation, instead of waiting for the later bulk copy.
+
+Found and independently reproduced via the allocation-failure harness
+(`tests/src/alloc_shim.h` + `tests/src/test_alloc_failure.c`), which fails a
+chosen allocation ordinal and checks for crashes/leaks; before this patch, two
+of its five scenarios had to be skipped under sanitizer builds specifically
+because of these bugs. All five now run unconditionally.
+
+This diverges from upstream `stb_image_resize2` (present verbatim in current
+upstream master) and **must be re-applied and re-verified against
+`test_alloc_failure` under `make debug && make test`** on the next bump of
+this vendored file — a version bump alone will silently drop the patch and
+reopen the crash/leak.
+
 ## Adding New Features
 
 1.  **Header**: Add the public signature to `include/libphash.h`.
