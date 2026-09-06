@@ -373,6 +373,78 @@ static int shim_is_effective(void) {
 #endif
 }
 
+/* ---- stb "outofmem" pinning --------------------------------------------
+ *
+ * The scenarios above already cover this defect end to end: once src/loader.c maps
+ * stb_image's "outofmem" failure reason to PH_ERR_ALLOCATION_FAILED, every one of
+ * their failure points that lands inside stb_image's decode is accepted by check()'s
+ * ALLOW_ALLOC and stops being counted as a defect.
+ *
+ * That end-to-end result is not proof the fix is doing what it says, though: a
+ * differently-worded stb reason falling through to the PH_ERR_CORRUPT_DATA branch
+ * would look identical from here if some *other* allocation on the same call path
+ * happened to fail with PH_ERR_ALLOCATION_FAILED instead -- the scenario would still
+ * pass, for the wrong reason, and a real regression in ph_stb_reason_is_oom() would
+ * go unnoticed. This test closes that gap by checking the diagnostic message itself:
+ * it sweeps every allocation ordinal a clean JPEG decode makes and requires that at
+ * least one of the resulting failures leaves the literal reason "outofmem" behind
+ * (not merely a non-empty message), pinned via ph_get_last_error_message(). If a
+ * vendored stb_image update rewords that reason, ph_stb_reason_is_oom() in
+ * src/loader.c stops recognizing it and this assertion fails -- which is the point:
+ * see also test_stb_failure_classification() in tests/src/test_loader.c, which pins
+ * the sibling "unknown image type" mapping the same way. */
+static void test_stb_oom_reason_pinned(void) {
+    g_scenario = "stb outofmem reason";
+
+    ph_shim_arm(0);
+    ph_context_t *ctx = NULL;
+    if (ph_create(&ctx) != PH_SUCCESS) {
+        defect("could not create a context for the baseline pass");
+        ph_shim_disarm();
+        ph_shim_reset();
+        return;
+    }
+    ph_error_t baseline = ph_load_from_memory(ctx, g_jpeg.data, g_jpeg.size);
+    ph_free(ctx);
+    ph_shim_disarm();
+    long n = ph_shim_count();
+    ph_shim_reset();
+
+    if (baseline != PH_SUCCESS || n <= 0) {
+        defect("could not establish a clean baseline load to sweep allocations over");
+        return;
+    }
+
+    int saw_outofmem = 0;
+    for (long k = 1; k <= n; k++) {
+        g_fail_at = k;
+        ph_shim_arm(k);
+        ctx = NULL;
+        if (ph_create(&ctx) != PH_SUCCESS) {
+            ph_shim_disarm();
+            ph_shim_reset();
+            continue;
+        }
+        ph_error_t err = ph_load_from_memory(ctx, g_jpeg.data, g_jpeg.size);
+        if (err == PH_ERR_ALLOCATION_FAILED &&
+            strcmp(ph_get_last_error_message(ctx), "outofmem") == 0)
+            saw_outofmem = 1;
+        ph_free(ctx);
+        ph_shim_disarm();
+        ph_shim_reset();
+    }
+
+    if (!saw_outofmem)
+        defect("no injected allocation failure reproduced stb_image's literal "
+               "\"outofmem\" reason over %ld failure point(s) -- ph_stb_reason_is_oom() "
+               "may be stale against the vendored stb_image.h",
+               n);
+    else
+        printf("  %-24s stb \"outofmem\" reason reproduced and mapped to "
+               "PH_ERR_ALLOCATION_FAILED\n",
+               "stb oom pinning");
+}
+
 int main(void) {
     printf("Running allocation-failure tests...\n");
 
@@ -384,6 +456,8 @@ int main(void) {
 
     g_png = read_file(PNG_PATH);
     g_jpeg = read_file(JPEG_PATH);
+
+    test_stb_oom_reason_pinned();
 
     long total_points = 0;
     for (size_t i = 0; i < sizeof(SCENARIOS) / sizeof(SCENARIOS[0]); i++) {

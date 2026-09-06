@@ -22,10 +22,13 @@
  *      (test_input_to_error_code_table): each row feeds a real input through the
  *      public API and pins the code it must produce.
  *
- * Three codes have no row in part 3 because nothing a caller can pass reaches them;
- * see the comment on `unreachable_by_design` below.
+ * Two codes have no row in part 3 because nothing a caller can pass reaches them;
+ * see the comment on `unreachable_by_design` below. PH_ERR_ALLOCATION_FAILED used to
+ * be a third, but is now exercised directly (row_allocation_failed) using the same
+ * allocation-failure shim as tests/src/test_alloc_failure.c.
  */
 
+#include "alloc_shim.h"
 #include "test_macros.h"
 #include <libphash.h>
 #include <stdio.h>
@@ -487,12 +490,93 @@ static void row_message_is_about_this_call(ph_context_t *ctx) {
     printf("  message freshness            -> cleared by every failing entry point\n");
 }
 
-/* Three codes are declared and described but cannot be produced by any input a
+/* --- PH_ERR_ALLOCATION_FAILED: the decoder itself could not get memory ---
+ *
+ * Used to be listed as unreachable by construction below, because reaching it needs
+ * a real malloc() failure and this file had no hook to force one. It shares
+ * tests/src/alloc_shim.h with test_alloc_failure.c for that: the shim replaces
+ * malloc()/calloc()/realloc()/posix_memalign() for this whole statically-linked
+ * binary, so arming it for the length of one load reproduces the code without
+ * disturbing anything else in this file.
+ *
+ * Reachability, not one specific decode path, is what this row proves: which
+ * allocation ordinal fails (a header buffer, a scanline row, stb_image's own
+ * malloc()) depends on which decoder backend the build compiled in, so the loop
+ * below sweeps every ordinal a clean load makes and only requires that *some* of
+ * them reproduce the code. The stb-specific half of this defect -- that stb_image's
+ * own OOM path must report exactly PH_ERR_ALLOCATION_FAILED, pinned against the
+ * literal "outofmem" string stb_image itself uses -- is exercised separately and
+ * more precisely in tests/src/test_alloc_failure.c; a coincidental pass here would
+ * not catch that string changing. */
+static int oom_row_shim_effective(void) {
+#if !PH_SHIM_SUPPORTED
+    return 0;
+#else
+    ph_shim_arm(0);
+    void *p = malloc(1);
+    long seen = ph_shim_count();
+    free(p);
+    ph_shim_disarm();
+    ph_shim_reset();
+    return seen > 0;
+#endif
+}
+
+static void row_allocation_failed(ph_context_t *ctx) {
+    if (!oom_row_shim_effective()) {
+        printf("  %-28s -> SKIPPED (allocator shim does not intercept this build)\n",
+               "PH_ERR_ALLOCATION_FAILED");
+        return;
+    }
+
+    size_t len = 0;
+    unsigned char *jpeg = read_file(TEST_DATA_DIR "/photo.jpeg", &len);
+
+    ph_shim_arm(0);
+    ph_error_t baseline = ph_load_from_memory(ctx, jpeg, len);
+    ph_shim_disarm();
+    long n = ph_shim_count();
+    ph_shim_reset();
+    ASSERT_INT_EQ(PH_SUCCESS, baseline);
+    ASSERT(n > 0);
+
+    /* Leak accounting across these injected failures is not this row's job -- that is
+     * swept exhaustively, scenario by scenario with a fresh context each time, by
+     * tests/src/test_alloc_failure.c. This row only needs the code, so overflow/live
+     * are read (matching that file's own bookkeeping) but not asserted on here. */
+    int reproduced = 0;
+    for (long k = 1; k <= n && !reproduced; k++) {
+        ph_shim_arm(k);
+        ph_error_t err = ph_load_from_memory(ctx, jpeg, len);
+        ph_shim_disarm();
+        ASSERT(!ph_shim_overflowed());
+        (void)ph_shim_live();
+        if (err == PH_ERR_ALLOCATION_FAILED) {
+            ASSERT_INT_EQ(1, (int)ph_shim_injected());
+            reproduced = 1;
+        }
+        ph_shim_reset();
+    }
+    free(jpeg);
+
+    if (!reproduced) {
+        fprintf(stderr,
+                "[FAIL] PH_ERR_ALLOCATION_FAILED: no injected allocation failure "
+                "reproduced it over %ld allocation(s)\n",
+                n);
+        exit(1);
+    }
+    printf("  %-28s -> %s (injected)\n", "PH_ERR_ALLOCATION_FAILED",
+           ph_get_error_string(PH_ERR_ALLOCATION_FAILED));
+
+    /* Reload cleanly so the rows after this one start from a known state. */
+    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.png"));
+}
+
+/* Two codes are declared and described but cannot be produced by any input a
  * caller can construct. They are listed here rather than left unmentioned, because
  * "no test reaches it" is a fact about the code, not an oversight in this file:
  *
- *   PH_ERR_ALLOCATION_FAILED -- returned only where malloc() itself fails. Forcing
- *       that needs an allocator shim, which this build has no hook for.
  *   PH_ERR_NOT_IMPLEMENTED   -- src/batch.c returns it in the branch reached when
  *       the thread pool is absent AND more than one thread was requested; the
  *       clamp in ph_resolve_thread_count() makes that combination impossible, and
@@ -505,7 +589,6 @@ static void row_message_is_about_this_call(ph_context_t *ctx) {
  * They still have to describe themselves (part 1 covers that), and if one of them
  * ever becomes reachable it belongs in the table above. */
 static const error_code_entry_t unreachable_by_design[] = {
-    {PH_ERR_ALLOCATION_FAILED, "PH_ERR_ALLOCATION_FAILED"},
     {PH_ERR_NOT_IMPLEMENTED, "PH_ERR_NOT_IMPLEMENTED"},
     {PH_ERR_EMPTY_IMAGE, "PH_ERR_EMPTY_IMAGE"},
 };
@@ -518,6 +601,7 @@ static void test_input_to_error_code_table(ph_context_t *ctx) {
     row_image_too_large(ctx);
     row_decoder_unavailable(ctx);
     row_requires_color(ctx);
+    row_allocation_failed(ctx);
 
     for (size_t i = 0; i < sizeof(unreachable_by_design) / sizeof(*unreachable_by_design); i++) {
         printf("  %-28s -> %s (no reachable input)\n", "(not exercised)",

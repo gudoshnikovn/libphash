@@ -62,6 +62,32 @@ static int ph_stb_reason_is_unsupported(const char *reason) {
     return 0;
 }
 
+/* Same coupling as ph_stb_unsupported_reasons above, for the other reason worth telling
+ * apart: stb_image's own malloc()/realloc() calls failing mid-decode. Left unrecognized,
+ * this used to fall into PH_ERR_CORRUPT_DATA -- telling the caller the file is bad when
+ * the truth is the process ran out of memory, while the native decoder backends (jpeg.c,
+ * png.c, webp.c) already report their own malloc failures as PH_ERR_ALLOCATION_FAILED.
+ * Recognizing it here closes that gap between the stb-only build and native-decoder
+ * builds. test_stb_oom_reason_pinned() in tests/src/test_alloc_failure.c pins this
+ * literal against a real forced allocation failure (not just a mocked reason string);
+ * if a vendor bump reworks the wording, that test breaks and this array is where to fix
+ * it -- do not relax the assertion instead. */
+static const char *const ph_stb_oom_reasons[] = {
+    /* stbi__malloc()/stbi__malloc_mad*() etc., wherever stb_image's internal allocator
+     * returns NULL. */
+    "outofmem",
+};
+
+static int ph_stb_reason_is_oom(const char *reason) {
+    if (!reason)
+        return 0;
+    for (size_t i = 0; i < sizeof(ph_stb_oom_reasons) / sizeof(*ph_stb_oom_reasons); i++) {
+        if (strcmp(reason, ph_stb_oom_reasons[i]) == 0)
+            return 1;
+    }
+    return 0;
+}
+
 static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *h, int *ch,
                                   int req_comp, uint64_t max_pixels, ph_error_t *out_err,
                                   char *err_msg, size_t err_msg_cap) {
@@ -94,9 +120,14 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
         const char *reason = stbi_failure_reason();
         if (reason)
             ph_set_err_msg(err_msg, err_msg_cap, reason);
-        if (out_err)
-            *out_err = ph_stb_reason_is_unsupported(reason) ? PH_ERR_UNSUPPORTED_FORMAT
-                                                            : PH_ERR_CORRUPT_DATA;
+        if (out_err) {
+            if (ph_stb_reason_is_unsupported(reason))
+                *out_err = PH_ERR_UNSUPPORTED_FORMAT;
+            else if (ph_stb_reason_is_oom(reason))
+                *out_err = PH_ERR_ALLOCATION_FAILED;
+            else
+                *out_err = PH_ERR_CORRUPT_DATA;
+        }
         return NULL;
     }
     if (req_comp != 0)

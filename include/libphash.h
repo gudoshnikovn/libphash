@@ -66,7 +66,16 @@ extern "C" {
  * a removed code's value stays retired rather than being handed to a new one. */
 typedef enum {
     PH_SUCCESS = 0,
-    PH_ERR_ALLOCATION_FAILED = -1,
+    PH_ERR_ALLOCATION_FAILED = -1, ///< A malloc() somewhere on the call path returned NULL --
+                                   ///< the input was fine, the process just could not get the
+                                   ///< memory it needed right now. This is transient and worth
+                                   ///< retrying, unlike PH_ERR_CORRUPT_DATA below, which is a
+                                   ///< verdict on the input itself. Reported identically by the
+                                   ///< native decoder backends (jpeg.c/png.c/webp.c, on their
+                                   ///< own malloc() failing) and by the stb_image fallback (on
+                                   ///< stbi_load_from_memory() failing with its "outofmem"
+                                   ///< reason) -- the two used to disagree, with the stb path
+                                   ///< reporting PH_ERR_CORRUPT_DATA instead.
     /* -2 is retired: it was PH_ERR_DECODE_FAILED, removed in 2.0.0. It had stopped
      * being returned from anywhere while still being declared, so
      * `if (err == PH_ERR_DECODE_FAILED)` silently never fired and the compiler said
