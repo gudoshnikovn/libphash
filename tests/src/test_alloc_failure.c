@@ -323,35 +323,15 @@ typedef void (*scenario_fn)(int recording);
 typedef struct {
     const char *name;
     scenario_fn fn;
-    int resizes; /* see PH_TEST_STBIR_OOM_UNSAFE */
 } scenario_t;
 
 static const scenario_t SCENARIOS[] = {
-    {"ph_create", scen_create, 0},
-    {"load_from_file", scen_load_file, 0},
-    {"load_from_memory", scen_load_memory, 0},
-    {"load + every hash", scen_hash_all, 1},
-    {"batch over one context", scen_batch, 1},
+    {"ph_create", scen_create},
+    {"load_from_file", scen_load_file},
+    {"load_from_memory", scen_load_memory},
+    {"load + every hash", scen_hash_all},
+    {"batch over one context", scen_batch},
 };
-
-/* Under a sanitizer the vendored stb_image_resize2 switches to
- * STBIR__SEPARATE_ALLOCATIONS, and its out-of-memory path is broken there: when
- * the second of its internal allocations fails it calls
- * stbir__free_internal_mem() on a still-uninitialised stbir__info, which
- * segfaults (and leaks the block it did get). That is an upstream defect in
- * vendor/stb_image_resize2.h, not in libphash, so the scenarios that resize are
- * skipped in sanitizer builds instead of failing on it every run. */
-#if defined(__has_feature)
-#if __has_feature(address_sanitizer) || __has_feature(memory_sanitizer)
-#define PH_TEST_STBIR_OOM_UNSAFE 1
-#endif
-#endif
-#if defined(__SANITIZE_ADDRESS__)
-#define PH_TEST_STBIR_OOM_UNSAFE 1
-#endif
-#ifndef PH_TEST_STBIR_OOM_UNSAFE
-#define PH_TEST_STBIR_OOM_UNSAFE 0
-#endif
 
 /* ---- driver ------------------------------------------------------------ */
 
@@ -408,13 +388,6 @@ int main(void) {
     long total_points = 0;
     for (size_t i = 0; i < sizeof(SCENARIOS) / sizeof(SCENARIOS[0]); i++) {
         const scenario_t *s = &SCENARIOS[i];
-
-        if (PH_TEST_STBIR_OOM_UNSAFE && s->resizes) {
-            printf("  %-24s skipped (sanitizer build: upstream stb_image_resize2 "
-                   "crashes on allocation failure)\n",
-                   s->name);
-            continue;
-        }
 
         /* Pass 1: no injection. Counts the allocations and, for the hash
          * scenario, records the reference hashes. */
