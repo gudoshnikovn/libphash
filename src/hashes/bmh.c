@@ -74,8 +74,11 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     if (!block_data)
         return PH_ERR_ALLOCATION_FAILED;
 
-    ph_resize_box(full_gray, ctx->image.width, ctx->image.height, block_data, block_size,
-                  block_size);
+    if (!ph_resize_box(full_gray, ctx->image.width, ctx->image.height, block_data, block_size,
+                       block_size)) {
+        ctx->arena.offset = saved_offset;
+        return PH_ERR_ALLOCATION_FAILED;
+    }
 
     /* The median of the block values, by counting sort: they are bytes, so 256 buckets
      * settle it in one pass over the data instead of sorting up to 484 values.

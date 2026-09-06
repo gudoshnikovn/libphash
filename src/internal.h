@@ -13,13 +13,19 @@
 void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, int channels,
                      uint8_t *dst);
 
-/* Resizes a grayscale image using box sampling (averaging) */
-void ph_resize_box(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh);
+/* Resizes a grayscale image using box sampling (averaging). Returns 1 on success, 0 if
+ * the dimensions are degenerate or the underlying stb resize failed to allocate --
+ * either way `dst` is left untouched and the caller must not read it. */
+int ph_resize_box(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh);
 
-void ph_resize_lanczos(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh);
+/* Same contract as ph_resize_box(): returns 1 on success, 0 (dst untouched) otherwise. */
+int ph_resize_lanczos(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh);
 
-/* Applies a 3x3 Gaussian Blur to reduce noise */
-void ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst);
+/* Applies a 3x3 Gaussian Blur to reduce noise. Returns 1 on success -- including the
+ * legitimate memcpy passthrough for images smaller than the kernel -- and 0 only when
+ * the scratchpad allocation needed for images >= 3x3 fails, in which case `dst` is left
+ * untouched. */
+int ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst);
 
 /* Applies Gamma Correction (gamma=2.2) to normalize brightness */
 void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h);

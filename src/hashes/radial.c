@@ -191,7 +191,10 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     if (!blurred)
         return PH_ERR_ALLOCATION_FAILED;
 
-    ph_apply_gaussian_blur(ctx, gray, ctx->image.width, ctx->image.height, blurred);
+    if (!ph_apply_gaussian_blur(ctx, gray, ctx->image.width, ctx->image.height, blurred)) {
+        free(blurred);
+        return PH_ERR_ALLOCATION_FAILED;
+    }
     ph_apply_gamma(ctx, blurred, ctx->image.width, ctx->image.height);
 
     size_t saved_offset = ctx->arena.offset;

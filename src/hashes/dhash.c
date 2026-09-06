@@ -29,8 +29,9 @@ PH_API ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out_hash) {
 
     uint8_t hash_input[(PH_CORE_HASH_SIZE + 1) * PH_CORE_HASH_SIZE];
 
-    ph_resize_lanczos(gray_input, ctx->image.width, ctx->image.height, hash_input,
-                      PH_CORE_HASH_SIZE + 1, PH_CORE_HASH_SIZE);
+    if (!ph_resize_lanczos(gray_input, ctx->image.width, ctx->image.height, hash_input,
+                           PH_CORE_HASH_SIZE + 1, PH_CORE_HASH_SIZE))
+        return PH_ERR_ALLOCATION_FAILED;
 
     uint64_t hash = 0;
     for (int row = 0; row < PH_CORE_HASH_SIZE; row++) {

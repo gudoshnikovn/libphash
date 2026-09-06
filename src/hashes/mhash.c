@@ -208,7 +208,11 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
     uint8_t *work = arena;
     uint8_t *norm = arena + work_bytes;
 
-    ph_resize_lanczos(blurred, ctx->image.width, ctx->image.height, norm, n, n);
+    if (!ph_resize_lanczos(blurred, ctx->image.width, ctx->image.height, norm, n, n)) {
+        free(blurred);
+        ctx->arena.offset = saved_offset;
+        return PH_ERR_ALLOCATION_FAILED;
+    }
     free(blurred);
     ph_equalize_histogram(norm, npix, PH_MH_EQUALIZE_LEVELS);
 

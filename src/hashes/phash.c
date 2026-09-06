@@ -175,7 +175,11 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
         compute_dct_coefficients(dct_mat, dct_size);
     }
 
-    ph_resize_box(gray_full, ctx->image.width, ctx->image.height, dct_input, dct_size, dct_size);
+    if (!ph_resize_box(gray_full, ctx->image.width, ctx->image.height, dct_input, dct_size,
+                       dct_size)) {
+        ctx->arena.offset = saved_offset;
+        return PH_ERR_ALLOCATION_FAILED;
+    }
 
     ph_error_t err = ph_dct2_partial(dct_mat, dct_input, dct_size, reduction_size, dct_out);
     if (err != PH_SUCCESS) {
