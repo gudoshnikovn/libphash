@@ -223,6 +223,19 @@ walkthrough.
 
 ### Added
 
+- **`ph_context_set_whash_remove_max_haar_ll()`** exposes ImageHash's `remove_max_haar_ll`,
+  which zeroes the coarsest Haar LL band before the working decomposition. It defaults to
+  **off**, and turning it on does nothing: zeroing that single coefficient and
+  reconstructing subtracts the image mean from every sample, a constant subtraction shifts
+  the working LL band and its median alike, and a hash thresholded at the median is blind
+  to it — which is equally true of ImageHash, where the option is on by default. All the
+  test fixtures hash bit for bit identically either way. It is off rather than on because
+  the only thing it can change is the tie-breaking of coefficients that land exactly on the
+  median, which the extra transform pair decides by rounding error: on the synthetic corpus
+  that moves 49 of 192 images and costs separability 4.34 → 3.43 for no gain. The setter
+  exists for callers who need to mirror ImageHash's configuration. wHash values are
+  unchanged from 1.x by this.
+
 - **A stated scope and threat model.** The README now says what the library is for —
   deduplicating a collection you control — and, more importantly, what it is not for.
   Every hash here is deterministic and unkeyed, which is what makes deduplication work
