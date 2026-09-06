@@ -423,6 +423,11 @@ walkthrough.
 - `make clean` removes stray `*.o` files left outside `obj/`.
 - UBSan alignment noise originating in the vendored `stb_image_resize2.h` is
   suppressed, so the sanitizer output is actionable again.
+- Resizing and Gaussian blur reported an allocation failure as `PH_SUCCESS` with a
+  hash computed over stack or heap garbage. `ph_resize_box()`, `ph_resize_lanczos()`
+  and `ph_apply_gaussian_blur()` now propagate the failure, so aHash, dHash, pHash,
+  wHash, mHash, BMH and Radial return `PH_ERR_ALLOCATION_FAILED` instead of a value
+  indistinguishable from a real hash. No hash value changes on the success path.
 
 ### Security
 
