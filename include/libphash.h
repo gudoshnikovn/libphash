@@ -618,6 +618,14 @@ typedef enum {
  * in particular @c PH_HASH_COLOR_HASH on a grayscale image fails the whole call with
  * @c PH_ERR_REQUIRES_COLOR (see ph_compute_color_hash()).
  *
+ * On such a failure @p out is left partially written: the slots of the algorithms that
+ * ran before the failing one hold their correct hashes, and the failing algorithm's slot
+ * and every slot after it are untouched — not zeroed. There is no way to tell how far it
+ * got from @p out alone, so a caller that gets a non-@c PH_SUCCESS return must treat the
+ * whole array as unusable, or re-request the algorithms it still wants one at a time.
+ * On @c PH_SUCCESS exactly as many slots as there are bits in @p flags are written, and
+ * nothing beyond them is ever touched.
+ *
  * @param ctx The context. Must have an image already loaded.
  * @param flags Bitwise-OR of `ph_hash_flags_t` values selecting which hashes to compute.
  * @param[out] out Array written with one uint64_t per flag that was set, in ascending
