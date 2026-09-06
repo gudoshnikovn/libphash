@@ -432,6 +432,11 @@ walkthrough.
   allocations failed under AddressSanitizer's separate-allocation mode (reachable
   only under real memory pressure with a sanitizer build). Patched locally pending
   an upstream fix.
+- The `stb_image` decoder fallback reported an out-of-memory condition during decode
+  as `PH_ERR_CORRUPT_DATA` — a verdict on the input file, when the file was fine and
+  the process simply ran out of memory. It now reports `PH_ERR_ALLOCATION_FAILED`,
+  matching what the native JPEG/PNG/WebP backends already reported for their own
+  allocation failures.
 
 ### Security
 
