@@ -225,6 +225,74 @@ void test_stb_fallback_formats() {
     printf("test_stb_fallback_formats: PASSED\n");
 }
 
+// Grayscale loading through the stb_image fallback, which is the one decoder path that
+// cannot be configured away: BMP and GIF have no native backend in any build, so this
+// exercises `*ch = req_comp` in ph_decode_stb_mem() (src/loader.c) whatever the native
+// decoders are compiled in. The native JPEG/PNG grayscale paths are covered elsewhere in
+// this file; in a stb-only build those tests hit this code too, and in a full CMake build
+// nothing did before.
+//
+// Only the channel count is asserted against a reference: stb_image converts to gray with
+// its own coefficients, so its pixel values are deliberately not compared with
+// ph_to_grayscale()'s -- see check_png_backend_parity() for why that exactness is asked of
+// libpng/spng and not of stb.
+void test_grayscale_via_stb_fallback() {
+    struct {
+        const char *name;
+        const uint8_t *data;
+        size_t len;
+        int w, h;
+    } cases[] = {
+        {"bmp bottom-up", bmp_bottomup, sizeof(bmp_bottomup), 2, 2},
+        {"bmp top-down", bmp_topdown, sizeof(bmp_topdown), 2, 2},
+        {"gif", mini_gif, sizeof(mini_gif), 1, 1},
+    };
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        ph_context_t *ctx = NULL;
+        ASSERT_OK(ph_create(&ctx));
+        ASSERT_OK(ph_context_set_load_grayscale(ctx, 1));
+
+        ph_error_t err = ph_load_from_memory(ctx, cases[i].data, cases[i].len);
+        if (err != PH_SUCCESS) {
+            fprintf(stderr, "[FAIL] test_grayscale_via_stb_fallback: %s failed with %d (%s)\n",
+                    cases[i].name, err, ph_get_error_string(err));
+            exit(1);
+        }
+
+        int w, h, ch;
+        ph_context_get_dimensions(ctx, &w, &h, &ch);
+        ASSERT_INT_EQ(cases[i].w, w);
+        ASSERT_INT_EQ(cases[i].h, h);
+        ASSERT_INT_EQ(1, ch); // the whole point: the request was honoured
+        ASSERT_INT_EQ(1, ph_is_loaded(ctx));
+
+        // A single-channel image really is single-channel as far as the rest of the
+        // library is concerned: grayscale hashes work, colour ones refuse.
+        uint64_t hash = 0;
+        ASSERT_OK(ph_compute_ahash(ctx, &hash));
+        ph_digest_t d;
+        ASSERT_INT_EQ(PH_ERR_REQUIRES_COLOR, ph_compute_color_hash(ctx, &d));
+
+        // Same buffer without the flag must come back with colour channels, so that the
+        // assertion above is about the request and not about the fixture. The exact count
+        // is the format's business -- stb hands back 3 for the BMPs and 4 for the GIF --
+        // so what matters here is only that it is not 1.
+        ph_context_t *rgb_ctx = NULL;
+        ASSERT_OK(ph_create(&rgb_ctx));
+        ASSERT_OK(ph_context_set_load_grayscale(rgb_ctx, 0));
+        ASSERT_OK(ph_load_from_memory(rgb_ctx, cases[i].data, cases[i].len));
+        int rw, rh, rc;
+        ph_context_get_dimensions(rgb_ctx, &rw, &rh, &rc);
+        ASSERT(rc >= 3);
+
+        ph_free(rgb_ctx);
+        ph_free(ctx);
+    }
+
+    printf("test_grayscale_via_stb_fallback: PASSED\n");
+}
+
 void test_bmp_negative_height_not_too_large() {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
@@ -492,6 +560,7 @@ int main() {
     test_memory_loading();
     test_loader_edge_cases();
     test_stb_fallback_formats();
+    test_grayscale_via_stb_fallback();
     test_bmp_negative_height_not_too_large();
     test_bmp_extreme_aspect_ratio_rejected();
     test_stb_failure_classification();
