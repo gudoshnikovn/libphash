@@ -1,6 +1,7 @@
 #include "libphash.h"
 #include "test_macros.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Every combination of the 6 ph_hash_flags_t bits, including the empty and full sets. */
@@ -204,6 +205,137 @@ static void test_hash_buffers_invalid_args() {
     PASS("test_hash_buffers_invalid_args");
 }
 
+static uint8_t *read_whole_file(const char *path, size_t *out_size) {
+    FILE *f = fopen(path, "rb");
+    ASSERT_PTR_NOT_NULL(f);
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    ASSERT(size > 0);
+    uint8_t *buf = malloc((size_t)size);
+    ASSERT_PTR_NOT_NULL(buf);
+    ASSERT(fread(buf, 1, (size_t)size, f) == (size_t)size);
+    fclose(f);
+    *out_size = (size_t)size;
+    return buf;
+}
+
+/* ph_hash_files() has test_hash_files_partial_failure(); the buffer version had nothing
+ * equivalent, so its per-item failure path -- the one the batch is supposed to survive --
+ * was never taken with real broken input.
+ *
+ * The malformed entries are deliberately of different kinds, because the contract is that
+ * every one of them lands in `status` and none of them reaches the return value: a NULL
+ * pointer and a zero length (rejected before any decoder sees them), bytes of no
+ * recognizable format, and a truncated PNG (recognized, then undecodable). The valid
+ * items around them must still come out bit-identical to a single-image hash of the same
+ * bytes -- a batch that gives up quietly on a neighbour's failure is the defect this
+ * guards. */
+static void test_hash_buffers_partial_failure() {
+    size_t png_size = 0, jpeg_size = 0;
+    uint8_t *png = read_whole_file(TEST_DATA_DIR "/photo_complex.png", &png_size);
+    uint8_t *jpeg = read_whole_file(TEST_DATA_DIR "/photo.jpeg", &jpeg_size);
+    ASSERT(png_size > 64);
+
+    const uint8_t junk[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+                            0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
+    const uint32_t flags = PH_HASH_AHASH | PH_HASH_DHASH;
+    int thread_counts[] = {1, 0, 4};
+
+    for (size_t tc = 0; tc < sizeof(thread_counts) / sizeof(thread_counts[0]); tc++) {
+        ph_batch_buffer_item_t items[6] = {
+            {.buffer = jpeg, .length = jpeg_size},
+            {.buffer = NULL, .length = jpeg_size},
+            {.buffer = junk, .length = sizeof(junk)},
+            {.buffer = png, .length = 40}, /* valid PNG signature, truncated body */
+            {.buffer = png, .length = 0},
+            {.buffer = png, .length = png_size},
+        };
+        for (size_t i = 0; i < 6; i++)
+            items[i].status = PH_ERR_NOT_IMPLEMENTED; /* must be overwritten by every item */
+
+        /* The batch itself was worked on, so the return value is success whatever
+         * happened to the individual images. */
+        ASSERT_OK(ph_hash_buffers(items, 6, flags, thread_counts[tc]));
+
+        ASSERT_INT_EQ(PH_SUCCESS, items[0].status);
+        ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, items[1].status);
+        ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, items[2].status);
+        ASSERT_INT_EQ(PH_ERR_CORRUPT_DATA, items[3].status);
+        ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, items[4].status);
+        ASSERT_INT_EQ(PH_SUCCESS, items[5].status);
+
+        /* Neighbouring failures must not have disturbed the good results. */
+        uint64_t expect_jpeg[PH_HASH_FLAGS_COUNT] = {0};
+        uint64_t expect_png[PH_HASH_FLAGS_COUNT] = {0};
+        reference_multi(TEST_DATA_DIR "/photo.jpeg", flags, expect_jpeg);
+        reference_multi(TEST_DATA_DIR "/photo_complex.png", flags, expect_png);
+        ASSERT_UINT64_EQ(expect_jpeg[0], items[0].hashes[0]);
+        ASSERT_UINT64_EQ(expect_jpeg[1], items[0].hashes[1]);
+        ASSERT_UINT64_EQ(expect_png[0], items[5].hashes[0]);
+        ASSERT_UINT64_EQ(expect_png[1], items[5].hashes[1]);
+    }
+
+    free(png);
+    free(jpeg);
+    PASS("test_hash_buffers_partial_failure");
+}
+
+/* A batch in which nothing is decodable is still a batch that ran: every item reports its
+ * own failure and the call succeeds. Reporting a hard failure here would make "the batch
+ * could not be started" indistinguishable from "none of your images were any good". */
+static void test_batch_all_items_failing_is_not_a_hard_failure() {
+    const uint8_t junk[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77};
+
+    ph_batch_buffer_item_t bufs[3] = {
+        {.buffer = junk, .length = sizeof(junk)},
+        {.buffer = NULL, .length = 4},
+        {.buffer = junk, .length = 0},
+    };
+    ASSERT_OK(ph_hash_buffers(bufs, 3, PH_HASH_AHASH, 0));
+    for (size_t i = 0; i < 3; i++)
+        ASSERT(bufs[i].status != PH_SUCCESS);
+
+    ph_batch_item_t files[2] = {
+        {.path = TEST_DATA_DIR "/does_not_exist.jpeg"},
+        {.path = NULL},
+    };
+    ASSERT_OK(ph_hash_files(files, 2, PH_HASH_AHASH, 0));
+    ASSERT_INT_EQ(PH_ERR_IO, files[0].status);
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, files[1].status);
+
+    PASS("test_batch_all_items_failing_is_not_a_hard_failure");
+}
+
+/* The per-item status codes are the same ones the single-image entry points return for
+ * the same input: a batch is a convenience wrapper, not a second error vocabulary. */
+static void test_batch_item_status_matches_single_call() {
+    struct {
+        const char *path;
+        ph_error_t expected;
+    } cases[] = {
+        {TEST_DATA_DIR "/photo.jpeg", PH_SUCCESS},
+        {TEST_DATA_DIR "/does_not_exist.jpeg", PH_ERR_IO},
+        {TEST_DATA_DIR "/corrupted.jpg", PH_ERR_CORRUPT_DATA},
+        {TEST_DATA_DIR, PH_ERR_IO}, /* a directory is not an image source */
+    };
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        ph_context_t *ctx = NULL;
+        ASSERT_OK(ph_create(&ctx));
+        ph_error_t single = ph_load_from_file(ctx, cases[i].path);
+        ph_free(ctx);
+
+        ph_batch_item_t item[1] = {{.path = cases[i].path}};
+        ASSERT_OK(ph_hash_files(item, 1, PH_HASH_AHASH, 1));
+
+        ASSERT_INT_EQ(cases[i].expected, single);
+        ASSERT_INT_EQ(single, item[0].status);
+    }
+
+    PASS("test_batch_item_status_matches_single_call");
+}
+
 int main() {
     test_hash_files_matches_compute_multi();
     test_hash_files_partial_failure();
@@ -211,5 +343,8 @@ int main() {
     test_batch_invalid_args();
     test_batch_validation_precedes_empty_shortcut();
     test_hash_buffers_invalid_args();
+    test_hash_buffers_partial_failure();
+    test_batch_all_items_failing_is_not_a_hard_failure();
+    test_batch_item_status_matches_single_call();
     return 0;
 }
