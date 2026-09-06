@@ -140,6 +140,12 @@ PH_API const char *ph_get_last_error_message(const ph_context_t *ctx);
  * tag exists so that such a call **fails** instead: it is never used to pick a metric
  * for you, only to refuse the wrong one.
  *
+ * @c PH_DIGEST_KIND_VECTOR16 is @c PH_DIGEST_KIND_VECTOR with two bytes per feature and a
+ * sign, which ColorMoments needs because the third moment is a direction, not a size. The
+ * two are separate tags rather than one because they are not the same bytes: comparing a
+ * 16-bit vector as if it were a byte vector reads each feature's high and low halves as
+ * two independent features, and returns a plausible number that means nothing.
+ *
  * @c PH_DIGEST_KIND_UNSPECIFIED is what a hand-filled struct contains, since it is zero.
  * Every comparison function accepts it — an FFI binding that fills in `data` and `size`
  * and nothing else keeps working exactly as before, and gets no protection.
@@ -148,9 +154,20 @@ typedef enum {
     PH_DIGEST_KIND_UNSPECIFIED = 0,  ///< Not stated. Accepted by every comparison.
     PH_DIGEST_KIND_BITS = 1,         ///< A bit vector. Hamming distance, similarity. BMH, mHash.
     PH_DIGEST_KIND_COEFFICIENTS = 2, ///< Quantised transform coefficients. Radial.
-    PH_DIGEST_KIND_VECTOR = 3,       ///< Real-valued features in a byte each. ColorMoments.
-    PH_DIGEST_KIND_HISTOGRAM = 4     ///< Bin counts. Histogram intersection. ColorHash.
+    PH_DIGEST_KIND_VECTOR = 3,       ///< Real-valued features in an unsigned byte each.
+    PH_DIGEST_KIND_HISTOGRAM = 4,    ///< Bin counts. Histogram intersection. ColorHash.
+    PH_DIGEST_KIND_VECTOR16 = 5      ///< Real-valued features, signed 16-bit. ColorMoments.
 } ph_digest_kind_t;
+
+/**
+ * @brief Units of a @c PH_DIGEST_KIND_VECTOR16 feature: 1/128 of a channel level.
+ *
+ * A @c PH_DIGEST_KIND_VECTOR16 digest holds signed 16-bit big-endian fixed-point numbers,
+ * two bytes per feature, most significant byte first. Divide by this to get the value
+ * back. A caller that only compares digests never needs it — ph_l2_distance() decodes
+ * them — but a caller that wants the moments themselves does.
+ */
+#define PH_VECTOR16_SCALE 128
 
 /**
  * @brief A flat structure representing a hash digest.

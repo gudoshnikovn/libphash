@@ -17,11 +17,17 @@
  * computed below exactly as stated, in double, with cbrt() rather than pow(x, 1.0/3.0)
  * so that a negative third moment is handled correctly.
  *
- * Two divergences, both in docs/algorithm-provenance.md: the source computes the
- * moments in HSV where this code uses the raw RGB channels; and the digest stores
- * fabs(skew), DISCARDING THE SIGN -- which is the direction of the asymmetry, half of
- * what the third moment says. Two images with mirrored channel distributions currently
- * produce identical bytes.
+ * The digest keeps all three as signed 16-bit big-endian fixed point in units of
+ * 1/PH_COLOR_MOMENT_SCALE (R62). It used to store one unsigned byte each, which threw
+ * away the sign of the skewness -- the direction of the asymmetry, half of what the third
+ * moment says -- so that two images with mirrored channel distributions produced
+ * identical bytes. It also clamped at 255 and truncated to whole units; at this scale
+ * nothing clamps and the resolution is 1/128 of a channel level.
+ *
+ * One divergence remains, recorded in docs/algorithm-provenance.md: the source computes
+ * the moments in HSV where this code uses the raw RGB channels. That is deliberate and
+ * separate -- the source's formulas are known here only through a rank-4 restatement, so
+ * the colour space is not changed on the strength of it.
  */
 #include "internal.h"
 #include <math.h>
@@ -43,9 +49,9 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
         return PH_ERR_REQUIRES_COLOR;
 
     memset(out_digest, 0, sizeof(ph_digest_t));
-    out_digest->size = PH_COLOR_CHANNELS * PH_COLOR_MOMENTS;
-    out_digest->kind = (uint8_t)
-        PH_DIGEST_KIND_VECTOR; /* nine real-valued moments: compare with ph_l2_distance() */
+    out_digest->size = PH_COLOR_MOMENTS_DIGEST_BYTES;
+    out_digest->kind = (uint8_t)PH_DIGEST_KIND_VECTOR16; /* nine signed 16-bit fixed-point
+                                                            moments: use ph_l2_distance() */
 
     /* size_t, not int: width * height overflows int above ~46340x46340 (R03/H6). */
     size_t num_pixels = (size_t)ctx->image.width * (size_t)ctx->image.height;
@@ -54,10 +60,22 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
         ph_channel_moments_t m =
             ph_compute_moments(ctx->image.raw_rgb, num_pixels, ctx->image.channels, c);
 
-        /* Write to digest. Mapping to 0-255 range and stored as bytes. */
-        out_digest->data[c * PH_COLOR_MOMENTS + 0] = (uint8_t)m.mean;
-        out_digest->data[c * PH_COLOR_MOMENTS + 1] = (uint8_t)fmin(255.0, m.std_dev);
-        out_digest->data[c * PH_COLOR_MOMENTS + 2] = (uint8_t)fmin(255.0, fabs(m.skew));
+        /* Signed fixed point, big-endian. The skewness keeps its sign; the static assert
+         * on the scale in internal.h is what guarantees the clamp below never fires for
+         * an 8-bit image, so it is a bound on programmer error rather than on the data. */
+        const double moments[PH_COLOR_MOMENTS] = {m.mean, m.std_dev, m.skew};
+        for (int k = 0; k < PH_COLOR_MOMENTS; k++) {
+            double scaled = round(moments[k] * (double)PH_COLOR_MOMENT_SCALE);
+            if (scaled > 32767.0)
+                scaled = 32767.0;
+            else if (scaled < -32768.0)
+                scaled = -32768.0;
+
+            uint16_t bits = (uint16_t)(int16_t)scaled;
+            size_t at = ((size_t)c * PH_COLOR_MOMENTS + (size_t)k) * PH_COLOR_MOMENT_BYTES;
+            out_digest->data[at + 0] = (uint8_t)(bits >> 8);
+            out_digest->data[at + 1] = (uint8_t)(bits & 0xFF);
+        }
     }
 
     return PH_SUCCESS;

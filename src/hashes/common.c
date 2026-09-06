@@ -118,7 +118,38 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
     return total;
 }
 
+/* Euclidean distance over a feature vector, in the features' own units.
+ *
+ * Two encodings reach here. PH_DIGEST_KIND_VECTOR is one unsigned byte per feature.
+ * PH_DIGEST_KIND_VECTOR16 is one signed 16-bit big-endian fixed-point number per feature,
+ * in units of 1/PH_VECTOR16_SCALE -- which is what ColorMoments emits since 2.0.0, because
+ * the third moment has a sign. The two must not be conflated: reading a 16-bit vector as
+ * bytes treats each feature's high and low halves as separate features, so a difference of
+ * one level in the high byte and one of 1/128 in the low byte would count the same.
+ *
+ * A digest tagged PH_DIGEST_KIND_UNSPECIFIED -- what a hand-filled FFI struct holds -- is
+ * still read as bytes, which is what it was before the tag existed. It is only when one
+ * side says VECTOR16 that the pairs are decoded, and then the other side must agree or be
+ * unspecified. */
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b) {
+    if (ph_digest_kind_is(a, PH_DIGEST_KIND_VECTOR16) ||
+        ph_digest_kind_is(b, PH_DIGEST_KIND_VECTOR16)) {
+        if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_VECTOR16))
+            return -1.0;
+        /* Half a feature is not a feature: an odd length is a malformed digest. */
+        if (a->size % 2 != 0)
+            return -1.0;
+
+        double sum = 0;
+        for (int i = 0; i + 1 < a->size; i += 2) {
+            double va = (double)ph_read_i16_be(&a->data[i]) / (double)PH_VECTOR16_SCALE;
+            double vb = (double)ph_read_i16_be(&b->data[i]) / (double)PH_VECTOR16_SCALE;
+            double diff = va - vb;
+            sum += diff * diff;
+        }
+        return sqrt(sum);
+    }
+
     if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_VECTOR))
         return -1.0;
 

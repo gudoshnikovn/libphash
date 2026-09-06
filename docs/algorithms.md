@@ -59,7 +59,7 @@ good at; the second is not in scope.
 | BMH | Yang, Gu & Niu | paper, 2006 | no |
 | Radial | De Roover, De Vleeschouwer, Lefèbvre & Macq | paper, 2005 | **yes** — two divergences |
 | ColorHash | Swain & Ballard (method); this library (quantisation) | paper, 1991 — **not read** | n/a — no conformance claimed |
-| ColorMoments | Stricker & Orengo | paper, 1995 | **yes** — skew sign, colour space |
+| ColorMoments | Stricker & Orengo | paper, 1995 | **yes** — colour space (RGB, not HSV) |
 
 One cross-cutting caveat: `ph_resize_lanczos()`, used by aHash and dHash, does **not**
 resample with Lanczos — it takes stb_image_resize2's default, which is Mitchell for a
@@ -187,10 +187,11 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
   shuffling the pixels; and flat colours that share a chroma bin and an intensity third —
   black against dark grey, light grey against white — are indistinguishable.
 - **ColorMoments** (`ph_compute_color_moments_hash`) — the mean, standard deviation and
-  skewness of each channel, 9 bytes. Follows the formulas of Stricker & Orengo.
-  **⚠ Known divergence**: the sign of the skewness is discarded, which is the direction
-  of the asymmetry — half of what the third moment tells you. The moments are also taken
-  on RGB where the source uses HSV.
+  skewness of each channel: nine features in an 18-byte digest, each a signed 16-bit
+  big-endian fixed-point number in units of 1/128. Follows the formulas of Stricker &
+  Orengo, including the sign of the skewness, which is the direction of the asymmetry.
+  Compare with `ph_l2_distance()`, which decodes the pairs.
+  **⚠ Known divergence**: the moments are taken on RGB where the source uses HSV.
 - **Use case**: telling apart images that are structurally identical but coloured
   differently — recoloured product photography, for instance — where the luminance hashes
   agree by design.
@@ -242,7 +243,7 @@ methodology.
 | Radial | ★ | ★★ — small angles, see §8 | ★★ | ★★★ | digest, 40 bytes |
 | BMH | ★★★ | ★ | ★★★ | ★★★★ | digest, 256-bit default |
 | ColorHash | ★★★★ | ★★★★★ | ★★★ | ★★★★★ | digest, 108 bytes |
-| ColorMoments | ★★★ | ★★★★ | ★★★ | ★★★★★ | digest, 9 bytes |
+| ColorMoments | ★★★ | ★★★★ | ★★★ | ★★★★★ | digest, 18 bytes |
 
 The two colour hashes are insensitive to rotation and scaling for a reason that is worth
 stating: they discard spatial layout entirely. That makes them robust and, on their own,

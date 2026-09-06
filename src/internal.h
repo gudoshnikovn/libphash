@@ -100,6 +100,21 @@ static inline int ph_digest_is_comparable(const ph_digest_t *d) {
     return ph_digest_is_valid(d) && d->size > 0;
 }
 
+/* Whether a digest states this exact kind. Distinct from ph_digest_kind_allows(): that
+ * one lets PH_DIGEST_KIND_UNSPECIFIED through, which is right for permitting a metric and
+ * wrong for choosing between two encodings. */
+static inline int ph_digest_kind_is(const ph_digest_t *d, ph_digest_kind_t kind) {
+    return d != NULL && d->kind == (uint8_t)kind;
+}
+
+/* Reads one big-endian signed 16-bit feature out of a PH_DIGEST_KIND_VECTOR16 digest.
+ * Assembled in unsigned arithmetic and converted at the end, because shifting a value
+ * into the sign bit of an int is undefined. */
+static inline int16_t ph_read_i16_be(const uint8_t *p) {
+    uint16_t bits = (uint16_t)(((uint16_t)p[0] << 8) | (uint16_t)p[1]);
+    return (int16_t)bits;
+}
+
 /* Whether a digest may be compared with a metric meant for `kind`.
  *
  * PH_DIGEST_KIND_UNSPECIFIED passes everything: it is what a hand-filled struct holds,
@@ -289,6 +304,31 @@ _Static_assert(PH_RADIAL_PROJECTIONS >= PH_RADIAL_MIN_PROJECTIONS &&
 
 #define PH_COLOR_MOMENTS 3
 #define PH_COLOR_CHANNELS 3
+
+/* ColorMoments: each moment is a signed 16-bit fixed-point number, big-endian, in units
+ * of 1/PH_COLOR_MOMENT_SCALE. Two bytes rather than one because the third moment carries
+ * a sign -- the direction of the asymmetry -- which a single unsigned byte cannot hold
+ * (R62).
+ *
+ * The scale is 128 by measurement, not by taste: over every distribution an 8-bit channel
+ * admits, the extremes are a mean of 255, a standard deviation of 127.5 and a skewness of
+ * +/-116.85 (two-point distributions are extremal for all three). 255 is therefore the
+ * largest magnitude any moment can take, and 128 is the largest power of two with
+ * 255 * scale <= INT16_MAX: the encoding covers the whole attainable range with nothing
+ * to clamp, at a resolution of 1/128, where the old byte encoding both clamped at 255 and
+ * truncated to whole units. */
+#define PH_COLOR_MOMENT_SCALE 128
+#define PH_COLOR_MOMENT_BYTES 2
+#define PH_COLOR_MOMENTS_DIGEST_BYTES (PH_COLOR_CHANNELS * PH_COLOR_MOMENTS * PH_COLOR_MOMENT_BYTES)
+
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+_Static_assert(PH_COLOR_MOMENTS_DIGEST_BYTES <= PH_DIGEST_MAX_BYTES,
+               "the colour moments must fit a digest");
+/* 255 is the largest magnitude a moment of an 8-bit channel can reach; if the scale ever
+ * grows past the point where that still encodes, the encoding starts clamping silently. */
+_Static_assert(255 * PH_COLOR_MOMENT_SCALE <= 32767,
+               "the fixed-point scale must keep every attainable moment inside int16");
+#endif
 
 /* ColorHash: the opponent colour axes of Swain & Ballard, quantised. The resolution is
  * this library's, chosen by measurement over sixteen candidates rather than by citation --

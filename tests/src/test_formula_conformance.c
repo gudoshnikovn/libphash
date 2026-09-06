@@ -615,14 +615,15 @@ static void test_colour_moments_match_the_definitions(void) {
     printf("test_colour_moments_match_the_definitions: PASSED\n");
 }
 
-static void test_colour_moments_digest_discards_the_skew_sign(void) {
-    /* KNOWN DIVERGENCE (docs/algorithm-provenance.md, defect 6): ph_compute_moments()
-     * computes the signed third moment correctly, and then the digest stores fabs() of
-     * it. Two images whose channel distributions are mirror images therefore produce
-     * byte-identical digests, and the direction of the asymmetry -- half of what the
-     * third moment says -- is unrecoverable.
-     *
-     * Built here as two 2x2 images that differ only in that mirroring. */
+/* R62. This used to be test_colour_moments_digest_discards_the_skew_sign, pinning the
+ * defect: the digest stored fabs() of a correctly signed third moment, so two images whose
+ * channel distributions are mirror images produced byte-identical skew bytes. The digest
+ * now keeps the sign, in signed 16-bit big-endian fixed point, and this is the same pair
+ * of images asserting the opposite. */
+static void test_colour_moments_digest_keeps_the_skew_sign(void) {
+    /* Two 2x2 images differing only in that mirroring: one is 3/4 black with a bright
+     * pixel, the other 3/4 bright with a black one. Their third moments are equal in
+     * magnitude and opposite in sign. */
     uint8_t a[4 * 3] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 100, 100};
     uint8_t b[4 * 3] = {100, 100, 100, 100, 100, 100, 100, 100, 100, 0, 0, 0};
 
@@ -635,16 +636,115 @@ static void test_colour_moments_digest_discards_the_skew_sign(void) {
     ASSERT_OK(ph_load_from_pixels(ctx, b, 2, 2, 3, 0));
     ASSERT_OK(ph_compute_color_moments_hash(ctx, &db));
 
-    /* The means differ (25 vs 75), so the digests are not equal overall -- but the skew
-     * bytes, which carry opposite signs, are identical. That is the information loss. */
-    for (int c = 0; c < 3; c++) {
-        int skew_byte = c * 3 + 2;
-        ASSERT_INT_EQ(da.data[skew_byte], db.data[skew_byte]);
+    ASSERT_INT_EQ(PH_COLOR_MOMENTS_DIGEST_BYTES, da.size);
+    ASSERT_INT_EQ(PH_DIGEST_KIND_VECTOR16, da.kind);
+
+    for (int c = 0; c < PH_COLOR_CHANNELS; c++) {
+        int at = (c * PH_COLOR_MOMENTS + 2) * PH_COLOR_MOMENT_BYTES;
+        double sa = (double)ph_read_i16_be(&da.data[at]) / (double)PH_VECTOR16_SCALE;
+        double sb = (double)ph_read_i16_be(&db.data[at]) / (double)PH_VECTOR16_SCALE;
+
+        /* Opposite signs, equal magnitudes -- and the magnitude is the definition's. */
+        ASSERT(sa > 0.0);
+        ASSERT(sb < 0.0);
+        assert_close(sa, cbrt(93750.0), 0.01, "skewness of the darker image");
+        assert_close(sb, -cbrt(93750.0), 0.01, "skewness of the mirrored image");
     }
-    ASSERT(da.data[0] != db.data[0]); /* the means do still distinguish them */
+
+    /* The whole point: mirrored distributions are no longer the same digest. */
+    ASSERT(memcmp(da.data, db.data, da.size) != 0);
 
     ph_free(ctx);
-    printf("test_colour_moments_digest_discards_the_skew_sign: PASSED (divergence pinned)\n");
+    printf("test_colour_moments_digest_keeps_the_skew_sign: PASSED\n");
+}
+
+/* The encoding itself: big-endian signed fixed point, decodable back to the values that
+ * ph_compute_moments() produced, to within the 1/128 resolution. */
+static void test_colour_moments_digest_round_trips_the_values(void) {
+    /* A deliberately lopsided image, so none of the nine moments is zero or degenerate. */
+    enum { W = 8, H = 8 };
+    uint8_t px[W * H * 3];
+    for (int i = 0; i < W * H; i++) {
+        px[i * 3 + 0] = (uint8_t)(i < 50 ? 10 : 240);
+        px[i * 3 + 1] = (uint8_t)(i * 3 % 256);
+        px[i * 3 + 2] = (uint8_t)(i < 8 ? 250 : 4);
+    }
+
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_load_from_pixels(ctx, px, W, H, 3, 0));
+
+    ph_digest_t d;
+    ASSERT_OK(ph_compute_color_moments_hash(ctx, &d));
+
+    for (int c = 0; c < PH_COLOR_CHANNELS; c++) {
+        ph_channel_moments_t m = ph_compute_moments(px, W * H, 3, c);
+        const double expected[PH_COLOR_MOMENTS] = {m.mean, m.std_dev, m.skew};
+        for (int k = 0; k < PH_COLOR_MOMENTS; k++) {
+            int at = (c * PH_COLOR_MOMENTS + k) * PH_COLOR_MOMENT_BYTES;
+            double got = (double)ph_read_i16_be(&d.data[at]) / (double)PH_VECTOR16_SCALE;
+            /* Half a quantisation step is the most rounding can cost. */
+            assert_close(got, expected[k], 0.5 / PH_VECTOR16_SCALE, "round-tripped moment");
+        }
+    }
+
+    ph_free(ctx);
+    printf("test_colour_moments_digest_round_trips_the_values: PASSED\n");
+}
+
+/* ph_l2_distance() must read the pairs, not the bytes. Comparing a 16-bit vector
+ * byte-wise returns a plausible number that means nothing, which is the reason
+ * PH_DIGEST_KIND_VECTOR16 exists as a separate tag. */
+static void test_l2_distance_decodes_sixteen_bit_vectors(void) {
+    ph_digest_t a, b;
+    memset(&a, 0, sizeof(a));
+    memset(&b, 0, sizeof(b));
+    a.size = b.size = 4;
+    a.kind = b.kind = (uint8_t)PH_DIGEST_KIND_VECTOR16;
+
+    /* Two features each: a = (+1, -1), b = (0, 0), in units of 1/128. */
+    a.data[0] = 0x00;
+    a.data[1] = 0x80; /* +128 -> +1.0 */
+    a.data[2] = 0xFF;
+    a.data[3] = 0x80; /* -128 -> -1.0 */
+
+    /* Distance is sqrt(1^2 + 1^2) in feature units, not in bytes. */
+    assert_close(ph_l2_distance(&a, &b), sqrt(2.0), 1e-9, "16-bit L2 in feature units");
+
+    /* A sign that a byte-wise reading would get wrong: -1.0 encodes as 0xFF80, whose
+     * bytes read unsigned are 255 and 128 -- a byte-wise L2 against zero would report
+     * sqrt(128^2 + 255^2 + 128^2) rather than sqrt(2). */
+    ph_digest_t only_negative;
+    memset(&only_negative, 0, sizeof(only_negative));
+    only_negative.size = 2;
+    only_negative.kind = (uint8_t)PH_DIGEST_KIND_VECTOR16;
+    only_negative.data[0] = 0xFF;
+    only_negative.data[1] = 0x80;
+
+    ph_digest_t zero;
+    memset(&zero, 0, sizeof(zero));
+    zero.size = 2;
+    zero.kind = (uint8_t)PH_DIGEST_KIND_VECTOR16;
+    assert_close(ph_l2_distance(&only_negative, &zero), 1.0, 1e-9, "a negative feature");
+
+    /* An odd length cannot be a whole number of features, and is refused. */
+    ph_digest_t odd = zero;
+    odd.size = 3;
+    ph_digest_t odd2 = odd;
+    ASSERT(ph_l2_distance(&odd, &odd2) < 0.0);
+
+    /* Mixing the two encodings is refused rather than silently reinterpreted. */
+    ph_digest_t bytes = zero;
+    bytes.kind = (uint8_t)PH_DIGEST_KIND_VECTOR;
+    ASSERT(ph_l2_distance(&zero, &bytes) < 0.0);
+
+    /* A hand-filled FFI digest leaves kind at 0 and must keep working: byte-wise when
+     * both sides are unspecified, decoded when the other side says VECTOR16. */
+    ph_digest_t unspecified = zero;
+    unspecified.kind = (uint8_t)PH_DIGEST_KIND_UNSPECIFIED;
+    ASSERT(ph_l2_distance(&only_negative, &unspecified) >= 0.0);
+
+    printf("test_l2_distance_decodes_sixteen_bit_vectors: PASSED\n");
 }
 
 int main(void) {
@@ -664,7 +764,9 @@ int main(void) {
     test_block_means_on_a_non_multiple();
     test_bmh_thresholds_on_the_median();
     test_colour_moments_match_the_definitions();
-    test_colour_moments_digest_discards_the_skew_sign();
+    test_colour_moments_digest_keeps_the_skew_sign();
+    test_colour_moments_digest_round_trips_the_values();
+    test_l2_distance_decodes_sixteen_bit_vectors();
     printf("ALL FORMULA CONFORMANCE TESTS PASSED\n");
     return 0;
 }

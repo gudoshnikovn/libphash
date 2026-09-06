@@ -45,6 +45,22 @@ walkthrough.
   the reference's and were kept after being measured against 23 alternatives.
   *Restore the old behaviour:* not possible; recompute any stored mHash values.
 
+- **`ph_compute_color_moments_hash()` returns an 18-byte digest, not 9, and keeps the sign
+  of the skewness.** The third moment measures the *direction* of a distribution's
+  asymmetry, and the digest stored `fabs()` of it: two images whose channel distributions
+  were mirror images produced byte-identical skew bytes, and half of what the moment says
+  was unrecoverable. Each of the nine features is now a **signed 16-bit big-endian
+  fixed-point number in units of 1/128** (`PH_VECTOR16_SCALE`), tagged with the new
+  `PH_DIGEST_KIND_VECTOR16`. The scale is not a taste: over every distribution an 8-bit
+  channel admits, no moment can exceed a magnitude of 255, and 128 is the largest power of
+  two with 255 x 128 inside `int16` — so unlike the old encoding, which clamped at 255 and
+  truncated to whole units, nothing clamps and the resolution is 1/128 of a channel level.
+  `ph_l2_distance()` decodes the pairs and returns the distance in the moments' own units;
+  reading a 16-bit vector as bytes would treat each feature's high and low halves as two
+  independent features, which is why the new tag is separate rather than a wider
+  `PH_DIGEST_KIND_VECTOR`. Mixing the two encodings in one comparison is refused.
+  *Restore the old behaviour:* not possible; recompute any stored ColorMoments values.
+
 - **`ph_digest_t` is 136 bytes, not 72, and carries a `kind` tag.** `PH_DIGEST_MAX_BYTES`
   is now 128: the Marr-Hildreth hash is 576 bits and did not fit in 64, and the remaining
   room is headroom taken once rather than twice. The byte after `size` is now `kind`, a

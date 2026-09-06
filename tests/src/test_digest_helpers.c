@@ -290,7 +290,7 @@ static void test_computed_digests_carry_their_kind(void) {
     ASSERT_OK(ph_compute_radial_hash(ctx, &d));
     ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_COEFFICIENTS, d.kind);
     ASSERT_OK(ph_compute_color_moments_hash(ctx, &d));
-    ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_VECTOR, d.kind);
+    ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_VECTOR16, d.kind);
 
     /* Decoded from text, nothing is claimed about the bytes. */
     ph_digest_t from_text;

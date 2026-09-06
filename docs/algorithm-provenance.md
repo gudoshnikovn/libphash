@@ -769,17 +769,18 @@ left to the user.
 **What this implementation does** (`src/hashes/color_moments.c`): exactly those three
 formulas, in `double`, including the signed cube root — `cbrt()`, not `pow(x, 1/3)`, so
 a negative third moment is handled correctly. Computed on the **raw RGB channels**. Each
-value is then written into one byte of a 9-byte digest as `mean`, `min(255, σ)` and
-`min(255, |skew|)`.
+value is then written into an 18-byte digest as a **signed 16-bit big-endian fixed-point
+number in units of 1/128**, tagged `PH_DIGEST_KIND_VECTOR16` (R62). Before 2.0.0 each was
+one unsigned byte holding `mean`, `min(255, σ)` and `min(255, |skew|)`.
 
 **Delta:**
 
 | Difference | Class | Note |
 |---|---|---|
-| **The sign of the skewness is discarded (`fabs`)** | **defect** | Skewness measures the *direction* of asymmetry; its sign is half the information. Two images whose channel distributions are mirror images of each other get identical bytes. The natural fix is to store `skew + 128` clamped, or to widen the digest — either way it changes stored hashes. |
+| ~~The sign of the skewness is discarded (`fabs`)~~ | **fixed in 2.0.0 (R62)** | Skewness measures the *direction* of asymmetry, and its sign is half the information: two images whose channel distributions are mirror images used to get identical bytes. The digest now keeps the sign. The fix chosen was to widen the digest rather than to store `skew + 128` in one byte, so the resolution improves at the same time. Pinned by `test_colour_moments_digest_keeps_the_skew_sign`. |
 | Moments computed on RGB, not HSV | deliberate, needs a decision | The restatement says HSV, while noting "alternative encoding could just as easily be used". RGB is defensible; it should be recorded as a choice rather than left implicit. Confirm against the paper first, given the rank of the source. |
-| Values clamped into `uint8_t` | deliberate | σ can reach 127.5 and the skew term further, so clamping at 255 rarely bites; the quantisation to integers does cost precision. |
-| Distance is L2 over the 9 bytes, not the weighted L1 of the source | deliberate | The source leaves the weights to the application, so there is no defined default to conform to. |
+| ~~Values clamped into `uint8_t`~~ | **fixed in 2.0.0 (R62)** | The scale of 128 is the largest power of two for which the whole attainable range still encodes: over every distribution an 8-bit channel admits, the extremes are a mean of 255, a σ of 127.5 and a skewness of ±116.85 (two-point distributions are extremal for all three), so 255 is the largest magnitude any moment can take and 255 × 128 = 32640 ≤ 32767. Nothing clamps, and the resolution is 1/128 of a channel level instead of a whole one. A `_Static_assert` in `internal.h` holds the scale to that bound. |
+| Distance is L2 over the nine features, not the weighted L1 of the source | deliberate | The source leaves the weights to the application, so there is no defined default to conform to. Since 2.0.0 `ph_l2_distance()` decodes the 16-bit pairs and computes the distance in the moments' own units; reading them as bytes would treat each feature's two halves as independent features, which is why `PH_DIGEST_KIND_VECTOR16` is a separate tag rather than a wider `PH_DIGEST_KIND_VECTOR`. |
 
 ---
 
@@ -795,7 +796,7 @@ value is then written into one byte of a 9-byte digest as `mean`, `min(255, σ)`
 | BMH | Yang, Gu, Niu, IIH-MSP 2006 | **Confirmed** as the primary source. It specifies a median threshold; this implementation uses the mean. |
 | Radial | Zauner on RASH, plus Lefèbvre/Macq and De Roover et al. 2005; pHash's `_ph_image_digest` as the reference implementation | **Confirmed and sharpened.** The implemented algorithm is De Roover et al. 2005; RASH (2002) is its superseded predecessor, which its own authors reported as troubled. Four defects follow. |
 | ColorHash | Probably Buchner's implementation with no paper | **Confirmed.** ImageHash gives no reference at all for `colorhash`. |
-| ColorMoments | Stricker & Orengo, SPIE 1995 | **Confirmed** as the source, though only a rank-4 restatement of it could be read. Formulas match; the colour space and the discarded skew sign do not. |
+| ColorMoments | Stricker & Orengo, SPIE 1995 | **Confirmed** as the source, though only a rank-4 restatement of it could be read. Formulas match; the skew sign is kept since 2.0.0 (R62); the colour space still differs (RGB here, HSV in the restatement) and is a deliberate, recorded choice. |
 
 ## Defects found, to be filed as separate tasks
 
@@ -828,8 +829,9 @@ misled this analysis on its first pass.
 5. **Radial: `PH_DEFAULT_GAMMA` is 2.2 where pHash defaults to 1.0, and the blur kernel is
    fixed at σ ≈ 0.707 where pHash defaults to σ = 3.5.** Already
    filed separately; this document is the evidence for it.
-6. **ColorMoments: the sign of the skewness is discarded.** Half of the third moment's
-   information is thrown away.
+6. ~~**ColorMoments: the sign of the skewness is discarded.**~~ Half of the third moment's
+   information was thrown away. **Fixed in 2.0.0 (R62)**: the digest is 18 bytes of signed
+   16-bit fixed point and keeps the sign. See §9.
 7. **mHash is documented as a Marr–Hildreth hash and is not one**, and
    `docs/algorithms.md` additionally describes it as configurable through
    `ph_context_set_block_params`, which it ignores. Documentation and naming only; the

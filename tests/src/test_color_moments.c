@@ -52,14 +52,16 @@ void test_color_moments_e2e() {
     // Identical images
     ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
     ASSERT_OK(ph_compute_color_moments_hash(ctx, &digest1));
-    ASSERT_INT_EQ(9, digest1.size);
+    ASSERT_INT_EQ(PH_COLOR_MOMENTS_DIGEST_BYTES, digest1.size);
+    ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_VECTOR16, digest1.kind);
 
     ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo_copy.jpeg"));
     ASSERT_OK(ph_compute_color_moments_hash(ctx, &digest2));
 
     /* Colour moments are nine real-valued features, not a bit vector: the digest is
-     * tagged PH_DIGEST_KIND_VECTOR and Hamming distance over it is refused. L2 is the
-     * metric, and it is 0 for an identical image. */
+     * tagged PH_DIGEST_KIND_VECTOR16 -- two bytes a feature, signed, since R62 -- and
+     * Hamming distance over it is refused. L2 is the metric, and it is 0 for an identical
+     * image. */
     ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&digest1, &digest2));
     ASSERT_FLOAT_EQ(0.0, ph_l2_distance(&digest1, &digest2), 1e-9);
 
