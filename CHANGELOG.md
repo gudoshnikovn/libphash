@@ -428,6 +428,10 @@ walkthrough.
   and `ph_apply_gaussian_blur()` now propagate the failure, so aHash, dHash, pHash,
   wHash, mHash, BMH and Radial return `PH_ERR_ALLOCATION_FAILED` instead of a value
   indistinguishable from a real hash. No hash value changes on the success path.
+- The vendored `stb_image_resize2` crashed or leaked when one of its internal
+  allocations failed under AddressSanitizer's separate-allocation mode (reachable
+  only under real memory pressure with a sanitizer build). Patched locally pending
+  an upstream fix.
 
 ### Security
 
