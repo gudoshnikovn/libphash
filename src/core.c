@@ -640,8 +640,17 @@ static ph_error_t ph_open_file_bytes(const char *filepath, ph_file_bytes_t *out,
 
 /* Drops whatever image the context is holding. Both load entry points call this
  * first, so a failed load never leaves the previously loaded image visible. */
+/* The diagnostic message is documented as describing "the most recent failure on this
+ * context". That obliges every failable entry point to clear it on the way in, including
+ * the ones that fail before they get as far as touching the image -- otherwise a rejected
+ * argument leaves the previous call's text standing and the caller reads a message about
+ * something else entirely. Kept separate from ph_reset_loaded_image() because clearing the
+ * message must NOT imply discarding the loaded image: ph_load_from_pixels() deliberately
+ * keeps the previous image when it fails. */
+static void ph_clear_last_error(ph_context_t *ctx) { ctx->last_error[0] = '\0'; }
+
 static void ph_reset_loaded_image(ph_context_t *ctx) {
-    ctx->last_error[0] = '\0';
+    ph_clear_last_error(ctx);
     if (ctx->image.raw_rgb)
         ph_free_image(ctx->image.raw_rgb);
     ctx->image.raw_rgb = NULL;
@@ -689,7 +698,10 @@ static ph_error_t ph_load_encoded_bytes(ph_context_t *ctx, const uint8_t *data, 
 }
 
 PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
-    if (!ctx || !filepath)
+    if (!ctx)
+        return PH_ERR_INVALID_ARGUMENT;
+    ph_clear_last_error(ctx);
+    if (!filepath)
         return PH_ERR_INVALID_ARGUMENT;
     ph_reset_loaded_image(ctx);
 
@@ -704,7 +716,10 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
 }
 
 PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, size_t length) {
-    if (!ctx || !buffer || length == 0)
+    if (!ctx)
+        return PH_ERR_INVALID_ARGUMENT;
+    ph_clear_last_error(ctx);
+    if (!buffer || length == 0)
         return PH_ERR_INVALID_ARGUMENT;
     ph_reset_loaded_image(ctx);
     return ph_load_encoded_bytes(ctx, buffer, length);
@@ -712,7 +727,13 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
 
 PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels, int width,
                                       int height, int channels, int stride) {
-    if (!ctx || !pixels)
+    if (!ctx)
+        return PH_ERR_INVALID_ARGUMENT;
+    /* Only the message: unlike the file and buffer paths, this one keeps the previously
+     * loaded image when it fails, and the image is not discarded until the new buffer has
+     * actually been allocated and filled below. */
+    ph_clear_last_error(ctx);
+    if (!pixels)
         return PH_ERR_INVALID_ARGUMENT;
     if (width <= 0 || height <= 0)
         return PH_ERR_INVALID_ARGUMENT;

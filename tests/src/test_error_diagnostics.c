@@ -441,6 +441,52 @@ static void row_requires_color(ph_context_t *ctx) {
     printf("  %-28s -> %s\n", "color hash on RGB", "PH_SUCCESS");
 }
 
+/* The diagnostic message is documented as describing "the most recent failure on this
+ * context". It used to describe an earlier one: every load entry point validated its
+ * arguments and returned before reaching the code that clears last_error, and
+ * ph_load_from_pixels() cleared the loaded image without ever clearing the message -- it
+ * open-coded ph_reset_loaded_image() minus that one line. So a rejected argument left the
+ * previous call's text standing, and a caller that logged the message after a failure got
+ * a sentence about something else entirely. */
+static void row_message_is_about_this_call(ph_context_t *ctx) {
+    /* Produce a real, detailed message first: a load that fails inside the decoder. */
+    const uint8_t junk[16] = {'n', 'o', 't', ' ', 'a', 'n', ' ', 'i',
+                              'm', 'a', 'g', 'e', 0,   1,   2,   3};
+    ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, ph_load_from_memory(ctx, junk, sizeof(junk)));
+    ASSERT(ph_get_last_error_message(ctx)[0] != '\0');
+
+    /* Each of the three load paths, rejected on its arguments. None may leave the
+     * decoder's sentence behind. */
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_load_from_file(ctx, NULL));
+    ASSERT_STR_EQ("", ph_get_last_error_message(ctx));
+
+    ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, ph_load_from_memory(ctx, junk, sizeof(junk)));
+    ASSERT(ph_get_last_error_message(ctx)[0] != '\0');
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_load_from_memory(ctx, NULL, 4));
+    ASSERT_STR_EQ("", ph_get_last_error_message(ctx));
+
+    ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, ph_load_from_memory(ctx, junk, sizeof(junk)));
+    ASSERT(ph_get_last_error_message(ctx)[0] != '\0');
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_load_from_pixels(ctx, NULL, 4, 4, 3, 0));
+    ASSERT_STR_EQ("", ph_get_last_error_message(ctx));
+
+    /* And a successful ph_load_from_pixels() must not leave one either. */
+    uint8_t px[4 * 4 * 3];
+    memset(px, 90, sizeof(px));
+    ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, ph_load_from_memory(ctx, junk, sizeof(junk)));
+    ASSERT(ph_get_last_error_message(ctx)[0] != '\0');
+    ASSERT_OK(ph_load_from_pixels(ctx, px, 4, 4, 3, 0));
+    ASSERT_STR_EQ("", ph_get_last_error_message(ctx));
+
+    /* The image a failed ph_load_from_pixels() was holding survives the call -- clearing
+     * the message must not have turned into discarding the image. */
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_load_from_pixels(ctx, px, -1, 4, 3, 0));
+    uint64_t still_there = 0;
+    ASSERT_OK(ph_compute_ahash(ctx, &still_there));
+
+    printf("  message freshness            -> cleared by every failing entry point\n");
+}
+
 /* Three codes are declared and described but cannot be produced by any input a
  * caller can construct. They are listed here rather than left unmentioned, because
  * "no test reaches it" is a fact about the code, not an oversight in this file:
@@ -467,6 +513,7 @@ static const error_code_entry_t unreachable_by_design[] = {
 static void test_input_to_error_code_table(ph_context_t *ctx) {
     row_io_errors(ctx);
     row_invalid_arguments(ctx);
+    row_message_is_about_this_call(ctx);
     row_bad_bytes(ctx);
     row_image_too_large(ctx);
     row_decoder_unavailable(ctx);
