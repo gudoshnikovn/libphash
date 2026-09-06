@@ -265,8 +265,131 @@ void test_radial_rotation_on_a_photograph() {
     PASS("test_radial_rotation_on_a_photograph");
 }
 
+/* R45. Non-square images, and the consequence of capping the radius at min(w,h)/2.
+ *
+ * Every projection is a line of `samples` points through the centre, and the radius is
+ * capped so that the line stays inside the image whatever its angle. On a square image
+ * that costs the corners; on a strip it costs almost everything -- a 200x30 image is
+ * described entirely by the 30-pixel-wide disc at its centre, and the 85 columns at each
+ * end contribute nothing at all.
+ *
+ * That is a deliberate divergence from the source (which sums a strip whose length varies
+ * with the angle), and it is a real limitation rather than a rounding detail: two banner
+ * images that differ only outside the centre are the same picture to this hash. It is
+ * asserted here so that the trade is on record and so that a future change to the radius
+ * rule shows up as a failing test rather than as a silent change in behaviour. */
+void test_radial_ignores_everything_outside_the_central_disc() {
+    enum { W = 200, H = 30 };
+    static uint8_t base[W * H], edited[W * H];
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++)
+            base[y * W + x] = (uint8_t)((x * 37 + y * 91 + x * y) % 256);
+    memcpy(edited, base, sizeof(base));
+
+    /* The sampled disc is x in [100 - 15, 100 + 15]; the 3x3 blur can reach one pixel
+     * further. Everything left of column 60 is comfortably outside both. */
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < 60; x++)
+            edited[y * W + x] = (uint8_t)(255 - base[y * W + x]);
+
+    ph_digest_t a, b;
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_load_from_pixels(ctx, base, W, H, 1, 0));
+    ASSERT_OK(ph_compute_radial_hash(ctx, &a));
+    ph_free(ctx);
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_load_from_pixels(ctx, edited, W, H, 1, 0));
+    ASSERT_OK(ph_compute_radial_hash(ctx, &b));
+    ph_free(ctx);
+
+    ASSERT_INT_EQ(PH_RADIAL_COEFFS, a.size);
+    ASSERT(memcmp(a.data, b.data, a.size) == 0);
+
+    /* The image is not flat, so the digest must not be the flat-image answer -- otherwise
+     * the equality above would be passing for the wrong reason. */
+    int nonzero = 0;
+    for (int i = 0; i < a.size; i++)
+        if (a.data[i])
+            nonzero++;
+    ASSERT(nonzero > 30);
+
+    /* The transposed strip is a different picture and must hash differently. */
+    static uint8_t transposed[W * H];
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++)
+            transposed[x * H + y] = base[y * W + x];
+    ph_digest_t t;
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_load_from_pixels(ctx, transposed, H, W, 1, 0));
+    ASSERT_OK(ph_compute_radial_hash(ctx, &t));
+    ph_free(ctx);
+    ASSERT(memcmp(a.data, t.data, a.size) != 0);
+
+    PASS("test_radial_ignores_everything_outside_the_central_disc");
+}
+
+/* R45/R04. The projection count at both ends of its accepted range.
+ *
+ * Since 2.0.0 the count is the number of angles only -- the digest is always
+ * PH_RADIAL_COEFFS bytes of DCT coefficients -- so the two bounds mean different things
+ * and both need checking. The lower one is hard: a DCT of an n-element vector has n
+ * coefficients, so fewer angles than coefficients cannot produce the hash at all. The
+ * upper one is a resolution limit, not a correctness one, and the test for it is
+ * convergence: past the point where extra angles stop carrying information, the digest
+ * has to stop moving. Measured on 2.0.0, 4096 angles against 131072 correlate at 0.99995,
+ * while 180 against 4096 are still at 0.9908 -- so the ceiling is well past the point of
+ * diminishing returns, which is what a ceiling should be. */
+void test_radial_projection_count_bounds() {
+    enum { SIDE = 64 };
+    static uint8_t px[SIDE * SIDE];
+    for (int y = 0; y < SIDE; y++)
+        for (int x = 0; x < SIDE; x++)
+            px[y * SIDE + x] = (uint8_t)((x * 97 + y * 13 + (x * y) / 3) % 256);
+
+    static const int counts[] = {PH_RADIAL_MIN_PROJECTIONS, PH_RADIAL_PROJECTIONS, 4096,
+                                 PH_RADIAL_MAX_PROJECTIONS};
+    ph_digest_t d[4];
+    for (unsigned i = 0; i < sizeof(counts) / sizeof(counts[0]); i++) {
+        ph_context_t *ctx = NULL;
+        ASSERT_OK(ph_create(&ctx));
+        ASSERT_OK(ph_context_set_radial_params(ctx, counts[i], PH_RADIAL_SAMPLES));
+        ASSERT_OK(ph_load_from_pixels(ctx, px, SIDE, SIDE, 1, 0));
+        memset(&d[i], 0xAA, sizeof(d[i]));
+        ASSERT_OK(ph_compute_radial_hash(ctx, &d[i]));
+        /* The digest width no longer follows the angle count, at either end. */
+        ASSERT_INT_EQ(PH_RADIAL_COEFFS, d[i].size);
+        ph_free(ctx);
+    }
+
+    /* One below the lower bound is refused by the setter, and the configuration it
+     * refuses is left alone -- so the hash computed afterwards is still the default's. */
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_INT_EQ(
+        PH_ERR_INVALID_ARGUMENT,
+        ph_context_set_radial_params(ctx, PH_RADIAL_MIN_PROJECTIONS - 1, PH_RADIAL_SAMPLES));
+    ASSERT_OK(ph_load_from_pixels(ctx, px, SIDE, SIDE, 1, 0));
+    ph_digest_t after_refusal;
+    ASSERT_OK(ph_compute_radial_hash(ctx, &after_refusal));
+    ph_free(ctx);
+    ASSERT(memcmp(d[1].data, after_refusal.data, PH_RADIAL_COEFFS) == 0);
+
+    double coarse = 0.0, fine = 0.0;
+    ASSERT_OK(ph_radial_similarity(&d[1], &d[2], &coarse));
+    ASSERT_OK(ph_radial_similarity(&d[2], &d[3], &fine));
+    printf("  radial angle convergence: 180 vs 4096 %.5f, 4096 vs %d %.5f\n", coarse,
+           PH_RADIAL_MAX_PROJECTIONS, fine);
+    ASSERT(fine > 0.999);
+    ASSERT(fine > coarse);
+
+    PASS("test_radial_projection_count_bounds");
+}
+
 int main() {
     test_bilinear_unit();
+    test_radial_ignores_everything_outside_the_central_disc();
+    test_radial_projection_count_bounds();
     test_projection_variance_unit();
     test_radial_similarity_contract();
     test_radial_with_real_rotation();

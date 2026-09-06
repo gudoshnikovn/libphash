@@ -281,8 +281,79 @@ void test_color_hash_refuses_one_channel_pixels() {
     PASS("test_color_hash_refuses_one_channel_pixels");
 }
 
+/* R45. The counts, not just the bins they land in.
+ *
+ * The digest is scaled against the largest bin rather than against the pixel count, and
+ * rounded to nearest in integer arithmetic. Both choices are invisible on a photograph,
+ * where every bin holds a fraction of a percent, and both are easy to get wrong by one --
+ * a truncating divide, or a scale by the total. An image built from two colours in a
+ * known ratio pins them: the majority colour is 255 by definition, and the other is that
+ * ratio of it, rounded.
+ *
+ * The single-pixel case is the degenerate end of the same rule and is worth stating
+ * because it is the one a caller is most likely to hit by accident: one pixel is its own
+ * largest bin, so a 1x1 image produces exactly one bin at 255, whatever its colour. */
+void test_color_histogram_counts_are_scaled_against_the_largest_bin() {
+    enum { N = 16 };
+    uint8_t px[N * 3];
+
+    struct {
+        int majority; /* how many of the N pixels are red; the rest are blue */
+        int expected; /* what the blue bin must therefore hold */
+    } cases[] = {
+        {12, 85},  /* 4/12 -> 85.0, exact */
+        {8, 255},  /* equal halves: both bins are the largest */
+        {15, 17},  /* 1/15 -> 17.0, exact */
+        {10, 153}, /* 6/10 -> 153.0, exact */
+        {11, 116}, /* 5/11 -> 115.9, rounds up */
+    };
+
+    const int red_bin = ph_color_histogram_bin(255, 0, 0);
+    const int blue_bin = ph_color_histogram_bin(0, 0, 255);
+    ASSERT(red_bin != blue_bin);
+
+    for (unsigned c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
+        for (int i = 0; i < N; i++) {
+            int red = i < cases[c].majority;
+            px[i * 3] = (uint8_t)(red ? 255 : 0);
+            px[i * 3 + 1] = 0;
+            px[i * 3 + 2] = (uint8_t)(red ? 0 : 255);
+        }
+        ph_context_t *ctx = NULL;
+        ph_digest_t d;
+        ASSERT_OK(ph_create(&ctx));
+        ASSERT_OK(ph_load_from_pixels(ctx, px, N, 1, 3, 0));
+        ASSERT_OK(ph_compute_color_hash(ctx, &d));
+        ph_free(ctx);
+
+        ASSERT_UINT8_EQ(255, d.data[red_bin]);
+        ASSERT_UINT8_EQ(cases[c].expected, d.data[blue_bin]);
+        for (int i = 0; i < d.size; i++)
+            if (i != red_bin && i != blue_bin)
+                ASSERT_UINT8_EQ(0, d.data[i]);
+    }
+
+    /* One pixel: one bin, full scale. */
+    uint8_t single[3] = {30, 200, 90};
+    ph_context_t *ctx = NULL;
+    ph_digest_t d;
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_load_from_pixels(ctx, single, 1, 1, 3, 0));
+    ASSERT_OK(ph_compute_color_hash(ctx, &d));
+    ph_free(ctx);
+    ASSERT_UINT8_EQ(255, d.data[ph_color_histogram_bin(30, 200, 90)]);
+    int filled = 0;
+    for (int i = 0; i < d.size; i++)
+        if (d.data[i])
+            filled++;
+    ASSERT_INT_EQ(1, filled);
+
+    PASS("test_color_histogram_counts_are_scaled_against_the_largest_bin");
+}
+
 int main() {
     test_color_histogram_bin_unit();
+    test_color_histogram_counts_are_scaled_against_the_largest_bin();
     test_histogram_intersection_unit();
     test_color_hash_separates_flat_colours();
     test_color_hash_e2e();
