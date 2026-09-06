@@ -292,6 +292,13 @@ PH_API ph_error_t ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t m
     return PH_SUCCESS;
 }
 
+PH_API ph_error_t ph_context_set_whash_remove_max_haar_ll(ph_context_t *ctx, int enable) {
+    if (!ctx)
+        return PH_ERR_INVALID_ARGUMENT;
+    ctx->config.whash_remove_max_haar_ll = enable ? 1 : 0;
+    return PH_SUCCESS;
+}
+
 PH_API ph_error_t ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixels) {
     if (!ctx)
         return PH_ERR_INVALID_ARGUMENT;
@@ -333,6 +340,7 @@ PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     ctx->config.radial_samples = PH_RADIAL_SAMPLES;
     ctx->config.block_size = PH_BLOCK_SIZE;
     ctx->config.whash_mode = PH_WHASH_FAST;
+    ctx->config.whash_remove_max_haar_ll = 0;
     ctx->config.max_pixels = PH_DEFAULT_MAX_PIXELS;
 
     /* Optimization Default: disabled by default for compatibility with

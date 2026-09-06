@@ -19,9 +19,13 @@
  * (tests/src/test_hash_properties.c). Kept deliberately for that reason; see the premise
  * section of docs/algorithm-provenance.md.
  *
- * One known difference from the reference implementation: ImageHash zeroes the coarsest
- * LL band by default (remove_max_haar_ll=True) so the hash describes local structure
- * rather than overall brightness; this code does not.
+ * One documented difference from the reference implementation: ImageHash zeroes the
+ * coarsest LL band by default (remove_max_haar_ll=True) so the hash describes local
+ * structure rather than overall brightness. This code implements the operation but leaves
+ * it off, because it is the identity here and there: zeroing that single coefficient and
+ * reconstructing subtracts the image mean from every sample, a constant subtraction
+ * shifts the working LL band and its median alike, and a median threshold is blind to
+ * that. See ph_context_set_whash_remove_max_haar_ll() and R67 in tasks/review/.
  *
  * The transform itself is the orthonormal Haar wavelet: sums and differences of
  * adjacent samples, both divided by sqrt(2).
@@ -64,6 +68,58 @@ void ph_haar_2d_level(float *data, int size, int stride, float *temp_row, float 
     }
 }
 
+void ph_haar_1d_inverse_float(float *data, int n, float *temp) {
+    int h = n / 2;
+    float inv_haar = (float)(1.0 / PH_HAAR_SCALE);
+    for (int i = 0; i < h; i++) {
+        temp[2 * i] = (data[i] + data[i + h]) * inv_haar;
+        temp[2 * i + 1] = (data[i] - data[i + h]) * inv_haar;
+    }
+    for (int i = 0; i < n; i++)
+        data[i] = temp[i];
+}
+
+void ph_haar_2d_level_inverse(float *data, int size, int stride, float *temp_row, float *temp_col) {
+    /* Mirror of ph_haar_2d_level: it went horizontal then vertical, so undo vertical first. */
+    for (int j = 0; j < size; j++) {
+        for (int i = 0; i < size; i++) {
+            temp_col[i] = data[i * stride + j];
+        }
+        ph_haar_1d_inverse_float(temp_col, size, temp_row);
+        for (int i = 0; i < size; i++) {
+            data[i * stride + j] = temp_col[i];
+        }
+    }
+
+    for (int i = 0; i < size; i++) {
+        for (int j = 0; j < size; j++) {
+            temp_row[j] = data[i * stride + j];
+        }
+        ph_haar_1d_inverse_float(temp_row, size, temp_col);
+        for (int j = 0; j < size; j++) {
+            data[i * stride + j] = temp_row[j];
+        }
+    }
+}
+
+/* ImageHash's remove_max_haar_ll: decompose all the way down to a 1x1 LL, zero that single
+ * coefficient, and reconstruct. See the note at ph_compute_whash() for what this is worth. */
+static void ph_whash_remove_max_haar_ll(float *d, int size, int stride, float *temp_a,
+                                        float *temp_b) {
+    int current_size = size;
+    while (current_size > 1) {
+        ph_haar_2d_level(d, current_size, stride, temp_a, temp_b);
+        current_size /= 2;
+    }
+
+    d[0] = 0.0f;
+
+    while (current_size < size) {
+        current_size *= 2;
+        ph_haar_2d_level_inverse(d, current_size, stride, temp_a, temp_b);
+    }
+}
+
 static ph_error_t ph_compute_whash_fast(ph_context_t *ctx, uint64_t *out_hash) {
     int hash_size = PH_CORE_HASH_SIZE;
     int image_scale = hash_size * 2; // 16
@@ -81,6 +137,10 @@ static ph_error_t ph_compute_whash_fast(ph_context_t *ctx, uint64_t *out_hash) {
         d[i] = (float)hash_input[i] / 255.0f;
 
     float temp_haar[16];
+    float temp_haar_b[16];
+    if (ctx->config.whash_remove_max_haar_ll)
+        ph_whash_remove_max_haar_ll(d, image_scale, image_scale, temp_haar, temp_haar_b);
+
     /* Horizontal passes */
     for (int i = 0; i < image_scale; i++)
         ph_haar_1d_float(&d[i * image_scale], image_scale, temp_haar);
@@ -143,6 +203,9 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
             d[i * image_scale + j] = (float)scaled_img[i * image_scale + j] / 255.0f;
         }
     }
+
+    if (ctx->config.whash_remove_max_haar_ll)
+        ph_whash_remove_max_haar_ll(d, image_scale, image_scale, temp_a, temp_b);
 
     int current_size = image_scale;
     // DWT cascade down to 8x8. We just call it on the top-left quadrant over and over.

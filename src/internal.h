@@ -136,6 +136,8 @@ PH_NODISCARD ph_error_t ph_dct1d_partial(const double *in, int n, int coeffs, do
 
 void ph_haar_1d_float(float *data, int n, float *temp);
 void ph_haar_2d_level(float *data, int size, int stride, float *temp_row, float *temp_col);
+void ph_haar_1d_inverse_float(float *data, int n, float *temp);
+void ph_haar_2d_level_inverse(float *data, int size, int stride, float *temp_row, float *temp_col);
 
 const float *ph_get_dct_matrix_32(void);
 
@@ -467,6 +469,7 @@ struct ph_context {
         int radial_samples;
         int block_size;
         ph_whash_mode_t whash_mode;
+        int whash_remove_max_haar_ll;
 
         // 0 = no caller limit; PH_MAX_SUPPORTED_PIXELS still applies. Otherwise the max
         // allowed width*height before decoding a pixel buffer.

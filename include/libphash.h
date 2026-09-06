@@ -376,6 +376,30 @@ PH_API ph_error_t ph_context_set_mhash_params(ph_context_t *ctx, float alpha, fl
 PH_API ph_error_t ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t mode);
 
 /**
+ * @brief Controls wHash's removal of the coarsest LL band (ImageHash's
+ *        @c remove_max_haar_ll). Off by default, and it does nothing either way.
+ *
+ * ImageHash enables this by default so that overall brightness stays out of the hash.
+ * Zeroing the coarsest LL coefficient and reconstructing is exactly a subtraction of the
+ * image mean from every sample; a constant subtracted from every sample shifts every
+ * coefficient of the working LL band and its median by that same constant, so a hash
+ * thresholded at the median comes out bit for bit identical. The median threshold has
+ * already removed what this option is meant to remove.
+ *
+ * It is offered for callers who need to mirror ImageHash's configuration, and it defaults
+ * to off because the only thing it can change is the tie-breaking of coefficients that
+ * land exactly on the median, which the extra transform pair decides by rounding error.
+ * On this library's synthetic corpus that costs separability 4.34 -> 3.43 and buys
+ * nothing. See tests/src/test_whash.c and docs/algorithm-provenance.md.
+ *
+ * @param ctx The context.
+ * @param enable Non-zero to zero the coarsest LL coefficient before the working
+ *        decomposition, zero to leave it in place.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx.
+ */
+PH_API ph_error_t ph_context_set_whash_remove_max_haar_ll(ph_context_t *ctx, int enable);
+
+/**
  * @brief Controls whether images are loaded as grayscale by default.
  *
  * If enabled (non-zero), `ph_load_from_file` and `ph_load_from_memory` will

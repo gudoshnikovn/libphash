@@ -323,6 +323,10 @@ exceeding the smaller image dimension; divide by 255; Haar `wavedec2` to level
 the LL coefficients of a full decomposition before the main one**; median of the
 remaining `hash_size × hash_size` low band; bit set when `value > median`.
 
+Note that `remove_max_haar_ll=True` cannot do for ImageHash what its name promises either,
+for the same reason given in the delta table below: its working band is thresholded at a
+median too.
+
 **What this implementation does** (`src/hashes/whash.c`): two modes.
 
 - `PH_WHASH_FAST` (default): box resize to a fixed 16×16, divide by 255, one Haar level
@@ -335,7 +339,7 @@ remaining `hash_size × hash_size` low band; bit set when `value > median`.
 
 | Difference | Class | Note |
 |---|---|---|
-| `remove_max_haar_ll` not implemented | **to be decided by measurement** | ImageHash removes the coarsest LL band so the hash describes local structure rather than overall brightness. Omitting it makes wHash more like aHash than intended — and the per-transform figures are consistent with that: wHash's mean distance under a +25 brightness shift is 0.008, so today's hash barely notices brightness leaving the LL band in. No source says which is correct, so this is settled the only way it can be: implement both, measure, keep the better, and record both numbers. Filed separately; the change was previously deferred only because it moves hash values, which 2.0.0 does anyway. |
+| `remove_max_haar_ll` implemented, defaults to off | **settled by proof and measurement (R67)** | The operation is the identity for a hash thresholded at the median, here and in ImageHash. Zeroing the single coarsest LL coefficient and reconstructing subtracts the image mean from every sample and nothing else (verified: max deviation 1.9e-07 against `orig − mean`, on a cascade whose round-trip error is 4.2e-07). A constant subtracted from every sample shifts every working-LL coefficient and their median by that same constant, so `value > median` is unchanged. Measured accordingly: all six real fixtures hash bit for bit identically in both modes. On the synthetic corpus 49 of 192 images do move, 536 bit flips in total, separability 4.34 → 3.43 — entirely tie-breaking noise, since bits move only where coefficients land exactly on the median (a disc with 34 such ties flips 2 bits; stripes, quadrants and noise have no ties and flip none), and that corpus is rich in the flat regions that produce ties while photographs produce none. The earlier suspicion that omitting it left brightness in the hash is **refuted**: the +25 brightness row is 0.028 without the removal and 0.050 with it. Exposed as `ph_context_set_whash_remove_max_haar_ll()` for callers mirroring ImageHash's configuration; default off, because the only thing it can do is let rounding error decide ties. Pinned by `test_remove_max_haar_ll_subtracts_the_mean`, `test_remove_max_haar_ll_leaves_the_hash_alone` and `test_remove_max_haar_ll_on_a_solid_fill`. |
 | Default mode fixes the scale at 16×16 | deliberate | `PH_WHASH_FULL` implements the power-of-two rule. Speed/robustness trade-off. |
 | Box resampling, where the reference implementation resamples with PIL's `LANCZOS` | undefined | |
 
