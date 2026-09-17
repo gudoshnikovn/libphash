@@ -167,8 +167,8 @@ portability and comparison against a foreign implementation.
   algorithm of Venkatesan et al. that is often cited for wavelet hashing — that one is
   keyed, and its key is not optional. No paper describes an unkeyed deterministic wavelet
   hash because there is nothing for the security literature to prove about one. So wHash
-  is justified by measurement instead: separability 4.34 on the synthetic corpus, second
-  best of the nine. Kept on those grounds rather than replaced.
+  is justified by measurement instead: separability 4.10 on the synthetic corpus, third
+  best of the nine, behind only BMH and aHash. Kept on those grounds rather than replaced.
 - One known difference from ImageHash: that implementation zeroes the coarsest LL band by
   default, so its hash describes local structure rather than overall brightness; this one
   does not.

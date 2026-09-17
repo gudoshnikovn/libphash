@@ -641,9 +641,9 @@ the kind the perceptual-hashing literature evaluates — and an exact half turn.
 turn is not the transform's doing: a projection line at α and at α+180 is the same line,
 so it is the identity on the variance vector before the DCT ever runs. On the smoother
 `photo_complex.png` the sweep holds out to 10° (0.939); on the deliberately
-high-frequency synthetic corpus, where a one-degree resample already moves 3-pixel
-stripes, it is much weaker (mean 0.76 at 1°) — content matters, and the corpus is the
-pessimistic end of it.
+high-frequency synthetic corpus, where a one-degree resample already moves its narrow
+stripes and small checkerboards, it is much weaker (mean 0.77 at 1°) — content matters,
+and the corpus is the pessimistic end of it.
 
 Quarter turns are not absorbed, and no comparison of these 40 coefficients can absorb
 them: pHash's maximisation over cyclic shifts of the coefficients is not the group a
@@ -990,6 +990,23 @@ number measured on this corpus describes the algorithm's behaviour on the corpus
 suitable for detecting a regression and for comparing two implementations of the same
 algorithm against each other — which is what these tests are for. It is **not** evidence
 about real-world recall, and no such claim should be made from it.
+
+**Resolution, and why it is a variable now.** Until 2026-09-18 (R69) the corpus was
+128×128 with every structural feature's size hardcoded in pixels — checkerboard cells,
+stripe widths, ring periods, disc radii — so its resolution and the relative fineness of
+its structure were the same knob. That understated any algorithm normalising to a size
+larger than the corpus: mHash, which normalises to 512, saw a corpus upscaled fourfold
+before it was ever filtered. Every feature size in `make_base()` is now a fraction of the
+corpus resolution (`IMG_W`/`IMG_H`, via `BASE_RES`), so the two are independent, and the
+corpus is generated at 160×160 — bigger than before, and deliberately not equal to any
+algorithm's normalisation preset (8 for aHash/dHash, 16 for BMH's default `block_size`,
+32 for pHash's default `dct_size`, 512 for mHash). This narrows mHash's bias (a 3.2x
+upsample now, against 4x before) without eliminating it — a corpus at or above 512 would,
+but `tests/src/test_hash_properties.c`'s radial-rotation assertions set a practical
+ceiling on how large this corpus can go before an unrelated property (`ph_compute_radial_hash()`'s
+fixed `PH_RADIAL_SAMPLES` sampling a fixed-size disc more coarsely) starts failing; see the
+comment on `IMG_W` there. Numbers measured on this corpus are comparable within one run of
+that file at one resolution, and nowhere else.
 
 ## The boundary with `python-libphash`
 

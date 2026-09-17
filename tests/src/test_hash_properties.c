@@ -39,9 +39,36 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define IMG_W 128
-#define IMG_H 128
+/* R69 (2026-09-18): 160x160, deliberately not equal to any normalisation preset in the
+ * library (8 for aHash/dHash, 16 for BMH's default block_size, 32 for pHash's default
+ * dct_size, 512 for mHash) and not a power of two like every one of them, so no
+ * algorithm's resize from this corpus is ever a no-op or a suspiciously round ratio.
+ * Bigger than the 128x128 this measured at before this date, which narrows (without
+ * eliminating) mHash's bias toward algorithms that normalise larger than the corpus --
+ * mHash upsamples this corpus 3.2x to reach its 512 default, against 4x at 128 -- see the
+ * note on BASE_RES below for why the absolute resolution matters.
+ *
+ * 160 is also close to the largest this corpus can be raised without retuning anything
+ * else: test_radial_rotation_profile()'s pinned half-turn floor (PH_RADIAL_PCC_THRESHOLD,
+ * asserted independently of this task) is a fixed-sample-count property of
+ * ph_compute_radial_hash() (PH_RADIAL_SAMPLES = 128 samples per projection, not scaled to
+ * image size), so a bigger corpus radius means coarser sampling relative to its own
+ * content and a noisier half-turn match: measured mean peak correlation at a half turn
+ * across the corpus, same generator, only IMG_W varied -- 144: 0.984, 160: 0.965, 176:
+ * 0.928, 192: 0.867 (fails the 0.90 floor), 200: 0.849 (fails). 160 keeps a real margin
+ * (0.965) without changing that unrelated threshold to accommodate this task. */
+#define IMG_W 160
+#define IMG_H 160
 #define NUM_BASE 24
+
+/* The resolution every make_base() feature size below was originally tuned at, and the
+ * reference every one of them is now expressed as a fraction of, via (IMG_W / BASE_RES).
+ * Before this existed, checkerboard cells, stripe widths, ring periods, disc radii and
+ * sinusoid frequencies were hardcoded in pixels: fine at 128x128, but wrong at any other
+ * resolution, because the feature size in fraction-of-frame terms silently changed with
+ * it. That is exactly the bug this task exists to fix -- it is also why raising IMG_W
+ * above, on its own, is safe: every family's structure now scales with it. */
+#define BASE_RES 128.0
 
 typedef struct {
     uint8_t *px; /* interleaved RGB */
@@ -116,7 +143,9 @@ static image_t make_base(int index) {
                     break;
                 }
                 case 1: { /* checkerboard, varying cell size and colour pair */
-                    int cell = 4 << variant;
+                    int cell = (int)((4 << variant) * (IMG_W / BASE_RES) + 0.5);
+                    if (cell < 1)
+                        cell = 1;
                     int on = ((x / cell) + (y / cell)) & 1;
                     r = on ? 235 : 30;
                     g = on ? 40 : 200;
@@ -126,14 +155,17 @@ static image_t make_base(int index) {
                 case 2: { /* concentric rings, varying period, cyan/magenta */
                     int dx = x - IMG_W / 2, dy = y - IMG_H / 2;
                     double d = sqrt((double)(dx * dx + dy * dy));
-                    double w = sin(d / (3.0 + variant * 2.0));
+                    double period = (3.0 + variant * 2.0) * (IMG_W / BASE_RES);
+                    double w = sin(d / period);
                     r = (int)(127.5 + 110.0 * w);
                     g = (int)(127.5 - 110.0 * w);
                     b = (int)(127.5 + 110.0 * sin(d / 7.0));
                     break;
                 }
                 case 3: { /* vertical stripes, varying width and colour */
-                    int w = 3 + variant * 4;
+                    int w = (int)((3 + variant * 4) * (IMG_W / BASE_RES) + 0.5);
+                    if (w < 1)
+                        w = 1;
                     int on = (x / w) & 1;
                     r = on ? 200 : 40;
                     g = on ? 60 : 180;
@@ -142,7 +174,7 @@ static image_t make_base(int index) {
                 }
                 case 4: { /* filled disc on a flat field, varying radius and colour */
                     int dx = x - IMG_W / 3, dy = y - IMG_H / 2;
-                    int rad = 20 + variant * 12;
+                    int rad = (int)((20 + variant * 12) * (IMG_W / BASE_RES) + 0.5);
                     int inside = dx * dx + dy * dy < rad * rad;
                     r = inside ? 220 : 25;
                     g = inside ? 30 : 150;
@@ -150,7 +182,7 @@ static image_t make_base(int index) {
                     break;
                 }
                 case 5: { /* smooth 2-D sinusoid, varying frequency, channels out of phase */
-                    double f = 0.05 + variant * 0.04;
+                    double f = (0.05 + variant * 0.04) * (BASE_RES / IMG_W);
                     double w = sin(x * f) * cos(y * f * 1.3);
                     r = (int)(127.5 + 100.0 * w);
                     g = (int)(127.5 + 100.0 * sin(x * f + 2.1) * cos(y * f * 1.3));
@@ -409,10 +441,10 @@ static double separability(const stats_t *intra, const stats_t *inter) {
 /* ---------------------------------------------------------------------------
  * Thresholds
  *
- * Measured on this corpus (24 bases x 7 transforms = 168 intra-pairs, 276 inter-pairs)
- * with the numbers printed by this test, then floored well below the observation so a
- * genuine regression trips it and ordinary noise does not. Observed values are in the
- * comment beside each entry; re-measure rather than relax.
+ * Measured on this corpus (24 bases x 7 transforms = 168 intra-pairs, 276 inter-pairs) at
+ * IMG_W=160 with the numbers printed by this test (2026-09-18), then floored well below
+ * the observation so a genuine regression trips it and ordinary noise does not. Observed
+ * values are in the comment beside each entry; re-measure rather than relax.
  * ------------------------------------------------------------------------ */
 typedef struct {
     double min_separability;
@@ -421,38 +453,47 @@ typedef struct {
 } bounds_t;
 
 static const bounds_t BOUNDS[A_COUNT] = {
-    /*             sep.  intra  inter        measured: sep / mean intra / mean inter   */
-    [A_AHASH] = {2.50, 0.100, 0.400},  /* 3.54 / 0.052 / 0.488 */
-    [A_DHASH] = {2.50, 0.120, 0.380},  /* 3.60 / 0.066 / 0.469 */
-    [A_PHASH] = {1.80, 0.260, 0.400},  /* 2.48 / 0.177 / 0.490 */
-    [A_WHASH] = {3.00, 0.080, 0.390},  /* 4.34 / 0.036 / 0.480 */
-    [A_MHASH] = {1.80, 0.200, 0.380},  /* 2.49 / 0.165 / 0.487 -- but read the note */
-    [A_BMH] = {3.50, 0.070, 0.390},    /* 5.21 / 0.031 / 0.478 */
-    [A_COLOR] = {2.80, 0.130, 0.700},  /* 3.95 / 0.089 / 0.849 */
-    [A_RADIAL] = {1.80, 0.070, 0.180}, /* 2.46 / 0.032 / 0.263, by cross-correlation */
+    /*             sep.  intra  inter        measured 2026-09-18 @ 160x160: sep / mean intra / mean
+       inter */
+    [A_AHASH] = {2.90, 0.060, 0.360},  /* 4.15 / 0.029 / 0.444 */
+    [A_DHASH] = {2.40, 0.115, 0.370},  /* 3.49 / 0.063 / 0.460 */
+    [A_PHASH] = {1.80, 0.250, 0.390},  /* 2.65 / 0.170 / 0.489 */
+    [A_WHASH] = {2.80, 0.085, 0.390},  /* 4.10 / 0.038 / 0.484 */
+    [A_MHASH] = {1.80, 0.185, 0.380},  /* 2.62 / 0.151 / 0.490 -- but read the note */
+    [A_BMH] = {3.60, 0.080, 0.390},    /* 5.43 / 0.034 / 0.480 */
+    [A_COLOR] = {2.80, 0.120, 0.690},  /* 4.01 / 0.081 / 0.841 */
+    [A_RADIAL] = {1.65, 0.085, 0.175}, /* 2.31 / 0.037 / 0.260, by cross-correlation */
 };
 
-/* This corpus understates any algorithm that normalises to a fixed size larger than
- * IMG_W. mHash normalises to 512 and these images are 128, so every one of them is
- * upscaled fourfold before it is filtered, while the benign transformations resample them
- * again on top of that. Measured: on this corpus mHash separates at 2.49; on the same
- * corpus generated at 300x300 it separates at 2.70 and is second only to BMH, against
- * aHash 2.31, dHash 2.07 and pHash 1.89. The absolute numbers of every algorithm move
- * with the corpus size, so they are comparable within one run of this file and nowhere
- * else -- which is what the thresholds below are for. Making the corpus resolution
- * representative is filed separately; changing it here would move every number in this
- * file and in the documentation at once.
+/* This corpus still understates any algorithm that normalises to a fixed size larger than
+ * IMG_W, but as of R69 (2026-09-18) that is a narrower gap, not a structural blind spot.
+ * Before R69, every make_base() family's feature sizes (checkerboard cell, stripe width,
+ * ring period, disc radius, sinusoid frequency) were hardcoded in pixels, tuned to look
+ * right at the then-fixed IMG_W=128; raising IMG_W on its own changed the *relative*
+ * fineness of the corpus's structure along with its resolution, which is why the earlier
+ * version of this file could only compare two corpus sizes by regenerating the whole
+ * thing and re-reading every number, and why mHash (which normalises to 512) measured
+ * worse the smaller the corpus was -- not because it is weaker, but because the corpus was
+ * relatively coarser structure stretched further to reach it. Every feature size below is
+ * now expressed as a fraction of IMG_W/IMG_H (via BASE_RES), so this bias is now purely
+ * about how far a resize has to travel, not also about what it is resizing. mHash still
+ * upsamples this 160x160 corpus 3.2x to reach its 512 default (down from 4x at the old
+ * 128x128), and it separates at 2.62 here -- ahead of pHash (2.65 is close enough that the
+ * two are not meaningfully ordered) and Radial, behind everything else. Absolute numbers
+ * are only comparable within one run of this file with one corpus resolution, which is
+ * what the thresholds above are for; docs/algorithm-provenance.md's per-algorithm notes
+ * cite this same run's numbers where they describe current behaviour.
  *
  * Three things the measurement says that are worth reading off it rather than assuming.
  *
- * ColorHash's inter-distance is the highest here -- 0.849, where the structural hashes
- * sit near 0.48 -- because its distance is one minus a histogram intersection, and two
+ * ColorHash's inter-distance is the highest here -- 0.841, where the structural hashes
+ * sit near 0.46 -- because its distance is one minus a histogram intersection, and two
  * unrelated pictures share little colour. That is a different scale from a normalised
  * Hamming distance, whose expectation between unrelated hashes is 0.5 by construction.
  * Compare its separability with the others; do not compare its raw distances with
- * theirs. Until 2.0.0 it read 1.89 / 0.031 / 0.123, when it was the 42-bit ImageHash
- * port -- most of whose bins were empty for most images, so unrelated pictures agreed on
- * a great many zeroes.
+ * theirs. Until 2.0.0 it read 1.89 / 0.031 / 0.123 on the corpus of the time, when it was
+ * the 42-bit ImageHash port -- most of whose bins were empty for most images, so unrelated
+ * pictures agreed on a great many zeroes.
  *
  * Radial's distances are not bits but quantised DCT coefficients compared by L2, so its
  * row is on a different footing from the rest even after normalisation; read its
@@ -460,17 +501,19 @@ static const bounds_t BOUNDS[A_COUNT] = {
  * mean is low for the same reason ColorHash's is -- one byte of its digest (coefficient
  * 0) is 255 for every image, and the affine quantisation squeezes the rest of the
  * coefficients into whatever range is left under it. Applying the DCT of the source in
- * 2.0.0 moved it from 0.021 / 0.344 / 2.80 to 0.007 / 0.188 / 2.12: three times more
- * robust, less well discriminated, and measured under a comparison the source does not
- * use -- see docs/algorithm-provenance.md section 7.
+ * 2.0.0 moved it, on the corpus of the time, from 0.021 / 0.344 / 2.80 to 0.007 / 0.188 /
+ * 2.12: three times more robust, less well discriminated, and measured under a comparison
+ * the source does not use -- see docs/algorithm-provenance.md section 7.
  *
  * pHash has the worst robustness of the structural hashes here -- mean intra-distance
- * 0.177 against 0.03-0.07 for the others -- and the second-lowest separability. The DC
- * coefficient was the suspect and has been ruled out: taking it out of the median leaves
- * this number at 0.177 to three decimals, and taking it out of the hash entirely (the
- * 8x8 block at DCT(1,1)) makes it worse, 0.190 with separability 2.27. A median is not
- * dragged by an outlier, whatever the received explanation says. The cause is elsewhere
- * and has not been found; docs/algorithm-provenance.md section 3 has the measurement. */
+ * 0.170 against 0.03-0.06 for the others -- and separability ahead of only Radial and
+ * mHash (2.65 against their 2.31 and 2.62). The DC coefficient was the suspect and was
+ * ruled out on the 128x128 corpus this test used before R69: taking it out of the median
+ * left the intra-distance at 0.177 to three decimals there, and taking it out of the hash
+ * entirely (the 8x8 block at DCT(1,1)) made it worse, 0.190 with separability 2.27. A
+ * median is not dragged by an outlier, whatever the received explanation says. The cause
+ * is elsewhere and has not been found; docs/algorithm-provenance.md section 3 has that
+ * measurement. */
 
 static void test_robustness_discrimination_separability(void) {
     image_t base[NUM_BASE];
@@ -669,12 +712,16 @@ static image_t rotate_by(const image_t *s, double deg) {
 /* The rotation profile over the corpus.
  *
  * Read this as a lower bound, not as the algorithm's behaviour on photographs. Every
- * image here is 128x128 and deliberately high-frequency -- 3-pixel stripes, 4-pixel
- * checkerboards, additive noise -- and on that content a one-degree resampling changes
- * the pixels enough to move the variance profile on its own. The same measurement on the
- * real photographs in tests/data (tests/src/test_radial.c) gives 0.99 at 1 degree and
- * 0.94 at 3. Both are worth having: this one says what happens when the content is all
- * detail, that one says what happens on a picture. */
+ * image here is IMG_W x IMG_H (160x160) and deliberately high-frequency -- narrow
+ * stripes, small checkerboards, additive noise -- and on that content a one-degree
+ * resampling changes the pixels enough to move the variance profile on its own. The same
+ * measurement on the real photographs in tests/data (tests/src/test_radial.c) gives 0.99
+ * at 1 degree and 0.94 at 3. Both are worth having: this one says what happens when the
+ * content is all detail, that one says what happens on a picture.
+ *
+ * This profile is also why IMG_W has a practical ceiling, not just a floor: see the note
+ * on PH_RADIAL_SAMPLES next to IMG_W's definition above. Raising it further than R69 did
+ * would erode the half-turn margin this test asserts on. */
 static void test_radial_rotation_profile(void) {
     static const double ANGLES[] = {1, 2, 5, 10, 15, 30, 45, 90, 180};
     const int NA = (int)(sizeof(ANGLES) / sizeof(ANGLES[0]));
@@ -731,14 +778,14 @@ static void test_radial_rotation_profile(void) {
 
     /* A half turn is the identity on the projections -- the line at alpha and at
      * alpha+180 is the same line -- so it must match on every image, whatever the
-     * content. Measured: mean 0.986, worst 0.943. */
+     * content. Measured 2026-09-18 @ 160x160: mean 0.965, worst 0.913. */
     if (mean_at[NA - 1] < PH_RADIAL_PCC_THRESHOLD) {
         fprintf(stderr, "[FAIL] a half turn averages %.3f, below the threshold %.2f\n",
                 mean_at[NA - 1], PH_RADIAL_PCC_THRESHOLD);
         exit(1);
     }
-    /* And a small rotation still has to beat an unrelated image even here. Measured:
-     * 0.764 at one degree against 0.599 for an unrelated pair. */
+    /* And a small rotation still has to beat an unrelated image even here. Measured
+     * 2026-09-18 @ 160x160: 0.765 at one degree against 0.557 for an unrelated pair. */
     if (mean_at[0] <= stats_mean(&unrel)) {
         fprintf(stderr,
                 "[FAIL] a one-degree rotation averages %.3f, no better than the %.3f an "
@@ -824,9 +871,11 @@ static void test_radial_rotation_survives_the_projections_not_the_transform(void
                 PH_RADIAL_PCC_THRESHOLD);
         exit(1);
     }
-    /* And the quarter turns do not. Measured 0.19 and 0.13 against 0.33 for an unrelated
-     * image. Asserted as the current, defective behaviour: if a representation that
-     * survives a shift is ever adopted, this has to be replaced by a test of invariance. */
+    /* And the quarter turns do not. Measured 0.19 and 0.13 against 0.34 for an unrelated
+     * image (the "other" comparison image comes from the corpus, so this one number
+     * moves with it; the rest of this function's fixed 128x128 stripe pattern does not).
+     * Asserted as the current, defective behaviour: if a representation that survives a
+     * shift is ever adopted, this has to be replaced by a test of invariance. */
     if (p90 >= PH_RADIAL_PCC_THRESHOLD || p270 >= PH_RADIAL_PCC_THRESHOLD) {
         fprintf(stderr,
                 "[FAIL] quarter turns now score %.4f / %.4f, at or above the threshold -- if the "
