@@ -225,6 +225,111 @@ void test_stb_fallback_formats() {
     printf("test_stb_fallback_formats: PASSED\n");
 }
 
+// The remaining formats CLAUDE.md, README.md and the ph_can_read_stb() comment claim
+// stb_image gives us "for free": TGA, PNM/PPM (P5 and P6), HDR, PSD, PIC. None of these
+// had any test coverage before -- each fixture below was hand-built against the exact
+// parsing stb_image.h does for that format (stbi__tga_info/stbi__tga_test,
+// stbi__hdr_load, stbi__psd_load, stbi__pic_load_core) and independently confirmed to
+// decode with the vendored stb_image.h before being pasted in here.
+
+// Minimal 2x2 uncompressed 24bpp TGA (image type 2, no colormap, no RLE). BGR pixel
+// order, origin bottom-left (the TGA default -- image descriptor byte is 0).
+static const uint8_t tga_2x2[] = {0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                  0x00, 0x00, 0x02, 0x00, 0x02, 0x00, 0x18, 0x00, 0x00, 0x00,
+                                  0xff, 0x00, 0xff, 0x00, 0xff, 0x00, 0x00, 0xff, 0xff, 0xff};
+
+// Minimal 2x2 binary PGM (P5, grayscale): "P5\n2 2\n255\n" + 4 raw gray bytes.
+static const uint8_t pgm_p5_2x2[] = {0x50, 0x35, 0x0a, 0x32, 0x20, 0x32, 0x0a, 0x32,
+                                     0x35, 0x35, 0x0a, 0x00, 0x40, 0x80, 0xff};
+
+// Minimal 2x2 binary PPM (P6, RGB): "P6\n2 2\n255\n" + 4 raw RGB triples.
+static const uint8_t ppm_p6_2x2[] = {0x50, 0x36, 0x0a, 0x32, 0x20, 0x32, 0x0a, 0x32,
+                                     0x35, 0x35, 0x0a, 0xff, 0x00, 0x00, 0x00, 0xff,
+                                     0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff};
+
+// Minimal 2x2 Radiance HDR (RGBE): "#?RADIANCE" signature, mandatory
+// "FORMAT=32-bit_rle_rgbe" token, blank line, "-Y 2 +X 2" resolution string, then raw
+// (non run-length-encoded) RGBE data -- stb_image only takes the RLE scanline path for
+// width in [8, 32768), so a 2-pixel-wide image goes through the flat read.
+static const uint8_t hdr_2x2[] = {
+    0x23, 0x3f, 0x52, 0x41, 0x44, 0x49, 0x41, 0x4e, 0x43, 0x45, 0x0a, 0x46, 0x4f, 0x52, 0x4d, 0x41,
+    0x54, 0x3d, 0x33, 0x32, 0x2d, 0x62, 0x69, 0x74, 0x5f, 0x72, 0x6c, 0x65, 0x5f, 0x72, 0x67, 0x62,
+    0x65, 0x0a, 0x0a, 0x2d, 0x59, 0x20, 0x32, 0x20, 0x2b, 0x58, 0x20, 0x32, 0x0a, 0x80, 0x00, 0x00,
+    0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0x00, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80};
+
+// Minimal 2x2 uncompressed 8-bit RGB PSD: "8BPS" signature, version 1, 3 channels,
+// zero-length color-mode/image-resources/layer-mask sections, compression = none, then
+// raw per-channel planes (R plane, then G, then B -- PSD stores channels separately,
+// not interleaved).
+static const uint8_t psd_2x2[] = {0x38, 0x42, 0x50, 0x53, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                  0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02,
+                                  0x00, 0x08, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0x80, 0x40,
+                                  0x00, 0xff, 0x80, 0x40, 0x00, 0x00, 0x80, 0x40};
+
+// Minimal 2x2 uncompressed RGB Softimage PIC: magic + 84-byte filler + "PICT" marker
+// (that's the 92-byte block stbi__pic_test_core()/stbi__pic_load() both skip), 2x2
+// resolution, then a single non-chained uncompressed packet covering the R/G/B
+// channels (channel mask 0xE0 -- no alpha, so comp comes back 3).
+static const uint8_t pic_2x2[] = {
+    0x53, 0x80, 0xf6, 0x34, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x50, 0x49,
+    0x43, 0x54, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x08, 0x00, 0xe0, 0xff, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff};
+
+void test_stb_extended_fallback_formats() {
+    struct {
+        const char *name;
+        const uint8_t *data;
+        size_t len;
+        int expect_w, expect_h, expect_min_ch;
+    } cases[] = {
+        {"tga", tga_2x2, sizeof(tga_2x2), 2, 2, 3},
+        {"pgm (P5)", pgm_p5_2x2, sizeof(pgm_p5_2x2), 2, 2, 1},
+        {"ppm (P6)", ppm_p6_2x2, sizeof(ppm_p6_2x2), 2, 2, 3},
+        {"hdr", hdr_2x2, sizeof(hdr_2x2), 2, 2, 3},
+        {"psd", psd_2x2, sizeof(psd_2x2), 2, 2, 3},
+        {"pic", pic_2x2, sizeof(pic_2x2), 2, 2, 3},
+    };
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        ph_context_t *ctx = NULL;
+        ASSERT_OK(ph_create(&ctx));
+
+        ph_error_t err = ph_load_from_memory(ctx, cases[i].data, cases[i].len);
+        if (err != PH_SUCCESS) {
+            fprintf(stderr, "[FAIL] test_stb_extended_fallback_formats: %s failed with %d (%s)\n",
+                    cases[i].name, err, ph_get_error_string(err));
+            exit(1);
+        }
+
+        int w, h, ch;
+        ph_context_get_dimensions(ctx, &w, &h, &ch);
+        if (w != cases[i].expect_w || h != cases[i].expect_h || ch < cases[i].expect_min_ch) {
+            fprintf(stderr,
+                    "[FAIL] test_stb_extended_fallback_formats: %s decoded to %dx%d ch=%d, "
+                    "expected %dx%d ch>=%d\n",
+                    cases[i].name, w, h, ch, cases[i].expect_w, cases[i].expect_h,
+                    cases[i].expect_min_ch);
+            exit(1);
+        }
+        ASSERT_INT_EQ(1, ph_is_loaded(ctx));
+
+        // Every one of these is a real color image, so a hash that needs color data
+        // must succeed on it, the same contract exercised for BMP/GIF above.
+        uint64_t hash = 0;
+        ASSERT_OK(ph_compute_ahash(ctx, &hash));
+
+        ph_free(ctx);
+    }
+
+    printf("test_stb_extended_fallback_formats: PASSED\n");
+}
+
 // Grayscale loading through the stb_image fallback, which is the one decoder path that
 // cannot be configured away: BMP and GIF have no native backend in any build, so this
 // exercises `*ch = req_comp` in ph_decode_stb_mem() (src/loader.c) whatever the native
@@ -291,6 +396,108 @@ void test_grayscale_via_stb_fallback() {
     }
 
     printf("test_grayscale_via_stb_fallback: PASSED\n");
+}
+
+// "Only the first frame is decoded" is an implicit contract this library has always
+// had for animated GIF (and for animated WebP, when PH_USE_WEBP is compiled in) --
+// documented on ph_load_from_memory() in include/libphash.h, but until now not backed
+// by a test. gif_two_frames below has two *visibly different* solid-color frames (red,
+// then blue); gif_frame1_only is a separately hand-built single-frame GIF holding just
+// the first one. If ph_load_from_memory() on the animated file ever started decoding
+// the wrong frame -- last frame instead of first, for instance -- the two would stop
+// matching while this test kept passing on either wrong answer alone, which is why the
+// comparison is against a real "frame 1 only" fixture and not just against a known RGBA
+// tuple.
+//
+// LZW-encoded with a minimal general-purpose GIF/LZW encoder (Python, not committed);
+// both fixtures were confirmed to decode with the vendored stb_image.h before being
+// pasted in.
+static const uint8_t gif_two_frames[] = {
+    0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x02, 0x00, 0x02, 0x00, 0x80, 0x00, 0x00, 0xff,
+    0x00, 0x00, 0x00, 0x00, 0xff, 0x21, 0xf9, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2c,
+    0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0x02, 0x02, 0x84, 0x51, 0x00,
+    0x21, 0xf9, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00, 0x00, 0x00, 0x02,
+    0x00, 0x02, 0x00, 0x00, 0x02, 0x02, 0x8c, 0x53, 0x00, 0x3b};
+
+static const uint8_t gif_frame1_only[] = {
+    0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x02, 0x00, 0x02, 0x00, 0x80, 0x00, 0x00, 0xff, 0x00,
+    0x00, 0x00, 0x00, 0xff, 0x21, 0xf9, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00,
+    0x00, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0x02, 0x02, 0x84, 0x51, 0x00, 0x3b};
+
+static uint64_t hash_of_buffer(const uint8_t *data, size_t len) {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_load_from_memory(ctx, data, len));
+    uint64_t hash = 0;
+    ASSERT_OK(ph_compute_ahash(ctx, &hash));
+    ph_free(ctx);
+    return hash;
+}
+
+void test_animated_gif_first_frame_only() {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_load_from_memory(ctx, gif_two_frames, sizeof(gif_two_frames)));
+
+    int w, h, ch;
+    ph_context_get_dimensions(ctx, &w, &h, &ch);
+    ASSERT_INT_EQ(2, w);
+    ASSERT_INT_EQ(2, h);
+    ph_free(ctx);
+
+    // The hash of the two-frame file must equal the hash of the standalone
+    // first-frame-only file, and not just "some" stable value.
+    uint64_t hash_multi = hash_of_buffer(gif_two_frames, sizeof(gif_two_frames));
+    uint64_t hash_frame1 = hash_of_buffer(gif_frame1_only, sizeof(gif_frame1_only));
+    ASSERT_INT_EQ(0, ph_hamming_distance(hash_multi, hash_frame1));
+
+    printf("test_animated_gif_first_frame_only: PASSED\n");
+}
+
+// Animated WebP is the other half of the "first frame only" contract documented on
+// ph_load_from_memory(), but exercising it needs a native WebP decode path
+// (PH_USE_WEBP), which in turn needs vendor/libwebp populated. In this worktree
+// vendor/libwebp is an uninitialized submodule (empty directory) and per project
+// policy submodule initialization is not something a task worktree does itself, so
+// there is no way to build or run a WebP-enabled binary here to construct and verify
+// an animated-WebP fixture against. This is a known gap: covering it needs either a
+// worktree with vendor/libwebp already populated, or a real .webp file added under
+// tests/data/ and hand-verified against a WebP-enabled build elsewhere.
+void test_webp_animated_first_frame_only_or_skip() {
+    if (!ph_can_use_webp()) {
+        printf("test_webp_animated_first_frame_only_or_skip: SKIPPED (no WebP decoder in "
+               "this build)\n");
+        return;
+    }
+    // Reachable only in a PH_USE_WEBP build; no fixture exists to run yet (see comment
+    // above). Fail loudly rather than silently pretending to have covered this.
+    fprintf(stderr, "[FAIL] test_webp_animated_first_frame_only_or_skip: WebP decoder is "
+                    "active but no animated-WebP fixture has been added for it yet\n");
+    exit(1);
+}
+
+// TIFF is claimed nowhere as supported (CLAUDE.md and README.md explicitly call it
+// out as NOT covered, since stb_image has zero TIFF support), but that claim was never
+// pinned by a test. Both byte orders reach ph_can_read_stb() -- which accepts every
+// magic except WebP's -- so they fall through to stb_image, which recognizes neither
+// signature and fails with its generic "unknown image type", landing on
+// PH_ERR_UNSUPPORTED_FORMAT and not some other/generic error.
+void test_tiff_unsupported() {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+
+    static const uint8_t tiff_le[] = {0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00};
+    ph_error_t err = ph_load_from_memory(ctx, tiff_le, sizeof(tiff_le));
+    ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, err);
+    ASSERT(strlen(ph_get_last_error_message(ctx)) > 0);
+
+    static const uint8_t tiff_be[] = {0x4d, 0x4d, 0x00, 0x2a, 0x00, 0x00, 0x00, 0x08};
+    err = ph_load_from_memory(ctx, tiff_be, sizeof(tiff_be));
+    ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, err);
+    ASSERT(strlen(ph_get_last_error_message(ctx)) > 0);
+
+    ph_free(ctx);
+    printf("test_tiff_unsupported: PASSED\n");
 }
 
 void test_bmp_negative_height_not_too_large() {
@@ -560,6 +767,10 @@ int main() {
     test_memory_loading();
     test_loader_edge_cases();
     test_stb_fallback_formats();
+    test_stb_extended_fallback_formats();
+    test_animated_gif_first_frame_only();
+    test_webp_animated_first_frame_only_or_skip();
+    test_tiff_unsupported();
     test_grayscale_via_stb_fallback();
     test_bmp_negative_height_not_too_large();
     test_bmp_extreme_aspect_ratio_rejected();

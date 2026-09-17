@@ -574,6 +574,13 @@ PH_API PH_NODISCARD ph_error_t ph_load_from_file(ph_context_t *ctx, const char *
 
 /**
  * @brief Loads an image from a memory buffer.
+ *
+ * @note Animated GIF and animated WebP are single-image formats as far as this
+ *       function is concerned: only the first frame is decoded and hashed, whichever
+ *       backend handles the buffer (the always-available @c stb_image fallback for
+ *       GIF, or the native WebP decoder when @c PH_USE_WEBP is compiled in). There is
+ *       no way to request a different frame or the frame count through this API.
+ *
  * @param ctx The context.
  * @param buffer Pointer to the raw file data (e.g., JPEG bytes).
  * @param length Size of the buffer.
