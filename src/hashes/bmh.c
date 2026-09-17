@@ -28,6 +28,10 @@
  * averages blocks of it. Box-resampling straight to the block grid equals that only
  * when the source dimensions are a multiple of the grid; otherwise source pixels are
  * weighted across block boundaries.
+ *
+ * Bit order: `data[i/8] |= 1 << (i%8)`, LSB first within each byte, blocks in raster
+ * order. The paper defines a bit sequence (equation 3.9), not a byte layout, so there
+ * is nothing to conform to here either -- a choice, recorded rather than left silent.
  */
 #include "internal.h"
 #include <stdlib.h>

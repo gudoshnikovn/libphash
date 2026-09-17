@@ -285,7 +285,7 @@ PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma);
  * @brief Sets custom RGB-to-Grayscale weights.
  *
  * Input values are automatically normalized to sum to 128 for optimized internal
- * processing. Default is PH_GRAY_R=38, PH_GRAY_G=75, PH_GRAY_B=15.
+ * processing. Default is PH_GRAY_R=38, PH_GRAY_G=75, PH_GRAY_B=15 (sum 128).
  *
  * @param ctx The context.
  * @param r,g,b Relative channel weights. Each must be >= 0, their sum must be > 0 and

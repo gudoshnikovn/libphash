@@ -69,6 +69,51 @@ One of the nine — wHash — has no primary source. For those, "correct" can on
 robustness, discrimination and separability — never conformance to a specification,
 because there is none.
 
+## Constants no source defines
+
+Nine algorithms and none of their primary sources specify a grayscale formula, and most
+leave the tie-break and the bit layout unstated too. Where a source is silent, this
+library still has to pick *something* — the choice below is deliberate, not inherited
+from whoever wrote the code first, and each one is repeated in the delta table of the
+algorithm(s) it touches in `docs/algorithm-provenance.md`.
+
+**Grayscale coefficients.** `PH_GRAY_R/G/B` = 38/75/15 over 128 (`src/internal.h`), an
+integer approximation of the **ITU-R BT.601** luma coefficients (0.299/0.587/0.114) —
+cited as an external standard, not because any source here asks for it. A closer
+8-bit approximation exists (77/150/29 over 256) and was measured as a replacement;
+rejected because it regresses BMH and wHash separability on this library's test corpus
+with no compensating gain, so the existing triple stays — kept on evidence, not just
+inherited. Used by every algorithm that reduces to grayscale: aHash, dHash, pHash,
+wHash, mHash, BMH, Radial. ColorHash and ColorMoments work in colour and never call
+this path.
+
+**Tie-break at the threshold (`value == threshold`).** Two different rules are in force,
+and unifying them would mean breaking one of two things that already have a stronger
+answer than "pick a convention":
+
+| Algorithm(s) | Rule | Why |
+|---|---|---|
+| BMH | `>=` | Matches Zauner's equation 3.9, the one place among all nine sources that states a direction. |
+| aHash | `>=` | Genuinely unpinned by its source ("above or below" leaves it unstated) and no reference implementation is cited to defer to here — adopted `>=` to agree with BMH rather than leave a fourth arbitrary answer in the codebase. |
+| pHash, wHash (`ph_median_bitpack()`/`ph_median_bitpack_from()`, shared) | `>` | Each is pinned to its own reference implementation's code instead: pHash's `ph_dct_imagehash()` and ImageHash's `whash()` both use `>`. Overriding a real reference implementation to chase a uniform convention would be the wrong kind of consistency. |
+| mHash | `>` | pHash's `ph_mh_imagehash()` construction; no inequality direction is stated in either source, so this is a choice, not a pinned conformance claim, but it was not moved because there is no signal either way to move it toward. |
+
+**Bit order.** Never affects Hamming distance — everything here is internally
+consistent — but it decides what the hash looks like in hex, which matters for
+portability and comparison against a foreign implementation.
+
+| Algorithm | Order | Source says |
+|---|---|---|
+| aHash | MSB first, `1ULL << (63 - i)`, row-major | Krawetz states this exact order ("left to right, top to bottom using big-endian") — the only one of the nine where the source actually specifies a layout. |
+| dHash | MSB first, `1ULL << (63 - i)`, row-major | Same source, same statement. |
+| pHash | LSB first, `1ULL << i`, row-major DCT block order | Undefined by Zauner or Krawetz; a choice, not verified against pHash's own code. |
+| wHash | LSB first, `1ULL << i`, row-major low band | Undefined; no primary source to check against, and not verified against ImageHash's own layout either. |
+| mHash | MSB first within each byte, windows in raster order | Undefined by either source; matches how pHash's own page describes packing the result, so kept for that reason alone. |
+| BMH | LSB first within each byte, blocks in raster order | The paper defines a bit *sequence* (equation 3.9), not a byte layout — undefined, recorded as a choice. |
+| ColorHash | not bit-packed — 108 one-byte histogram bins | n/a |
+| ColorMoments | not bit-packed — 18-byte signed 16-bit fixed-point vector | n/a |
+| Radial | not bit-packed — 40-byte min-max-quantised DCT vector | n/a |
+
 ---
 
 ## 1. aHash (Average Hash)

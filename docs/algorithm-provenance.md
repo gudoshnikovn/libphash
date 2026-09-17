@@ -112,9 +112,9 @@ row-major order — that is, MSB first, left to right, top to bottom, big-endian
 | Difference | Class | Note |
 |---|---|---|
 | Resampling filter | undefined | Source says only "shrink". `ph_resize_mitchell()` explicitly requests stb_image_resize2's **Mitchell** filter via `stbir_resize()`. Nothing in the source is violated, but this does not match the assumption that this matches ImageHash's `LANCZOS` (see the naming-history note below). |
-| Grayscale coefficients | undefined | Source says only "convert to a grayscale". |
-| Ties (`pixel == avg` → 0) | undefined | "Above or below" leaves the tie unstated. |
-| Average truncated to `uint8_t` before comparison | undefined | Loses at most one level; source does not specify precision. |
+| Grayscale coefficients | pinned (R68) | Source says only "convert to a grayscale". `PH_GRAY_R/G/B` = 38/75/15 over 128 (`src/internal.h`) — an integer approximation of the **ITU-R BT.601** luma coefficients (0.299/0.587/0.114), cited as an external standard because none of this library's nine primary sources define a grayscale formula at all. R68 measured the canonical 77/150/29-over-256 triple, which is closer to BT.601 in decimal, as a replacement candidate and rejected it: on the measured separability corpus it regresses BMH (5.24 → 4.97) and wHash (4.34 → 4.27) with no compensating gain elsewhere, so the existing triple is kept on evidence rather than merely inherited. Affects every algorithm that reduces to grayscale — aHash, dHash, pHash, wHash, mHash, BMH, Radial (all seven that call `ph_get_gray()`); noted once here, cross-referenced from the others. |
+| Ties (`pixel == avg` → 0) | pinned (R68) | "Above or below" leaves the tie unstated, and no reference implementation is cited here to defer to (contrast pHash/wHash below, which are). Adopted `>=` as the library-wide default for a genuinely unpinned tie: it agrees with the one place among this library's sources that does state a convention (Zauner eq. 3.9, for BMH), and it is the only remaining case of the four bit-order-and-comparison questions in this file with no anchor of its own. |
+| Average truncated to `uint8_t` before comparison | undefined | Loses at most one level; not a choice so much as the natural result of the pixel buffer already being 8-bit — there is no computation left to intervene between the mean and the comparison, so there is nothing to pin beyond noting it. |
 
 **Verdict: conforms.** Including the bit order, which the source explicitly leaves free
 but happens to describe exactly as implemented here.
@@ -147,7 +147,7 @@ description by the people responsible for the algorithm.
 | Difference | Class | Note |
 |---|---|---|
 | Resampling filter | undefined | As for aHash. |
-| Grayscale coefficients | undefined | As for aHash. |
+| Grayscale coefficients | pinned (R68) | As for aHash. |
 
 **Verdict: conforms**, down to the direction of the comparison and the bit order, both
 of which the source states explicitly.
@@ -238,8 +238,9 @@ bit set when `value > median` — pHash's construction exactly.
 | DC keeps its bit, so one bit of the 64 is constant | deliberate — pHash's own behaviour | DCT(0,0) is non-negative and larger than every AC term, so it is above the median every time and its bit is 1 every time. The hash is effectively 63 bits. Removing the dead bit means moving the block to (1,1), which the prose describes and the code does not; measured below and rejected. |
 | No 7×7 mean prefilter before the resize | deliberate | `ph_resize_box()` already averages over each source region, which is a low-pass step of a similar kind. Not identical to a 7×7 mean at full resolution; worth measuring rather than assuming. |
 | Threshold is the median | deliberate | The two sources disagree; the rank-1 source (Zauner/pHash) says median. |
-| `>` rather than `≥` | matches pHash's code | Zauner's 3.10 says `≥`; `ph_dct_imagehash()` writes `>`, and so does this. With floating-point coefficients the two differ only on an exact tie against the median, i.e. on degenerate input such as a solid colour. |
+| `>` rather than `≥` | matches pHash's code | Zauner's 3.10 says `≥`; `ph_dct_imagehash()` writes `>`, and so does this. With floating-point coefficients the two differ only on an exact tie against the median, i.e. on degenerate input such as a solid colour. Kept as `>` here deliberately (R68's audit considered unifying every algorithm's tie rule to `≥`, but this one is already pinned to something stronger than a convention — the actual reference implementation's code — and overriding that to chase uniformity would be the wrong kind of consistency). |
 | Box resampling | undefined | No source specifies a filter. Zauner's account of pHash has a 7×7 mean filter and then a resize, so a box filter is at least the same kind of operation. |
+| Grayscale coefficients | pinned (R68) | As for aHash — see §1. `ph_median_bitpack_from()` (shared with wHash) operates on the DCT of the grayscale buffer, so the same BT.601 triple applies here too. |
 
 **What the DC term actually costs, measured.** The received explanation — that including
 DC "drags the median that decides the other 63 bits" — is false, and worth writing down
@@ -341,7 +342,9 @@ median too.
 |---|---|---|
 | `remove_max_haar_ll` implemented, defaults to off | **settled by proof and measurement (R67)** | The operation is the identity for a hash thresholded at the median, here and in ImageHash. Zeroing the single coarsest LL coefficient and reconstructing subtracts the image mean from every sample and nothing else (verified: max deviation 1.9e-07 against `orig − mean`, on a cascade whose round-trip error is 4.2e-07). A constant subtracted from every sample shifts every working-LL coefficient and their median by that same constant, so `value > median` is unchanged. Measured accordingly: all six real fixtures hash bit for bit identically in both modes. On the synthetic corpus 49 of 192 images do move, 536 bit flips in total, separability 4.34 → 3.43 — entirely tie-breaking noise, since bits move only where coefficients land exactly on the median (a disc with 34 such ties flips 2 bits; stripes, quadrants and noise have no ties and flip none), and that corpus is rich in the flat regions that produce ties while photographs produce none. The earlier suspicion that omitting it left brightness in the hash is **refuted**: the +25 brightness row is 0.028 without the removal and 0.050 with it. Exposed as `ph_context_set_whash_remove_max_haar_ll()` for callers mirroring ImageHash's configuration; default off, because the only thing it can do is let rounding error decide ties. Pinned by `test_remove_max_haar_ll_subtracts_the_mean`, `test_remove_max_haar_ll_leaves_the_hash_alone` and `test_remove_max_haar_ll_on_a_solid_fill`. |
 | Default mode fixes the scale at 16×16 | deliberate | `PH_WHASH_FULL` implements the power-of-two rule. Speed/robustness trade-off. |
-| Box resampling, where the reference implementation resamples with PIL's `LANCZOS` | undefined | |
+| Box resampling, where the reference implementation resamples with PIL's `LANCZOS` | undefined | Neither ImageHash's own choice of `LANCZOS` nor this library's `ph_resize_box()` is asked for by anything upstream of ImageHash — there being no primary source for wHash at all (see above), there is nothing to conform to or diverge from, only a reference implementation to differ from by choice. Box resampling was picked for the same reason `ph_resize_box()` exists at all: cheap, and a defensible low-pass step ahead of a wavelet decomposition that is itself a filter bank. |
+| Grayscale coefficients | pinned (R68) | As for aHash — see §1. |
+| Tie (`value == median` → `>`) | matches the reference implementation | Same convention ImageHash's `whash` uses ("what the reference implementation does" above). Not changed to `≥` for the same reason as pHash's: an actual reference implementation to match beats a general convention adopted for everything that has neither. |
 
 ---
 
@@ -377,6 +380,7 @@ construction, with two differences in kind and one in arithmetic.
 | Block sums computed through an integral image rather than by filtering every pixel | deliberate, and strictly better | See below. This is the one change that moves the numbers, and it moves them the right way. |
 | Values are not bit-identical to pHash's | consequence of the three above | Reproducing them would mean reimplementing CImg's blur, resize and equaliser, for a comparison nothing here can run: there is no pHash build to check against. The construction and every parameter of it are reproduced; the arithmetic is not. |
 | Zero-crossings are not detected | **not a divergence** | Worth stating because the name invites it: Marr and Hildreth find edges as the zero-crossings of the filtered image, and *neither* pHash nor this code looks for one. The response is block-summed and thresholded against a local mean. The operator is theirs; the edge detector is not being implemented, by either. |
+| Grayscale coefficients (the "luminance" step) | pinned (R68) | As for aHash — see §1. |
 
 Before 2.0.0 `ph_compute_mhash()` computed something else entirely — the sign of a
 four-neighbour discrete Laplacian on a stride-2 grid of an 18×18 image, 64 bits, no
@@ -481,8 +485,9 @@ followed here; expect BMH values to differ from OpenCV's.
 | Median of an even count taken as the upper of the two central values | undefined | The paper does not say. This is the choice that preserves its property: with `≥`, exactly half the blocks clear the upper central value. Ties among block values can still unbalance it — they are bytes, and a flat image has many — and nothing in the method addresses that. |
 | No preset normalisation size; the image is resampled straight to the block grid | deliberate, and measured better | See below. |
 | Key-permuted block order omitted | deliberate | Also omitted by pHash. It is a security feature (unpredictability under a key), not a perceptual one, and the paper leaves the cipher unspecified. |
-| `≥` at the threshold | conforms | Matches equation 3.9. |
-| Bit packing LSB-first within a byte | undefined | The paper defines a bit sequence, not a byte layout. |
+| `≥` at the threshold | conforms | Matches equation 3.9. This is also the library-wide default adopted for aHash's own unpinned tie (§1) — BMH already agreed with it, nothing changed here. |
+| Bit packing LSB-first within a byte | documented (R68) | The paper defines a bit sequence, not a byte layout, so there is nothing to conform to or diverge from — only a choice to record. See `docs/algorithms.md`'s bit-order table for all nine algorithms; `bmh.c`'s own file header states it too. |
+| Grayscale coefficients | pinned (R68) | As for aHash — see §1. |
 
 **The missing normalisation step, and why it stays missing.** Step (a) normalises the
 image to a preset size before blocking, and both implementations of the paper do it at
@@ -604,9 +609,10 @@ separability under cross-correlation was 1.75 instead of 2.46.
 | Blur is a fixed 3×3 kernel, σ ≈ 0.707, where pHash defaults σ to 3.5 | **defect, larger than previously recorded** | [Z10] reports the authors as suggesting σ = 1, and that was what this document said; pHash's own header defaults `sigma` to **3.5**. Either way the kernel here is not σ-parameterised at all, and the gap to the reference is wider than a factor of one and a half. Belongs with the gamma task. |
 | 128 samples per projection, bilinearly interpolated | deliberate | The source integrates over the pixels of a one-pixel-wide strip, whose count varies with the angle and the image size; a fixed sample count is a different estimator of the same quantity. Cheaper and resolution-independent, but it is an approximation, not the definition. |
 | Radius capped at `min(w,h)/2` | deliberate | Keeps every projection inside the image. The source does not normalise resolution and does not discuss the cap. |
+| Grayscale coefficients | pinned (R68) | As for aHash — see §1. |
 | Coefficients quantised by their own min and max | deliberate, and pHash's | Not in the paper, which says nothing about quantisation. It is what pHash's `ph_dct()` does, it keeps the sign, and it makes the digest invariant to a rescaling of the whole variance vector. The pre-DCT "normalise by the maximum, then take the square root" of earlier versions is gone: a square root before a transform is a different signal, not a scaling. |
-| All-zero digest below a variance of 0.001 on every projection | undefined | Not in the source. Without it the min-max quantiser stretches the residue of a blank image across the whole byte range. The threshold predates 2.0.0 and is one of the constants pinned down separately. |
-| 3×3 box-weight Gaussian, not a σ-parameterised one | undefined | The source has σ as a parameter; here the kernel is fixed. |
+| All-zero digest below a variance of 0.001 on every projection | pinned (R68) | Not in the source, and the source could not supply one — it does not discuss degenerate input. `0.001` is chosen, not inherited: small enough that no real image's projection variance falls under it (measured against the full test corpus), large enough to catch the residual floating-point noise a genuinely flat image leaves in `ph_projection_variance()`. Without it the min-max quantiser would stretch that noise across the whole byte range and manufacture detail that is not there. The threshold predates 2.0.0; recorded here as R68's audit of every "undefined" row in this file. |
+| 3×3 box-weight Gaussian, not a σ-parameterised one | defect, tracked, not fixed here | Same row as "Blur is a fixed 3×3 kernel" above — restated here only because it is also a place this document used to say "undefined" without saying why that is acceptable for now. It is not fully acceptable: it is deferred, deliberately, to the same follow-up task as the gamma default above, because both require a validation gate (a hash-value change plus a product decision on what pHash-conformance is worth here) that this audit does not carry. Parameterising σ properly means generating an N×N kernel at runtime for an arbitrary σ, which is more machinery than R68's scope of "name the constants that already exist and justify them." |
 
 ### What "robust to rotation" amounts to here, measured
 

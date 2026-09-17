@@ -29,6 +29,11 @@
  *
  * The transform itself is the orthonormal Haar wavelet: sums and differences of
  * adjacent samples, both divided by sqrt(2).
+ *
+ * Bit order: ph_median_bitpack_from()/ph_median_bitpack() (shared with pHash) packs
+ * LSB first -- `1ULL << i` for coefficient i in row-major order of the low band. Not
+ * verified against ImageHash's own layout, and not specifiable against a primary
+ * source that does not exist; a choice, not a conformance claim.
  */
 #include "internal.h"
 #include <stdlib.h>

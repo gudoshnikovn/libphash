@@ -36,6 +36,10 @@
  * Before 2.0.0 this function computed something else entirely -- the sign of a
  * four-neighbour discrete Laplacian on a stride-2 grid of an 18x18 image, 64 bits, no
  * Gaussian, no scale, no zero-crossings -- under the same name.
+ *
+ * Bit order: MSB first within each byte, windows in raster order (see the packing loop
+ * below) -- matching "the source packs them" as pHash's own page states it, per neither
+ * paper specifying a byte layout of its own.
  */
 #include "internal.h"
 #include <math.h>

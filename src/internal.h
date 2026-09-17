@@ -399,7 +399,21 @@ _Static_assert(PH_COLOR_BINS <= PH_DIGEST_MAX_BYTES,
  * protection). Overridable via ph_context_set_max_pixels(); 0 disables it. */
 #define PH_DEFAULT_MAX_PIXELS ((uint64_t)256 * 1024 * 1024)
 
-/* Grayscale Weights (standard ITU-R BT.601) scaled by 128 */
+/* Grayscale weights: ITU-R BT.601 luma coefficients (0.299/0.587/0.114), approximated
+ * as 38/75/15 over 128. None of the nine algorithms' primary sources specify a
+ * grayscale formula at all (R68's finding); BT.601 is cited as an external standard
+ * because it is one, not because anything here points to it.
+ *
+ * R68 measured switching to the canonical 8-bit triple 77/150/29 over 256, which is
+ * closer to the real-valued BT.601 coefficients on every channel
+ * (+0.0018/-0.0011/-0.0007 vs. this triple's -0.0021/-0.0011/+0.0032) and whose
+ * denominator is an exact power of two with no rounding in the sum. On this library's
+ * measured separability corpus (test_hash_properties.c) it is not an improvement: BMH
+ * drops from 5.24 to 4.97 and wHash from 4.34 to 4.27, while aHash, dHash, pHash and
+ * mHash move by less than the run-to-run noise floor. A closer decimal approximation
+ * does not track discrimination on real content, so the existing triple is kept --
+ * chosen and re-confirmed by measurement, not merely inherited from whoever wrote it
+ * first. */
 #define PH_GRAY_R 38
 #define PH_GRAY_G 75
 #define PH_GRAY_B 15

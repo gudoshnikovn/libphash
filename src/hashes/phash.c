@@ -32,6 +32,11 @@
  *
  * Zauner's equation 3.10 thresholds with >=; pHash's code, and this code, use >. With
  * float coefficients that differs only on degenerate input such as a solid colour.
+ *
+ * Bit order: ph_median_bitpack_from() (shared with wHash) packs LSB first --
+ * `1ULL << i` for coefficient i in row-major DCT block order. Not specified by either
+ * source (neither Zauner nor Krawetz's post says how to lay out the 64 bits); this is
+ * simply what this library's implementation does, unverified against pHash's own code.
  */
 #include "internal.h"
 #include <math.h>
