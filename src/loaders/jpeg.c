@@ -35,6 +35,7 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size
     if (ph_exceeds_pixel_limit((uint64_t)w, (uint64_t)h, max_pixels)) {
         if (out_err)
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         tjDestroy(handle);
         return NULL;
     }
@@ -47,6 +48,7 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size
         pitch_size > INT_MAX) {
         if (out_err)
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         tjDestroy(handle);
         return NULL;
     }
@@ -56,6 +58,7 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size
     if (!ph_safe_image_alloc_size((uint64_t)pitch, (uint64_t)h, 1, &alloc_size)) {
         if (out_err)
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         tjDestroy(handle);
         return NULL;
     }
@@ -64,6 +67,7 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size
     if (!output) {
         if (out_err)
             *out_err = PH_ERR_ALLOCATION_FAILED;
+        ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
         tjDestroy(handle);
         return NULL;
     }

@@ -32,6 +32,7 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long siz
     if (ph_exceeds_pixel_limit((uint64_t)w, (uint64_t)h, max_pixels)) {
         if (out_err)
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         return NULL;
     }
 
@@ -43,6 +44,7 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long siz
     if (!ph_safe_image_alloc_size((uint64_t)w, (uint64_t)h, (uint64_t)out_channels, &out_size)) {
         if (out_err)
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         return NULL;
     }
     size_t stride = (size_t)w * out_channels;
@@ -51,6 +53,7 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long siz
     if (!output) {
         if (out_err)
             *out_err = PH_ERR_ALLOCATION_FAILED;
+        ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
         return NULL;
     }
 

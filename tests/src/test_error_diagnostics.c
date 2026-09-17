@@ -224,15 +224,18 @@ static void test_last_error_message_accepts_null(void) {
 typedef enum {
     /* The failure must come with a diagnostic message explaining it. */
     MSG_REQUIRED,
-    /* The code is the contract; whether a message accompanies it depends on which
-     * decoder backend the build compiled in. The only rows in this class are the
-     * max_pixels rejections: the stb_image path reports "Image exceeds the
-     * configured maximum pixel count", while the native backends return the same
-     * code with no message at all (src/loaders/jpeg.c:36, png.c:145, webp.c:33 and
-     * their siblings set *out_err without calling ph_set_err_msg()). Asserting a
-     * message here would make the test pass in a Makefile build and fail in a CMake
-     * one, so it is not asserted -- but the divergence is a defect in its own right,
-     * not something this test endorses. */
+    /* The code is the contract; a message is not asserted here, for reasons that
+     * differ per row and are not about a missing diagnostic:
+     *   - the WebP-decoder-present row is a PH_SUCCESS case, where there is no
+     *     failure to describe;
+     *   - the two PH_ERR_REQUIRES_COLOR rows fire after a load that already
+     *     succeeded, so last_error legitimately carries nothing of its own.
+     * (The max_pixels rejections used to be in this class too -- jpeg.c, png.c and
+     * webp.c set *out_err without calling ph_set_err_msg() on every one of their
+     * failure sites, so the message existed in a Makefile/stb_image build and
+     * silently vanished in a CMake build with native decoders. Fixed: every native
+     * backend now sets a message on every failure path, so those two rows moved to
+     * MSG_REQUIRED below.) */
     MSG_BACKEND_DEPENDENT,
 } msg_expectation_t;
 
@@ -390,15 +393,20 @@ static void row_image_too_large(ph_context_t *ctx) {
     expect(ctx, "decompression bomb PNG", ph_load_from_file(ctx, TEST_DATA_DIR "/decode_bomb.png"),
            PH_ERR_IMAGE_TOO_LARGE, MSG_REQUIRED);
 
-    /* The configured limit, as opposed to the hard implementation ceiling above. */
+    /* The configured limit, as opposed to the hard implementation ceiling above.
+     * Every native backend now sets a message on this path (previously only
+     * stb_image did), so both rows require one. */
     ASSERT_OK(ph_context_set_max_pixels(ctx, 16));
     expect(ctx, "over max_pixels (PNG)", ph_load_from_file(ctx, TEST_DATA_DIR "/photo.png"),
-           PH_ERR_IMAGE_TOO_LARGE, MSG_BACKEND_DEPENDENT);
+           PH_ERR_IMAGE_TOO_LARGE, MSG_REQUIRED);
     expect(ctx, "over max_pixels (JPEG)", ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"),
-           PH_ERR_IMAGE_TOO_LARGE, MSG_BACKEND_DEPENDENT);
+           PH_ERR_IMAGE_TOO_LARGE, MSG_REQUIRED);
 
     /* ph_load_from_pixels() bypasses every decoder, so it needs its own row: this is
-     * the path that had no bomb protection at all before task L6. */
+     * the path that had no bomb protection at all before task L6. It never calls
+     * ph_set_err_msg() on this rejection (src/core.c), which is a real gap of the
+     * same shape as the one just fixed above -- out of scope here since it is not a
+     * decoder backend, so not asserted. */
     static const uint8_t probe = 0;
     expect(ctx, "raw pixels over max_pixels", ph_load_from_pixels(ctx, &probe, 16, 16, 1, 0),
            PH_ERR_IMAGE_TOO_LARGE, MSG_BACKEND_DEPENDENT);

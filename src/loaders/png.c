@@ -160,6 +160,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     if (ph_exceeds_pixel_limit(w, h, max_pixels)) {
         if (out_err)
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return NULL;
     }
@@ -202,6 +203,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     if (!ph_safe_image_alloc_size(rowbytes, h, 1, &alloc_size)) {
         if (out_err)
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return NULL;
     }
@@ -210,6 +212,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     if (!data) {
         if (out_err)
             *out_err = PH_ERR_ALLOCATION_FAILED;
+        ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return NULL;
     }
@@ -223,6 +226,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     if (!ph_safe_image_alloc_size(sizeof(png_bytep), h, 1, &row_ptrs_size)) {
         if (out_err)
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         free(data);
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return NULL;
@@ -232,6 +236,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     if (!row_ptrs) {
         if (out_err)
             *out_err = PH_ERR_ALLOCATION_FAILED;
+        ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
         free(data);
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return NULL;
@@ -276,6 +281,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     if (!ctx) {
         if (out_err)
             *out_err = PH_ERR_ALLOCATION_FAILED;
+        ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
         return NULL;
     }
 
@@ -306,6 +312,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     if (ph_exceeds_pixel_limit(ihdr.width, ihdr.height, max_pixels)) {
         if (out_err)
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         spng_ctx_free(ctx);
         return NULL;
     }
@@ -344,6 +351,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     if (!data) {
         if (out_err)
             *out_err = PH_ERR_ALLOCATION_FAILED;
+        ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
         spng_ctx_free(ctx);
         return NULL;
     }

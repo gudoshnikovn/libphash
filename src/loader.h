@@ -36,8 +36,12 @@ static inline int ph_magic_is_webp(const uint8_t *magic, size_t len) {
 // has claimed the data, any decode failure it hits is a recognized-but-broken bitstream,
 // so it should set *out_err to the most specific applicable code (PH_ERR_IMAGE_TOO_LARGE
 // or PH_ERR_CORRUPT_DATA) rather than leaving it at PH_SUCCESS.
-// err_msg/err_msg_cap: optional fixed-size buffer (may be NULL/0) that the decoder can
-// fill with a short human-readable reason via ph_set_err_msg(); never allocates.
+// err_msg/err_msg_cap: optional fixed-size buffer (may be NULL/0). A backend that
+// returns NULL with *out_err != PH_SUCCESS MUST fill it via ph_set_err_msg() whenever
+// err_msg is non-NULL -- not merely "can": a diagnostic that exists in one build
+// (stb_image) and vanishes in another (a native decoder) for the same error code is a
+// defect in its own right, since a caller sees a different answer to the same input
+// depending on how the library was compiled. ph_set_err_msg() never allocates.
 
 #ifdef PH_USE_TURBOJPEG
 // --- JPEG: Static TurboJPEG API (tjDecompress2) ---
