@@ -326,8 +326,10 @@ walkthrough.
 
 - Vendored decoder submodules bumped to their latest stable tags.
 - `THIRD-PARTY-NOTICES.md` now names the exact version of the two copied stb headers
-  (`stb_image` v2.30, `stb_image_resize2` v2.18) with their hashes. Everything else
-  under `vendor/` is a submodule, whose revision the repository already records.
+  (`stb_image` v2.30, `stb_image_resize2` v2.18), records that both are modified
+  copies, and gives two hashes for each: the file as vendored and the upstream file
+  it was derived from. Everything else under `vendor/` is a submodule, whose revision
+  the repository already records.
 - The library version has a single source of truth: `project(libphash VERSION ...)`
   in `CMakeLists.txt`, from which `phash_version.h` is generated. There are no
   version literals in sources, scripts, CI or the README any more.
@@ -437,6 +439,13 @@ walkthrough.
   the process simply ran out of memory. It now reports `PH_ERR_ALLOCATION_FAILED`,
   matching what the native JPEG/PNG/WebP backends already reported for their own
   allocation failures.
+- The same misdiagnosis survived in the `stb_image` fallback wherever the vendored
+  decoder itself lost the reason: its zlib entry points returned NULL without setting
+  one, and its format dispatch overwrote an allocating probe's out-of-memory reason
+  with `"unknown image type"`. An out-of-memory PNG was reported as corrupt and an
+  out-of-memory JPEG as an unrecognized format. Patched locally in
+  `vendor/stb_image.h` pending an upstream fix; all 83 allocation-failure points in
+  the test suite now report `PH_ERR_ALLOCATION_FAILED`.
 
 ### Security
 

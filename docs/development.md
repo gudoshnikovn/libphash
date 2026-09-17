@@ -307,6 +307,40 @@ upstream master) and **must be re-applied and re-verified against
 this vendored file — a version bump alone will silently drop the patch and
 reopen the crash/leak.
 
+**Known vendor patch — the reason reported for an allocation failure in
+`vendor/stb_image.h`.** `src/loader.c` classifies a failed `stbi_load*()` by
+comparing `stbi_failure_reason()` against string literals from the vendored
+header (`ph_stb_oom_reasons[]`, `ph_stb_unsupported_reasons[]`). Upstream loses
+that reason in two independent places, so a decode that failed purely because
+`malloc()` returned NULL is reported to the caller as a verdict on the file:
+
+- The three `stbi_zlib_decode_*malloc*` entry points return NULL when their own
+  initial `stbi__malloc()` fails **without calling `stbi__err()` at all**, while
+  the PNG caller assumes they did (`return 0; // zlib should set error`).
+  `stbi_failure_reason()` then still holds whatever unrelated string ran last —
+  in our own call sequence, `"no SOI"`, left by the JPEG probe inside the
+  `stbi_info_from_memory()` that `ph_decode_stb_mem()` runs first to read the
+  dimensions. An out-of-memory PNG arrives as `PH_ERR_CORRUPT_DATA`. Fixed by
+  setting `"outofmem"` there, through a `stbi__errpc()` spelled exactly like the
+  file's existing `stbi__errpuc()`/`stbi__errpf()`.
+- The format probes that allocate (`stbi__jpeg_test`, `stbi__jpeg_info`,
+  `stbi__gif_info_raw`) report an allocation failure by returning 0 — the same
+  value that means "this is not my format". `stbi__load_main()`/
+  `stbi__info_main()` cannot tell the two apart, move on to the next format, and
+  the dispatch's own `"unknown image type"` overwrites `"outofmem"`; a perfectly
+  valid JPEG arrives as `PH_ERR_UNSUPPORTED_FORMAT`. Fixed with a thread-local
+  `stbi__g_probe_outofmem` flag, set by those three probes, cleared at the top of
+  each dispatch and read only where the dispatch is about to give up — the
+  success path is untouched.
+
+Each change carries the same `/* libphash local patch (not upstream): ... */`
+marker as the resize patch above (search the file for it). Before the patch,
+`test_alloc_failure` reported 5 problems across 83 failure points, all of this
+shape; after it, 83/83. As with the resize patch, **a bump of this vendored file
+must re-apply and re-verify it** — `tasks/review/upstream-stb/` holds a
+standalone reproducer (`repro/`, `make check`) and notes written up for an
+upstream report.
+
 ## Adding New Features
 
 1.  **Header**: Add the public signature to `include/libphash.h`.

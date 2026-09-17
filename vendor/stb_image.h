@@ -1023,6 +1023,21 @@ static int stbi__err(const char *str) {
 }
 #endif
 
+/* libphash local patch (not upstream): a format probe (stbi__*_test /
+ * stbi__*_info) that fails because an allocation failed reports that the same
+ * way it reports "this isn't my format" -- by returning 0. The dispatch in
+ * stbi__load_main()/stbi__info_main() cannot tell the two apart, moves on to
+ * the next format, and the next probe overwrites the out-of-memory reason with
+ * its own; the caller then reads "unknown image type" and calls a valid image
+ * unrecognized. Record the allocation failure separately so the dispatch can
+ * report the real reason. Thread-local on the same terms as
+ * stbi__g_failure_reason above -- it is read only by the dispatch that set it. */
+static
+#ifdef STBI_THREAD_LOCAL
+    STBI_THREAD_LOCAL
+#endif
+    int stbi__g_probe_outofmem;
+
 static void *stbi__malloc(size_t size) { return STBI_MALLOC(size); }
 
 // stb_image uses ints pervasively, including for offset calculations.
@@ -1145,6 +1160,18 @@ static int stbi__mul2shorts_valid(int a, int b) {
 #define stbi__errpf(x, y) ((float *)(size_t)(stbi__err(x, y) ? NULL : NULL))
 #define stbi__errpuc(x, y)                                                     \
   ((unsigned char *)(size_t)(stbi__err(x, y) ? NULL : NULL))
+/* libphash local patch (not upstream): stbi__errpc - error returning pointer to
+ * char, for the zlib entry points, which are the only ones returning char*. */
+#define stbi__errpc(x, y) ((char *)(size_t)(stbi__err(x, y) ? NULL : NULL))
+
+#if !defined(STBI_NO_JPEG) || !defined(STBI_NO_GIF)
+/* libphash local patch (not upstream): out of memory inside a format probe;
+ * see stbi__g_probe_outofmem above. */
+static int stbi__err_probe_outofmem(void) {
+  stbi__g_probe_outofmem = 1;
+  return stbi__err("outofmem", "Out of memory");
+}
+#endif
 
 STBIDEF void stbi_image_free(void *retval_from_stbi_load) {
   STBI_FREE(retval_from_stbi_load);
@@ -1190,6 +1217,7 @@ static void *stbi__load_main(stbi__context *s, int *x, int *y, int *comp,
       STBI_ORDER_RGB; // all current input & output are this, but this is here
                       // so we can add BGR order
   ri->num_channels = 0;
+  stbi__g_probe_outofmem = 0; /* libphash local patch (not upstream) */
 
 // test the formats with a very explicit header first (at least a FOURCC
 // or distinctive magic number first)
@@ -1240,6 +1268,12 @@ static void *stbi__load_main(stbi__context *s, int *x, int *y, int *comp,
   if (stbi__tga_test(s))
     return stbi__tga_load(s, x, y, comp, req_comp, ri);
 #endif
+
+  /* libphash local patch (not upstream): a probe above ran out of memory rather
+   * than declining the format, so "unknown image type" would be a verdict on a
+   * file we never finished looking at. */
+  if (stbi__g_probe_outofmem)
+    return stbi__errpuc("outofmem", "Out of memory");
 
   return stbi__errpuc("unknown image type",
                       "Image not of any known type, or corrupt");
@@ -4485,7 +4519,8 @@ static int stbi__jpeg_test(stbi__context *s) {
   int r;
   stbi__jpeg *j = (stbi__jpeg *)stbi__malloc(sizeof(stbi__jpeg));
   if (!j)
-    return stbi__err("outofmem", "Out of memory");
+    /* libphash local patch (not upstream): was stbi__err("outofmem", ...) */
+    return stbi__err_probe_outofmem();
   memset(j, 0, sizeof(stbi__jpeg));
   j->s = s;
   stbi__setup_jpeg(j);
@@ -4513,7 +4548,8 @@ static int stbi__jpeg_info(stbi__context *s, int *x, int *y, int *comp) {
   int result;
   stbi__jpeg *j = (stbi__jpeg *)(stbi__malloc(sizeof(stbi__jpeg)));
   if (!j)
-    return stbi__err("outofmem", "Out of memory");
+    /* libphash local patch (not upstream): was stbi__err("outofmem", ...) */
+    return stbi__err_probe_outofmem();
   memset(j, 0, sizeof(stbi__jpeg));
   j->s = s;
   result = stbi__jpeg_info_raw(j, x, y, comp);
@@ -5014,7 +5050,12 @@ STBIDEF char *stbi_zlib_decode_malloc_guesssize(const char *buffer, int len,
   stbi__zbuf a;
   char *p = (char *)stbi__malloc(initial_size);
   if (p == NULL)
-    return NULL;
+    /* libphash local patch (not upstream): upstream returns a bare NULL here
+     * without setting a reason, though callers assume it did ("return 0; //
+     * zlib should set error" in stbi__parse_png_file), so stbi_failure_reason()
+     * keeps whatever unrelated string ran last and an out-of-memory PNG is
+     * reported as corrupt. */
+    return stbi__errpc("outofmem", "Out of memory");
   a.zbuffer = (stbi_uc *)buffer;
   a.zbuffer_end = (stbi_uc *)buffer + len;
   if (stbi__do_zlib(&a, p, initial_size, 1, 1)) {
@@ -5040,7 +5081,12 @@ STBIDEF char *stbi_zlib_decode_malloc_guesssize_headerflag(const char *buffer,
   stbi__zbuf a;
   char *p = (char *)stbi__malloc(initial_size);
   if (p == NULL)
-    return NULL;
+    /* libphash local patch (not upstream): upstream returns a bare NULL here
+     * without setting a reason, though callers assume it did ("return 0; //
+     * zlib should set error" in stbi__parse_png_file), so stbi_failure_reason()
+     * keeps whatever unrelated string ran last and an out-of-memory PNG is
+     * reported as corrupt. */
+    return stbi__errpc("outofmem", "Out of memory");
   a.zbuffer = (stbi_uc *)buffer;
   a.zbuffer_end = (stbi_uc *)buffer + len;
   if (stbi__do_zlib(&a, p, initial_size, 1, parse_header)) {
@@ -5069,7 +5115,12 @@ STBIDEF char *stbi_zlib_decode_noheader_malloc(char const *buffer, int len,
   stbi__zbuf a;
   char *p = (char *)stbi__malloc(16384);
   if (p == NULL)
-    return NULL;
+    /* libphash local patch (not upstream): upstream returns a bare NULL here
+     * without setting a reason, though callers assume it did ("return 0; //
+     * zlib should set error" in stbi__parse_png_file), so stbi_failure_reason()
+     * keeps whatever unrelated string ran last and an out-of-memory PNG is
+     * reported as corrupt. */
+    return stbi__errpc("outofmem", "Out of memory");
   a.zbuffer = (stbi_uc *)buffer;
   a.zbuffer_end = (stbi_uc *)buffer + len;
   if (stbi__do_zlib(&a, p, 16384, 1, 0)) {
@@ -7358,7 +7409,8 @@ static int stbi__gif_header(stbi__context *s, stbi__gif *g, int *comp,
 static int stbi__gif_info_raw(stbi__context *s, int *x, int *y, int *comp) {
   stbi__gif *g = (stbi__gif *)stbi__malloc(sizeof(stbi__gif));
   if (!g)
-    return stbi__err("outofmem", "Out of memory");
+    /* libphash local patch (not upstream): was stbi__err("outofmem", ...) */
+    return stbi__err_probe_outofmem();
   if (!stbi__gif_header(s, g, comp, 1)) {
     STBI_FREE(g);
     stbi__rewind(s);
@@ -8420,6 +8472,8 @@ static int stbi__pnm_is16(stbi__context *s) {
 #endif
 
 static int stbi__info_main(stbi__context *s, int *x, int *y, int *comp) {
+  stbi__g_probe_outofmem = 0; /* libphash local patch (not upstream) */
+
 #ifndef STBI_NO_JPEG
   if (stbi__jpeg_info(s, x, y, comp))
     return 1;
@@ -8465,6 +8519,10 @@ static int stbi__info_main(stbi__context *s, int *x, int *y, int *comp) {
   if (stbi__tga_info(s, x, y, comp))
     return 1;
 #endif
+  /* libphash local patch (not upstream): see stbi__load_main(). */
+  if (stbi__g_probe_outofmem)
+    return stbi__err("outofmem", "Out of memory");
+
   return stbi__err("unknown image type",
                    "Image not of any known type, or corrupt");
 }

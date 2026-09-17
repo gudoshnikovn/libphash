@@ -71,7 +71,16 @@ static int ph_stb_reason_is_unsupported(const char *reason) {
  * builds. test_stb_oom_reason_pinned() in tests/src/test_alloc_failure.c pins this
  * literal against a real forced allocation failure (not just a mocked reason string);
  * if a vendor bump reworks the wording, that test breaks and this array is where to fix
- * it -- do not relax the assertion instead. */
+ * it -- do not relax the assertion instead.
+ *
+ * Reading this reason at all only works because vendor/stb_image.h carries a local patch
+ * (marker: "libphash local patch") making stb set it in two paths where upstream loses
+ * it: its zlib entry points return NULL without setting any reason, and its format
+ * dispatch overwrites an out-of-memory reason from an allocating probe with its own
+ * verdict. Without that patch some allocation failures arrive here as "no SOI" or
+ * "unknown image type" and are classified as corrupt/unsupported. A vendor bump that
+ * drops the patch shows up as failures in test_alloc_failure.c, not here; see
+ * docs/development.md. */
 static const char *const ph_stb_oom_reasons[] = {
     /* stbi__malloc()/stbi__malloc_mad*() etc., wherever stb_image's internal allocator
      * returns NULL. */
