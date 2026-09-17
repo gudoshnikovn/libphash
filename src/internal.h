@@ -242,6 +242,15 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
 #define PH_DCT_MAX_SIZE 32
 #define PH_DCT_MAX_REDUCTION_SIZE 8
 
+/* R74 -- hard lower bound for reduction_size. Since 2.0.0 (R61) the DC coefficient is
+ * excluded from the hash: ph_median_bitpack_from(dct_out, n=reduction_size^2, median_from=1)
+ * skips the first (DC) coefficient and thresholds only the AC ones. At
+ * reduction_size == 1 there is exactly one coefficient (the DC one), all of it is
+ * skipped, and the hash is the fixed 64-bit value 0 for every image -- content-independent
+ * by construction, not by a bad input. 2 is the smallest value that leaves at least one
+ * AC coefficient (2^2 - 1 = 3) for the hash to depend on. */
+#define PH_DCT_MIN_REDUCTION_SIZE 2
+
 /* R04 -- hard upper bounds for the remaining tunable parameters. Every one of them is
  * derived from a real limit of the implementation, not picked as a round number; the
  * derivation is spelled out next to each constant so a future change to a digest size
@@ -257,6 +266,13 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
  * bound moved from 22 to 32 by itself when the digest grew.
  * block_size affects BMH only -- mHash has its own fixed geometry. */
 #define PH_BLOCK_MAX_SIZE 32
+
+/* R74 -- hard lower bound for block_size. At block_size == 1 the grid is a single block
+ * whose mean is itself; the "median" of one value is that same value, the threshold is
+ * ">= median" (R60), so the comparison is always true and the one output bit is always 1 --
+ * digest 0x01 for every image, regardless of content. 2 is the smallest grid that can
+ * produce blocks with different means and therefore a content-dependent bit pattern. */
+#define PH_BLOCK_MIN_SIZE 2
 
 /* Since 2.0.0 the projection count is the number of ANGLES, and the digest width no
  * longer follows it: the hash is always PH_RADIAL_COEFFS DCT coefficients. So the bound
@@ -285,6 +301,14 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
  * structure to sample, so the bound is treated as the practical maximum rather than
  * being raised to INT_MAX for their sake. */
 #define PH_RADIAL_MAX_SAMPLES 65536
+
+/* R74 -- hard lower bound for samples. Variance is undefined-in-effect for a single
+ * observation: with one sample per projection, every projection's variance is exactly 0
+ * by definition, which is the same all-flat condition PH_RADIAL_FLAT_VARIANCE exists to
+ * catch (see R58) -- so at samples == 1 the digest is all zeroes for every image,
+ * independent of content. 2 is the smallest sample count for which a projection's variance
+ * can be nonzero. */
+#define PH_RADIAL_MIN_SAMPLES 2
 
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 _Static_assert((PH_BLOCK_MAX_SIZE * PH_BLOCK_MAX_SIZE + 7) / 8 <= PH_DIGEST_MAX_BYTES,

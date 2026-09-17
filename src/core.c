@@ -188,9 +188,13 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
     /* Upper bounds are hard limits of the pHash implementation:
      * dct_size <= PH_DCT_MAX_SIZE and reduction_size <= PH_DCT_MAX_REDUCTION_SIZE
      * (the hash must fit into 64 bits). Out-of-range input is rejected without
-     * touching the configuration; it is never clamped. (R02, kept as-is by R04.) */
-    if (!ctx || dct_size <= 0 || dct_size > PH_DCT_MAX_SIZE || reduction_size <= 0 ||
-        reduction_size > PH_DCT_MAX_REDUCTION_SIZE || reduction_size > dct_size)
+     * touching the configuration; it is never clamped. (R02, kept as-is by R04.)
+     * Lower bound on reduction_size is PH_DCT_MIN_REDUCTION_SIZE, not 1: since R61 the
+     * DC coefficient is excluded from the hash, so reduction_size == 1 leaves zero AC
+     * coefficients and yields the fixed digest 0 for every image (R74). */
+    if (!ctx || dct_size <= 0 || dct_size > PH_DCT_MAX_SIZE ||
+        reduction_size < PH_DCT_MIN_REDUCTION_SIZE || reduction_size > PH_DCT_MAX_REDUCTION_SIZE ||
+        reduction_size > dct_size)
         return PH_ERR_INVALID_ARGUMENT;
     ctx->config.phash_dct_size = dct_size;
     ctx->config.phash_reduction_size = reduction_size;
@@ -201,11 +205,14 @@ PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projection
     /* projections: the number of angles. At least PH_RADIAL_COEFFS of them, because the
      * hash is that many DCT coefficients of the vector they form; at most as many as the
      * angular resolution of the largest supported image can distinguish.
-     * samples: bounded by the diagonal of the largest image the library will process.
+     * samples: bounded by the diagonal of the largest image the library will process, and
+     * at least PH_RADIAL_MIN_SAMPLES, because a single sample per projection has zero
+     * variance by definition and yields the all-zero digest for every image (R74).
      * Derivations are next to PH_RADIAL_MIN_PROJECTIONS / PH_RADIAL_MAX_PROJECTIONS /
-     * PH_RADIAL_MAX_SAMPLES. */
+     * PH_RADIAL_MIN_SAMPLES / PH_RADIAL_MAX_SAMPLES. */
     if (!ctx || projections < PH_RADIAL_MIN_PROJECTIONS ||
-        projections > PH_RADIAL_MAX_PROJECTIONS || samples <= 0 || samples > PH_RADIAL_MAX_SAMPLES)
+        projections > PH_RADIAL_MAX_PROJECTIONS || samples < PH_RADIAL_MIN_SAMPLES ||
+        samples > PH_RADIAL_MAX_SAMPLES)
         return PH_ERR_INVALID_ARGUMENT;
     ctx->config.radial_projections = projections;
     ctx->config.radial_samples = samples;
@@ -235,8 +242,10 @@ PH_API ph_error_t ph_context_set_mhash_params(ph_context_t *ctx, float alpha, fl
 }
 
 PH_API ph_error_t ph_context_set_block_params(ph_context_t *ctx, int block_size) {
-    /* block_size^2 bits have to fit into a ph_digest_t; see PH_BLOCK_MAX_SIZE. */
-    if (!ctx || block_size <= 0 || block_size > PH_BLOCK_MAX_SIZE)
+    /* block_size^2 bits have to fit into a ph_digest_t; see PH_BLOCK_MAX_SIZE. Lower bound
+     * is PH_BLOCK_MIN_SIZE, not 1: a single block's mean equals itself, the median-of-one
+     * always compares >= true, and the digest is the fixed 0x01 for every image (R74). */
+    if (!ctx || block_size < PH_BLOCK_MIN_SIZE || block_size > PH_BLOCK_MAX_SIZE)
         return PH_ERR_INVALID_ARGUMENT;
     ctx->config.block_size = block_size;
     return PH_SUCCESS;

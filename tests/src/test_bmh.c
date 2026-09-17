@@ -41,7 +41,8 @@ void test_bmh_logic() {
  * rounded up to a byte. It is what a caller has to store, so it is part of the contract
  * and not an implementation detail. */
 static void test_bmh_digest_width_follows_block_size() {
-    const int sizes[] = {1, 2, 8, 16, 22, 31, 32}; /* 32 is the setter's upper bound */
+    const int sizes[] = {2, 8, 16, 22, 31, 32}; /* 2 is the setter's lower bound (R74),
+                                                    32 is its upper bound */
 
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
@@ -91,6 +92,8 @@ static void test_bmh_block_size_bounds() {
 
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, 0));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, -1));
+    /* R74: 1 used to be accepted but collapsed every image to the same digest (0x01). */
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, 1));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, 33));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, 46341));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(NULL, 16));

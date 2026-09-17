@@ -110,7 +110,10 @@ void test_setter_bounds_reject_out_of_range(void) {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
 
-    const int bad_blocks[] = {1 << 30, INT_MAX, 46341, PH_BLOCK_MAX_SIZE + 1};
+    /* R74: block_size == 1 is the old documented minimum, but a single block's mean is
+     * its own median, the ">=" threshold is then always true, and the digest is the fixed
+     * 0x01 for every image -- as invalid as the overflow-sized values above it. */
+    const int bad_blocks[] = {1, 1 << 30, INT_MAX, 46341, PH_BLOCK_MAX_SIZE + 1};
     for (size_t i = 0; i < sizeof(bad_blocks) / sizeof(bad_blocks[0]); i++) {
         ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, bad_blocks[i]));
         ASSERT_INT_EQ(PH_BLOCK_SIZE, ctx->config.block_size);
@@ -118,6 +121,9 @@ void test_setter_bounds_reject_out_of_range(void) {
     /* And the ceiling itself is accepted: (22*22 + 7) / 8 == 61 bytes still fits. */
     ASSERT_OK(ph_context_set_block_params(ctx, PH_BLOCK_MAX_SIZE));
     ASSERT_INT_EQ(PH_BLOCK_MAX_SIZE, ctx->config.block_size);
+    /* R74: the new minimum, 2, still succeeds -- blocks can differ from each other again. */
+    ASSERT_OK(ph_context_set_block_params(ctx, PH_BLOCK_MIN_SIZE));
+    ASSERT_INT_EQ(PH_BLOCK_MIN_SIZE, ctx->config.block_size);
 
     /* Both ends: fewer angles than the DCT has coefficients is as invalid as more angles
      * than the largest supported image can resolve. */
@@ -131,9 +137,19 @@ void test_setter_bounds_reject_out_of_range(void) {
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
                   ph_context_set_radial_params(ctx, 180, PH_RADIAL_MAX_SAMPLES + 1));
     ASSERT_INT_EQ(PH_RADIAL_SAMPLES, ctx->config.radial_samples);
+    /* R74: samples == 1 is the old documented minimum, but the variance of one observation
+     * is zero by definition, so every projection is flat and the digest is all-zero for
+     * every image -- rejected, config untouched. */
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(ctx, 180, 1));
+    ASSERT_INT_EQ(PH_RADIAL_PROJECTIONS, ctx->config.radial_projections);
+    ASSERT_INT_EQ(PH_RADIAL_SAMPLES, ctx->config.radial_samples);
     ASSERT_OK(ph_context_set_radial_params(ctx, PH_RADIAL_MAX_PROJECTIONS, PH_RADIAL_MAX_SAMPLES));
     ASSERT_INT_EQ(PH_RADIAL_MAX_PROJECTIONS, ctx->config.radial_projections);
     ASSERT_INT_EQ(PH_RADIAL_MAX_SAMPLES, ctx->config.radial_samples);
+    /* R74: the new minimum, 2, still succeeds. */
+    ASSERT_OK(ph_context_set_radial_params(ctx, 180, PH_RADIAL_MIN_SAMPLES));
+    ASSERT_INT_EQ(180, ctx->config.radial_projections);
+    ASSERT_INT_EQ(PH_RADIAL_MIN_SAMPLES, ctx->config.radial_samples);
 
     ph_free(ctx);
     PASS("test_setter_bounds_reject_out_of_range");

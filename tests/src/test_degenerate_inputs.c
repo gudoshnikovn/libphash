@@ -357,26 +357,23 @@ void test_phash_of_a_uniform_image_is_rounding_noise(void) {
     PASS("test_phash_of_a_uniform_image_is_rounding_noise");
 }
 
-/* CHARACTERISATION TEST FOR A DEFECT (R45). Three parameter values the setters accept
- * collapse their algorithm to a constant, and report PH_SUCCESS while doing it.
+/* R74 (was a CHARACTERISATION TEST FOR A DEFECT, R45). Three parameter values the
+ * setters used to accept collapsed their algorithm to a constant, reporting PH_SUCCESS
+ * while doing it:
  *
  *   ph_context_set_phash_params(ctx, n, 1)  -- the hash is 1x1 = one coefficient, the DC
  *       term, and pHash thresholds against the median of the AC coefficients only. With
  *       one coefficient there are no AC terms, ph_median_bitpack_from() sees
- *       median_from >= n and returns 0. Every image hashes to 0.
+ *       median_from >= n and returns 0. Every image hashed to 0.
  *   ph_context_set_block_params(ctx, 1)     -- one block, whose value is its own median,
- *       and the threshold is `>=`. Every image hashes to 0x01.
+ *       and the threshold is `>=`. Every image hashed to 0x01.
  *   ph_context_set_radial_params(ctx, p, 1) -- one sample per projection, and the variance
- *       of one sample is zero. Every projection is flat, so every image gets the all-zero
+ *       of one sample is zero. Every projection was flat, so every image got the all-zero
  *       digest that means "no radial structure".
  *
- * All three are the H5/M12 anti-pattern the review is about: a silently wrong answer that
- * a caller cannot distinguish from a real one. They are recorded rather than fixed here
- * because the fix is a contract change -- either the setters reject these values, or the
- * compute functions return PH_ERR_INVALID_ARGUMENT -- and that is a decision, not a patch.
- *
- * WHEN IT IS MADE: each block below becomes an assertion that the setter (or the compute
- * call) returns PH_ERR_INVALID_ARGUMENT. */
+ * The fix (decided and implemented under R74): the setters themselves reject the
+ * degenerate minimum with PH_ERR_INVALID_ARGUMENT and raise the documented lower bound to
+ * 2, which is the smallest value for which each algorithm can still depend on content. */
 void test_parameter_values_that_collapse_the_hash_to_a_constant(void) {
     enum { SIDE = 32 };
     uint8_t a[SIDE * SIDE], b[SIDE * SIDE];
@@ -386,44 +383,69 @@ void test_parameter_values_that_collapse_the_hash_to_a_constant(void) {
             b[y * SIDE + x] = (uint8_t)((x * x + y * 13) % 256);
         }
 
-    /* pHash with a single coefficient. */
-    for (int i = 0; i < 2; i++) {
+    /* pHash: reduction_size == 1 is rejected; reduction_size == 2 (the new minimum) gives
+     * content-dependent hashes again. */
+    {
         ph_context_t *ctx = NULL;
         ASSERT_OK(ph_create(&ctx));
-        ASSERT_OK(ph_context_set_phash_params(ctx, PH_DCT_SIZE, 1));
-        ASSERT_OK(ph_load_from_pixels(ctx, i ? b : a, SIDE, SIDE, 1, 0));
-        uint64_t h = 0xdeadbeefULL;
-        ASSERT_OK(ph_compute_phash(ctx, &h));
-        ASSERT_UINT64_EQ(0ULL, h);
+        ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
+                      ph_context_set_phash_params(ctx, PH_DCT_SIZE, 1));
+        ASSERT_OK(ph_context_set_phash_params(ctx, PH_DCT_SIZE, 2));
+
+        ASSERT_OK(ph_load_from_pixels(ctx, a, SIDE, SIDE, 1, 0));
+        uint64_t ha = 0xdeadbeefULL;
+        ASSERT_OK(ph_compute_phash(ctx, &ha));
+
+        ASSERT_OK(ph_load_from_pixels(ctx, b, SIDE, SIDE, 1, 0));
+        uint64_t hb = 0xdeadbeefULL;
+        ASSERT_OK(ph_compute_phash(ctx, &hb));
+
+        ASSERT(ha != hb);
         ph_free(ctx);
     }
 
-    /* BMH with a single block. */
-    for (int i = 0; i < 2; i++) {
+    /* BMH: block_size == 1 is rejected; block_size == 2 (the new minimum) gives
+     * content-dependent digests again. */
+    {
         ph_context_t *ctx = NULL;
         ASSERT_OK(ph_create(&ctx));
-        ASSERT_OK(ph_context_set_block_params(ctx, 1));
-        ASSERT_OK(ph_load_from_pixels(ctx, i ? b : a, SIDE, SIDE, 1, 0));
-        ph_digest_t d;
-        memset(&d, 0xAA, sizeof(d));
-        ASSERT_OK(ph_compute_bmh(ctx, &d));
-        ASSERT_INT_EQ(1, d.size);
-        ASSERT_UINT8_EQ(0x01, d.data[0]);
+        ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, 1));
+        ASSERT_OK(ph_context_set_block_params(ctx, 2));
+
+        ph_digest_t da, db;
+        ASSERT_OK(ph_load_from_pixels(ctx, a, SIDE, SIDE, 1, 0));
+        memset(&da, 0xAA, sizeof(da));
+        ASSERT_OK(ph_compute_bmh(ctx, &da));
+
+        ASSERT_OK(ph_load_from_pixels(ctx, b, SIDE, SIDE, 1, 0));
+        memset(&db, 0xAA, sizeof(db));
+        ASSERT_OK(ph_compute_bmh(ctx, &db));
+
+        ASSERT(da.size == db.size);
+        ASSERT(memcmp(da.data, db.data, (size_t)da.size) != 0);
         ph_free(ctx);
     }
 
-    /* Radial with a single sample per projection. */
-    for (int i = 0; i < 2; i++) {
+    /* Radial: samples == 1 is rejected; samples == 2 (the new minimum) gives
+     * content-dependent digests again. */
+    {
         ph_context_t *ctx = NULL;
         ASSERT_OK(ph_create(&ctx));
-        ASSERT_OK(ph_context_set_radial_params(ctx, PH_RADIAL_PROJECTIONS, 1));
-        ASSERT_OK(ph_load_from_pixels(ctx, i ? b : a, SIDE, SIDE, 1, 0));
-        ph_digest_t d;
-        memset(&d, 0xAA, sizeof(d));
-        ASSERT_OK(ph_compute_radial_hash(ctx, &d));
-        ASSERT_INT_EQ(PH_RADIAL_COEFFS, d.size);
-        for (int k = 0; k < d.size; k++)
-            ASSERT_UINT8_EQ(0x00, d.data[k]);
+        ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
+                      ph_context_set_radial_params(ctx, PH_RADIAL_PROJECTIONS, 1));
+        ASSERT_OK(ph_context_set_radial_params(ctx, PH_RADIAL_PROJECTIONS, 2));
+
+        ph_digest_t da, db;
+        ASSERT_OK(ph_load_from_pixels(ctx, a, SIDE, SIDE, 1, 0));
+        memset(&da, 0xAA, sizeof(da));
+        ASSERT_OK(ph_compute_radial_hash(ctx, &da));
+
+        ASSERT_OK(ph_load_from_pixels(ctx, b, SIDE, SIDE, 1, 0));
+        memset(&db, 0xAA, sizeof(db));
+        ASSERT_OK(ph_compute_radial_hash(ctx, &db));
+
+        ASSERT(da.size == db.size);
+        ASSERT(memcmp(da.data, db.data, (size_t)da.size) != 0);
         ph_free(ctx);
     }
 

@@ -305,7 +305,7 @@ PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, i
  *
  * Both values are hard-bounded by the implementation:
  *   - @p dct_size must be in [1, 32];
- *   - @p reduction_size must be in [1, 8] and must not exceed @p dct_size
+ *   - @p reduction_size must be in [2, 8] and must not exceed @p dct_size
  *     (the resulting hash has to fit into the 64 bits of @c uint64_t).
  *
  * Out-of-range values are rejected and the current configuration is left
@@ -316,7 +316,12 @@ PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, i
  * @param ctx The context.
  * @param dct_size Size of the DCT matrix, 1..32 (default 32).
  * @param reduction_size Size of the low-frequency coefficient block to keep,
- *                       1..8 and <= @p dct_size (default 8).
+ *                       2..8 and <= @p dct_size (default 8). The lower bound is 2, not 1:
+ *                       since 2.0.0 (R61) the DC coefficient is excluded from the hash, so
+ *                       reduction_size == 1 would leave no AC coefficients at all and the
+ *                       hash would be the fixed value 0 for every image, regardless of
+ *                       content. 2 is the smallest size that leaves at least one AC
+ *                       coefficient to hash.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
  *         out-of-range pair.
  */
@@ -334,10 +339,15 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
  *        longer reproduces the old hashes. The lower bound is the coefficient count (a
  *        DCT of an n-element vector has n coefficients); the upper bound is the angular
  *        resolution the largest supported image can distinguish.
- * @param samples Number of samples per projection, 1..65536 (default 128). Samples are
+ * @param samples Number of samples per projection, 2..65536 (default 128). Samples are
  *        taken along a straight line across the image, and 65536 covers the diagonal of
  *        the largest square image the library will process (46340 x 46340, from the
- *        INT_MAX pixel ceiling); more samples only re-visit pixels already sampled.
+ *        INT_MAX pixel ceiling); more samples only re-visit pixels already sampled. The
+ *        lower bound is 2, not 1: variance of a single observation is 0 by definition, so
+ *        samples == 1 makes every projection's variance 0 regardless of image content --
+ *        the same all-flat condition @c PH_RADIAL_FLAT_VARIANCE exists to catch -- and the
+ *        digest is all zeroes for every image. 2 is the smallest count for which a
+ *        projection's variance can be nonzero.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
  *         out-of-range value.
  */
@@ -347,13 +357,17 @@ PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projection
  * @brief Sets the grid resolution for the Block Mean Hash (BMH).
  *
  * @param ctx The context.
- * @param block_size Resolution of the grid, 1..32 (default 16). BMH packs one bit per
+ * @param block_size Resolution of the grid, 2..32 (default 16). BMH packs one bit per
  *        block, i.e. `block_size * block_size` bits, into a @c ph_digest_t of at most
  *        PH_DIGEST_MAX_BYTES (128) bytes: 32x32 = 1024 bits = 128 bytes fits exactly,
  *        33x33 = 1089 bits = 137 bytes does not. The bound was 22 before 2.0.0 and moved
  *        with the digest capacity, not by choice. Above the bound, ph_compute_bmh() used to
  * truncate the digest to 64 bytes, hash the full grid anyway and return @c PH_SUCCESS — a partial
- * result indistinguishable from a complete one.
+ * result indistinguishable from a complete one. The lower bound is 2, not 1: with a single
+ * block its mean equals itself, the median of one value is that same value, the threshold
+ * is ">=" (R60) and is therefore always true, so the digest is the fixed 0x01 for every
+ * image regardless of content. 2 is the smallest grid whose blocks can have different
+ * means and therefore a content-dependent bit pattern.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
  *         out-of-range @p block_size.
  *
