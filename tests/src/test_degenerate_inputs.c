@@ -217,17 +217,21 @@ void test_every_algorithm_is_defined_on_degenerate_geometry(void) {
  * Every one of these follows from the algorithm's own threshold, and each is pinned here
  * so that a change of resampler or of threshold cannot alter it unnoticed:
  *
- *   aHash    every sample equals the mean and the test is `>`, so no bit is set;
+ *   aHash    every sample equals the mean and the test is `>=` (R68 -- unified with BMH's
+ *            tie convention since aHash's own source leaves it unstated), so every bit
+ *            is set;
  *   dHash    every horizontal difference is zero and the test is `<`, so no bit is set;
- *   wHash    every LL coefficient equals the median, same `>`, so no bit is set;
+ *   wHash    every LL coefficient equals the median, and the test stays `>` (pinned to
+ *            ImageHash's own reference implementation, not moved by R68), so no bit is
+ *            set;
  *   mHash    the Laplacian-of-Gaussian response is flat, so every block equals its
  *            window's mean and no bit is set;
  *   Radial   the projection variances are all zero, which is the flat case the algorithm
  *            answers with an all-zero digest;
  *   BMH      the threshold is `>=` the median and every block *is* the median, so every
- *            bit is set. This is the one algorithm whose flat-image answer is all ones,
- *            and it is a direct consequence of the >= in the source's equation 3.9 --
- *            the same >= that gives BMH its balanced bit distribution everywhere else;
+ *            bit is set. It is a direct consequence of the >= in the source's equation
+ *            3.9 -- the same >= that gives BMH its balanced bit distribution everywhere
+ *            else, and the same convention aHash now follows too;
  *   ColorHash    one bin holds every pixel and bins are scaled against the largest, so
  *            that bin is 255 and the other 107 are 0;
  *   ColorMoments the mean is the fill value; the second and third central moments are 0.
@@ -246,7 +250,7 @@ void test_uniform_images_have_documented_digests(void) {
             results_t r;
             compute_all(px, GEOMS[g].w, GEOMS[g].h, 3, &r);
 
-            ASSERT_UINT64_EQ(0ULL, r.ahash);
+            ASSERT_UINT64_EQ(0xFFFFFFFFFFFFFFFFULL, r.ahash);
             ASSERT_UINT64_EQ(0ULL, r.dhash);
             ASSERT_UINT64_EQ(0ULL, r.whash_fast);
             ASSERT_UINT64_EQ(0ULL, r.whash_full);
@@ -388,8 +392,7 @@ void test_parameter_values_that_collapse_the_hash_to_a_constant(void) {
     {
         ph_context_t *ctx = NULL;
         ASSERT_OK(ph_create(&ctx));
-        ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
-                      ph_context_set_phash_params(ctx, PH_DCT_SIZE, 1));
+        ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, PH_DCT_SIZE, 1));
         ASSERT_OK(ph_context_set_phash_params(ctx, PH_DCT_SIZE, 2));
 
         ASSERT_OK(ph_load_from_pixels(ctx, a, SIDE, SIDE, 1, 0));
@@ -582,7 +585,7 @@ void test_one_pixel_wide_images_collide_with_a_blank_image(void) {
  * give the same answer as hashing the original, for every algorithm whose reduction is a
  * box resize (pHash, wHash in both modes, BMH).
  *
- * aHash, dHash and mHash are excluded because they reduce through ph_resize_lanczos(),
+ * aHash, dHash and mHash are excluded because they reduce through ph_resize_mitchell(),
  * whose filter is not a box and therefore not invariant to replication; Radial is excluded
  * because its blur runs at full resolution, so the two images genuinely differ before it
  * ever samples them. */
@@ -649,8 +652,9 @@ void test_saturated_colours_are_binned_apart(void) {
             }
         ASSERT_INT_EQ(ph_color_histogram_bin(colours[i].r, colours[i].g, colours[i].b), bins[i]);
 
-        /* Flat in grey, whatever the colour. */
-        ASSERT_UINT64_EQ(0ULL, r.ahash);
+        /* Flat in grey, whatever the colour. aHash's tie-break is `>=` (R68), so a flat
+         * image -- every sample equal to the mean -- sets every bit rather than none. */
+        ASSERT_UINT64_EQ(0xFFFFFFFFFFFFFFFFULL, r.ahash);
         ASSERT_UINT64_EQ(0ULL, r.dhash);
         ASSERT_UINT64_EQ(0ULL, r.whash_fast);
         for (int k = 0; k < r.radial.size; k++)

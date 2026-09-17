@@ -43,7 +43,7 @@ PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash) {
 
     uint64_t hash = 0;
     for (int i = 0; i < num_pixels; i++) {
-        if (hash_input[i] > avg) {
+        if (hash_input[i] >= avg) {
             hash |= (1ULL << (63 - i));
         }
     }
