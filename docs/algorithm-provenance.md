@@ -103,7 +103,7 @@ pixel exactly equal to the mean.
 
 **What this implementation does** (`src/hashes/ahash.c`): grayscale via BT.601-approximate
 integer weights (38/75/15 over 128, configurable), resize to 8×8 through
-`ph_resize_lanczos()`, mean of the
+`ph_resize_mitchell()`, mean of the
 64 bytes truncated to `uint8_t`, bit set when `pixel > avg`, bit index `63 - i` in
 row-major order — that is, MSB first, left to right, top to bottom, big-endian.
 
@@ -111,7 +111,7 @@ row-major order — that is, MSB first, left to right, top to bottom, big-endian
 
 | Difference | Class | Note |
 |---|---|---|
-| Resampling filter | undefined | Source says only "shrink". Note that `ph_resize_lanczos()` **does not use Lanczos**: it calls `stbir_resize_uint8_linear()`, which for a downscale resolves to stb's `STBIR_DEFAULT_FILTER_DOWNSAMPLE` — **Mitchell**. The name is wrong and so is the assumption that this matches ImageHash's `LANCZOS`. Nothing in the source is violated, but see the naming defect below. |
+| Resampling filter | undefined | Source says only "shrink". `ph_resize_mitchell()` explicitly requests stb_image_resize2's **Mitchell** filter via `stbir_resize()`. Nothing in the source is violated, but this does not match the assumption that this matches ImageHash's `LANCZOS` (see the naming-history note below). |
 | Grayscale coefficients | undefined | Source says only "convert to a grayscale". |
 | Ties (`pixel == avg` → 0) | undefined | "Above or below" leaves the tie unstated. |
 | Average truncated to `uint8_t` before comparison | undefined | Loses at most one level; source does not specify precision. |
@@ -140,13 +140,13 @@ description by the people responsible for the algorithm.
    to bottom using big-endian."
 
 **What this implementation does** (`src/hashes/dhash.c`): resize to 9×8 through
-`ph_resize_lanczos()` (Mitchell — see aHash), bit set when `row[col] < row[col+1]`, bit index `63 - (row*8 + col)`.
+`ph_resize_mitchell()` (see aHash), bit set when `row[col] < row[col+1]`, bit index `63 - (row*8 + col)`.
 
 **Delta:**
 
 | Difference | Class | Note |
 |---|---|---|
-| Resampling filter | undefined | As for aHash, including the misnamed helper. |
+| Resampling filter | undefined | As for aHash. |
 | Grayscale coefficients | undefined | As for aHash. |
 
 **Verdict: conforms**, down to the direction of the comparison and the bit order, both
@@ -838,15 +838,15 @@ misled this analysis on its first pass.
    maths is unaffected.
 8. **BMH: no preset normalisation size**, so the block means are only true block means
    when the image dimensions are a multiple of the grid. Lower severity than the others.
-9. **`ph_resize_lanczos()` does not use Lanczos.** It calls `stbir_resize_uint8_linear()`,
-   which resolves an unspecified filter to stb's default — Mitchell when downscaling,
-   Catmull-Rom when upscaling, point sampling at 1:1. Every use in this library is a
-   downscale, so it is Mitchell throughout. No source specifies a filter, so no formula
-   is contradicted, but the name asserts something false about aHash and dHash to anyone
-   reading the code, and it is the reason the resampling was assumed to match ImageHash
-   (which uses PIL's `LANCZOS`) when it does not. Rename it, or make it actually pass
-   `STBIR_FILTER_MITCHELL`; do not silently change the filter, which would move every
-   aHash and dHash value.
+9. ~~**`ph_resize_lanczos()` does not use Lanczos.**~~ **Fixed**: renamed to
+   `ph_resize_mitchell()` and now passes `STBIR_FILTER_MITCHELL` explicitly through
+   `stbir_resize()`, rather than relying on `stbir_resize_uint8_linear()`'s implicit
+   default (which happened to resolve to Mitchell for every downscale use in this
+   library, but would silently change if stb's default ever moved). No formula was
+   ever contradicted — no source specifies a filter — but the old name asserted
+   something false about aHash and dHash, and was the reason the resampling was once
+   assumed to match ImageHash's PIL `LANCZOS`, which it does not. Pure rename plus
+   explicit filter selection; aHash/dHash values are unchanged.
 
 Items 1–5 all change stored hash values. The decision taken on 2 September 2026 is that
 **all of them are fixed in 2.0.0**: a major release is the one cheap moment to move a hash

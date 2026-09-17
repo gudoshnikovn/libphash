@@ -61,10 +61,9 @@ good at; the second is not in scope.
 | ColorHash | Swain & Ballard (method); this library (quantisation) | paper, 1991 — **not read** | n/a — no conformance claimed |
 | ColorMoments | Stricker & Orengo | paper, 1995 | **yes** — colour space (RGB, not HSV) |
 
-One cross-cutting caveat: `ph_resize_lanczos()`, used by aHash and dHash, does **not**
-resample with Lanczos — it takes stb_image_resize2's default, which is Mitchell for a
-downscale. No source specifies a filter, so nothing is violated, but the name is wrong
-and the filter is not the one ImageHash uses.
+One cross-cutting caveat: `ph_resize_mitchell()`, used by aHash and dHash, explicitly
+requests stb_image_resize2's Mitchell filter. No source specifies a filter, so nothing
+is violated, but this is not the filter ImageHash uses.
 
 One of the nine — wHash — has no primary source. For those, "correct" can only mean measured
 robustness, discrimination and separability — never conformance to a specification,

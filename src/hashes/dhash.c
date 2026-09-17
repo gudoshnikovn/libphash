@@ -10,7 +10,7 @@
  * differences of each of the 8 rows, with "a '1' to indicate that P[x] < P[x+1]" and
  * the bits set "from left to right, top to bottom using big-endian". This code follows
  * that exactly, including the direction of the comparison. The resampling filter is not
- * specified by the source; see ahash.c on ph_resize_lanczos() being misnamed.
+ * specified by the source; see ahash.c on the Mitchell filter ph_resize_mitchell() uses.
  *
  * See docs/algorithm-provenance.md and docs/references.md.
  */
@@ -29,8 +29,8 @@ PH_API ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out_hash) {
 
     uint8_t hash_input[(PH_CORE_HASH_SIZE + 1) * PH_CORE_HASH_SIZE];
 
-    if (!ph_resize_lanczos(gray_input, ctx->image.width, ctx->image.height, hash_input,
-                           PH_CORE_HASH_SIZE + 1, PH_CORE_HASH_SIZE))
+    if (!ph_resize_mitchell(gray_input, ctx->image.width, ctx->image.height, hash_input,
+                            PH_CORE_HASH_SIZE + 1, PH_CORE_HASH_SIZE))
         return PH_ERR_ALLOCATION_FAILED;
 
     uint64_t hash = 0;

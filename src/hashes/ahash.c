@@ -10,11 +10,10 @@
  * here -- MSB first, left to right, top to bottom -- is the one the post itself uses.
  *
  * The resampling filter, the grayscale coefficients and the handling of a pixel exactly
- * equal to the mean are not specified by the source. Note that ph_resize_lanczos() does
- * NOT use Lanczos: it lets stb_image_resize2 pick its default, which for a downscale is
- * Mitchell. The name is wrong; the behaviour violates nothing, but it is not the filter
- * ImageHash uses either. See docs/algorithm-provenance.md
- * for the full comparison and docs/references.md for the citation.
+ * equal to the mean are not specified by the source. ph_resize_mitchell() explicitly
+ * requests stb_image_resize2's Mitchell filter -- it is not the filter ImageHash uses
+ * either. See docs/algorithm-provenance.md for the full comparison and docs/references.md
+ * for the citation.
  */
 #include "internal.h"
 #include <stdlib.h>
@@ -31,8 +30,8 @@ PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash) {
 
     uint8_t hash_input[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
 
-    if (!ph_resize_lanczos(gray_input, ctx->image.width, ctx->image.height, hash_input,
-                           PH_CORE_HASH_SIZE, PH_CORE_HASH_SIZE))
+    if (!ph_resize_mitchell(gray_input, ctx->image.width, ctx->image.height, hash_input,
+                            PH_CORE_HASH_SIZE, PH_CORE_HASH_SIZE))
         return PH_ERR_ALLOCATION_FAILED;
 
     uint64_t total_sum = 0;
