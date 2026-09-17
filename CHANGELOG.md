@@ -386,6 +386,11 @@ walkthrough.
   coefficients tie to within a float ulp — contrary to the usual explanation, a median is
   not dragged by an outlier. Recorded because it is a conformance change you may see on
   degenerate input, not because it will move your hashes.
+- **aHash now thresholds a pixel exactly equal to the mean as set, not clear**
+  (`pixel >= mean`, was `pixel > mean`), matching the tie-break this library already
+  uses for BMH. The source leaves the tie unstated either way. This moves aHash's
+  result only on a genuinely flat/uniform image, where every pixel equals the mean —
+  the all-zero hash becomes all-ones. No ordinary photograph has this property.
 - `ph_compute_phash()` returned a hash computed from **uninitialized memory** when
   the DCT parameters were out of range; out-of-range parameters are now rejected.
 - Pixel counts were computed in `int` and could overflow (undefined behaviour); they
