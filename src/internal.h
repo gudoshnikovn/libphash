@@ -13,6 +13,12 @@
 void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, int channels,
                      uint8_t *dst);
 
+/* Same contract as ph_to_grayscale(), but always the scalar path, even on a build with a
+ * SIMD-capable target. Exists only so tests/src/test_simd_equivalence.c can compare the
+ * two against each other; production code should call ph_to_grayscale(). */
+void ph_to_grayscale_scalar(const ph_context_t *ctx, const uint8_t *src, int w, int h, int channels,
+                            uint8_t *dst);
+
 /* Resizes a grayscale image using box sampling (averaging). Returns 1 on success, 0 if
  * the dimensions are degenerate or the underlying stb resize failed to allocate --
  * either way `dst` is left untouched and the caller must not read it. */
@@ -26,6 +32,11 @@ int ph_resize_mitchell(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw,
  * the scratchpad allocation needed for images >= 3x3 fails, in which case `dst` is left
  * untouched. */
 int ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst);
+
+/* Same contract as ph_apply_gaussian_blur(), but always the scalar path, even on a build
+ * with a SIMD-capable target. Exists only so tests/src/test_simd_equivalence.c can compare
+ * the two against each other; production code should call ph_apply_gaussian_blur(). */
+int ph_apply_gaussian_blur_scalar(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst);
 
 /* Applies Gamma Correction (gamma=2.2) to normalize brightness */
 void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h);
@@ -80,6 +91,18 @@ ph_channel_moments_t ph_compute_moments(const uint8_t *data, size_t num_pixels, 
  * check the result, otherwise `out` stays whatever it was (see R02/H5). */
 PH_NODISCARD ph_error_t ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size,
                                         int reduction_size, float *out);
+
+/* Same contract as ph_dct2_partial(), but always the scalar path, even on a build with a
+ * SIMD-capable target. Exists only so tests/src/test_simd_equivalence.c can compare the
+ * two against each other; production code should call ph_dct2_partial(). */
+PH_NODISCARD ph_error_t ph_dct2_partial_scalar(const float *dct_mat, const uint8_t *input,
+                                               int dct_size, int reduction_size, float *out);
+
+/* Same contract as the public ph_hamming_distance_digest(), but always the scalar path,
+ * even on a build with a SIMD-capable target. Exists only so
+ * tests/src/test_simd_equivalence.c can compare the two against each other; production
+ * code should call the public function. */
+int ph_hamming_distance_digest_scalar(const ph_digest_t *a, const ph_digest_t *b);
 
 uint64_t ph_median_bitpack(const float *values, int n);
 

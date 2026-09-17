@@ -1,5 +1,6 @@
 #include "internal.h"
 #include <math.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -9,27 +10,36 @@
 #include <smmintrin.h>
 #endif
 
-int ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst) {
-    /* size_t, not int: w * h overflows int above ~46340x46340, which would both
-     * truncate the memcpy() length and mis-size the scratchpad (R03/H6). */
-    size_t nbytes = (w > 0 && h > 0) ? (size_t)w * (size_t)h : 0;
-
-    if (!ctx || !src || !dst || w < 3 || h < 3) {
-        if (dst && src && dst != src && nbytes > 0)
-            memcpy(dst, src, nbytes);
-        return 1;
+/* 3x3 Gaussian blur ([1,2,1]/4 separable kernel), scalar reference implementation.
+ * Shared by ph_apply_gaussian_blur()'s non-NEON build and by
+ * ph_apply_gaussian_blur_scalar(), which forces this path even when NEON is available
+ * so tests/src/test_simd_equivalence.c can compare the two byte for byte. */
+static void gaussian_blur_scalar_impl(const uint8_t *src, int w, int h, uint8_t *temp,
+                                      uint8_t *dst) {
+    /* Horizontal pass: Kernel [1 2 1], divide by 4 */
+    for (int y = 0; y < h; y++) {
+        temp[y * w] = src[y * w];
+        temp[y * w + w - 1] = src[y * w + w - 1];
+        for (int x = 1; x < w - 1; x++) {
+            uint32_t val = src[y * w + (x - 1)] + (src[y * w + x] << 1) + src[y * w + (x + 1)];
+            temp[y * w + x] = (uint8_t)(val >> 2);
+        }
     }
 
-    size_t saved_offset = ctx->arena.offset;
-    uint8_t *temp = ph_get_scratchpad(ctx, nbytes);
-    if (!temp) {
-        /* Allocation failure, not the legitimate small-image passthrough above: the
-         * caller must be told rather than silently getting the unblurred image back. */
-        ctx->arena.offset = saved_offset;
-        return 0;
+    /* Vertical pass: Kernel [1 2 1], divide by 4 */
+    for (int x = 0; x < w; x++) {
+        dst[x] = temp[x];
+        dst[(h - 1) * w + x] = temp[(h - 1) * w + x];
+        for (int y = 1; y < h - 1; y++) {
+            uint32_t val = temp[(y - 1) * w + x] + (temp[y * w + x] << 1) + temp[(y + 1) * w + x];
+            dst[y * w + x] = (uint8_t)(val >> 2);
+        }
     }
+}
 
 #if defined(__ARM_NEON)
+/* Same contract as gaussian_blur_scalar_impl(), NEON fast path. */
+static void gaussian_blur_neon_impl(const uint8_t *src, int w, int h, uint8_t *temp, uint8_t *dst) {
     // --- NEON Implementation ---
     // Kernel: [1, 2, 1] / 4
 
@@ -130,32 +140,53 @@ int ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_
 
     // Bottom Edge (copy last row)
     memcpy(&dst[(h - 1) * w], &temp[(h - 1) * w], w);
-
-#else
-    // --- Scalar Implementation (Original Fallback) ---
-
-    /* Horizontal pass: Kernel [1 2 1], divide by 4 */
-    for (int y = 0; y < h; y++) {
-        temp[y * w] = src[y * w];
-        temp[y * w + w - 1] = src[y * w + w - 1];
-        for (int x = 1; x < w - 1; x++) {
-            uint32_t val = src[y * w + (x - 1)] + (src[y * w + x] << 1) + src[y * w + (x + 1)];
-            temp[y * w + x] = (uint8_t)(val >> 2);
-        }
-    }
-
-    /* Vertical pass: Kernel [1 2 1], divide by 4 */
-    for (int x = 0; x < w; x++) {
-        dst[x] = temp[x];
-        dst[(h - 1) * w + x] = temp[(h - 1) * w + x];
-        for (int y = 1; y < h - 1; y++) {
-            uint32_t val = temp[(y - 1) * w + x] + (temp[y * w + x] << 1) + temp[(y + 1) * w + x];
-            dst[y * w + x] = (uint8_t)(val >> 2);
-        }
-    }
+}
 #endif
+
+/* Shared body of ph_apply_gaussian_blur() and ph_apply_gaussian_blur_scalar(): validation,
+ * scratchpad allocation, then dispatch to the scalar or (when available and not forced off)
+ * NEON kernel. */
+static int gaussian_blur_impl(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst,
+                              bool force_scalar) {
+    /* size_t, not int: w * h overflows int above ~46340x46340, which would both
+     * truncate the memcpy() length and mis-size the scratchpad (R03/H6). */
+    size_t nbytes = (w > 0 && h > 0) ? (size_t)w * (size_t)h : 0;
+
+    if (!ctx || !src || !dst || w < 3 || h < 3) {
+        if (dst && src && dst != src && nbytes > 0)
+            memcpy(dst, src, nbytes);
+        return 1;
+    }
+
+    size_t saved_offset = ctx->arena.offset;
+    uint8_t *temp = ph_get_scratchpad(ctx, nbytes);
+    if (!temp) {
+        /* Allocation failure, not the legitimate small-image passthrough above: the
+         * caller must be told rather than silently getting the unblurred image back. */
+        ctx->arena.offset = saved_offset;
+        return 0;
+    }
+
+#if defined(__ARM_NEON)
+    if (force_scalar)
+        gaussian_blur_scalar_impl(src, w, h, temp, dst);
+    else
+        gaussian_blur_neon_impl(src, w, h, temp, dst);
+#else
+    (void)force_scalar;
+    gaussian_blur_scalar_impl(src, w, h, temp, dst);
+#endif
+
     ctx->arena.offset = saved_offset;
     return 1;
+}
+
+int ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst) {
+    return gaussian_blur_impl(ctx, src, w, h, dst, false);
+}
+
+int ph_apply_gaussian_blur_scalar(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst) {
+    return gaussian_blur_impl(ctx, src, w, h, dst, true);
 }
 
 void ph_apply_laplacian_3x3(const uint8_t *src, int w, int h, uint8_t *dst) {

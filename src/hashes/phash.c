@@ -200,8 +200,11 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     return PH_SUCCESS;
 }
 
-ph_error_t ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size,
-                           int reduction_size, float *out) {
+/* Shared body of ph_dct2_partial() and ph_dct2_partial_scalar(): identical except for
+ * whether the row-DCT dot product may take the NEON path. force_scalar exists only so
+ * tests/src/test_simd_equivalence.c can compare the two against each other. */
+static ph_error_t dct2_partial_impl(const float *dct_mat, const uint8_t *input, int dct_size,
+                                    int reduction_size, float *out, bool force_scalar) {
     // Temporary matrix for first pass: dct_size rows, reduction_size columns
     float temp[PH_DCT_MAX_SIZE * PH_DCT_MAX_REDUCTION_SIZE];
 
@@ -221,13 +224,14 @@ ph_error_t ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_s
             const uint8_t *in = &input[i * dct_size];
 
 #if defined(__ARM_NEON)
-            if (dct_size == 32) {
+            if (!force_scalar && dct_size == 32) {
                 sum = dot_product_f32_u8_neon(coeffs, in, 32);
             } else {
                 for (int k = 0; k < dct_size; k++)
                     sum += coeffs[k] * in[k];
             }
 #else
+            (void)force_scalar;
             for (int k = 0; k < dct_size; k++)
                 sum += coeffs[k] * in[k];
 #endif
@@ -248,6 +252,16 @@ ph_error_t ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_s
     }
 
     return PH_SUCCESS;
+}
+
+ph_error_t ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size,
+                           int reduction_size, float *out) {
+    return dct2_partial_impl(dct_mat, input, dct_size, reduction_size, out, false);
+}
+
+ph_error_t ph_dct2_partial_scalar(const float *dct_mat, const uint8_t *input, int dct_size,
+                                  int reduction_size, float *out) {
+    return dct2_partial_impl(dct_mat, input, dct_size, reduction_size, out, true);
 }
 
 uint64_t ph_median_bitpack(const float *values, int n) {

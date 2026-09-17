@@ -32,6 +32,38 @@ uint8_t *ph_get_gray(ph_context_t *ctx) {
     return ctx->image.gray_cache;
 }
 
+/* Scalar tail shared by ph_to_grayscale() (after its SIMD prefix, if any) and
+ * ph_to_grayscale_scalar() (the whole buffer, for the SIMD-equivalence test in
+ * tests/src/test_simd_equivalence.c). */
+static void grayscale_scalar_range(const uint8_t *s, uint8_t *d, size_t count, int channels,
+                                   int r_w, int g_w, int b_w) {
+    for (size_t i = 0; i < count; i++) {
+        uint32_t r = s[0];
+        uint32_t g = s[1];
+        uint32_t b = s[2];
+        *d++ = (uint8_t)((r * r_w + g * g_w + b * b_w) >> 7);
+        s += channels;
+    }
+}
+
+void ph_to_grayscale_scalar(const ph_context_t *ctx, const uint8_t *src, int w, int h, int channels,
+                            uint8_t *dst) {
+    if (w <= 0 || h <= 0)
+        return;
+    size_t num_pixels = (size_t)w * (size_t)h;
+
+    int r_w = ctx ? ctx->config.gray_r : PH_GRAY_R;
+    int g_w = ctx ? ctx->config.gray_g : PH_GRAY_G;
+    int b_w = ctx ? ctx->config.gray_b : PH_GRAY_B;
+
+    if (channels == 1) {
+        memcpy(dst, src, num_pixels);
+        return;
+    }
+
+    grayscale_scalar_range(src, dst, num_pixels, channels, r_w, g_w, b_w);
+}
+
 void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, int channels,
                      uint8_t *dst) {
     if (w <= 0 || h <= 0)
@@ -87,13 +119,7 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
 #endif
 
     /* Fallback for remaining pixels or other architectures */
-    for (; i < num_pixels; i++) {
-        uint32_t r = s[0];
-        uint32_t g = s[1];
-        uint32_t b = s[2];
-        *d++ = (uint8_t)((r * r_w + g * g_w + b * b_w) >> 7);
-        s += channels;
-    }
+    grayscale_scalar_range(s, d, num_pixels - i, channels, r_w, g_w, b_w);
 }
 
 /* Applied from exactly one place: ph_compute_radial_hash() (src/hashes/radial.c).

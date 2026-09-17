@@ -32,6 +32,33 @@ PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2) {
 #endif
 }
 
+/* Shared tail of ph_hamming_distance_digest(): plain byte-at-a-time XOR + popcount, no
+ * vector instructions. Used both as the fallback for whatever a SIMD prefix left
+ * unprocessed, and standalone (over the whole digest) by
+ * ph_hamming_distance_digest_scalar(), which exists only so
+ * tests/src/test_simd_equivalence.c can compare the two against each other. */
+static int hamming_scalar_tail(const ph_digest_t *a, const ph_digest_t *b, size_t start,
+                               int total) {
+    for (size_t i = start; i < a->size; i++) {
+        uint8_t x = a->data[i] ^ b->data[i];
+#if defined(__GNUC__) || defined(__clang__)
+        total += __builtin_popcount(x);
+#else
+        while (x) {
+            x &= (x - 1);
+            total++;
+        }
+#endif
+    }
+    return total;
+}
+
+int ph_hamming_distance_digest_scalar(const ph_digest_t *a, const ph_digest_t *b) {
+    if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_BITS))
+        return -1;
+    return hamming_scalar_tail(a, b, 0, 0);
+}
+
 PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b) {
     if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_BITS))
         return -1;
@@ -101,21 +128,7 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
 #endif
 
     // --- Fallback/Remainder Loop ---
-    for (; i < len; i++) {
-        uint8_t x = a->data[i] ^ b->data[i];
-
-        // Use generic built-in popcount if available for the remainder
-#if defined(__GNUC__) || defined(__clang__)
-        total += __builtin_popcount(x);
-#else
-        // Fallback: Kernighan's algorithm for the remaining bytes
-        while (x) {
-            x &= (x - 1);
-            total++;
-        }
-#endif
-    }
-    return total;
+    return hamming_scalar_tail(a, b, i, total);
 }
 
 /* Euclidean distance over a feature vector, in the features' own units.
