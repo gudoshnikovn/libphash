@@ -48,18 +48,34 @@ static void png_mem_read_fn(png_structp png_ptr, png_bytep out, png_size_t count
 typedef struct {
     char *err_msg;
     size_t err_msg_cap;
+    ph_error_t *out_err;
 } PngErrorCtx;
 
 static void png_error_fn(png_structp png_ptr, png_const_charp msg) {
     PngErrorCtx *ectx = (PngErrorCtx *)png_get_error_ptr(png_ptr);
-    if (ectx)
+    /* If png_warning_fn below already classified this failure (currently: the
+     * per-dimension user-limit check), keep its code and message -- the fatal error
+     * that follows a user-limit warning is libpng's generic "Invalid IHDR data",
+     * which would overwrite a specific answer with a useless one. */
+    if (ectx && (!ectx->out_err || *ectx->out_err == PH_SUCCESS))
         ph_set_err_msg(ectx->err_msg, ectx->err_msg_cap, msg);
     longjmp(png_jmpbuf(png_ptr), 1);
 }
 
 static void png_warning_fn(png_structp png_ptr, png_const_charp msg) {
     (void)png_ptr;
-    (void)msg; // Warnings aren't fatal; nothing to surface for now.
+    /* png_check_IHDR() reports png_set_user_limits() rejections as a *warning*
+     * ("Image width/height exceeds user limit in IHDR"), not the png_error() that
+     * follows moments later -- so without this, the fatal error's own generic message
+     * ("Invalid IHDR data") is all that reaches the caller, and the code defaults to
+     * PH_ERR_CORRUPT_DATA in the setjmp catch below. That mislabels a configured-limit
+     * rejection as a broken file. Reclassify here, while the specific reason is still
+     * available. */
+    PngErrorCtx *ectx = (PngErrorCtx *)png_get_error_ptr(png_ptr);
+    if (ectx && ectx->out_err && strstr(msg, "exceeds user limit") != NULL) {
+        *ectx->out_err = PH_ERR_IMAGE_TOO_LARGE;
+        ph_set_err_msg(ectx->err_msg, ectx->err_msg_cap, msg);
+    }
 }
 
 unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
@@ -81,7 +97,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     if (png_sig_cmp(buffer, 0, 8) != 0)
         return NULL;
 
-    PngErrorCtx ectx = {.err_msg = err_msg, .err_msg_cap = err_msg_cap};
+    PngErrorCtx ectx = {.err_msg = err_msg, .err_msg_cap = err_msg_cap, .out_err = out_err};
     png_structp png_ptr =
         png_create_read_struct(PNG_LIBPNG_VER_STRING, &ectx, png_error_fn, png_warning_fn);
     if (!png_ptr)
