@@ -426,7 +426,7 @@ walkthrough.
 - UBSan alignment noise originating in the vendored `stb_image_resize2.h` is
   suppressed, so the sanitizer output is actionable again.
 - Resizing and Gaussian blur reported an allocation failure as `PH_SUCCESS` with a
-  hash computed over stack or heap garbage. `ph_resize_box()`, `ph_resize_lanczos()`
+  hash computed over stack or heap garbage. `ph_resize_box()`, `ph_resize_mitchell()`
   and `ph_apply_gaussian_blur()` now propagate the failure, so aHash, dHash, pHash,
   wHash, mHash, BMH and Radial return `PH_ERR_ALLOCATION_FAILED` instead of a value
   indistinguishable from a real hash. No hash value changes on the success path.
@@ -446,6 +446,19 @@ walkthrough.
   out-of-memory JPEG as an unrecognized format. Patched locally in
   `vendor/stb_image.h` pending an upstream fix; all 83 allocation-failure points in
   the test suite now report `PH_ERR_ALLOCATION_FAILED`.
+- The native JPEG, PNG and WebP decoder backends left `ph_get_last_error_message()`
+  empty on 16 of their own failure paths, while the `stb_image` fallback already
+  filled it for the same error codes. The same input could therefore get a
+  diagnostic message in one build configuration and an empty string in another for
+  an identical `ph_error_t`. Every native backend, including the alternative spng
+  PNG path, now fills the message on every failure.
+- The PNG decoder reported a configured `max_pixels` (or a single dimension close to
+  it) as `PH_ERR_CORRUPT_DATA` instead of `PH_ERR_IMAGE_TOO_LARGE` when the rejection
+  came from libpng's own per-dimension limit rather than this library's own
+  post-header check: libpng reports that specific case as a warning, which was
+  silently discarded, so only the generic fatal error that followed it reached the
+  caller. An intact, ordinary image now correctly reports "too large" rather than
+  "corrupt" when it is rejected for size.
 
 ### Security
 
