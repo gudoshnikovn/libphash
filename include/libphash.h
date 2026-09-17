@@ -575,11 +575,16 @@ PH_API PH_NODISCARD ph_error_t ph_load_from_file(ph_context_t *ctx, const char *
 /**
  * @brief Loads an image from a memory buffer.
  *
- * @note Animated GIF and animated WebP are single-image formats as far as this
- *       function is concerned: only the first frame is decoded and hashed, whichever
- *       backend handles the buffer (the always-available @c stb_image fallback for
- *       GIF, or the native WebP decoder when @c PH_USE_WEBP is compiled in). There is
- *       no way to request a different frame or the frame count through this API.
+ * @note Animated GIF is a single-image format as far as this function is concerned:
+ *       only the first frame is decoded and hashed, via the always-available
+ *       @c stb_image fallback. There is no way to request a different frame or the
+ *       frame count through this API.
+ * @note Animated WebP is NOT decoded to its first frame -- it fails with
+ *       @c PH_ERR_CORRUPT_DATA. The native WebP backend (@c PH_USE_WEBP) decodes
+ *       through libwebp's simple API, which has no bitstream to read at the
+ *       container's top level for a multi-frame file; reaching an individual frame
+ *       needs libwebp's demux API, which this backend does not use. A static WebP
+ *       (no @c ANIM chunk) is unaffected.
  *
  * @param ctx The context.
  * @param buffer Pointer to the raw file data (e.g., JPEG bytes).

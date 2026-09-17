@@ -13,10 +13,12 @@
  * too, since stb_image decodes both natively. Two formats it does NOT cover:
  * WebP (excluded below on purpose -- see comment on ph_can_read_stb) and TIFF
  * (stb_image has no TIFF support at all; would need a dedicated PHASH_USE_TIFF
- * backend on libtiff if that's ever needed). Animated GIF/WebP: only the first
- * frame is decoded/hashed, same as everything else in this library.
+ * backend on libtiff if that's ever needed). Animated GIF: only the first frame is
+ * decoded/hashed, via this fallback. Animated WebP does NOT get the same treatment
+ * from the native WebP backend (src/loaders/webp.c) -- it fails outright rather than
+ * decoding a frame; see the @note on ph_load_from_memory() in include/libphash.h.
  *
- * Every format named above (including TIFF's absence and the first-frame-only
+ * Every format named above (including TIFF's absence and GIF's first-frame-only
  * behavior) has a hand-built fixture and a passing assertion in
  * test_stb_extended_fallback_formats(), test_animated_gif_first_frame_only() and
  * test_tiff_unsupported() in tests/src/test_loader.c -- update that coverage

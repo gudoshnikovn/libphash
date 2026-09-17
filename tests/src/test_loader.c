@@ -424,6 +424,29 @@ static const uint8_t gif_frame1_only[] = {
     0x00, 0x00, 0x00, 0xff, 0x21, 0xf9, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2c, 0x00, 0x00,
     0x00, 0x00, 0x02, 0x00, 0x02, 0x00, 0x00, 0x02, 0x02, 0x84, 0x51, 0x00, 0x3b};
 
+// Same "first frame only" contract, for the native WebP decoder path: webp_anim_two_frames
+// is a real animated WebP (built with `img2webp`, libwebp 1.6.0) holding a 4x4 red frame
+// then a 4x4 blue one; webp_frame1_only is a standalone lossless WebP (built with `cwebp`)
+// of just the red frame. The two encoders produce different containers -- VP8X+ANIM+ANMF
+// for the animated file, a bare VP8L chunk for the standalone one -- which is deliberate:
+// it means a passing comparison cannot be an accident of identical bytes, only of decoding
+// to the same pixels.
+static const uint8_t webp_anim_two_frames[] = {
+    0x52, 0x49, 0x46, 0x46, 0x84, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x58,
+    0x0a, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x03, 0x00, 0x00, 0x41, 0x4e,
+    0x49, 0x4d, 0x06, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x41, 0x4e, 0x4d, 0x46,
+    0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x03, 0x00, 0x00,
+    0x64, 0x00, 0x00, 0x02, 0x56, 0x50, 0x38, 0x4c, 0x0f, 0x00, 0x00, 0x00, 0x2f, 0x03, 0xc0, 0x00,
+    0x00, 0x07, 0x10, 0xe5, 0x8f, 0xfe, 0x07, 0x22, 0xa2, 0xff, 0x01, 0x00, 0x41, 0x4e, 0x4d, 0x46,
+    0x28, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x03, 0x00, 0x00,
+    0x64, 0x00, 0x00, 0x00, 0x56, 0x50, 0x38, 0x4c, 0x0f, 0x00, 0x00, 0x00, 0x2f, 0x03, 0xc0, 0x00,
+    0x00, 0x07, 0x10, 0xd1, 0xfe, 0xfe, 0x07, 0x22, 0xa2, 0xff, 0x01, 0x00};
+
+static const uint8_t webp_frame1_only[] = {0x52, 0x49, 0x46, 0x46, 0x1c, 0x00, 0x00, 0x00, 0x57,
+                                           0x45, 0x42, 0x50, 0x56, 0x50, 0x38, 0x4c, 0x0f, 0x00,
+                                           0x00, 0x00, 0x2f, 0x03, 0xc0, 0x00, 0x00, 0x07, 0x10,
+                                           0xe5, 0x8f, 0xfe, 0x07, 0x22, 0xa2, 0xff, 0x01, 0x00};
+
 static uint64_t hash_of_buffer(const uint8_t *data, size_t len) {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
@@ -454,26 +477,40 @@ void test_animated_gif_first_frame_only() {
     printf("test_animated_gif_first_frame_only: PASSED\n");
 }
 
-// Animated WebP is the other half of the "first frame only" contract documented on
-// ph_load_from_memory(), but exercising it needs a native WebP decode path
-// (PH_USE_WEBP), which in turn needs vendor/libwebp populated. In this worktree
-// vendor/libwebp is an uninitialized submodule (empty directory) and per project
-// policy submodule initialization is not something a task worktree does itself, so
-// there is no way to build or run a WebP-enabled binary here to construct and verify
-// an animated-WebP fixture against. This is a known gap: covering it needs either a
-// worktree with vendor/libwebp already populated, or a real .webp file added under
-// tests/data/ and hand-verified against a WebP-enabled build elsewhere.
+// Animated WebP was assumed to follow the same "first frame only" contract as animated
+// GIF (both are what CLAUDE.md/README.md/ph_load_from_memory() document). It does not:
+// this backend calls WebPGetInfo() + WebPDecodeRGBInto(), libwebp's *simple* decode API,
+// which has no bitstream to decode at the RIFF top level for a VP8X+ANIM container --
+// the actual pixels are one level down, in per-frame ANMF chunks, reachable only through
+// the demux API (WebPAnimDecoder / WebPDemuxer), which this backend does not link. The
+// dimension query still succeeds (VP8X carries the canvas size), but the decode call
+// itself fails, so an animated WebP is refused outright rather than decoding its first
+// frame. Confirmed against a real two-frame file built with `img2webp` (libwebp 1.6.0).
+// This contradicts the documented contract; flagged as a real gap rather than silently
+// worked around -- fixing it means linking libwebp's demux library and decoding through
+// WebPAnimDecoder, which is a decoder-behavior change of its own, not a test-coverage one.
 void test_webp_animated_first_frame_only_or_skip() {
     if (!ph_can_use_webp()) {
         printf("test_webp_animated_first_frame_only_or_skip: SKIPPED (no WebP decoder in "
                "this build)\n");
         return;
     }
-    // Reachable only in a PH_USE_WEBP build; no fixture exists to run yet (see comment
-    // above). Fail loudly rather than silently pretending to have covered this.
-    fprintf(stderr, "[FAIL] test_webp_animated_first_frame_only_or_skip: WebP decoder is "
-                    "active but no animated-WebP fixture has been added for it yet\n");
-    exit(1);
+
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ph_error_t err = ph_load_from_memory(ctx, webp_anim_two_frames, sizeof(webp_anim_two_frames));
+    ASSERT_INT_EQ(PH_ERR_CORRUPT_DATA, err);
+    ph_free(ctx);
+
+    // The standalone single-frame fixture (same pixels, no ANIM container) decodes fine,
+    // confirming the failure above is about the container, not the fixture being broken.
+    ph_context_t *ctx2 = NULL;
+    ASSERT_OK(ph_create(&ctx2));
+    ASSERT_OK(ph_load_from_memory(ctx2, webp_frame1_only, sizeof(webp_frame1_only)));
+    ph_free(ctx2);
+
+    printf("test_webp_animated_first_frame_only_or_skip: PASSED (documents a real gap: "
+           "animated WebP is rejected, not decoded to its first frame -- see comment)\n");
 }
 
 // TIFF is claimed nowhere as supported (CLAUDE.md and README.md explicitly call it
