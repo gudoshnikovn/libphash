@@ -7,7 +7,8 @@
 
 /* Last-resort fallback backend: whatever no native decoder recognized, hand to
  * stb_image. This is what actually gives us BMP/GIF/TGA/PSD/HDR/PIC/PNM support
- * (stb_image is always linked in, via STB_IMAGE_IMPLEMENTATION in core.c) --
+ * (stb_image is always linked in, via STB_IMAGE_IMPLEMENTATION in
+ * src/loaders/stb_image_impl.c) --
  * and in a build with a native decoder missing for JPEG/PNG, it covers those
  * too, since stb_image decodes both natively. Two formats it does NOT cover:
  * WebP (excluded below on purpose -- see comment on ph_can_read_stb) and TIFF
