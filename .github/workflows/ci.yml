@@ -346,11 +346,27 @@ jobs:
     - name: Build
       run: cmake --build build --target fuzz_load
 
+    # R27: fuzz-corpus- (no run id) always misses on the save side and restores the
+    # most recently saved cache on the restore side -- the corpus only ever grows,
+    # so each run should pick up where the last one left off instead of starting
+    # from zero every time (90s was finding nothing new run after run before this).
+    - name: Restore fuzz corpus cache
+      uses: actions/cache@v4
+      with:
+        path: tests/fuzz/corpus
+        key: fuzz-corpus-${{ github.run_id }}
+        restore-keys: |
+          fuzz-corpus-
+
     - name: Run fuzz_load (short session on every PR)
       run: |
-        mkdir -p /tmp/fuzz-artifacts
+        mkdir -p /tmp/fuzz-artifacts tests/fuzz/corpus
+        # tests/fuzz/corpus is the writable corpus libFuzzer saves new units into;
+        # tests/data is passed second, as a read-only seed corpus -- swapping the
+        # order would make libFuzzer write generated inputs straight into the
+        # fixture directory (R27).
         ./build/fuzz_load -max_total_time=90 -dict=tests/fuzz/magic.dict \
-          -artifact_prefix=/tmp/fuzz-artifacts/ tests/data
+          -artifact_prefix=/tmp/fuzz-artifacts/ tests/fuzz/corpus tests/data
 
     - name: Upload crash artifacts
       if: failure()
