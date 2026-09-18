@@ -205,7 +205,15 @@ target_include_directories(phash PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
-target_link_libraries(phash PRIVATE m)
+# Not on Windows: there is no libm there (or an "m.lib" of any kind) --
+# math.h's functions are part of the CRT already. A STATIC build never
+# actually invokes a linker to resolve this (ar/lib.exe just bundles object
+# files), so this went unnoticed until R42's release workflow linked a SHARED
+# libphash on a real windows-x86_64 runner: LNK1181 "cannot open input file
+# 'm.lib'".
+if(NOT WIN32)
+    target_link_libraries(phash PRIVATE m)
+endif()
 
 if(PHASH_COVERAGE)
     # -O0: matches Makefile's `coverage` (PHASH_COVERAGE=1 there too, same intent,
@@ -498,7 +506,11 @@ if(PHASH_IS_TOP_LEVEL)
     # -lm/-ldl for libphash.pc's Libs.private: not added to
     # PHASH_INSTALL_LINK_LIBS, since `target_link_libraries(phash PRIVATE m)`
     # above already puts them on phash's exported INTERFACE_LINK_LIBRARIES.
-    list(APPEND PHASH_PC_LIBS_PRIVATE "-lm")
+    # NOT WIN32: same reason as that target_link_libraries() call -- there is
+    # no libm on Windows.
+    if(NOT WIN32)
+        list(APPEND PHASH_PC_LIBS_PRIVATE "-lm")
+    endif()
     if(UNIX AND NOT APPLE)
         list(APPEND PHASH_PC_LIBS_PRIVATE "-ldl")
     endif()
