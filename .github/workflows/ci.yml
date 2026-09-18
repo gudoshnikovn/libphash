@@ -99,9 +99,6 @@ jobs:
       run: cd build && ctest --output-on-failure
 
   # Zero-dependency build: every PHASH_USE_* backend off, stb_image only.
-  # Only needs to compile cleanly -- exercising the stb_image decode path
-  # itself is tracked separately (tasks/PROGRESS.md, task 14: stb_image is
-  # built but not registered in loader.c's backends[] table yet).
   minimal-build:
     strategy:
       fail-fast: false
