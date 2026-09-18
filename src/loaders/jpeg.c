@@ -13,9 +13,29 @@ int ph_can_read_jpeg(const uint8_t *magic, size_t len) {
     return (len >= 2 && magic[0] == 0xFF && magic[1] == 0xD8);
 }
 
+/* decode_scale -> a libjpeg-turbo scaling factor. TJSCALED() below picks the nearest
+ * scaling factor the JPEG's DCT actually supports at or under the requested size, same
+ * as libjpeg-turbo does for any other caller of this API -- eighths are just the
+ * factors this library exposes as a stable, documented contract (see
+ * ph_context_set_decode_scale()), not a hard restriction of the underlying decoder. */
+static tjscalingfactor ph_jpeg_scaling_factor(ph_decode_scale_t decode_scale) {
+    switch (decode_scale) {
+        case PH_DECODE_SCALE_HALF:
+            return (tjscalingfactor){1, 2};
+        case PH_DECODE_SCALE_QUARTER:
+            return (tjscalingfactor){1, 4};
+        case PH_DECODE_SCALE_EIGHTH:
+            return (tjscalingfactor){1, 8};
+        case PH_DECODE_SCALE_FULL:
+        default:
+            return (tjscalingfactor){1, 1};
+    }
+}
+
 unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size, int *width,
                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                 ph_error_t *out_err, char *err_msg, size_t err_msg_cap) {
+                                 ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
+                                 size_t err_msg_cap) {
     if (!buffer || size == 0)
         return NULL;
 
@@ -32,6 +52,10 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size
         return NULL;
     }
 
+    /* The pixel-count limit is judged against the file's declared full-resolution
+     * dimensions, not the requested decode size: it exists to reject decompression
+     * bombs, which a scale request does not make safe -- the header can still claim an
+     * enormous image regardless of what the caller asked to receive. */
     if (ph_exceeds_pixel_limit((uint64_t)w, (uint64_t)h, max_pixels)) {
         if (out_err)
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
@@ -39,6 +63,10 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size
         tjDestroy(handle);
         return NULL;
     }
+
+    tjscalingfactor sf = ph_jpeg_scaling_factor(decode_scale);
+    w = TJSCALED(w, sf);
+    h = TJSCALED(h, sf);
 
     int pixelFormat = (req_comp == 1) ? TJPF_GRAY : TJPF_RGB;
     int out_channels = (req_comp == 1) ? 1 : 3;

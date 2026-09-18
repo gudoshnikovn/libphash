@@ -108,11 +108,11 @@ void test_loader_exhaustion(void) {
     int w, h, ch;
 
     // Identification loop exhaustion
-    if (ph_decode_buffer(junk, 16, &w, &h, &ch, 0, 0, NULL, NULL, 0) != NULL)
+    if (ph_decode_buffer(junk, 16, &w, &h, &ch, 0, 0, PH_DECODE_SCALE_FULL, NULL, NULL, 0) != NULL)
         exit(1);
-    if (ph_decode_buffer(NULL, 10, &w, &h, &ch, 0, 0, NULL, NULL, 0) != NULL)
+    if (ph_decode_buffer(NULL, 10, &w, &h, &ch, 0, 0, PH_DECODE_SCALE_FULL, NULL, NULL, 0) != NULL)
         exit(1);
-    if (ph_decode_buffer(junk, 0, &w, &h, &ch, 0, 0, NULL, NULL, 0) != NULL)
+    if (ph_decode_buffer(junk, 0, &w, &h, &ch, 0, 0, PH_DECODE_SCALE_FULL, NULL, NULL, 0) != NULL)
         exit(1);
 
     ph_free_image(NULL);
@@ -126,7 +126,8 @@ void test_loader_corrupted_backend(void) {
      *    and by nothing at all otherwise (see R10). */
     uint8_t mock_data[4] = {0xDE, 0xAD, 0xBE, 0xEF};
     ph_error_t mock_err = PH_SUCCESS;
-    uint8_t *res = ph_decode_buffer(mock_data, 4, &w, &h, &ch, 0, 0, &mock_err, NULL, 0);
+    uint8_t *res =
+        ph_decode_buffer(mock_data, 4, &w, &h, &ch, 0, 0, PH_DECODE_SCALE_FULL, &mock_err, NULL, 0);
 #ifdef PH_ENABLE_MOCK_BACKEND
     ASSERT_PTR_NOT_NULL(res);
 #else
@@ -138,7 +139,7 @@ void test_loader_corrupted_backend(void) {
 
     // 2. Junk data (loop exhaustion)
     uint8_t junk[4] = {0, 0, 0, 0};
-    ph_decode_buffer(junk, 4, &w, &h, &ch, 0, 0, NULL, NULL, 0);
+    ph_decode_buffer(junk, 4, &w, &h, &ch, 0, 0, PH_DECODE_SCALE_FULL, NULL, NULL, 0);
 
     PASS("test_loader_corrupted_backend");
 }

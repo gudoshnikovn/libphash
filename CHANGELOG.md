@@ -239,6 +239,21 @@ walkthrough.
 
 ### Added
 
+- **`ph_context_set_decode_scale()`** lets a caller opt into decoding JPEG at 1/2, 1/4 or
+  1/8 linear resolution instead of natively, trading accuracy for decode speed via
+  libjpeg-turbo's DCT-domain scaling. Default is `PH_DECODE_SCALE_FULL` — behavior and
+  golden hashes are unchanged unless a caller sets this explicitly. Only the JPEG backend
+  honors it; PNG has no format-level scaled decode and libwebp's scaling API resizes
+  *after* a full decode (no decode-time saving), so both backends decode at full
+  resolution regardless of the setting. Measured tradeoffs (speed saturates around 18%
+  at 1/8 because entropy decoding isn't skipped; accuracy holds on photographic content
+  but pHash and mHash can exceed this library's own same-scene-transform contract on
+  fine periodic textures) are in the setter's doc comment in `include/libphash.h` and in
+  `tasks/review/PROGRESS.md` ("R57"). Radial, ColorMoments and ColorHash are not
+  resize-based, so at any scale other than full they operate directly on the reduced
+  buffer as their actual input, not as an approximation of the full-resolution result —
+  their accuracy at reduced scale has not been measured.
+
 - **`ph_context_set_whash_remove_max_haar_ll()`** exposes ImageHash's `remove_max_haar_ll`,
   which zeroes the coarsest Haar LL band before the working decomposition. It defaults to
   **off**, and turning it on does nothing: zeroing that single coefficient and

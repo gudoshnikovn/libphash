@@ -80,7 +80,11 @@ static void png_warning_fn(png_structp png_ptr, png_const_charp msg) {
 
 unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                 ph_error_t *out_err, char *err_msg, size_t err_msg_cap) {
+                                 ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
+                                 size_t err_msg_cap) {
+    /* PNG has no format-level scaled decode; decode_scale is a JPEG-only optimization
+     * (see ph_context_set_decode_scale()), silently ignored here as documented. */
+    (void)decode_scale;
     if (!buffer || size < 8)
         return NULL;
 
@@ -263,7 +267,11 @@ PH_API int ph_can_use_libpng(void) { return 1; }
 
 unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                 ph_error_t *out_err, char *err_msg, size_t err_msg_cap) {
+                                 ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
+                                 size_t err_msg_cap) {
+    /* PNG has no format-level scaled decode; decode_scale is a JPEG-only optimization
+     * (see ph_context_set_decode_scale()), silently ignored here as documented. */
+    (void)decode_scale;
     if (!buffer || size < 8)
         return NULL;
 

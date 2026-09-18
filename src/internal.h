@@ -581,6 +581,10 @@ struct ph_context {
         // 0 = no caller limit; PH_MAX_SUPPORTED_PIXELS still applies. Otherwise the max
         // allowed width*height before decoding a pixel buffer.
         uint64_t max_pixels;
+
+        // See ph_context_set_decode_scale(). Only the JPEG backend honors this; other
+        // backends decode at full resolution regardless.
+        ph_decode_scale_t decode_scale;
     } config;
 
     // System data of the allocator (Arena)

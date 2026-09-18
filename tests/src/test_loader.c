@@ -688,14 +688,16 @@ static void check_png_backend_parity(const char *path) {
 
     int rw = 0, rh = 0, rc = 0;
     ph_error_t err = PH_SUCCESS;
-    uint8_t *rgb = ph_decode_buffer(buf, size, &rw, &rh, &rc, 0, 0, &err, NULL, 0);
+    uint8_t *rgb =
+        ph_decode_buffer(buf, size, &rw, &rh, &rc, 0, 0, PH_DECODE_SCALE_FULL, &err, NULL, 0);
     ASSERT_PTR_NOT_NULL(rgb);
     ASSERT_INT_EQ(PH_SUCCESS, err);
     ASSERT_INT_EQ(3, rc);
 
     int gw = 0, gh = 0, gc = 0;
     err = PH_SUCCESS;
-    uint8_t *gray = ph_decode_buffer(buf, size, &gw, &gh, &gc, 1, 0, &err, NULL, 0);
+    uint8_t *gray =
+        ph_decode_buffer(buf, size, &gw, &gh, &gc, 1, 0, PH_DECODE_SCALE_FULL, &err, NULL, 0);
     ASSERT_PTR_NOT_NULL(gray);
     ASSERT_INT_EQ(PH_SUCCESS, err);
 

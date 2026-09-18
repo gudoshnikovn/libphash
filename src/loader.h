@@ -45,28 +45,37 @@ static inline int ph_magic_is_webp(const uint8_t *magic, size_t len) {
 
 #ifdef PH_USE_TURBOJPEG
 // --- JPEG: Static TurboJPEG API (tjDecompress2) ---
+// The only backend that honors decode_scale -- see ph_context_set_decode_scale().
 unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size, int *width,
                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                 ph_error_t *out_err, char *err_msg, size_t err_msg_cap);
+                                 ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
+                                 size_t err_msg_cap);
 #endif
 
 #ifdef PH_USE_LIBPNG
 // --- PNG: Static libpng (memory-based reading, ARM NEON optimized) ---
+// PNG has no format-level scaled decode; decode_scale is accepted and ignored.
 unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                 ph_error_t *out_err, char *err_msg, size_t err_msg_cap);
+                                 ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
+                                 size_t err_msg_cap);
 #elif defined(PH_USE_SPNG)
 // --- PNG: Static spng (single-call API, fast on x86) ---
+// PNG has no format-level scaled decode; decode_scale is accepted and ignored.
 unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                 ph_error_t *out_err, char *err_msg, size_t err_msg_cap);
+                                 ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
+                                 size_t err_msg_cap);
 #endif
 
 #ifdef PH_USE_WEBP
 // --- WebP: libwebp (decodes to RGB, no native grayscale) ---
+// libwebp's scaling API resizes *after* a full decode (no decode-time saving), so
+// decode_scale is accepted and ignored here rather than paying a resize for nothing.
 unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long size, int *width,
                                   int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                  ph_error_t *out_err, char *err_msg, size_t err_msg_cap);
+                                  ph_decode_scale_t decode_scale, ph_error_t *out_err,
+                                  char *err_msg, size_t err_msg_cap);
 #endif
 
 // Runtime capability checks (always available)
@@ -78,11 +87,14 @@ int ph_can_use_webp(void);
 typedef struct {
     int (*can_read)(const uint8_t *magic, size_t len);
     uint8_t *(*decode)(const uint8_t *data, size_t len, int *w, int *h, int *ch, int req_comp,
-                       uint64_t max_pixels, ph_error_t *out_err, char *err_msg, size_t err_msg_cap);
+                       uint64_t max_pixels, ph_decode_scale_t decode_scale, ph_error_t *out_err,
+                       char *err_msg, size_t err_msg_cap);
 } ph_image_backend_t;
 
 // Unified decoder that tries all registered backends.
 // max_pixels: 0 = unlimited, otherwise the max allowed width*height.
+// decode_scale: see ph_context_set_decode_scale(); only honored by the JPEG backend,
+// every other backend decodes at full resolution regardless.
 // out_err: optional; set to a specific PH_ERR_* code if a backend recognized the format
 // but couldn't decode it (too large, corrupt) or if the format is recognized by magic
 // bytes but its decoder wasn't compiled into this build (left untouched, i.e. PH_SUCCESS,
@@ -90,8 +102,9 @@ typedef struct {
 // err_msg/err_msg_cap: optional fixed-size buffer (may be NULL/0) filled with a short
 // human-readable reason alongside *out_err.
 uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int *height,
-                          int *channels, int req_comp, uint64_t max_pixels, ph_error_t *out_err,
-                          char *err_msg, size_t err_msg_cap);
+                          int *channels, int req_comp, uint64_t max_pixels,
+                          ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
+                          size_t err_msg_cap);
 
 // Safe image memory free
 void ph_free_image(uint8_t *data);

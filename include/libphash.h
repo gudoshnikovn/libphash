@@ -120,6 +120,16 @@ typedef enum {
     PH_WHASH_FULL = 1, ///< Academically accurate full 2D DWT matching ImageHash.
 } ph_whash_mode_t;
 
+/**
+ * @brief JPEG decode resolution hint — see ph_context_set_decode_scale().
+ */
+typedef enum {
+    PH_DECODE_SCALE_FULL = 0,    ///< Decode at the image's native resolution (default).
+    PH_DECODE_SCALE_HALF = 1,    ///< Decode at 1/2 linear resolution (1/4 the pixels).
+    PH_DECODE_SCALE_QUARTER = 2, ///< Decode at 1/4 linear resolution (1/16 the pixels).
+    PH_DECODE_SCALE_EIGHTH = 3,  ///< Decode at 1/8 linear resolution (1/64 the pixels).
+} ph_decode_scale_t;
+
 // --- Types ---
 
 /**
@@ -527,6 +537,68 @@ PH_API ph_error_t ph_context_set_auto_orient(ph_context_t *ctx, int enable);
  *         such an image is refused with @c PH_ERR_IMAGE_TOO_LARGE.
  */
 PH_API ph_error_t ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixels);
+
+/**
+ * @brief Requests that JPEG be decoded at a reduced resolution instead of natively,
+ *        trading accuracy for decode speed. Full resolution by default.
+ *
+ * Every hash algorithm here resizes the decoded image down to a small working buffer
+ * (8x8 to 32x32) before hashing it, so decoding a 20-megapixel photo in full only to
+ * discard almost all of it is wasted work. libjpeg-turbo can decode directly at 1/2,
+ * 1/4 or 1/8 linear resolution using its DCT-domain scaling, which is cheaper than
+ * decoding in full and downsampling afterward.
+ *
+ * @note **Entropy decoding is not skipped by this**, so the saving is bounded, not
+ *       proportional to the scale: DCT scaling only shrinks the IDCT/upsample/color
+ *       convert stage, while Huffman-decoding every coded coefficient still happens at
+ *       full cost regardless of the requested output size, because JPEG stores
+ *       coefficients sequentially per 8x8 block and there is no way to skip that pass.
+ *       Measured on a 20-megapixel synthetic photo (5472x3648, libjpeg-turbo, this
+ *       library's TJFLAG_FASTDCT|TJFLAG_NOREALLOC call shape, min of 40 iterations
+ *       after warmup): full decode 47.24ms; @c PH_DECODE_SCALE_HALF 42.38ms (10.3%
+ *       faster); @c PH_DECODE_SCALE_QUARTER 39.87ms (15.6%); @c PH_DECODE_SCALE_EIGHTH
+ *       38.53ms (18.4%) -- the gain saturates well short of proportional to the scale.
+ *
+ * @note **This changes the hash, and by how much depends on the algorithm and on the
+ *       image's content, not on the scale alone.** Measured as the Hamming distance
+ *       between the hash of the same file decoded in full versus decoded at each scale
+ *       (aHash/dHash/pHash/wHash out of 64 bits, BMH out of 256, mHash out of 576),
+ *       against this library's own same-scene-transform contract
+ *       (`tests/src/test_robustness.c`, `MAX_SIMILAR_DIST`: aHash <=15.6%, dHash <=21.9%,
+ *       pHash <=28.1%, wHash <=21.9%, mHash <=37.5%):
+ *       - On photographic content (smooth gradients, mixed low/mid/high frequency
+ *         detail), the shift stays within that contract at every scale, with one
+ *         exception: mHash grows with coarser scale even on ordinary photos --
+ *         measured 6.6% / 16.0% / 26.7% at half/quarter/eighth on a real-photo fixture,
+ *         still inside its 37.5% contract but with shrinking headroom.
+ *       - On fine periodic/textured content (fabric, brickwork, screens, grilles --
+ *         not a rare case in real photos), pHash and mHash can exceed their own
+ *         contract outright: measured 43.75% for pHash at every scale from half
+ *         downward on a fine checkerboard, and mHash reaching 50.9% at
+ *         @c PH_DECODE_SCALE_EIGHTH -- statistically indistinguishable from comparing
+ *         against an unrelated image. wHash was also seen to exceed its contract
+ *         (39.1% vs. 21.9%) on pure high-frequency noise, which is not representative
+ *         of real photos but establishes an upper bound.
+ *       Full measurement notes: `tasks/review/PROGRESS.md`, "R57" entries.
+ *
+ * @note **Radial, ColorMoments and ColorHash are not resize-based** — they compute
+ *       directly over the decoded buffer, so at any setting other than
+ *       @c PH_DECODE_SCALE_FULL they operate on the reduced buffer as their actual
+ *       input, not as a downstream approximation of the full-resolution one. Their
+ *       accuracy contract at reduced scale has not been measured; treat it as unknown
+ *       rather than assuming it behaves like the resize-based algorithms above.
+ *
+ * @note Only the JPEG backend honors this. PNG has no format-level scaled decode, and
+ *       libwebp's scaling is applied after a full decode (no decode-time saving), so
+ *       both silently decode at full resolution regardless of this setting.
+ *       @c ph_load_from_pixels() has no decoder at all and is unaffected.
+ *
+ * @param ctx The context.
+ * @param scale The requested decode resolution. @c PH_DECODE_SCALE_FULL is the default.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or a @p scale that
+ *         is not one of the declared enumerators.
+ */
+PH_API ph_error_t ph_context_set_decode_scale(ph_context_t *ctx, ph_decode_scale_t scale);
 
 /** @} */
 

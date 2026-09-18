@@ -107,8 +107,11 @@ static int ph_stb_reason_is_oom(const char *reason) {
 }
 
 static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *h, int *ch,
-                                  int req_comp, uint64_t max_pixels, ph_error_t *out_err,
-                                  char *err_msg, size_t err_msg_cap) {
+                                  int req_comp, uint64_t max_pixels, ph_decode_scale_t decode_scale,
+                                  ph_error_t *out_err, char *err_msg, size_t err_msg_cap) {
+    /* stb_image has no scaled-decode path; decode_scale is a JPEG-only optimization
+     * (see ph_context_set_decode_scale()), silently ignored here as documented. */
+    (void)decode_scale;
     /* Run unconditionally, not only when max_pixels is set: the per-dimension cap and
      * the implementation ceiling inside ph_exceeds_pixel_limit() apply even when the
      * caller has disabled their own area limit with max_pixels == 0. Reading the header
@@ -168,12 +171,13 @@ static int ph_mock_can_read(const uint8_t *magic, size_t len) {
     return 0;
 }
 static uint8_t *ph_mock_decode(const uint8_t *data, size_t len, int *w, int *h, int *ch, int req,
-                               uint64_t max_pixels, ph_error_t *out_err, char *err_msg,
-                               size_t err_msg_cap) {
+                               uint64_t max_pixels, ph_decode_scale_t decode_scale,
+                               ph_error_t *out_err, char *err_msg, size_t err_msg_cap) {
     (void)data;
     (void)len;
     (void)req;
     (void)max_pixels;
+    (void)decode_scale;
     (void)out_err;
     (void)err_msg;
     (void)err_msg_cap;
@@ -200,8 +204,9 @@ static const ph_image_backend_t backends[] = {
     {ph_can_read_stb, ph_decode_stb_mem},   {NULL, NULL}};
 
 uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int *height,
-                          int *channels, int req_comp, uint64_t max_pixels, ph_error_t *out_err,
-                          char *err_msg, size_t err_msg_cap) {
+                          int *channels, int req_comp, uint64_t max_pixels,
+                          ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
+                          size_t err_msg_cap) {
     if (out_err)
         *out_err = PH_SUCCESS;
     if (!buffer || length == 0)
@@ -221,8 +226,9 @@ uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int 
     for (int i = 0; backends[i].can_read != NULL; i++) {
         if (backends[i].can_read(buffer, length)) {
             ph_error_t err = PH_SUCCESS;
-            uint8_t *data = backends[i].decode(buffer, length, width, height, channels, req_comp,
-                                               max_pixels, &err, err_msg, err_msg_cap);
+            uint8_t *data =
+                backends[i].decode(buffer, length, width, height, channels, req_comp, max_pixels,
+                                   decode_scale, &err, err_msg, err_msg_cap);
             if (data)
                 return data;
             // The magic bytes matched this backend, so a decode failure here is a

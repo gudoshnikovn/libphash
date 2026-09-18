@@ -301,6 +301,18 @@ PH_API ph_error_t ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixe
     return PH_SUCCESS;
 }
 
+PH_API ph_error_t ph_context_set_decode_scale(ph_context_t *ctx, ph_decode_scale_t scale) {
+    if (!ctx)
+        return PH_ERR_INVALID_ARGUMENT;
+    /* Same rule as ph_context_set_whash_mode(): an enum parameter is not a guarantee in
+     * C, and this value is dispatched on directly by the JPEG backend. */
+    if (scale != PH_DECODE_SCALE_FULL && scale != PH_DECODE_SCALE_HALF &&
+        scale != PH_DECODE_SCALE_QUARTER && scale != PH_DECODE_SCALE_EIGHTH)
+        return PH_ERR_INVALID_ARGUMENT;
+    ctx->config.decode_scale = scale;
+    return PH_SUCCESS;
+}
+
 PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     if (!out_ctx)
         return PH_ERR_INVALID_ARGUMENT;
@@ -331,6 +343,7 @@ PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     ctx->config.whash_mode = PH_WHASH_FAST;
     ctx->config.whash_remove_max_haar_ll = 0;
     ctx->config.max_pixels = PH_DEFAULT_MAX_PIXELS;
+    ctx->config.decode_scale = PH_DECODE_SCALE_FULL;
 
     /* Optimization Default: disabled by default for compatibility with
      * ColorHash and custom weights. */
@@ -661,7 +674,8 @@ static ph_error_t ph_load_encoded_bytes(ph_context_t *ctx, const uint8_t *data, 
     ph_error_t decode_err = PH_SUCCESS;
 
     uint8_t *decoded = ph_decode_buffer(data, length, &w, &h, &ch, req_comp, ctx->config.max_pixels,
-                                        &decode_err, ctx->last_error, sizeof(ctx->last_error));
+                                        ctx->config.decode_scale, &decode_err, ctx->last_error,
+                                        sizeof(ctx->last_error));
     if (!decoded) {
         /* ph_decode_buffer() resolves a non-empty buffer to either decoded data
          * or a specific error (its last-resort stb_image backend claims anything

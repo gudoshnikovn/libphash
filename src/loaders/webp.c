@@ -15,8 +15,13 @@ int ph_can_read_webp(const uint8_t *magic, size_t len) {
 
 unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long size, int *width,
                                   int *height, int *channels, int req_comp, uint64_t max_pixels,
-                                  ph_error_t *out_err, char *err_msg, size_t err_msg_cap) {
+                                  ph_decode_scale_t decode_scale, ph_error_t *out_err,
+                                  char *err_msg, size_t err_msg_cap) {
     (void)req_comp;
+    /* libwebp's scaling API resizes *after* a full decode -- no decode-time saving --
+     * so decode_scale is a JPEG-only optimization (see ph_context_set_decode_scale()),
+     * silently ignored here rather than paying a resize for nothing. */
+    (void)decode_scale;
     if (!buffer || size < 12)
         return NULL;
 
