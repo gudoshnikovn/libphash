@@ -122,6 +122,31 @@ walkthrough.
   the source's cross-correlation comparison, which this release does not add.
   *Restore the old behaviour:* not possible; recompute any stored radial digests.
 
+- **The Radial hash's gamma default, exponent convention and blur sigma now match the
+  reference implementation, and every radial value changes again.** Three independent
+  divergences from pHash's own radial digest, found together: the gamma default was 2.2
+  (an unrelated sRGB display value, chosen before Radial had any reference implementation
+  to diverge from) where pHash defaults to 1.0 — an identity transform; pixels were raised
+  to `1.0 / gamma` where pHash raises them to `gamma` directly, so the same numeric value
+  passed to `ph_context_set_gamma()` meant a different exponent either way; and gamma was
+  applied against a fixed 0..255 range rather than normalised by the buffer's own maximum
+  and rescaled back, as pHash does. All three are now fixed together — at the default they
+  are algebraically identical (`(v/max)^1.0 * max == v` for any `max > 0`), so fixing only
+  the default would have produced the same default behaviour, but the convention and
+  normalisation also matter for any caller passing a non-default gamma explicitly, and
+  fixing them separately would have meant two golden-hash-breaking releases instead of
+  one. The blur that precedes gamma is also no longer a fixed, unparameterised 3×3 kernel
+  (effective sigma ≈ 0.707): `ph_context_set_radial_params()` takes a third argument,
+  `sigma`, default 3.5 — pHash's own header default — applied through the same
+  sigma-parameterised Gaussian blur mHash already used. Measured delta from the gamma
+  default change alone, real photo fixtures: mean PCC-distance 0.08–0.10, the same order
+  of magnitude as this library's normal intra-class variation from benign transforms.
+  History, the trust placed in pHash's own code as the source for these two parameters,
+  and the full measurement are in `docs/algorithm-provenance.md` §7 and
+  `tasks/review/R52_gamma_default_and_convention.md`.
+  *Restore the old behaviour:* not possible; recompute any stored radial digests. A caller
+  who explicitly set gamma or relied on the old 3×3 blur must also review that call.
+
 - **Automatic EXIF orientation is now on by default.** Images carrying an
   `Orientation` tag other than 1 (most photos straight from phones and cameras) are
   rotated/mirrored before hashing, so a hash now describes what a viewer displays
