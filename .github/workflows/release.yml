@@ -135,16 +135,23 @@ jobs:
         name: dist-${{ matrix.platform }}
         path: dist
 
+    # ls with two glob patterns, only one of which ever exists (.tar.gz on
+    # Unix, .zip on Windows), exits nonzero for the missing one even after
+    # printing the match for the other -- and under bash's default -e (GH
+    # Actions run steps), that kills the step before $archive is even used.
+    # Same bug class as scripts/smoke_release_artifact.sh's own internal
+    # `find` call, fixed there via `|| true`; found here the same way, on this
+    # workflow's own first real run across the whole matrix.
     - name: Smoke test static archive
       shell: bash
       run: |
-        archive=$(ls dist/libphash-*-${{ matrix.platform }}.tar.gz dist/libphash-*-${{ matrix.platform }}.zip 2>/dev/null | grep -v -- -shared | head -n1)
+        archive=$(ls dist/libphash-*-${{ matrix.platform }}.tar.gz dist/libphash-*-${{ matrix.platform }}.zip 2>/dev/null | grep -v -- -shared | head -n1 || true)
         scripts/smoke_release_artifact.sh "$archive" static
 
     - name: Smoke test shared archive
       shell: bash
       run: |
-        archive=$(ls dist/libphash-*-${{ matrix.platform }}-shared.tar.gz dist/libphash-*-${{ matrix.platform }}-shared.zip 2>/dev/null | head -n1)
+        archive=$(ls dist/libphash-*-${{ matrix.platform }}-shared.tar.gz dist/libphash-*-${{ matrix.platform }}-shared.zip 2>/dev/null | head -n1 || true)
         scripts/smoke_release_artifact.sh "$archive" shared
 
   checksums:
