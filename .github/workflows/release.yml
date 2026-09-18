@@ -1,0 +1,204 @@
+name: Release
+
+# R42: publishes prebuilt release artifacts (static + shared libs, headers,
+# LICENSE, THIRD-PARTY-NOTICES.md) so a consumer -- most concretely
+# python-libphash, but any FFI binding is in the same position -- doesn't have
+# to build the vendored decoder stack itself. See tasks/review/R42_release_artifacts.md.
+#
+# Two trigger shapes:
+#  - push of a `v*` tag: builds, packages, smoke-tests, then publishes a GitHub
+#    Release. A tag containing `-` (e.g. v2.0.0-rc1) is published as a
+#    pre-release -- this is the "test run on a pre-release tag" the task's
+#    acceptance criteria asks for, exercising the exact same path production
+#    tags use.
+#  - workflow_dispatch: same build+package+smoke pipeline, uploaded as
+#    ordinary workflow artifacts, no GitHub Release created. Lets this
+#    pipeline be validated on a branch before any tag exists.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  # Same release decoder set as CI's build-and-test job and scripts/coverage_cmake.sh's
+  # "native" leg: TurboJPEG + libpng + libwebp + zlib-ng, PHASH_STRICT_DEPS=ON so a
+  # silently-missing backend fails the build instead of shipping a quietly
+  # degraded artifact.
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            os: ubuntu-latest
+            needs_nasm: true
+          - platform: linux-arm64
+            os: ubuntu-24.04-arm
+            needs_nasm: false
+          - platform: macos-arm64
+            os: macos-latest
+            needs_nasm: false
+          - platform: macos-x86_64
+            os: macos-13
+            needs_nasm: true
+          - platform: windows-x86_64
+            os: windows-latest
+            needs_nasm: true
+    runs-on: ${{ matrix.os }}
+    name: build (${{ matrix.platform }})
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install NASM (Linux)
+      if: matrix.needs_nasm && runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y nasm cmake
+
+    - name: Install dependencies (Linux, no NASM needed)
+      if: (!matrix.needs_nasm) && runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake
+
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: brew install cmake nasm
+
+    - name: Install NASM (Windows)
+      if: runner.os == 'Windows'
+      uses: ilammy/setup-nasm@v1
+
+    # Same as ci.yml: libjpeg-turbo doesn't like add_subdirectory, so its
+    # submodule is configured+built standalone; scripts/package_release.sh's
+    # main configure then finds the resulting static lib in this build dir.
+    - name: Build vendored TurboJPEG
+      run: |
+        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
+        cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static --config Release -j
+
+    - name: Package release archives (static + shared)
+      shell: bash
+      run: scripts/package_release.sh ${{ matrix.platform }} dist both
+
+    - name: Upload archives
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist-${{ matrix.platform }}
+        path: dist/*
+        if-no-files-found: error
+
+  # Extracts each archive in isolation (no access to the build tree above --
+  # see scripts/smoke_release_artifact.sh) and links a minimal consumer
+  # against it via find_package(phash), on the same OS family it was built on.
+  smoke:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x86_64
+            os: ubuntu-latest
+          - platform: linux-arm64
+            os: ubuntu-24.04-arm
+          - platform: macos-arm64
+            os: macos-latest
+          - platform: macos-x86_64
+            os: macos-13
+          - platform: windows-x86_64
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    name: smoke (${{ matrix.platform }})
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download archives
+      uses: actions/download-artifact@v4
+      with:
+        name: dist-${{ matrix.platform }}
+        path: dist
+
+    - name: Smoke test static archive
+      shell: bash
+      run: |
+        archive=$(ls dist/libphash-*-${{ matrix.platform }}.tar.gz dist/libphash-*-${{ matrix.platform }}.zip 2>/dev/null | grep -v -- -shared | head -n1)
+        scripts/smoke_release_artifact.sh "$archive" static
+
+    - name: Smoke test shared archive
+      shell: bash
+      run: |
+        archive=$(ls dist/libphash-*-${{ matrix.platform }}-shared.tar.gz dist/libphash-*-${{ matrix.platform }}-shared.zip 2>/dev/null | head -n1)
+        scripts/smoke_release_artifact.sh "$archive" shared
+
+  checksums:
+    needs: smoke
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download all archives
+      uses: actions/download-artifact@v4
+      with:
+        pattern: dist-*
+        path: dist
+        merge-multiple: true
+
+    - name: Compute SHA256SUMS.txt
+      run: |
+        cd dist
+        sha256sum * > SHA256SUMS.txt
+        cat SHA256SUMS.txt
+
+    - name: Upload combined artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: dist-all
+        path: |
+          dist/*
+        if-no-files-found: error
+
+  # Only on an actual tag push -- workflow_dispatch runs stop at the checksums
+  # job above so this pipeline can be exercised on a branch without a GitHub
+  # Release appearing.
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: checksums
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all archives
+      uses: actions/download-artifact@v4
+      with:
+        name: dist-all
+        path: dist
+
+    - name: Extract CHANGELOG section for this tag
+      id: notes
+      run: |
+        tag="${GITHUB_REF#refs/tags/v}"
+        awk -v ver="$tag" '
+          $0 ~ "^## \\[" ver "\\]" { found=1; print; next }
+          found && /^## \[/ { exit }
+          found { print }
+        ' CHANGELOG.md > release_notes.md
+        if [ ! -s release_notes.md ]; then
+          echo "No CHANGELOG.md section found for [$tag], falling back to a generic note" >&2
+          echo "See CHANGELOG.md for details." > release_notes.md
+        fi
+
+    - name: Create GitHub Release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        tag="${GITHUB_REF#refs/tags/}"
+        prerelease_flag=""
+        case "$tag" in *-*) prerelease_flag="--prerelease" ;; esac
+        gh release create "$tag" dist/* \
+          --title "$tag" \
+          --notes-file release_notes.md \
+          $prerelease_flag

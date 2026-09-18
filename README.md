@@ -60,6 +60,21 @@ and [`docs/algorithm-provenance.md`](docs/algorithm-provenance.md).
 
 ## Building & Installation
 
+### Prebuilt binaries
+
+Each tagged release (`vX.Y.Z`) publishes prebuilt archives on the
+[GitHub Releases page](https://github.com/gudoshnikovn/libphash/releases) for
+linux-x86_64, linux-arm64, macos-arm64, macos-x86_64, and windows-x86_64 — both a
+static (`libphash-X.Y.Z-<platform>.tar.gz`/`.zip`) and a shared
+(`libphash-X.Y.Z-<platform>-shared.tar.gz`/`.zip`) build, each containing
+`include/`, `lib/` (plus `LICENSE` and `THIRD-PARTY-NOTICES.md`), and a
+`SHA256SUMS.txt` covering every archive in the release. Every archive is
+compiled with the full vendored decoder set (`libjpeg-turbo`, `libpng`,
+`libwebp`, `zlib-ng`) and smoke-tested against a clean extraction before
+publishing — see `.github/workflows/release.yml`. This is the quickest path
+for FFI bindings (e.g. `python-libphash`) or any consumer that doesn't want to
+build the vendored decoders itself.
+
 ### Recommended (CMake)
 
 Best for managing bundled high-performance decoders and system integration.
