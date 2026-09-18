@@ -25,7 +25,14 @@ KINDS="${3:-both}"
 VERSION=$(sed -nE 's/.*project\([^)]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' "$ROOT_DIR/CMakeLists.txt" | head -n1)
 [ -n "$VERSION" ] || { echo "package_release.sh: could not read version from CMakeLists.txt" >&2; exit 1; }
 
+# Canonicalize to an absolute path: package_one() below cd's into a temporary
+# stage directory before invoking 7z/zip (Windows branch), so a relative
+# OUT_DIR would otherwise resolve against that temp dir instead of the
+# caller's original working directory -- the archives got built, just into
+# the wrong place, and the workflow's own upload step then found nothing at
+# the path it expected. Found on a real windows-x86_64 GH Actions run.
 mkdir -p "$OUT_DIR"
+OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
