@@ -45,7 +45,11 @@ graph TD
 ## Key Structures
 
 ### `ph_context_t`
-The central opaque object designed for thread-safety and high-load environments. It is internally organized into logical groups:
+The central opaque object designed for high-load environments. Thread-safety is
+per-context, not global: distinct threads each using their own `ph_context_t` need no
+synchronization between them, but a single instance is not safe to share between
+threads (see the `@note` on the typedef in `include/libphash.h`). It is internally
+organized into logical groups:
 - **`image`**: Loaded pixel data, dimensions, and caching for grayscale buffers.
 - **`config`**: User-defined parameters (Gamma, DCT size, block size, custom weights, etc.).
 - **`arena`**: An internal **Arena Allocator** providing a contiguous scratchpad for zero-fragmentation, high-speed memory operations during image processing and hash computation.

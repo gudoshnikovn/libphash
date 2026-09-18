@@ -255,10 +255,10 @@ jobs:
     - name: Run Tests
       run: cd build && ctest --output-on-failure
 
-  # R25: the threaded batch path (src/batch.c) is the one piece of this codebase whose
-  # whole point is concurrent access to shared state (the atomic work-stealing index) --
-  # exactly what ASan/UBSan above cannot see. stb-only on purpose: this job's job is the
-  # thread-safety of ph_batch_run_threaded() itself, not decoder coverage (already
+  # R25/R35: the threaded batch path (src/batch.c) and the "one context per thread"
+  # contract (include/libphash.h) are the two places in this codebase whose whole point
+  # is concurrent access -- exactly what ASan/UBSan above cannot see. stb-only on
+  # purpose: this job's job is thread-safety itself, not decoder coverage (already
   # exercised elsewhere), and skipping the vendored TurboJPEG build keeps it fast.
   tsan:
     runs-on: ubuntu-latest
@@ -280,12 +280,13 @@ jobs:
         -DCMAKE_C_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
 
     - name: Build
-      run: cmake --build build --target test_batch --target test_batch_stress -j
+      run: cmake --build build --target test_batch --target test_batch_stress --target test_thread_safety -j
 
-    - name: Run test_batch*
+    - name: Run test_batch* and test_thread_safety
       run: |
         ./build/test_batch
         ./build/test_batch_stress
+        ./build/test_thread_safety
 
   fuzz:
     runs-on: ubuntu-latest

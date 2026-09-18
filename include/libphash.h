@@ -135,6 +135,15 @@ typedef enum {
 /**
  * @brief Opaque context structure holding image data and configuration.
  * Treat this as a void* in FFI.
+ *
+ * @note Thread-safety contract: one context per thread at a time. Distinct threads
+ * each using their own @c ph_context_t may call into the library concurrently with no
+ * further synchronization -- nothing here is process-global mutable state. A single
+ * @c ph_context_t is not safe to use from two threads at once, including two threads
+ * merely reading it concurrently (e.g. one loading a new image while another reads
+ * ph_get_last_error_message()); that pairing is the caller's to serialize, not the
+ * library's. ph_hash_files()/ph_hash_buffers() follow this same rule internally: each
+ * worker thread in their pool creates and owns its own context (see src/batch.c).
  */
 typedef struct ph_context ph_context_t;
 
