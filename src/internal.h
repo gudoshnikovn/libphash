@@ -593,7 +593,7 @@ struct ph_context {
         float gamma;
         int gray_r, gray_g, gray_b;
         int load_grayscale;
-        int auto_orient; // Off by default: see ph_context_set_auto_orient().
+        int auto_orient; // On by default: see ph_context_set_auto_orient().
 
         // Various tunings for hashes
         float mhash_alpha;
