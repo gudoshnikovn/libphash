@@ -7,7 +7,7 @@
  * because of deliberate unaligned 64-bit moves inside stb (see the
  * comment at the top of that file). Keeping the implementation out of this TU
  * keeps our own code fully sanitizer-instrumented. */
-#include "../vendor/stb_image_resize2.h"
+#include "../../vendor/stb_image_resize2.h"
 
 int ph_resize_box(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh) {
     if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0)
