@@ -82,7 +82,7 @@ COMPARE_JQ='
 [
   ($base | keys[]) as $k |
   ($base[$k]) as $bv | ($pr[$k]) as $pv |
-  ((($pv - $bv) / $bv) * 100) as $pct |
+  (if $bv == 0 then 0 else (($pv - $bv) / $bv) * 100 end) as $pct |
   {
     metric: $k, base_ms: $bv, pr_ms: $pv, pct: $pct,
     flag: (if $pct > $threshold then "regression" else "ok" end)
