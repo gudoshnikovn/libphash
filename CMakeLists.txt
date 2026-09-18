@@ -110,7 +110,12 @@ endif()
 include(CheckCCompilerFlag)
 
 if(MSVC)
-    add_compile_options(/W3 /O2)
+    # Explicit, not the MSVC default: src/batch.c includes <stdatomic.h>
+    # unconditionally when PHASH_ENABLE_THREADS is on, and MSVC only ships that
+    # header under /std:c11 or later (VS 17.5+). Leaving the standard on
+    # whatever cl.exe defaults to would make the batch thread pool's build
+    # success depend on the toolset version instead of on this file.
+    add_compile_options(/W3 /O2 /std:c11)
 else()
     add_compile_options(-Wall -Wextra -O3 -fPIC)
     

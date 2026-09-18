@@ -11,6 +11,22 @@ permissions:
   pull-requests: write
 
 jobs:
+  # R26: fast, no submodules/build needed -- catches an unformatted diff before
+  # the much slower legs below spend minutes on it. .clang-format already backs
+  # `make format`; this is the same check, just enforced.
+  format-check:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install clang-format
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang-format
+
+    - name: clang-format --dry-run --Werror
+      run: find src tests/src include -name "*.c" -o -name "*.h" | xargs clang-format --dry-run --Werror
+
   # Full vendored build (all bundled decoders) across the platforms/arches we
   # actually ship for. PHASH_STRICT_DEPS=ON turns a silent decoder fallback
   # (e.g. TurboJPEG not found) into a hard configure failure, so a CI green
@@ -37,6 +53,15 @@ jobs:
             os: macos-latest
             needs_nasm: false
             cc: clang
+          # R26: spng is the other PNG backend (src/loaders/png.c compiles exactly
+          # one of libpng/spng), and until this leg it was never actually built
+          # in CI even though the R49 grayscale-decode fix specifically touched
+          # its path.
+          - name: ubuntu-x86_64-gcc-spng
+            os: ubuntu-latest
+            needs_nasm: true
+            cc: gcc
+            extra_cmake_args: -DPHASH_USE_SPNG=ON -DPHASH_USE_LIBPNG=OFF
     runs-on: ${{ matrix.os }}
     name: build-and-test (${{ matrix.name }})
     env:
@@ -65,7 +90,7 @@ jobs:
         cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
 
     - name: Configure CMake (full vendored build)
-      run: cmake -B build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
+      run: cmake -B build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release ${{ matrix.extra_cmake_args }}
 
     - name: Build
       run: cmake --build build --config Release -j
@@ -99,6 +124,42 @@ jobs:
 
     - name: Run Tests
       run: cd build && ctest -C Release --output-on-failure
+
+  # R26: most overflow findings from this review (e.g. pixel-count overflow, PNG
+  # row_ptrs overflow) trigger at much smaller inputs on a 32-bit size_t/int than on
+  # 64-bit -- the matrix above never exercised that width at all. Scoped to the
+  # native PNG backend (libpng) plus system zlib, not the full vendored set: cross-
+  # building TurboJPEG/zlib-ng's own NASM-based 32-bit SIMD and libwebp under -m32
+  # is a much larger, separate lift, and this backend already links the one native
+  # decoder (src/loaders/png.c) that the overflow fixes this leg exists to guard
+  # (R03/R17) live in.
+  build-and-test-32bit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install 32-bit toolchain and zlib
+      run: |
+        sudo dpkg --add-architecture i386
+        sudo apt-get update
+        sudo apt-get install -y cmake gcc-multilib g++-multilib zlib1g-dev:i386
+
+    - name: Configure CMake (32-bit, libpng)
+      run: >
+        cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+        -DPHASH_USE_TURBOJPEG=OFF -DPHASH_USE_LIBPNG=ON -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
+        -DCMAKE_C_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32 -DCMAKE_SYSTEM_PROCESSOR=i686
+
+    - name: Build
+      run: cmake --build build --config Release -j
+
+    - name: Confirm this is actually a 32-bit build
+      run: file build/test_version | grep -q "ELF 32-bit"
+
+    - name: Run Tests
+      run: cd build && ctest --output-on-failure
 
   # Task 16: compares the PR against its base commit built in this same job
   # (not against hardcoded numbers) to keep GH-hosted-runner noise out of the
