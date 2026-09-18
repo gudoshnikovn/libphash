@@ -1,0 +1,65 @@
+name: Fuzz (nightly)
+
+# R27: the per-PR fuzz job in ci.yml only gets a 90s budget, which is there to
+# catch a regression fast, not to actually explore the input space. This is the
+# long run that does that -- it shares the same growing corpus cache, so each
+# night builds on every previous night's (and every PR's) findings instead of
+# starting cold.
+on:
+  schedule:
+    - cron: '0 3 * * *' # 03:00 UTC daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz-nightly:
+    runs-on: ubuntu-latest
+    env:
+      CC: clang
+      ASAN_OPTIONS: halt_on_error=1
+      UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake clang nasm
+
+    - name: Build vendored TurboJPEG
+      run: |
+        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DCMAKE_C_COMPILER=clang
+        cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
+
+    - name: Configure CMake (fuzzers)
+      run: cmake -B build -DPHASH_BUILD_FUZZERS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Debug
+
+    - name: Build
+      run: cmake --build build --target fuzz_load
+
+    # Same cache lineage as the PR job's (ci.yml) -- both read and write
+    # fuzz-corpus-*, so a corpus entry either job finds benefits the other.
+    - name: Restore fuzz corpus cache
+      uses: actions/cache@v4
+      with:
+        path: tests/fuzz/corpus
+        key: fuzz-corpus-${{ github.run_id }}
+        restore-keys: |
+          fuzz-corpus-
+
+    - name: Run fuzz_load (30 minute session)
+      run: |
+        mkdir -p /tmp/fuzz-artifacts tests/fuzz/corpus
+        ./build/fuzz_load -max_total_time=1800 -dict=tests/fuzz/magic.dict \
+          -artifact_prefix=/tmp/fuzz-artifacts/ tests/fuzz/corpus tests/data
+
+    - name: Upload crash artifacts
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: fuzz-nightly-crashes
+        path: /tmp/fuzz-artifacts/
