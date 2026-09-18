@@ -1,4 +1,13 @@
 #include "internal.h"
+
+/* MSVC only ships <stdatomic.h> under /std:c11 or later (VS 17.5+); the CMake
+ * build sets that flag explicitly (see CMakeLists.txt), but a build invoking
+ * cl.exe directly without it fails inside the header with a confusing
+ * "cannot open source file" -- fail here instead, with a message that names
+ * the actual requirement. */
+#if defined(_MSC_VER) && !defined(__STDC_VERSION__)
+#error "src/batch.c requires <stdatomic.h>: build MSVC with /std:c11 or later"
+#endif
 #include <stdatomic.h>
 #include <stdlib.h>
 
