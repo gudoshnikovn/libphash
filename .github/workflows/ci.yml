@@ -98,6 +98,40 @@ jobs:
     - name: Run Tests
       run: cd build && ctest --output-on-failure
 
+  # R24: `make coverage` (Makefile) only measures the stb_image-only path -- none
+  # of src/loaders/{jpeg,png,webp}.c's native decoding code (the #ifdef PH_USE_*
+  # bodies) exists in that binary at all, just their ph_can_use_*() stub. This job
+  # runs scripts/coverage_cmake.sh, which drives the vendored decoder build (plus
+  # a separate spng pass) under -DPHASH_COVERAGE=ON and merges both lcov traces,
+  # then publishes the merged HTML report as an artifact. See
+  # docs/development.md#two-coverage-targets-and-why-one-isnt-enough-r24.
+  coverage-cmake:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake nasm lcov
+
+    - name: Build vendored TurboJPEG
+      run: |
+        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
+        cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
+
+    - name: Run coverage-cmake
+      run: ./scripts/coverage_cmake.sh
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-cmake-html
+        path: docs/coverage/cmake/html/
+        retention-days: 14
+
   # Zero-dependency build: every PHASH_USE_* backend off, stb_image only.
   minimal-build:
     strategy:
