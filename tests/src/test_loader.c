@@ -158,7 +158,7 @@ void test_loader_edge_cases() {
 
     // 2. Unknown format (magic not matching any backend, and not recognized by
     // stb_image's fallback either) must report PH_ERR_UNSUPPORTED_FORMAT.
-    uint8_t garbage[10] = "garbage!!!";
+    uint8_t garbage[11] = "garbage!!!";
     err = ph_load_from_memory(ctx, garbage, 10);
     ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, err);
 
