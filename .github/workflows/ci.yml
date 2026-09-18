@@ -255,6 +255,38 @@ jobs:
     - name: Run Tests
       run: cd build && ctest --output-on-failure
 
+  # R25: the threaded batch path (src/batch.c) is the one piece of this codebase whose
+  # whole point is concurrent access to shared state (the atomic work-stealing index) --
+  # exactly what ASan/UBSan above cannot see. stb-only on purpose: this job's job is the
+  # thread-safety of ph_batch_run_threaded() itself, not decoder coverage (already
+  # exercised elsewhere), and skipping the vendored TurboJPEG build keeps it fast.
+  tsan:
+    runs-on: ubuntu-latest
+    env:
+      CC: clang
+      TSAN_OPTIONS: halt_on_error=1
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake clang
+
+    - name: Configure CMake (TSan, stb_image only)
+      run: >
+        cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
+        -DPHASH_USE_TURBOJPEG=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
+        -DCMAKE_C_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
+
+    - name: Build
+      run: cmake --build build --target test_batch --target test_batch_stress -j
+
+    - name: Run test_batch*
+      run: |
+        ./build/test_batch
+        ./build/test_batch_stress
+
   fuzz:
     runs-on: ubuntu-latest
     env:
