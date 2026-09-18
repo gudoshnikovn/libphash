@@ -110,7 +110,7 @@ static void *ph_batch_worker_pthread(void *arg) {
 }
 #endif
 
-/* Known and deliberate platform split, documented on ph_hash_files() (R47).
+/* Known and deliberate platform split, documented on ph_hash_files().
  *
  * The Windows branch reports only the processors of the *current processor group*, which
  * the OS caps at 64. So `threads = 0` on a machine with more than 64 logical processors
@@ -125,8 +125,8 @@ static void *ph_batch_worker_pthread(void *arg) {
  * anywhere in this project's current test matrix. Until such a machine is available for
  * testing, the limitation stays documented rather than half-fixed.
  *
- * Note this is not the cause of the MAXIMUM_WAIT_OBJECTS defect fixed in R05: the wait there
- * is now batched, so it is correct for any worker count. The 64-processor cap merely kept
+ * Note this is not the cause of the MAXIMUM_WAIT_OBJECTS defect fixed previously: the wait
+ * there is now batched, so it is correct for any worker count. The 64-processor cap merely kept
  * `threads = 0` from ever reaching that limit, which is why the defect went unnoticed. */
 static int ph_detect_num_cores(void) {
 #if defined(_WIN32)
@@ -157,7 +157,7 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
      * of allocating a wrapped-around, too-small handle array. */
     /* Spelled out rather than via a helper: the macro previously used here was a
      * tautology wherever SIZE_MAX == ULLONG_MAX, i.e. it checked nothing on every
-     * 64-bit build (removed in R03). */
+     * 64-bit build (removed later). */
     if ((size_t)nthreads > SIZE_MAX / sizeof(HANDLE))
         return PH_ERR_ALLOCATION_FAILED;
     HANDLE *handles = malloc(sizeof(HANDLE) * (size_t)nthreads);
@@ -206,7 +206,7 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
     /* Same overflow guard as the Windows branch above. */
     /* Spelled out rather than via a helper: the macro previously used here was a
      * tautology wherever SIZE_MAX == ULLONG_MAX, i.e. it checked nothing on every
-     * 64-bit build (removed in R03). */
+     * 64-bit build (removed later). */
     if ((size_t)nthreads > SIZE_MAX / sizeof(pthread_t))
         return PH_ERR_ALLOCATION_FAILED;
     pthread_t *threads_arr = malloc(sizeof(pthread_t) * (size_t)nthreads);

@@ -45,8 +45,8 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     int block_size = ctx->config.block_size;
     if (block_size <= 0)
         return PH_ERR_INVALID_ARGUMENT;
-    /* size_t, not int: block_size = 46341 already overflows the int product (R03/H6).
-     * The upper bound on block_size itself lives in the setter (R04); here we only
+    /* size_t, not int: block_size = 46341 already overflows the int product.
+     * The upper bound on block_size itself lives in the setter; here we only
      * guarantee the arithmetic is well-defined and the allocation is honestly sized. */
     size_t total_pixels = (size_t)block_size * (size_t)block_size;
 
@@ -62,7 +62,8 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
          * Note what this branch does, and why the setter bound matters: it truncates the
          * reported digest size to 64 bytes but keeps hashing all `total_pixels` blocks,
          * so the caller received PH_SUCCESS together with a silently partial hash -- the
-         * same anti-pattern as H5. It is not turned into an error here because the size
+         * same anti-pattern the setter's out-of-range rejection exists to prevent. It is
+         * not turned into an error here because the size
          * is the only thing wrong and the setter now makes the situation impossible. */
         out_digest->size = PH_DIGEST_MAX_BYTES;
     } else {

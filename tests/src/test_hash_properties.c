@@ -39,7 +39,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* R69 (2026-09-18): 160x160, deliberately not equal to any normalisation preset in the
+/* As of 2026-09-18: 160x160, deliberately not equal to any normalisation preset in the
  * library (8 for aHash/dHash, 16 for BMH's default block_size, 32 for pHash's default
  * dct_size, 512 for mHash) and not a power of two like every one of them, so no
  * algorithm's resize from this corpus is ever a no-op or a suspiciously round ratio.
@@ -466,8 +466,8 @@ static const bounds_t BOUNDS[A_COUNT] = {
 };
 
 /* This corpus still understates any algorithm that normalises to a fixed size larger than
- * IMG_W, but as of R69 (2026-09-18) that is a narrower gap, not a structural blind spot.
- * Before R69, every make_base() family's feature sizes (checkerboard cell, stripe width,
+ * IMG_W, but as of 2026-09-18 that is a narrower gap, not a structural blind spot.
+ * Before that date, every make_base() family's feature sizes (checkerboard cell, stripe width,
  * ring period, disc radius, sinusoid frequency) were hardcoded in pixels, tuned to look
  * right at the then-fixed IMG_W=128; raising IMG_W on its own changed the *relative*
  * fineness of the corpus's structure along with its resolution, which is why the earlier
@@ -508,12 +508,11 @@ static const bounds_t BOUNDS[A_COUNT] = {
  * pHash has the worst robustness of the structural hashes here -- mean intra-distance
  * 0.170 against 0.03-0.06 for the others -- and separability ahead of only Radial and
  * mHash (2.65 against their 2.31 and 2.62). The DC coefficient was the suspect and was
- * ruled out on the 128x128 corpus this test used before R69: taking it out of the median
- * left the intra-distance at 0.177 to three decimals there, and taking it out of the hash
- * entirely (the 8x8 block at DCT(1,1)) made it worse, 0.190 with separability 2.27. A
- * median is not dragged by an outlier, whatever the received explanation says. The cause
- * is elsewhere and has not been found; docs/algorithm-provenance.md section 3 has that
- * measurement. */
+ * ruled out on the 128x128 corpus this test used before the corpus was enlarged: taking it out of
+ * the median left the intra-distance at 0.177 to three decimals there, and taking it out of the
+ * hash entirely (the 8x8 block at DCT(1,1)) made it worse, 0.190 with separability 2.27. A median
+ * is not dragged by an outlier, whatever the received explanation says. The cause is elsewhere and
+ * has not been found; docs/algorithm-provenance.md section 3 has that measurement. */
 
 static void test_robustness_discrimination_separability(void) {
     image_t base[NUM_BASE];
@@ -720,8 +719,8 @@ static image_t rotate_by(const image_t *s, double deg) {
  * content is all detail, that one says what happens on a picture.
  *
  * This profile is also why IMG_W has a practical ceiling, not just a floor: see the note
- * on PH_RADIAL_SAMPLES next to IMG_W's definition above. Raising it further than R69 did
- * would erode the half-turn margin this test asserts on. */
+ * on PH_RADIAL_SAMPLES next to IMG_W's definition above. Raising it further than the current
+ * 160x160 would erode the half-turn margin this test asserts on. */
 static void test_radial_rotation_profile(void) {
     static const double ANGLES[] = {1, 2, 5, 10, 15, 30, 45, 90, 180};
     const int NA = (int)(sizeof(ANGLES) / sizeof(ANGLES[0]));

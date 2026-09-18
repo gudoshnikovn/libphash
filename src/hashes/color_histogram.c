@@ -75,7 +75,7 @@ PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_dige
     if (ctx->image.width <= 0 || ctx->image.height <= 0 || !ctx->image.raw_rgb)
         return PH_ERR_EMPTY_IMAGE;
 
-    /* R08/M13: a grayscale image carries no colour to bin. Replicating the single channel
+    /* A grayscale image carries no colour to bin. Replicating the single channel
      * into r/g/b would put every pixel on the grey axis and still report PH_SUCCESS, so
      * refuse instead of returning a hash that means nothing. */
     if (ctx->image.channels < 3)
@@ -86,7 +86,7 @@ PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_dige
     out_digest->kind = (uint8_t)PH_DIGEST_KIND_HISTOGRAM;
 
     /* size_t and uint64_t throughout: width * height overflows int above ~46340x46340,
-     * and so does a per-bin counter on an image that large (R03/H6). */
+     * and so does a per-bin counter on an image that large. */
     size_t total_pixels = (size_t)ctx->image.width * (size_t)ctx->image.height;
     size_t channels = (size_t)ctx->image.channels;
     const uint8_t *src = ctx->image.raw_rgb;

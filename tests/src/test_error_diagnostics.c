@@ -403,7 +403,7 @@ static void row_image_too_large(ph_context_t *ctx) {
            PH_ERR_IMAGE_TOO_LARGE, MSG_REQUIRED);
 
     /* ph_load_from_pixels() bypasses every decoder, so it needs its own row: this is
-     * the path that had no bomb protection at all before task L6. It never calls
+     * the path that had no bomb protection at all before that was fixed. It never calls
      * ph_set_err_msg() on this rejection (src/core.c), which is a real gap of the
      * same shape as the one just fixed above -- out of scope here since it is not a
      * decoder backend, so not asserted. */

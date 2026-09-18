@@ -615,7 +615,7 @@ static void test_colour_moments_match_the_definitions(void) {
     printf("test_colour_moments_match_the_definitions: PASSED\n");
 }
 
-/* R62. This used to be test_colour_moments_digest_discards_the_skew_sign, pinning the
+/* This used to be test_colour_moments_digest_discards_the_skew_sign, pinning the
  * defect: the digest stored fabs() of a correctly signed third moment, so two images whose
  * channel distributions are mirror images produced byte-identical skew bytes. The digest
  * now keeps the sign, in signed 16-bit big-endian fixed point, and this is the same pair

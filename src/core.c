@@ -61,7 +61,7 @@ typedef struct stat ph_file_stat_t;
 #endif
 
 /* stb_image's implementation lives in its own translation unit,
- * src/loaders/stb_image_impl.c (R56) -- see that file for why. */
+ * src/loaders/stb_image_impl.c -- see that file for why. */
 
 PH_API const char *ph_version(void) { return PH_VERSION_STRING; }
 
@@ -102,12 +102,13 @@ PH_API const char *ph_get_last_error_message(const ph_context_t *ctx) {
     return ctx->last_error;
 }
 
-/* R04: every ph_context_set_* below returns ph_error_t. Contract, uniform across all
+/* Every ph_context_set_* below returns ph_error_t. Contract, uniform across all
  * nine of them: valid input -> PH_SUCCESS; invalid input -> PH_ERR_INVALID_ARGUMENT with
  * the configuration left exactly as it was. No partial application, no clamping and no
  * silent fallback to defaults -- a caller that cannot see its argument was refused ends
- * up hashing with a configuration it did not ask for, which is the root cause M12
- * describes behind H5 and H6.
+ * up hashing with a configuration it did not ask for, which used to let out-of-range
+ * parameters reach the hash computation and read from or write into memory the caller
+ * never sized for them.
  *
  * Deliberately NOT marked PH_NODISCARD, unlike the ph_compute_ and ph_load_ family. These
  * setters are routinely called for their effect in sequences where the arguments are
@@ -122,8 +123,8 @@ PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma) {
     /* isfinite() has to come first. The previous guard was `gamma <= PH_GAMMA_EPSILON`,
      * and every comparison against NaN is false, so NAN (and INFINITY, which is also
      * greater than the epsilon) passed validation, which used to poison a precomputed
-     * LUT. There is no LUT here any more (R52 -- gamma is applied per-image, normalised
-     * by the buffer's own maximum, see ph_apply_gamma() in src/image/color.c), but the
+     * LUT. There is no LUT here any more -- gamma is applied per-image, normalised
+     * by the buffer's own maximum, see ph_apply_gamma() in src/image/color.c -- but the
      * bound stays: it is still what keeps the exponent applied to a pixel meaningful.
      * The upper bound keeps that exponent inside a range symmetric about 1.0; see
      * PH_GAMMA_MAX. */
@@ -162,7 +163,7 @@ PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, i
     long long sum = (long long)r + (long long)g + (long long)b;
     /* sum == 0 used to reset the weights to the ITU-R BT.601 defaults and report nothing,
      * so "0, 0, 0" silently changed the configuration to something the caller never
-     * asked for. It is an error now (R04). */
+     * asked for. It is an error now. */
     if (sum <= 0 || sum > PH_GRAY_WEIGHT_MAX_SUM)
         return PH_ERR_INVALID_ARGUMENT;
 
@@ -182,10 +183,10 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
     /* Upper bounds are hard limits of the pHash implementation:
      * dct_size <= PH_DCT_MAX_SIZE and reduction_size <= PH_DCT_MAX_REDUCTION_SIZE
      * (the hash must fit into 64 bits). Out-of-range input is rejected without
-     * touching the configuration; it is never clamped. (R02, kept as-is by R04.)
-     * Lower bound on reduction_size is PH_DCT_MIN_REDUCTION_SIZE, not 1: since R61 the
-     * DC coefficient is excluded from the hash, so reduction_size == 1 leaves zero AC
-     * coefficients and yields the fixed digest 0 for every image (R74). */
+     * touching the configuration; it is never clamped.
+     * Lower bound on reduction_size is PH_DCT_MIN_REDUCTION_SIZE, not 1: since the DC
+     * coefficient is excluded from the hash, reduction_size == 1 leaves zero AC
+     * coefficients and yields the fixed digest 0 for every image. */
     if (!ctx || dct_size <= 0 || dct_size > PH_DCT_MAX_SIZE ||
         reduction_size < PH_DCT_MIN_REDUCTION_SIZE || reduction_size > PH_DCT_MAX_REDUCTION_SIZE ||
         reduction_size > dct_size)
@@ -202,8 +203,8 @@ PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projection
      * angular resolution of the largest supported image can distinguish.
      * samples: bounded by the diagonal of the largest image the library will process, and
      * at least PH_RADIAL_MIN_SAMPLES, because a single sample per projection has zero
-     * variance by definition and yields the all-zero digest for every image (R74).
-     * sigma: the Gaussian blur applied before the projections are taken (R52). Must be
+     * variance by definition and yields the all-zero digest for every image.
+     * sigma: the Gaussian blur applied before the projections are taken. Must be
      * finite and strictly positive -- ph_gaussian_blur_sigma() leaves its output
      * unwritten otherwise -- and at most PH_RADIAL_MAX_SIGMA, above which its kernel
      * radius would be silently narrower than requested.
@@ -245,7 +246,7 @@ PH_API ph_error_t ph_context_set_mhash_params(ph_context_t *ctx, float alpha, fl
 PH_API ph_error_t ph_context_set_block_params(ph_context_t *ctx, int block_size) {
     /* block_size^2 bits have to fit into a ph_digest_t; see PH_BLOCK_MAX_SIZE. Lower bound
      * is PH_BLOCK_MIN_SIZE, not 1: a single block's mean equals itself, the median-of-one
-     * always compares >= true, and the digest is the fixed 0x01 for every image (R74). */
+     * always compares >= true, and the digest is the fixed 0x01 for every image. */
     if (!ctx || block_size < PH_BLOCK_MIN_SIZE || block_size > PH_BLOCK_MAX_SIZE)
         return PH_ERR_INVALID_ARGUMENT;
     ctx->config.block_size = block_size;
@@ -295,7 +296,7 @@ PH_API ph_error_t ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixe
     /* Every uint64_t is a valid request, 0 included ("no limit of my own"). No upper
      * bound is enforced here on purpose: the implementation ceiling
      * PH_MAX_SUPPORTED_PIXELS is applied where the limit is used, by
-     * ph_exceeds_pixel_limit() (R48), so a caller can ask for more than the library
+     * ph_exceeds_pixel_limit(), so a caller can ask for more than the library
      * supports and simply gets PH_ERR_IMAGE_TOO_LARGE at load time. Rejecting it here
      * would duplicate that policy in two places. */
     ctx->config.max_pixels = max_pixels;
@@ -745,8 +746,8 @@ PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels, 
     if (channels != 1 && channels != 3 && channels != 4)
         return PH_ERR_INVALID_ARGUMENT;
 
-    /* L6: this used to be the one load path with no decompression-bomb protection,
-     * which is what made the int-overflow in the pixel-count arithmetic (H6) reachable
+    /* This used to be the one load path with no decompression-bomb protection,
+     * which is what made the int-overflow in the pixel-count arithmetic reachable
      * with the default configuration. Same check and same error code as the file and
      * buffer paths; max_pixels == 0 still means "unlimited". */
     if (ph_exceeds_pixel_limit((uint64_t)width, (uint64_t)height, ctx->config.max_pixels))

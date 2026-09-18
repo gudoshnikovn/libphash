@@ -1,4 +1,4 @@
-/* Stress test for the batch thread pool (R05).
+/* Stress test for the batch thread pool.
  *
  * The defect class this file targets: ph_hash_files()/ph_hash_buffers() reporting the
  * batch as finished while worker threads are still writing into items[]. On Windows

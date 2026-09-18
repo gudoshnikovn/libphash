@@ -4,7 +4,7 @@
 
 /* Declarations only. The stb_image_resize2 implementation is instantiated in
  * src/image/stb_resize_impl.c, which is compiled with -fno-sanitize=alignment
- * because of deliberate unaligned 64-bit moves inside stb (R46 — see the
+ * because of deliberate unaligned 64-bit moves inside stb (see the
  * comment at the top of that file). Keeping the implementation out of this TU
  * keeps our own code fully sanitizer-instrumented. */
 #include "../vendor/stb_image_resize2.h"

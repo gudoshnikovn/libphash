@@ -1,4 +1,4 @@
-/* R03 / H6: pixel counts must never be computed in `int`.
+/* Pixel counts must never be computed in `int`.
  *
  * Every case below used to trip UBSan (signed integer overflow) or slip past the old
  * PH_SAFE_ALLOC_SIZE guard straight into a wrapped malloc(). They now have to end in a
@@ -64,10 +64,10 @@ static ph_context_t *make_ctx_with_tiny_image(int w, int h, int channels) {
     return ctx;
 }
 
-/* H6, the exact repro from the review: 46341 * 46341 overflows int.
+/* The exact repro from the original review: 46341 * 46341 overflows int.
  * The product is now size_t, so the request is simply too big for the arena.
  *
- * Since R04 these values can no longer reach ph_compute_bmh() through the public API --
+ * These values can no longer reach ph_compute_bmh() through the public API --
  * ph_context_set_block_params() rejects anything above PH_BLOCK_MAX_SIZE. The config field
  * is therefore poisoned directly here, exactly as test_phash.c does for the pHash guard:
  * the point of this file is that the *arithmetic* is well-defined whatever the field
@@ -105,13 +105,13 @@ void test_bmh_block_size_overflows_int(void) {
     PASS("test_bmh_block_size_overflows_int");
 }
 
-/* R04: the values above are unreachable through the public API now. The setter refuses
+/* The values above are unreachable through the public API now. The setter refuses
  * them and leaves the configuration exactly as it was -- no clamping to the ceiling. */
 void test_setter_bounds_reject_out_of_range(void) {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
 
-    /* R74: block_size == 1 is the old documented minimum, but a single block's mean is
+    /* block_size == 1 is the old documented minimum, but a single block's mean is
      * its own median, the ">=" threshold is then always true, and the digest is the fixed
      * 0x01 for every image -- as invalid as the overflow-sized values above it. */
     const int bad_blocks[] = {1, 1 << 30, INT_MAX, 46341, PH_BLOCK_MAX_SIZE + 1};
@@ -122,7 +122,7 @@ void test_setter_bounds_reject_out_of_range(void) {
     /* And the ceiling itself is accepted: (22*22 + 7) / 8 == 61 bytes still fits. */
     ASSERT_OK(ph_context_set_block_params(ctx, PH_BLOCK_MAX_SIZE));
     ASSERT_INT_EQ(PH_BLOCK_MAX_SIZE, ctx->config.block_size);
-    /* R74: the new minimum, 2, still succeeds -- blocks can differ from each other again. */
+    /* The new minimum, 2, still succeeds -- blocks can differ from each other again. */
     ASSERT_OK(ph_context_set_block_params(ctx, PH_BLOCK_MIN_SIZE));
     ASSERT_INT_EQ(PH_BLOCK_MIN_SIZE, ctx->config.block_size);
 
@@ -140,7 +140,7 @@ void test_setter_bounds_reject_out_of_range(void) {
         PH_ERR_INVALID_ARGUMENT,
         ph_context_set_radial_params(ctx, 180, PH_RADIAL_MAX_SAMPLES + 1, PH_RADIAL_DEFAULT_SIGMA));
     ASSERT_INT_EQ(PH_RADIAL_SAMPLES, ctx->config.radial_samples);
-    /* R74: samples == 1 is the old documented minimum, but the variance of one observation
+    /* samples == 1 is the old documented minimum, but the variance of one observation
      * is zero by definition, so every projection is flat and the digest is all-zero for
      * every image -- rejected, config untouched. */
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
@@ -151,7 +151,7 @@ void test_setter_bounds_reject_out_of_range(void) {
                                            PH_RADIAL_DEFAULT_SIGMA));
     ASSERT_INT_EQ(PH_RADIAL_MAX_PROJECTIONS, ctx->config.radial_projections);
     ASSERT_INT_EQ(PH_RADIAL_MAX_SAMPLES, ctx->config.radial_samples);
-    /* R74: the new minimum, 2, still succeeds. */
+    /* The new minimum, 2, still succeeds. */
     ASSERT_OK(
         ph_context_set_radial_params(ctx, 180, PH_RADIAL_MIN_SAMPLES, PH_RADIAL_DEFAULT_SIGMA));
     ASSERT_INT_EQ(180, ctx->config.radial_projections);
@@ -182,7 +182,7 @@ void test_bmh_normal_block_size_still_works(void) {
 }
 
 /* Radial: a huge projection count must fail cleanly, not wrap the byte count.
- * As above, the config is poisoned directly since R04 -- the setter rejects these values,
+ * As above, the config is poisoned directly -- the setter rejects these values,
  * and this test is about the arithmetic behind it. */
 void test_radial_huge_projections(void) {
     /* Far more projections than the digest could ever hold: the byte count must be
@@ -236,7 +236,7 @@ void test_radial_huge_projections(void) {
     PASS("test_radial_huge_projections");
 }
 
-/* L6: ph_load_from_pixels() was the only load path without bomb protection. */
+/* ph_load_from_pixels() was the only load path without bomb protection. */
 void test_load_from_pixels_respects_max_pixels(void) {
     uint8_t px[32 * 32 * 3];
     memset(px, 0x5A, sizeof(px));
@@ -259,7 +259,8 @@ void test_load_from_pixels_respects_max_pixels(void) {
 }
 
 /* The default limit applies too, without the caller configuring anything --
- * this is the path that made H6 reachable with the default configuration. */
+ * this is the path that made the pixel-count overflow reachable with the default
+ * configuration. */
 void test_load_from_pixels_default_limit(void) {
     uint8_t probe = 0;
     ph_context_t *ctx = NULL;
@@ -284,10 +285,10 @@ void test_load_from_pixels_unlimited(void) {
     ASSERT_OK(ph_create(&ctx));
     ph_context_set_max_pixels(ctx, 0);
 
-    /* Since R48, max_pixels = 0 means "no limit of MY own", not "no limit at all":
+    /* max_pixels = 0 means "no limit of MY own", not "no limit at all":
      * the implementation ceiling of INT_MAX pixels still applies, and an image above
-     * it is refused as too large rather than attempted. Before R48 this reached the
-     * allocator (PH_ERR_ALLOCATION_FAILED) -- or, on a host that served the request,
+     * it is refused as too large rather than attempted. Before this ceiling existed this
+     * reached the allocator (PH_ERR_ALLOCATION_FAILED) -- or, on a host that served the request,
      * overflowed int index arithmetic. */
     ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_pixels(ctx, &probe, INT_MAX, INT_MAX, 1, 0));
     ASSERT_INT_EQ(0, ph_is_loaded(ctx));
@@ -301,7 +302,7 @@ void test_load_from_pixels_unlimited(void) {
     PASS("test_load_from_pixels_unlimited");
 }
 
-/* R48: the PH_MAX_SUPPORTED_PIXELS ceiling applies uniformly -- to max_pixels = 0
+/* The PH_MAX_SUPPORTED_PIXELS ceiling applies uniformly -- to max_pixels = 0
  * ("no caller limit") and to an explicitly configured value above it. Without it,
  * `y * w + x` in the hot loops overflows int, which is undefined behaviour reachable
  * through a documented configuration. */
@@ -341,7 +342,7 @@ void test_implementation_ceiling_applies_uniformly(void) {
 
 /* The ceiling limits width * height, not either dimension on its own: a very wide,
  * one-pixel-tall image is fine, which is also the shape a decompression bomb takes
- * (see M1 -- 268435456 x 1).
+ * (268435456 x 1).
  *
  * Note this cannot be probed with a stub buffer the way the "too large" cases can:
  * ph_load_from_pixels() takes no buffer length, so it must trust the caller's

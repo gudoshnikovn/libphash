@@ -49,7 +49,7 @@ void test_core_setters_happy_and_edge(void) {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
 
-    /* Happy paths. Every setter returns ph_error_t since 2.0.0 (R04), so the expected
+    /* Happy paths. Every setter returns ph_error_t since 2.0.0, so the expected
      * outcome is asserted rather than discarded -- `ph_context_set_phash_params(ctx, 64,
      * 16)` sat in this list as a "happy path" while actually being rejected. */
     ASSERT_OK(ph_context_set_gamma(ctx, 1.0f));              // The identity fast path
@@ -91,7 +91,8 @@ void test_core_loading_mock_success(void) {
     ASSERT_OK(ph_create(&ctx));
 
     /* DE AD is the magic of the test-only mock backend. In a build without it --
-     * which is every shipped build, see R10 -- nothing claims this buffer and the
+     * which is every shipped build, since the mock backend is opt-in and never part
+     * of a release build -- nothing claims this buffer and the
      * loader must report it as an unknown format. Asserting both directions keeps
      * the mock from silently leaking into a release artifact again. */
     uint8_t mock_data[4] = {0xDE, 0xAD, 0xBE, 0xEF};
@@ -162,14 +163,14 @@ void test_hashes_extra_coverage(void) {
     ctx->image.is_loaded = 1;
     ASSERT_OK(ph_compute_phash(ctx, &hash));
 
-    // Out-of-range sizes / NULL args are reported, not silently ignored (R02)
+    // Out-of-range sizes / NULL args are reported, not silently ignored
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_dct2_partial(NULL, NULL, 33, 8, NULL));
     // Hits ph_median_bitpack guards (insertion sort & boundary)
     ASSERT_UINT64_EQ(0, ph_median_bitpack(NULL, 0));
     float vals[2] = {1.0f, 0.5f};
     ph_median_bitpack(vals, 2); // Hits insertion sort while
 
-    // Out-of-range reduction_size is rejected by the setter, config unchanged (R02)
+    // Out-of-range reduction_size is rejected by the setter, config unchanged
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, 32, 16));
     ASSERT_INT_EQ(PH_DCT_REDUCTION_SIZE, ctx->config.phash_reduction_size);
     ASSERT_OK(ph_compute_phash(ctx, &hash));

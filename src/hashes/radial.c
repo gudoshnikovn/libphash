@@ -47,7 +47,7 @@
  * the invariance lives in the variance vector, and the DCT does not survive a shift. The
  * measured profile is in docs/algorithm-provenance.md section 7.
  *
- * R52 -- gamma and blur sigma now follow pHash's own header defaults (ph_compare_images(),
+ * Gamma and blur sigma now follow pHash's own header defaults (ph_compare_images(),
  * aetilius/pHash): gamma 1.0 (identity), sigma 3.5, applied through ph_gaussian_blur_sigma()
  * rather than a fixed 3x3 kernel. Before this fix gamma defaulted to 2.2, an independently
  * chosen sRGB display value with no connection to this algorithm's reference, and the blur
@@ -56,7 +56,7 @@
  * history, the trust placed in pHash's own code as the source for these two parameters
  * (Zauner's Diplomarbeit reports the authors merely "suggest 1 for both", which pHash's own
  * header itself does not follow for sigma), and the measured delta this moved are in
- * docs/algorithm-provenance.md section 7 and tasks/review/R52_gamma_default_and_convention.md.
+ * docs/algorithm-provenance.md section 7.
  *
  * Deliberate differences: a fixed sample count per projection with bilinear
  * interpolation, rather than summing the pixels of a one-pixel-wide strip whose length
@@ -166,7 +166,7 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     /* projections * sizeof(double) does not overflow size_t on a 64-bit target, but it
      * does on a 32-bit one. Since 2.0.0 ph_context_set_radial_params() caps projections
      * at PH_RADIAL_MAX_PROJECTIONS, so this cannot trigger through the public API either;
-     * kept as defence in depth. Refuse rather than wrap (R03/H6). */
+     * kept as defence in depth. Refuse rather than wrap. */
     if ((size_t)projections > SIZE_MAX / sizeof(double))
         return PH_ERR_ALLOCATION_FAILED;
 

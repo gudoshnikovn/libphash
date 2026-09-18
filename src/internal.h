@@ -80,7 +80,7 @@ typedef struct {
 } ph_channel_moments_t;
 
 /* num_pixels is a size_t on purpose: it is width * height, which does not fit an
- * int for images above ~46340x46340 (see R03/H6). */
+ * int for images above ~46340x46340. */
 ph_channel_moments_t ph_compute_moments(const uint8_t *data, size_t num_pixels, int channels,
                                         int channel_index);
 
@@ -89,7 +89,7 @@ ph_channel_moments_t ph_compute_moments(const uint8_t *data, size_t num_pixels, 
  * Bounds are hard limits, not hints: dct_size must be in [1, PH_DCT_MAX_SIZE] and
  * reduction_size in [1, PH_DCT_MAX_REDUCTION_SIZE] and <= dct_size. On violation the
  * function writes nothing to `out` and returns PH_ERR_INVALID_ARGUMENT — callers MUST
- * check the result, otherwise `out` stays whatever it was (see R02/H5). */
+ * check the result, otherwise `out` stays whatever it was. */
 PH_NODISCARD ph_error_t ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size,
                                         int reduction_size, float *out);
 
@@ -253,19 +253,18 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
 #define PH_RADIAL_COEFFS 40
 #define PH_RADIAL_SAMPLES 128
 
-/* R52 -- default Gaussian-blur sigma for Radial, aligned on pHash's own header default
+/* Default Gaussian-blur sigma for Radial, aligned on pHash's own header default
  * (ph_compare_images(), aetilius/pHash), not on Zauner's Diplomarbeit, which reports "the
  * authors suggest 1 for both variables" (sigma and gamma) and is contradicted by pHash's
  * own default here. Before 2.0.0 (well, before this fix) Radial's blur was a fixed 3x3
  * kernel with no sigma at all (effective sigma about 0.707) -- see
- * docs/algorithm-provenance.md section 7 and tasks/review/R52_gamma_default_and_convention.md
- * for the measured delta this moved. */
+ * docs/algorithm-provenance.md section 7 for the measured delta this moved. */
 #define PH_RADIAL_DEFAULT_SIGMA 3.5f
 
 /* Upper bound on radial sigma: ph_gaussian_blur_sigma() (src/image/filters.c) derives its
  * kernel radius as ceil(3*sigma) and silently clamps it to 64 rather than growing the
  * fixed-size kernel array further. A sigma above this bound would be silently narrower
- * than requested -- exactly the clamping R04's setters refuse to do -- so the setter
+ * than requested -- exactly the clamping the setters refuse to do -- so the setter
  * rejects it instead. Lower bound is a bare `> 0.0f`: that same function leaves `dst`
  * entirely unwritten for a non-positive sigma (a precondition, not a clamp), so 0 or
  * negative values must never reach it. */
@@ -275,7 +274,8 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
  * describe -- it is flat, or radially symmetric -- and the digest is all zeroes rather
  * than a standardisation of floating-point residue. No source specifies the value; it is
  * the one that was already in this code for the same job before 2.0.0, and it is one of
- * the constants R68 pins down. */
+ * the constants left pinned to their pre-2.0.0 values rather than re-derived from a
+ * source that does not specify them. */
 #define PH_RADIAL_FLAT_VARIANCE 0.001
 
 /* Hard upper bounds for the pHash DCT: ph_dct2_partial() uses a fixed
@@ -284,7 +284,7 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
 #define PH_DCT_MAX_SIZE 32
 #define PH_DCT_MAX_REDUCTION_SIZE 8
 
-/* R74 -- hard lower bound for reduction_size. Since 2.0.0 (R61) the DC coefficient is
+/* Hard lower bound for reduction_size. Since 2.0.0 the DC coefficient is
  * excluded from the hash: ph_median_bitpack_from(dct_out, n=reduction_size^2, median_from=1)
  * skips the first (DC) coefficient and thresholds only the AC ones. At
  * reduction_size == 1 there is exactly one coefficient (the DC one), all of it is
@@ -293,13 +293,14 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
  * AC coefficient (2^2 - 1 = 3) for the hash to depend on. */
 #define PH_DCT_MIN_REDUCTION_SIZE 2
 
-/* R04 -- hard upper bounds for the remaining tunable parameters. Every one of them is
+/* Hard upper bounds for the remaining tunable parameters. Every one of them is
  * derived from a real limit of the implementation, not picked as a round number; the
  * derivation is spelled out next to each constant so a future change to a digest size
  * or a pixel ceiling shows up here as an inconsistency instead of silently widening
  * the accepted range. Out-of-range input is rejected by the setter
- * (PH_ERR_INVALID_ARGUMENT, configuration untouched) and never clamped: clamping is
- * the "silently wrong answer" anti-pattern that H5/M12 are about. */
+ * (PH_ERR_INVALID_ARGUMENT, configuration untouched) and never clamped: clamping would
+ * let the caller hash with a parameter it never asked for, silently and without an
+ * error it could check. */
 
 /* BMH packs one bit per block, i.e. block_size^2 bits, into a ph_digest_t of at most
  * PH_DIGEST_MAX_BYTES bytes. At the 128 bytes of 2.0.0: 32*32 = 1024 bits = 128 bytes
@@ -309,9 +310,9 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
  * block_size affects BMH only -- mHash has its own fixed geometry. */
 #define PH_BLOCK_MAX_SIZE 32
 
-/* R74 -- hard lower bound for block_size. At block_size == 1 the grid is a single block
+/* Hard lower bound for block_size. At block_size == 1 the grid is a single block
  * whose mean is itself; the "median" of one value is that same value, the threshold is
- * ">= median" (R60), so the comparison is always true and the one output bit is always 1 --
+ * ">= median", so the comparison is always true and the one output bit is always 1 --
  * digest 0x01 for every image, regardless of content. 2 is the smallest grid that can
  * produce blocks with different means and therefore a content-dependent bit pattern. */
 #define PH_BLOCK_MIN_SIZE 2
@@ -344,10 +345,10 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
  * being raised to INT_MAX for their sake. */
 #define PH_RADIAL_MAX_SAMPLES 65536
 
-/* R74 -- hard lower bound for samples. Variance is undefined-in-effect for a single
+/* Hard lower bound for samples. Variance is undefined-in-effect for a single
  * observation: with one sample per projection, every projection's variance is exactly 0
  * by definition, which is the same all-flat condition PH_RADIAL_FLAT_VARIANCE exists to
- * catch (see R58) -- so at samples == 1 the digest is all zeroes for every image,
+ * catch -- so at samples == 1 the digest is all zeroes for every image,
  * independent of content. 2 is the smallest sample count for which a projection's variance
  * can be nonzero. */
 #define PH_RADIAL_MIN_SAMPLES 2
@@ -379,8 +380,7 @@ _Static_assert(PH_RADIAL_PROJECTIONS >= PH_RADIAL_MIN_PROJECTIONS &&
 
 /* ColorMoments: each moment is a signed 16-bit fixed-point number, big-endian, in units
  * of 1/PH_COLOR_MOMENT_SCALE. Two bytes rather than one because the third moment carries
- * a sign -- the direction of the asymmetry -- which a single unsigned byte cannot hold
- * (R62).
+ * a sign -- the direction of the asymmetry -- which a single unsigned byte cannot hold.
  *
  * The scale is 128 by measurement, not by taste: over every distribution an 8-bit channel
  * admits, the extremes are a mean of 255, a standard deviation of 127.5 and a skewness of
@@ -417,12 +417,11 @@ _Static_assert(PH_COLOR_BINS <= PH_DIGEST_MAX_BYTES,
                "the colour histogram must fit a digest, one byte per bin");
 #endif
 
-/* R52 -- aligned on pHash's own default (ph_compare_images(), aetilius/pHash), which is
+/* Aligned on pHash's own default (ph_compare_images(), aetilius/pHash), which is
  * an identity transform: pow(v, 1.0) == v. Before this fix the default was 2.2, an
  * independently-chosen sRGB display gamma with no connection to Radial's reference
- * implementation -- see docs/algorithm-provenance.md section 7 and
- * tasks/review/R52_gamma_default_and_convention.md for the history and the measured
- * delta this moved (real photographs: mean PCC-distance 0.08-0.10 between the old and
+ * implementation -- see docs/algorithm-provenance.md section 7 for the history and the
+ * measured delta this moved (real photographs: mean PCC-distance 0.08-0.10 between the old and
  * new default, the same order of magnitude as the library's normal intra-class
  * variation). Gamma now also raises pixels to `gamma` directly, not `1.0/gamma` --
  * pHash's own convention -- and normalises the buffer by its own maximum before the
@@ -452,10 +451,10 @@ _Static_assert(PH_COLOR_BINS <= PH_DIGEST_MAX_BYTES,
 
 /* Grayscale weights: ITU-R BT.601 luma coefficients (0.299/0.587/0.114), approximated
  * as 38/75/15 over 128. None of the nine algorithms' primary sources specify a
- * grayscale formula at all (R68's finding); BT.601 is cited as an external standard
+ * grayscale formula at all; BT.601 is cited as an external standard
  * because it is one, not because anything here points to it.
  *
- * R68 measured switching to the canonical 8-bit triple 77/150/29 over 256, which is
+ * Measurement checked switching to the canonical 8-bit triple 77/150/29 over 256, which is
  * closer to the real-valued BT.601 coefficients on every channel
  * (+0.0018/-0.0011/-0.0007 vs. this triple's -0.0021/-0.0011/+0.0032) and whose
  * denominator is an exact power of two with no rounding in the sum. On this library's
@@ -511,7 +510,7 @@ static inline int ph_safe_image_alloc_size(uint64_t w, uint64_t h, uint64_t chan
  * when a caller deliberately raises or disables the limit.
  *
  * Raising this ceiling means converting that index arithmetic to size_t everywhere,
- * SIMD paths included -- see tasks/review/R48. */
+ * SIMD paths included -- not done, since nothing currently needs images this large. */
 #define PH_MAX_SUPPORTED_PIXELS ((uint64_t)INT_MAX)
 
 /* Upper bound on a single image dimension, applied by every decode path.
@@ -544,7 +543,7 @@ static inline int ph_exceeds_dimension_limit(uint64_t w, uint64_t h) {
  *   - PH_MAX_SUPPORTED_PIXELS, which always applies -- including when max_pixels is 0
  *     or set above it. `0` therefore means "the implementation's limit", not "no limit".
  *
- * Contract (L4): `w` and `h` must each fit in 32 bits. Every caller feeds it either an
+ * Contract: `w` and `h` must each fit in 32 bits. Every caller feeds it either an
  * `int` dimension (already made non-negative -- see ph_abs_dim()) or a `png_uint_32`,
  * so `w * h` is at most 2^64 - 2^33 + 1 and cannot wrap the uint64_t product. Do NOT
  * call this with values wider than 32 bits without adding an overflow check first. */
@@ -588,7 +587,7 @@ struct ph_context {
 
     // User-defined configuration parameters
     struct {
-        // R52: gamma is applied per-image (normalised by the blurred buffer's own
+        // gamma is applied per-image (normalised by the blurred buffer's own
         // maximum, not by a context-wide precomputed LUT), so there is no gamma_lut
         // field here any more -- see ph_apply_gamma(), src/image/color.c.
         float gamma;

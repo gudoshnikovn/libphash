@@ -51,7 +51,7 @@ void test_whash_e2e() {
     PASS("test_whash_e2e");
 }
 
-/* R67. ImageHash zeroes the coarsest LL band before the working decomposition
+/* ImageHash zeroes the coarsest LL band before the working decomposition
  * (remove_max_haar_ll, on by default there) to keep overall brightness out of the hash.
  * These three tests are why ours defaults to off: the operation is the identity for a
  * hash thresholded at the median, so it cannot remove anything the median has not
@@ -147,7 +147,7 @@ void test_remove_max_haar_ll_on_a_solid_fill() {
     PASS("test_remove_max_haar_ll_on_a_solid_fill");
 }
 
-/* R45. The transform against its definition rather than against one worked example.
+/* The transform against its definition rather than against one worked example.
  *
  * Two properties settle whether ph_haar_1d_float() is the orthonormal Haar transform it
  * claims to be, and both are checkable without a reference implementation:
@@ -191,7 +191,7 @@ void test_haar_1d_matches_its_definition() {
     PASS("test_haar_1d_matches_its_definition");
 }
 
-/* R45. The FULL-mode cascade against an independent calculation of what it should be.
+/* The FULL-mode cascade against an independent calculation of what it should be.
  *
  * After L levels of the orthonormal Haar transform, the LL coefficient at (i,j) is the
  * mean of the 2^L x 2^L block of samples under it, times 2^L. The hash thresholds those

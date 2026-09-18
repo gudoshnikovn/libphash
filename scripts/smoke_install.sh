@@ -23,7 +23,7 @@ cmake -S "$ROOT_DIR" -B "$BUILD_DIR" "${CMAKE_ARGS[@]}"
 cmake --build "$BUILD_DIR" --target phash -j
 cmake --install "$BUILD_DIR"
 
-# R15/L11: structural check on the generated .pc. This is the check with actual teeth:
+# Structural check on the generated .pc. This is the check with actual teeth:
 # `libdir`/`includedir` must be written relative to ${prefix}, because that is the only
 # form every pkg-config implementation can relocate. It used to substitute
 # @CMAKE_INSTALL_FULL_LIBDIR@ -- a configure-time absolute path.
@@ -82,7 +82,7 @@ if command -v pkg-config >/dev/null 2>&1; then
     else
         "$CONSUMER_DIR/consumer_pc"
     fi
-    # R15/L11: end-to-end companion to the structural check above -- the install tree is
+    # End-to-end companion to the structural check above -- the install tree is
     # physically moved and the consumer is rebuilt from the new location, so the .pc has
     # to be usable and not merely well-formed. `--define-prefix` is required: no
     # pkg-config redefines the prefix unless asked (Windows builds aside).

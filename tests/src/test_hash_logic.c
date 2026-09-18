@@ -118,7 +118,7 @@ static ph_context_t *load_ppm(int w, int h, const uint8_t *pixels) {
  * ========================================================= */
 
 static void test_ahash_uniform_gray(void) {
-    /* 8×8 uniform gray image: every pixel == avg. The tie-break is `>=` (R68), so every
+    /* 8×8 uniform gray image: every pixel == avg. The tie-break is `>=`, so every
      * bit is set → hash == all-ones. */
     uint8_t pixels[64];
     memset(pixels, 128, 64);
@@ -135,7 +135,7 @@ static void test_ahash_uniform_gray(void) {
 }
 
 static void test_ahash_all_black(void) {
-    /* All-black image: avg=0, every pixel == 0 == avg, and the tie-break is `>=` (R68),
+    /* All-black image: avg=0, every pixel == 0 == avg, and the tie-break is `>=`,
      * so every bit is set even here. */
     uint8_t pixels[64];
     memset(pixels, 0, 64);

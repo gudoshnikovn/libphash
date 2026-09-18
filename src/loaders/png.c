@@ -90,7 +90,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
 
     /* Checked before the buffer reaches libpng/spng so both backends agree on the
      * verdict and the error code, and so an absurd dimension is refused before any
-     * row buffer is sized (R16/M1). */
+     * row buffer is sized. */
     if (!ph_png_dimensions_within_limit(buffer, size)) {
         if (out_err)
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
@@ -111,7 +111,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
      * unconditionally longjmp()s to png_jmpbuf(png_ptr), and libpng can raise a fatal
      * error from inside png_create_info_struct() itself (allocation failure). With the
      * setjmp() placed after that call, such a failure jumped through an uninitialized
-     * jmp_buf -- undefined behaviour (R18/M3).
+     * jmp_buf -- undefined behaviour.
      *
      * info_for_cleanup is volatile because it is assigned after setjmp() and read in
      * the longjmp branch: a non-volatile local modified between setjmp and longjmp has
@@ -148,7 +148,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
         // malicious header can't force a huge allocation before we even see w/h.
         /* Only ever LOWER libpng's own per-dimension default (1000000). Passing
          * max_pixels straight through raised it -- with the default 256 MP that meant
-         * telling libpng a 268435456-pixel-wide image is acceptable (R16/M1). */
+         * telling libpng a 268435456-pixel-wide image is acceptable. */
         png_uint_32 dim_limit = (max_pixels > PH_MAX_IMAGE_DIMENSION) ? PH_MAX_IMAGE_DIMENSION
                                                                       : (png_uint_32)max_pixels;
         png_set_user_limits(png_ptr, dim_limit, dim_limit);
@@ -222,7 +222,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     }
 
     /* The only allocation in this decoder that used to skip the overflow check while
-     * its neighbour above went through ph_safe_image_alloc_size() (R17/M2). `h` comes
+     * its neighbour above went through ph_safe_image_alloc_size(). `h` comes
      * straight from the PNG header as a png_uint_32, so on a 32-bit target
      * sizeof(png_bytep) * h wraps and produces a too-small array that png_read_image()
      * then writes past. Refuse instead. */
@@ -277,7 +277,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
 
     /* Checked before the buffer reaches libpng/spng so both backends agree on the
      * verdict and the error code, and so an absurd dimension is refused before any
-     * row buffer is sized (R16/M1). */
+     * row buffer is sized. */
     if (!ph_png_dimensions_within_limit(buffer, size)) {
         if (out_err)
             *out_err = PH_ERR_IMAGE_TOO_LARGE;

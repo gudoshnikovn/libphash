@@ -268,7 +268,7 @@ PH_API void ph_free(ph_context_t *ctx);
  *          ColorMoments ignore it entirely. Setting it and expecting any of those to
  *          change is a mistake the previous wording invited.
  *
- * @note Since 2.0.0 (R52) this follows pHash's own header default (`ph_compare_images()`,
+ * @note Since 2.0.0 this follows pHash's own header default (`ph_compare_images()`,
  *       aetilius/pHash) exactly: gamma defaults to 1.0, not 2.2, pixels are raised to
  *       `gamma` directly rather than `1.0/gamma`, and the buffer is normalised by its
  *       own maximum before the power step and rescaled by the same maximum after.
@@ -276,14 +276,14 @@ PH_API void ph_free(ph_context_t *ctx);
  *       (2.2) with no connection to Radial's reference implementation, and the older
  *       convention and lack of normalisation meant an explicit non-default gamma value
  *       did not mean what a caller porting pHash settings would expect. Changing this
- *       moved every Radial hash; see docs/algorithm-provenance.md section 7 and
- *       tasks/review/R52_gamma_default_and_convention.md for the history and the
- *       measured delta.
+ *       moved every Radial hash; see docs/algorithm-provenance.md section 7 for the
+ *       history and the measured delta.
  *
- * @note TODO(R53): whether gamma belongs in the shared grayscale path (affecting every
- *       algorithm) is a separate question. No reference implementation does that --
- *       ImageHash applies no gamma at all -- so it needs a correctness methodology
- *       before it is attempted, not just a code change.
+ * @note Whether gamma belongs in the shared grayscale path (affecting every algorithm,
+ *       not only Radial) is a deliberately open question, not an oversight. No reference
+ *       implementation among the ones this library follows does that -- ImageHash
+ *       applies no gamma at all -- so extending it would need its own correctness
+ *       methodology, not just a code change, and none exists yet.
  *
  * @param ctx The context.
  * @param gamma The gamma value (e.g., 1.0). Must be finite and in (0.001, 1000].
@@ -332,7 +332,7 @@ PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, i
  * @param dct_size Size of the DCT matrix, 1..32 (default 32).
  * @param reduction_size Size of the low-frequency coefficient block to keep,
  *                       2..8 and <= @p dct_size (default 8). The lower bound is 2, not 1:
- *                       since 2.0.0 (R61) the DC coefficient is excluded from the hash, so
+ *                       since 2.0.0 the DC coefficient is excluded from the hash, so
  *                       reduction_size == 1 would leave no AC coefficients at all and the
  *                       hash would be the fixed value 0 for every image, regardless of
  *                       content. 2 is the smallest size that leaves at least one AC
@@ -365,7 +365,7 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
  *        projection's variance can be nonzero.
  * @param sigma Gaussian blur sigma applied before the projections are taken, in
  *        (0, 64/3] (default 3.5, pHash's own header default -- see
- *        ph_context_set_gamma()). Since 2.0.0 (R52) this replaces a fixed, unparameterised
+ *        ph_context_set_gamma()). Since 2.0.0 this replaces a fixed, unparameterised
  *        3x3 kernel; passing a value outside the accepted range no longer reproduces the
  *        old hashes for those images that relied on the previous fixed blur. The upper
  *        bound is where the underlying blur's kernel radius, ceil(3*sigma), reaches its
@@ -389,7 +389,7 @@ PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projection
  * truncate the digest to 64 bytes, hash the full grid anyway and return @c PH_SUCCESS — a partial
  * result indistinguishable from a complete one. The lower bound is 2, not 1: with a single
  * block its mean equals itself, the median of one value is that same value, the threshold
- * is ">=" (R60) and is therefore always true, so the digest is the fixed 0x01 for every
+ * is ">=" and is therefore always true, so the digest is the fixed 0x01 for every
  * image regardless of content. 2 is the smallest grid whose blocks can have different
  * means and therefore a content-dependent bit pattern.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
@@ -593,7 +593,6 @@ PH_API ph_error_t ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixe
  *         against an unrelated image. wHash was also seen to exceed its contract
  *         (39.1% vs. 21.9%) on pure high-frequency noise, which is not representative
  *         of real photos but establishes an upper bound.
- *       Full measurement notes: `tasks/review/PROGRESS.md`, "R57" entries.
  *
  * @note **Radial, ColorMoments and ColorHash are not resize-based** — they compute
  *       directly over the decoded buffer, so at any setting other than

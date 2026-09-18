@@ -25,7 +25,7 @@
  * it off, because it is the identity here and there: zeroing that single coefficient and
  * reconstructing subtracts the image mean from every sample, a constant subtraction
  * shifts the working LL band and its median alike, and a median threshold is blind to
- * that. See ph_context_set_whash_remove_max_haar_ll() and R67 in tasks/review/.
+ * that. See ph_context_set_whash_remove_max_haar_ll().
  *
  * The transform itself is the orthonormal Haar wavelet: sums and differences of
  * adjacent samples, both divided by sqrt(2).

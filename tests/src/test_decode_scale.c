@@ -1,7 +1,7 @@
 /* ph_context_set_decode_scale(): opt-in reduced-resolution JPEG decode. Default is
  * PH_DECODE_SCALE_FULL, so the invariant this file exists to pin is "nothing changes
- * unless a caller explicitly asks" -- see the setter's doc comment in libphash.h and
- * tasks/review/PROGRESS.md ("R57") for the measurements behind that default. */
+ * unless a caller explicitly asks" -- see the setter's doc comment in libphash.h for
+ * the measurements behind that default. */
 #include "libphash.h"
 #include "test_macros.h"
 #include <stdio.h>

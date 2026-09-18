@@ -85,7 +85,7 @@ void test_parameter_validation(void) {
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_gamma(ctx, -1.0f));
     ASSERT_FLOAT_EQ((double)old_gamma, (double)ctx->config.gamma, 0.0001);
 
-    /* Gray weights validation. Since R04 a zero sum is an error, NOT a silent reset to
+    /* Gray weights validation. A zero sum is an error, NOT a silent reset to
      * the BT.601 defaults -- so custom weights are installed first and have to survive
      * the rejected call. Asserting against the defaults would pass either way. */
     ASSERT_OK(ph_context_set_gray_weights(ctx, 128, 0, 0));
@@ -117,7 +117,7 @@ void test_parameter_validation(void) {
     PASS("test_parameter_validation");
 }
 
-/* R04 / M12: every ph_context_set_* reports an invalid argument and leaves the
+/* Every ph_context_set_* reports an invalid argument and leaves the
  * configuration untouched. NULL context first, then per-setter ranges. */
 void test_setter_error_contract(void) {
     ph_context_t *ctx = NULL;
@@ -137,7 +137,7 @@ void test_setter_error_contract(void) {
 
     /* --- gamma: non-finite values used to pass validation --- */
     /* Every comparison against NaN is false, so `gamma <= PH_GAMMA_EPSILON` let NAN
-     * through; before R52 this filled a context-wide LUT with NaN and every subsequent
+     * through; before this fix this filled a context-wide LUT with NaN and every subsequent
      * hash silently became garbage (measured: aHash = 00000000ffffffff, PH_SUCCESS).
      * INFINITY got through the same guard. There is no LUT any more (gamma is applied
      * per-image, see ph_apply_gamma() in src/image/color.c), but ctx->config.gamma
@@ -194,7 +194,7 @@ void test_setter_error_contract(void) {
     ASSERT_INT_EQ(1, ctx->config.auto_orient);
     ASSERT_OK(ph_context_set_auto_orient(ctx, 0));
     ASSERT_INT_EQ(0, ctx->config.auto_orient);
-    /* Above the implementation ceiling is still a valid request: R48 applies the ceiling
+    /* Above the implementation ceiling is still a valid request: the library applies the ceiling
      * at load time, so there is nothing for the setter to refuse. */
     ASSERT_OK(ph_context_set_max_pixels(ctx, 0));
     ASSERT_OK(ph_context_set_max_pixels(ctx, UINT64_MAX));
@@ -204,7 +204,7 @@ void test_setter_error_contract(void) {
     PASS("test_setter_error_contract");
 }
 
-/* R04: the concrete consequence of the gamma defect, measured through the public API.
+/* The concrete consequence of the gamma defect, measured through the public API.
  *
  * The Radial hash is the one algorithm that consumes the gamma LUT (ph_apply_gamma() is
  * called from src/hashes/radial.c only), so it is the algorithm that shows the damage.

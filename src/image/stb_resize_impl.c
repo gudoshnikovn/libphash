@@ -1,6 +1,6 @@
 /*
  * Sole translation unit that instantiates the vendored stb_image_resize2
- * implementation (R46).
+ * implementation.
  *
  * Why this file exists at all — it holds nothing but the #define/#include pair:
  *
@@ -15,7 +15,8 @@
  *
  * Under `-fsanitize=undefined` it produced 5 `runtime error: load/store of
  * misaligned address ... for type 'stbir_uint64'` per test run, which drowned
- * out our own findings (that noise is exactly why defect H6 went unnoticed).
+ * out our own findings (that noise is exactly why an unrelated pixel-count overflow
+ * defect elsewhere in the library went unnoticed for a while).
  *
  * The build therefore compiles THIS FILE ONLY with `-fno-sanitize=alignment`
  * (see the `STB_NOSAN_CFLAGS` rule in the Makefile and the

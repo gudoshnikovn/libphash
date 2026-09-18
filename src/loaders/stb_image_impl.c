@@ -1,6 +1,6 @@
 /*
- * Sole translation unit that instantiates the vendored stb_image implementation
- * (R56). Its only content is the #define/#include pair and the thread-local
+ * Sole translation unit that instantiates the vendored stb_image implementation.
+ * Its only content is the #define/#include pair and the thread-local
  * guard that depends on it -- everything else stays in src/core.c.
  *
  * stb_image previously had STB_IMAGE_IMPLEMENTATION defined directly inside
@@ -9,7 +9,7 @@
  * A change to core.c that never touches decoding could still shuffle the
  * decoder's code layout in the binary and move loading-benchmark numbers by as
  * much as the 10% regression-gate threshold, purely from alignment (measured
- * at R20/R56: loading_grayscale/loading_rgb moved by up to ~15% across three
+ * at one point: loading_grayscale/loading_rgb moved by up to ~15% across three
  * builds of byte-identical source that only varied -falign-functions). Giving
  * stb_image its own TU makes core.c's own code layout independent of the
  * decoder's.

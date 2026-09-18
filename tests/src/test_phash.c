@@ -43,7 +43,7 @@ void test_dct2_partial_unit() {
     // (though for a symmetric kernel it might just be swapped in rows/cols)
     ASSERT_FLOAT_EQ(out[0], out_t[0], 0.1); // DC should be same
 
-    // Case 3 (R02): out-of-range sizes must be reported, and `out` must be left
+    // Case 3: out-of-range sizes must be reported, and `out` must be left
     // untouched instead of being silently skipped.
     for (int i = 0; i < 64; i++)
         out[i] = -12345.0f;
@@ -95,7 +95,7 @@ void test_phash_e2e() {
     PASS("test_phash_e2e");
 }
 
-/* R02: the public setter must reject out-of-range parameters and leave the
+/* The public setter must reject out-of-range parameters and leave the
  * previously configured (valid) values in place. */
 void test_phash_params_setter_bounds() {
     ph_context_t *ctx = NULL;
@@ -106,7 +106,7 @@ void test_phash_params_setter_bounds() {
     ASSERT_INT_EQ(PH_DCT_REDUCTION_SIZE, ctx->config.phash_reduction_size);
 
     /* dct_size above the supported maximum -> rejected, config untouched.
-     * Since R04 the rejection is also reported to the caller. */
+     * The rejection is also reported to the caller. */
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, 33, 8));
     ASSERT_INT_EQ(PH_DCT_SIZE, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(PH_DCT_REDUCTION_SIZE, ctx->config.phash_reduction_size);
@@ -116,9 +116,9 @@ void test_phash_params_setter_bounds() {
     ASSERT_INT_EQ(PH_DCT_SIZE, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(PH_DCT_REDUCTION_SIZE, ctx->config.phash_reduction_size);
 
-    /* R74: reduction_size == 1 is the old documented minimum, but since R61 it leaves no
-     * AC coefficient at all -> the hash would be the fixed value 0 for every image.
-     * Rejected, config untouched. */
+    /* reduction_size == 1 is the old documented minimum, but since the DC coefficient
+     * is excluded it leaves no AC coefficient at all -> the hash would be the fixed value 0 for
+     * every image. Rejected, config untouched. */
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, 32, 1));
     ASSERT_INT_EQ(PH_DCT_SIZE, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(PH_DCT_REDUCTION_SIZE, ctx->config.phash_reduction_size);
@@ -133,7 +133,7 @@ void test_phash_params_setter_bounds() {
     ASSERT_INT_EQ(16, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(4, ctx->config.phash_reduction_size);
 
-    /* R74: the new minimum, 2, still succeeds. */
+    /* The new minimum, 2, still succeeds. */
     ASSERT_OK(ph_context_set_phash_params(ctx, 16, 2));
     ASSERT_INT_EQ(16, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(2, ctx->config.phash_reduction_size);
@@ -142,7 +142,7 @@ void test_phash_params_setter_bounds() {
     PASS("test_phash_params_setter_bounds");
 }
 
-/* R02: defensive check inside ph_compute_phash(). The config is poisoned
+/* Defensive check inside ph_compute_phash(). The config is poisoned
  * directly (bypassing the setter) to emulate any other way an out-of-range
  * value could reach the hash path. Previously ph_dct2_partial() bailed out
  * silently, leaving the arena-backed dct_out buffer uninitialized, and
@@ -179,7 +179,7 @@ void test_phash_out_of_range_config_rejected() {
     PASS("test_phash_out_of_range_config_rejected");
 }
 
-/* R02: pHash at the boundary parameters must be independent of which
+/* pHash at the boundary parameters must be independent of which
  * algorithms ran before it (i.e. of the arena contents). */
 void test_phash_dirty_arena_determinism() {
     ph_context_t *ctx = NULL;

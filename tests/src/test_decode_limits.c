@@ -82,7 +82,7 @@ void test_custom_higher_limit_allows_normal_image() {
     printf("test_custom_higher_limit_allows_normal_image: PASSED\n");
 }
 
-/* R16/M1: max_pixels bounds the AREA, which on its own permits an absurd aspect
+/* max_pixels bounds the AREA, which on its own permits an absurd aspect
  * ratio. A 268435456 x 1 PNG hits the default 256 MP limit exactly -- w*h is not
  * greater than max_pixels -- yet implies a row buffer of ~800 MB. Worse, passing
  * max_pixels straight into png_set_user_limits() *raised* libpng's own per-dimension

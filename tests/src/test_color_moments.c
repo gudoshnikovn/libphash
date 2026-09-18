@@ -59,7 +59,7 @@ void test_color_moments_e2e() {
     ASSERT_OK(ph_compute_color_moments_hash(ctx, &digest2));
 
     /* Colour moments are nine real-valued features, not a bit vector: the digest is
-     * tagged PH_DIGEST_KIND_VECTOR16 -- two bytes a feature, signed, since R62 -- and
+     * tagged PH_DIGEST_KIND_VECTOR16 -- two bytes a feature, signed -- and
      * Hamming distance over it is refused. L2 is the metric, and it is 0 for an identical
      * image. */
     ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&digest1, &digest2));
@@ -69,7 +69,7 @@ void test_color_moments_e2e() {
     PASS("test_color_moments_e2e");
 }
 
-/* R08: with a grayscale image all three "color" moments used to come out of the same
+/* With a grayscale image all three "color" moments used to come out of the same
  * byte -- three identical channels reported as PH_SUCCESS. Refuse, and leave the
  * caller's digest untouched. */
 void test_color_moments_requires_color() {

@@ -149,7 +149,7 @@ static void gaussian_blur_neon_impl(const uint8_t *src, int w, int h, uint8_t *t
 static int gaussian_blur_impl(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst,
                               bool force_scalar) {
     /* size_t, not int: w * h overflows int above ~46340x46340, which would both
-     * truncate the memcpy() length and mis-size the scratchpad (R03/H6). */
+     * truncate the memcpy() length and mis-size the scratchpad. */
     size_t nbytes = (w > 0 && h > 0) ? (size_t)w * (size_t)h : 0;
 
     if (!ctx || !src || !dst || w < 3 || h < 3) {

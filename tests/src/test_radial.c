@@ -265,7 +265,7 @@ void test_radial_rotation_on_a_photograph() {
     PASS("test_radial_rotation_on_a_photograph");
 }
 
-/* R45. Non-square images, and the consequence of capping the radius at min(w,h)/2.
+/* Non-square images, and the consequence of capping the radius at min(w,h)/2.
  *
  * Every projection is a line of `samples` points through the centre, and the radius is
  * capped so that the line stays inside the image whatever its angle. On a square image
@@ -329,7 +329,7 @@ void test_radial_ignores_everything_outside_the_central_disc() {
     PASS("test_radial_ignores_everything_outside_the_central_disc");
 }
 
-/* R45/R04. The projection count at both ends of its accepted range.
+/* The projection count at both ends of its accepted range.
  *
  * Since 2.0.0 the count is the number of angles only -- the digest is always
  * PH_RADIAL_COEFFS bytes of DCT coefficients -- so the two bounds mean different things

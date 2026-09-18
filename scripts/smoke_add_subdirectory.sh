@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# R11/H3 + R51: libphash must not reconfigure a parent project that pulls it in via
+# libphash must not reconfigure a parent project that pulls it in via
 # add_subdirectory(), and the result must actually BUILD and RUN -- with the parent
 # building static or shared, and across a repeated configure of the same build tree.
 #
-# R11/H3: the zlib-ng block used to force BUILD_SHARED_LIBS, BUILD_TESTING and
+# The zlib-ng block used to force BUILD_SHARED_LIBS, BUILD_TESTING and
 # ZLIB::ZLIB / ZLIB_INCLUDE_DIR / ZLIB_LIBRARY into the cache, silently turning off
 # the parent's shared build and its ctest.
 #
-# R51: the ZLIB_INCLUDE_DIR/ZLIB_LIBRARY pins were still forced into the cache, so on
-# the SECOND configure of the same build tree libphash mistook its own pin for "the
-# parent brought its own zlib", stood aside, and left libpng linking an absolute path
-# to a zlib-ng archive no target produced any more:
+# A follow-up defect: the ZLIB_INCLUDE_DIR/ZLIB_LIBRARY pins were still forced into the
+# cache, so on the SECOND configure of the same build tree libphash mistook its own pin
+# for "the parent brought its own zlib", stood aside, and left libpng linking an
+# absolute path to a zlib-ng archive no target produced any more:
 #   No rule to make target 'phash_build/vendor/zlib-ng/libz.a', needed by 'parent_app'
 # Hence the re-configure step below -- a plain `cmake -S . -B build` re-run, which is
-# what every incremental build does. Without it this script has no teeth for R51.
+# what every incremental build does. Without it this script has no teeth for that defect.
 #
 # Run from anywhere; exits non-zero on the first violation.
 set -euo pipefail
@@ -78,7 +78,8 @@ int main(int argc, char **argv) {
 EOF
 
 # Both parent configurations get the same treatment: configure, check the parent's
-# cache survived, RE-configure (the R51 trigger), then build and run.
+# cache survived, RE-configure (the trigger for the stale-zlib-pin defect above), then
+# build and run.
 check_parent() {
     local label="$1" shared="$2" expect_shared="$3"
     local build_dir="$WORK_DIR/build-${label}"
@@ -108,7 +109,7 @@ check_parent() {
         exit 1
     fi
 
-    # R51: libphash must not leave its zlib pins in the parent's cache -- that is
+    # libphash must not leave its zlib pins in the parent's cache -- that is
     # exactly what made the second configure stand down and break the link.
     for var in ZLIB_LIBRARY ZLIB_INCLUDE_DIR; do
         if cmake -L "$build_dir" 2>/dev/null | grep -q "^${var}:"; then

@@ -18,7 +18,7 @@
  * so that a negative third moment is handled correctly.
  *
  * The digest keeps all three as signed 16-bit big-endian fixed point in units of
- * 1/PH_COLOR_MOMENT_SCALE (R62). It used to store one unsigned byte each, which threw
+ * 1/PH_COLOR_MOMENT_SCALE. It used to store one unsigned byte each, which threw
  * away the sign of the skewness -- the direction of the asymmetry, half of what the third
  * moment says -- so that two images with mirrored channel distributions produced
  * identical bytes. It also clamped at 255 and truncated to whole units; at this scale
@@ -42,7 +42,7 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
     if (ctx->image.width <= 0 || ctx->image.height <= 0)
         return PH_ERR_EMPTY_IMAGE;
 
-    /* R08/M13: with fewer than 3 channels every moment would be computed from the same
+    /* With fewer than 3 channels every moment would be computed from the same
      * byte, yielding three identical channels under a PH_SUCCESS. Refuse, and do it
      * before touching out_digest so a failed call leaves the caller's buffer alone. */
     if (ctx->image.channels < 3)
@@ -53,7 +53,7 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
     out_digest->kind = (uint8_t)PH_DIGEST_KIND_VECTOR16; /* nine signed 16-bit fixed-point
                                                             moments: use ph_l2_distance() */
 
-    /* size_t, not int: width * height overflows int above ~46340x46340 (R03/H6). */
+    /* size_t, not int: width * height overflows int above ~46340x46340. */
     size_t num_pixels = (size_t)ctx->image.width * (size_t)ctx->image.height;
 
     for (int c = 0; c < PH_COLOR_CHANNELS; c++) {

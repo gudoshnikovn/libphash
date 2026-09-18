@@ -71,7 +71,7 @@ void test_config_radial_params() {
     // Below the coefficient count there is no hash to compute, and the setter says so.
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(ctx, 39, 128, 3.5f));
 
-    // sigma (R52): a much narrower blur has to change the hash too, or the parameter
+    // sigma: a much narrower blur has to change the hash too, or the parameter
     // set_gamma()-style would be doing nothing once accepted.
     ph_digest_t d3;
     ASSERT_OK(ph_context_set_radial_params(ctx, 180, 128, 0.5f));

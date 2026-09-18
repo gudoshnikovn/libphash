@@ -137,7 +137,7 @@ static void test_gray_null_ctx_uses_defaults(void) {
 
 static void test_gamma_identity_lut(void) {
     /* gamma=1.0 -> pow(v/max, 1.0)*max = v for any max > 0: an exact identity, and the
-     * default since R52, so this holds even without an explicit set_gamma() call. */
+     * default, so this holds even without an explicit set_gamma() call. */
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
     uint8_t data[] = {0, 64, 128, 192, 255};
@@ -151,10 +151,10 @@ static void test_gamma_identity_lut(void) {
 }
 
 static void test_gamma_2_2_midpoint(void) {
-    /* R52: gamma now raises pixels to `gamma` directly (not `1.0/gamma`) and normalises
+    /* gamma raises pixels to `gamma` directly (not `1.0/gamma`) and normalises
      * by the buffer's own maximum rather than assuming a fixed 0..255 span. With 255
      * present in the buffer, max=255 and the formula collapses to the same shape the
-     * pre-R52 LUT had, just with the exponent the other way round:
+     * old fixed-table LUT had, just with the exponent the other way round:
      * expected = round(pow(128/255, 2.2) * 255) */
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
@@ -172,7 +172,7 @@ static void test_gamma_uniform_image(void) {
     /* A flat buffer's only value is its own maximum, so normalised == 1 and
      * pow(1, gamma) == 1 for any gamma: a uniform image is invariant to gamma entirely,
      * not merely mapped through some non-trivial fixed point. This is the direct
-     * consequence of normalising by the buffer's own maximum (R52) rather than by a
+     * consequence of normalising by the buffer's own maximum rather than by a
      * fixed 0..255 span, where a non-255 uniform value would have moved. */
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));

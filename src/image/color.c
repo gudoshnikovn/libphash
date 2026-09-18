@@ -18,7 +18,7 @@ uint8_t *ph_get_gray(ph_context_t *ctx) {
         /* One byte per pixel. The size must be computed in size_t: an int product
          * wraps above ~46340x46340 and would hand malloc() a bogus (often negative,
          * i.e. huge after conversion) size while ph_to_grayscale() still writes
-         * w * h bytes -- a heap overflow (R03/H6). */
+         * w * h bytes -- a heap overflow. */
         size_t gray_size;
         if (!ph_safe_image_alloc_size((uint64_t)ctx->image.width, (uint64_t)ctx->image.height, 1,
                                       &gray_size)) {
@@ -69,7 +69,7 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
                      uint8_t *dst) {
     if (w <= 0 || h <= 0)
         return;
-    /* size_t, not int: w * h overflows int above ~46340x46340 (R03/H6). */
+    /* size_t, not int: w * h overflows int above ~46340x46340. */
     size_t num_pixels = (size_t)w * (size_t)h;
     const uint8_t *s = src;
     uint8_t *d = dst;
@@ -127,7 +127,7 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
  * The setting lives on the context and reads as general preprocessing, but no other
  * algorithm touches it -- see the warning on ph_context_set_gamma().
  *
- * R52: normalises the buffer by its own maximum before the power step and rescales by
+ * Normalises the buffer by its own maximum before the power step and rescales by
  * that same maximum after -- `out = (in / max)^gamma * max` -- the way pHash's own
  * radial digest does, rather than treating every buffer as if it already spanned the
  * full 0..255 range. This is what makes gamma == 1.0 an exact identity for any image,
@@ -138,7 +138,7 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
 void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h) {
     if (!ctx || !data || w <= 0 || h <= 0)
         return;
-    // size_t: w * h overflows int (R03/H6).
+    // size_t: w * h overflows int.
     size_t num_pixels = (size_t)w * (size_t)h;
 
     // gamma == 1.0 (the default) is an identity transform regardless of the buffer's

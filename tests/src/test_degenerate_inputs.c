@@ -1,11 +1,11 @@
-/* R45 -- what every algorithm does with an image that has no structure to describe.
+/* What every algorithm does with an image that has no structure to describe.
  *
  * The nine algorithms are written for photographs, and a photograph is never 1x1, never
  * a single solid colour and never one pixel wide. Those inputs still reach the library:
  * a thumbnail, a spacer image, a scanner producing a blank page, a caller feeding a video
  * frame that has not started yet. What they must not do is return a value that *looks*
  * like a hash while being a readout of uninitialised memory or of floating-point residue
- * -- that is exactly how H5 (pHash reading an unwritten buffer) reached a release.
+ * -- that is exactly how a defect (pHash reading an unwritten buffer) reached a release.
  *
  * So this file states the answer for each degenerate class rather than leaving it to be
  * discovered later:
@@ -171,7 +171,7 @@ static int popcount_digest(const ph_digest_t *d) {
  * times, with a digest of the width and kind it declares and no stale bytes behind it.
  *
  * Run under ASan/UBSan (`make debug`) this also covers the "reads memory nobody wrote"
- * half of the question, which is the half H5 was: a buffer left unwritten by an
+ * half of the question, which is the half that pHash defect was: a buffer left unwritten by an
  * early-returning resize would show up here as two runs disagreeing even without a
  * sanitizer, since the stack garbage differs between calls. */
 void test_every_algorithm_is_defined_on_degenerate_geometry(void) {
@@ -217,12 +217,13 @@ void test_every_algorithm_is_defined_on_degenerate_geometry(void) {
  * Every one of these follows from the algorithm's own threshold, and each is pinned here
  * so that a change of resampler or of threshold cannot alter it unnoticed:
  *
- *   aHash    every sample equals the mean and the test is `>=` (R68 -- unified with BMH's
+ *   aHash    every sample equals the mean and the test is `>=` (unified with BMH's
  *            tie convention since aHash's own source leaves it unstated), so every bit
  *            is set;
  *   dHash    every horizontal difference is zero and the test is `<`, so no bit is set;
  *   wHash    every LL coefficient equals the median, and the test stays `>` (pinned to
- *            ImageHash's own reference implementation, not moved by R68), so no bit is
+ *            ImageHash's own reference implementation, not moved by the aHash/BMH tie-break
+ *            unification above), so no bit is
  *            set;
  *   mHash    the Laplacian-of-Gaussian response is flat, so every block equals its
  *            window's mean and no bit is set;
@@ -272,7 +273,7 @@ void test_uniform_images_have_documented_digests(void) {
             ASSERT_INT_EQ(1, filled);
             ASSERT_INT_EQ(ph_color_histogram_bin(v, v, v), where);
 
-            /* Since R62 each feature is a signed 16-bit big-endian fixed-point number,
+            /* Each feature is a signed 16-bit big-endian fixed-point number,
              * two bytes wide, in units of 1/PH_VECTOR16_SCALE. */
             for (int c = 0; c < PH_COLOR_CHANNELS; c++) {
                 int feature = c * PH_COLOR_MOMENTS;
@@ -292,7 +293,7 @@ void test_uniform_images_have_documented_digests(void) {
     PASS("test_uniform_images_have_documented_digests");
 }
 
-/* CHARACTERISATION TEST FOR A DEFECT (R45). pHash on a uniform image is a readout of
+/* CHARACTERISATION TEST FOR A DEFECT. pHash on a uniform image is a readout of
  * floating-point rounding error, not a hash.
  *
  * Mathematically every AC coefficient of the DCT of a constant image is exactly zero, so
@@ -361,7 +362,7 @@ void test_phash_of_a_uniform_image_is_rounding_noise(void) {
     PASS("test_phash_of_a_uniform_image_is_rounding_noise");
 }
 
-/* R74 (was a CHARACTERISATION TEST FOR A DEFECT, R45). Three parameter values the
+/* Was a CHARACTERISATION TEST FOR A DEFECT. Three parameter values the
  * setters used to accept collapsed their algorithm to a constant, reporting PH_SUCCESS
  * while doing it:
  *
@@ -375,7 +376,7 @@ void test_phash_of_a_uniform_image_is_rounding_noise(void) {
  *       of one sample is zero. Every projection was flat, so every image got the all-zero
  *       digest that means "no radial structure".
  *
- * The fix (decided and implemented under R74): the setters themselves reject the
+ * The fix: the setters themselves reject the
  * degenerate minimum with PH_ERR_INVALID_ARGUMENT and raise the documented lower bound to
  * 2, which is the smallest value for which each algorithm can still depend on content. */
 void test_parameter_values_that_collapse_the_hash_to_a_constant(void) {
@@ -654,7 +655,7 @@ void test_saturated_colours_are_binned_apart(void) {
             }
         ASSERT_INT_EQ(ph_color_histogram_bin(colours[i].r, colours[i].g, colours[i].b), bins[i]);
 
-        /* Flat in grey, whatever the colour. aHash's tie-break is `>=` (R68), so a flat
+        /* Flat in grey, whatever the colour. aHash's tie-break is `>=`, so a flat
          * image -- every sample equal to the mean -- sets every bit rather than none. */
         ASSERT_UINT64_EQ(0xFFFFFFFFFFFFFFFFULL, r.ahash);
         ASSERT_UINT64_EQ(0ULL, r.dhash);

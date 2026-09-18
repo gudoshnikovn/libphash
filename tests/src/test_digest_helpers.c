@@ -101,7 +101,7 @@ void test_similarity() {
     PASS("test_similarity");
 }
 
-/* R07/M4: ph_digest_t is a flat public struct that callers (notably FFI bindings)
+/* ph_digest_t is a flat public struct that callers (notably FFI bindings)
  * fill in by hand. `size` is a uint8_t, so it can hold 200 while `data` is only
  * PH_DIGEST_MAX_BYTES long -- every public function reading a digest must reject
  * that instead of reading past the end of the array. Run this under ASan: before
@@ -162,7 +162,7 @@ void test_digest_zero_size_not_comparable() {
     PASS("test_digest_zero_size_not_comparable");
 }
 
-/* Mismatched sizes were untested (T5) -- both comparison helpers must say -1
+/* Mismatched sizes were untested -- both comparison helpers must say -1
  * rather than comparing the shorter prefix. */
 void test_digest_size_mismatch() {
     ph_digest_t a = {0}, b = {0};
@@ -180,7 +180,7 @@ void test_digest_size_mismatch() {
 }
 
 /* ph_digest_from_hex documents uppercase support (common.c:174) but it was never
- * tested; and the round trip was only checked on a couple of fixed values (T5). */
+ * tested; and the round trip was only checked on a couple of fixed values. */
 void test_digest_hex_roundtrip_random_and_uppercase() {
     unsigned seed = 12345u; /* fixed: a failure must be reproducible */
     for (int iter = 0; iter < 1000; iter++) {

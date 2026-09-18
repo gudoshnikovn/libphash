@@ -123,7 +123,8 @@ void test_loader_corrupted_backend(void) {
     int w, h, ch;
 
     /* 1. DE AD: claimed by the test-only mock backend when it is compiled in,
-     *    and by nothing at all otherwise (see R10). */
+     *    and by nothing at all otherwise -- that backend is opt-in and not part of
+     *    a normal release build. */
     uint8_t mock_data[4] = {0xDE, 0xAD, 0xBE, 0xEF};
     ph_error_t mock_err = PH_SUCCESS;
     uint8_t *res =

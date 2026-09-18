@@ -1,11 +1,11 @@
 /*
  * test_simd_equivalence.c
  *
- * Covers R28: none of color.c's/filters.c's NEON paths, phash.c's NEON dot product, or
+ * Covers a gap where none of color.c's/filters.c's NEON paths, phash.c's NEON dot product, or
  * common.c's AVX2/SSE4.2/NEON Hamming distance were ever checked against their scalar
  * fallback for producing the same result. A mismatch here means two different hashes for
  * the same input depending on which architecture ran it -- exactly the class of bug that
- * would otherwise surface as an unexplained golden-hash mismatch (R29/R36).
+ * would otherwise surface as an unexplained golden-hash mismatch.
  *
  * Every function below exists in two forms: the production one (compiled with whatever
  * SIMD the target supports) and a `_scalar` twin that always takes the plain C path,
