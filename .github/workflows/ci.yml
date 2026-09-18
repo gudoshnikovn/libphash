@@ -253,11 +253,14 @@ jobs:
         filePath: benchmark_report.md
         comment_tag: performance_report
 
+  # R34: LeakSanitizer is bundled into ASan by default on Linux (unlike macOS,
+  # where it doesn't exist), so it already ran here -- detect_leaks=1 makes that
+  # explicit instead of relying on an upstream default that could silently change.
   sanitizers:
     runs-on: ubuntu-latest
     env:
       CC: clang
-      ASAN_OPTIONS: halt_on_error=1
+      ASAN_OPTIONS: halt_on_error=1:detect_leaks=1
       UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
     steps:
     - uses: actions/checkout@v4
@@ -318,6 +321,41 @@ jobs:
         ./build/test_batch
         ./build/test_batch_stress
         ./build/test_thread_safety
+
+  # R34: independent of ASan/LSan above (Valgrind and ASan don't mix -- ASan's own
+  # shadow memory looks like a leak to Valgrind and vice versa), and it catches a
+  # different class of memory error (e.g. uninitialized-read) that neither
+  # sanitizer nor test_alloc_failure's own shim-based leak accounting covers.
+  # stb-only + a fixed subset, not the whole matrix: Valgrind's own instrumentation
+  # overhead makes a full run too slow for per-PR CI; this subset concentrates on
+  # the allocation-heavy paths (loader, core, batch, the alloc-failure-injection
+  # test itself) that R34 exists to guard.
+  valgrind:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake valgrind
+
+    - name: Configure CMake (stb_image only, no sanitizers)
+      run: >
+        cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
+        -DPHASH_USE_TURBOJPEG=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
+
+    - name: Build
+      run: >
+        cmake --build build --target test_alloc_failure --target test_core
+        --target test_core_extended --target test_loader --target test_batch
+        --target test_pixel_count_overflow -j
+
+    - name: Run subset under Valgrind
+      run: |
+        for t in test_alloc_failure test_core test_core_extended test_loader test_batch test_pixel_count_overflow; do
+          valgrind --error-exitcode=1 --leak-check=full --errors-for-leak-kinds=all ./build/$t
+        done
 
   fuzz:
     runs-on: ubuntu-latest
