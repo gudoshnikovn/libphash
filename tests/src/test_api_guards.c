@@ -191,9 +191,6 @@ void test_hashes_extra_coverage(void) {
     ph_resize_box(src8x8, 8, 8, out, 0, 4);
     ph_resize_box(src8x8, 8, 8, out, 4, 0);
 
-    // Mipmap hit
-    uint8_t src16x16[256] = {0};
-
     ph_free(ctx);
     PASS("test_hashes_extra_coverage");
 }

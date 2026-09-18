@@ -70,7 +70,6 @@ void test_get_gray_alloc(void) {
     ASSERT_OK(ph_create(&ctx));
 
     // Setup a 3-ch image without gray_cache
-    uint8_t rgb[12] = {0};
     ctx->image.width = 2;
     ctx->image.height = 2;
     ctx->image.channels = 3;
