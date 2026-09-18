@@ -39,6 +39,7 @@ sync when you add or flip a switch.**
 | libFuzzer harnesses | `PHASH_BUILD_FUZZERS=OFF` | *n/a* | requires Clang |
 | Test-only mock decoder | `PHASH_ENABLE_MOCK_BACKEND=OFF` | `PHASH_ENABLE_MOCK_BACKEND=0` | must never be on in a shipped build |
 | Strict dependency handling | `PHASH_STRICT_DEPS=OFF` | *n/a* | |
+| Coverage instrumentation | `PHASH_COVERAGE=OFF` | `PHASH_COVERAGE=0` | same flag name, independent implementations (R24) — see below for why one build alone isn't enough |
 
 Both spellings of the thread switch accept the same off-ramp:
 
@@ -64,6 +65,41 @@ concurrent path is worth more than the dependency.
 re-invoke `make` rather than listing `clean` as a sibling prerequisite. The old
 `debug: clean all` shape raced under `-jN`: `clean` deleted object files while other
 jobs were compiling them. Prefer the same shape for any future instrumented mode.
+
+### Two coverage targets, and why one isn't enough (R24)
+
+`make coverage` and `make coverage-cmake` measure disjoint code:
+
+- **`make coverage`** runs the Makefile's stb_image-only build. Every line inside
+  `#ifdef PH_USE_TURBOJPEG` / `PH_USE_LIBPNG` / `PH_USE_SPNG` / `PH_USE_WEBP` in
+  `src/loaders/{jpeg,png,webp}.c` doesn't exist in that binary at all — those
+  backends compile down to nothing but their `ph_can_use_*()` stub. The overall
+  percentage this target reports (currently ~95% lines) does **not** include the
+  native decoders, no matter how high it reads.
+- **`make coverage-cmake`** (`scripts/coverage_cmake.sh`) runs two separate CMake
+  `-DPHASH_COVERAGE=ON` + `ctest` passes — one with the default vendored decoder
+  set (TurboJPEG + libpng + libwebp + zlib-ng, i.e. what CI's `build-and-test` job
+  and releases ship), one with `PHASH_USE_SPNG=ON`/`PHASH_USE_LIBPNG=OFF` (the
+  alternative PNG backend, mutually exclusive with libpng so it needs its own
+  configure) — then merges both `lcov` traces into one report under
+  `docs/coverage/cmake/html/index.html`. This is what actually exercises the
+  `max_pixels` checks, `png_error_fn`/`png_warning_fn` + the `longjmp` that carries
+  libpng's error message out, `spng_strerror()` branches, and the `pitch`/
+  `alloc_size` overflow guards in `jpeg.c` — the code R16, R17 and R18 lived in and
+  that no coverage number before R24 ever measured.
+
+Neither target subsumes the other — always read the two side by side, and treat a
+report that only ran one of them as measuring at most half the decoder surface.
+
+`scripts/coverage_cmake.sh` treats a failing test the same way `make coverage`
+does: coverage is a measurement pass, not a correctness gate, so a `ctest` failure
+prints a warning and the script continues rather than aborting (a failed test still
+executed its lines). If a decoder submodule isn't built locally (e.g. TurboJPEG —
+see `tasks/PROGRESS.md`), that backend's native path simply can't be measured on
+that machine; `find_library(TURBOJPEG_LIB ...)` falls back to stb_image silently in
+that case, same as any other CMake build here, so check the summary's per-file
+breakdown (`lcov --list docs/coverage/cmake/native.info`) rather than assuming the
+option being `ON` means the backend was actually linked.
 
 ### Installed package and `pkg-config`
 
