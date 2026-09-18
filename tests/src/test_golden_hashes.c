@@ -1,19 +1,39 @@
 // Task 13: golden-hash regression test. Computes every algorithm's hash for
 // every valid fixture in tests/data/ and compares against a committed golden
-// file (tests/data/golden_hashes.txt) -- any unintentional change to hash
-// output (e.g. an optimization that subtly changes results) shows up as a
-// failing test here, instead of silently shipping.
+// file (tests/data/golden_hashes.<backend-set>.txt) -- any unintentional
+// change to hash output (e.g. an optimization that subtly changes results)
+// shows up as a failing test here, instead of silently shipping.
 //
-// Comparison is by Hamming distance with a small tolerance
-// (GOLDEN_TOLERANCE_BITS), not exact byte equality: lossy formats (JPEG,
-// WebP) can legitimately decode to very slightly different pixels across
-// decoder backends (e.g. TurboJPEG vs. the stb_image fallback have different
-// IDCT rounding) without anything being wrong. A real algorithm regression
-// moves many bits, not one or two -- the tolerance is tight enough to still
-// catch that.
+// One golden file used to cover every build. It could not: TurboJPEG and the
+// stb_image JPEG fallback round their IDCT differently, so the *same* pixels
+// never reach the hash functions in a TurboJPEG build and a stb-only build --
+// this is not decoder noise absorbable by a tolerance, it is a different
+// input. On darwin-arm64 that alone put 12/72 checks (every mHash/ColorHash/
+// ColorMoments entry on a JPEG fixture) outside a tolerance of 2. So instead
+// of one file, the golden path is namespaced by the backend set the binary
+// was actually built with -- see PH_GOLDEN_BACKEND_SET below, computed from
+// the same PH_USE_* macros the loader dispatches on, never set by hand in CI.
+// Each backend set gets its own committed file; a build picks its file by
+// construction, so switching PHASH_USE_TURBOJPEG/PHASH_USE_LIBPNG/
+// PHASH_USE_SPNG/PHASH_USE_WEBP can never compare against the wrong one.
 //
-// Run with --update to regenerate the golden file after a verified,
-// intentional change to an algorithm's output.
+// What tolerance is still for, once decoder identity is no longer the
+// variable: the *same* decoder can still round its last couple of bits
+// differently across CPU architectures (NEON vs. SSE4.2 in resize.c/DCT), and
+// two 2.0.0 algorithms quantise a continuous value into a byte -- Radial
+// (PH_DIGEST_KIND_COEFFICIENTS) rescales its 40 coefficients by their own
+// per-image min/max before quantising to 0..255, so a one-ULP perturbation in
+// any single coefficient can shift where every other one lands; ColorMoments
+// (PH_DIGEST_KIND_VECTOR16) has a fixed 1/128-per-level scale, so the same
+// perturbation moves a bounded, small number of levels. Both get a wider
+// per-algorithm tolerance than the generic byte-vector default; see
+// GOLDEN_TOLERANCE_LEVELS_FOR() below for the reasoning per algorithm.
+//
+// Run with --update to regenerate the current build's golden file after a
+// verified, intentional change to an algorithm's output. Regenerating one
+// backend set's file does not touch the others -- if the change is real (not
+// decoder-identity noise), regenerate every backend set you can build
+// locally and let CI catch any you can't.
 #include "libphash.h"
 #include "test_macros.h"
 #include <stdio.h>
@@ -21,9 +41,55 @@
 #include <string.h>
 
 #define GOLDEN_TOLERANCE_BITS 2
-/* The same allowance for digests whose bytes are numbers rather than bits: two levels of
- * decoder noise per byte, not two bits over the whole digest. */
+/* The default allowance for digests whose bytes are numbers rather than bits: two
+ * levels of same-decoder, cross-arch rounding noise per byte, not two bits over the
+ * whole digest. Algorithms that amplify that noise get their own wider constant
+ * below instead of a change here. */
 #define GOLDEN_TOLERANCE_LEVELS 2
+/* Radial's per-image min/max rescaling (src/hashes/radial.c) turns a one-ULP
+ * difference in a single DCT coefficient into a shift of the quantisation range for
+ * all 40 -- the generic tolerance above is sized for noise that stays local to one
+ * byte, not noise an upstream normalisation step can spread across the whole
+ * digest. */
+#define GOLDEN_TOLERANCE_LEVELS_RADIAL 8
+/* ColorMoments (src/hashes/color_moments.c) quantises at a fixed 1/128-per-level
+ * scale with no data-dependent rescaling, so the same cross-arch float noise moves a
+ * smaller, bounded number of levels than Radial's -- wider than the generic default,
+ * but not as wide as Radial's. */
+#define GOLDEN_TOLERANCE_LEVELS_COLOR_MOMENTS 4
+
+static int golden_tolerance_levels(const char *algo) {
+    if (strcmp(algo, "Radial") == 0)
+        return GOLDEN_TOLERANCE_LEVELS_RADIAL;
+    if (strcmp(algo, "ColorMoments") == 0)
+        return GOLDEN_TOLERANCE_LEVELS_COLOR_MOMENTS;
+    return GOLDEN_TOLERANCE_LEVELS;
+}
+
+/* The backend set a build actually decodes with, computed from the same PH_USE_*
+ * macros src/loader.c dispatches on -- never set by hand, so it cannot drift out of
+ * sync with what the binary was actually built with. */
+#if defined(PH_USE_TURBOJPEG)
+#define PH_GOLDEN_JPEG_TAG "turbojpeg"
+#else
+#define PH_GOLDEN_JPEG_TAG "stbjpeg"
+#endif
+
+#if defined(PH_USE_LIBPNG)
+#define PH_GOLDEN_PNG_TAG "libpng"
+#elif defined(PH_USE_SPNG)
+#define PH_GOLDEN_PNG_TAG "spng"
+#else
+#define PH_GOLDEN_PNG_TAG "stbpng"
+#endif
+
+#if defined(PH_USE_WEBP)
+#define PH_GOLDEN_WEBP_TAG "webp"
+#else
+#define PH_GOLDEN_WEBP_TAG "nowebp"
+#endif
+
+#define PH_GOLDEN_BACKEND_SET PH_GOLDEN_JPEG_TAG "-" PH_GOLDEN_PNG_TAG "-" PH_GOLDEN_WEBP_TAG
 
 static const char *FIXTURES[] = {
     "photo.jpeg",
@@ -57,7 +123,9 @@ static int g_golden_count = 0;
 static int g_mismatches = 0;
 static int g_checked = 0;
 
-static const char *golden_path(void) { return TEST_DATA_DIR "/golden_hashes.txt"; }
+static const char *golden_path(void) {
+    return TEST_DATA_DIR "/golden_hashes." PH_GOLDEN_BACKEND_SET ".txt";
+}
 
 /* The hex field width has to track PH_DIGEST_MAX_BYTES, not sit at a literal that
  * quietly stops matching it: mHash and ColorHash grew past 64 bytes (128 hex chars) in
@@ -181,11 +249,12 @@ static void check_digest(const char *filename, const char *algo, const ph_digest
         if (diff > worst)
             worst = diff;
     }
-    if (worst > GOLDEN_TOLERANCE_LEVELS) {
+    int tolerance = golden_tolerance_levels(algo);
+    if (worst > tolerance) {
         fprintf(stderr,
                 "[FAIL] test_golden_hashes - %s/%s changed: golden=%s actual=%s (worst byte "
                 "differs by %d, max %d)\n",
-                filename, algo, expected_hex, hex, worst, GOLDEN_TOLERANCE_LEVELS);
+                filename, algo, expected_hex, hex, worst, tolerance);
         g_mismatches++;
     }
 }
@@ -245,7 +314,7 @@ int main(int argc, char **argv) {
     }
 
     load_golden();
-    printf("test_golden_hashes:\n");
+    printf("test_golden_hashes (backend set: %s):\n", PH_GOLDEN_BACKEND_SET);
     for (size_t i = 0; i < NUM_FIXTURES; i++)
         process_fixture(FIXTURES[i], NULL);
 
