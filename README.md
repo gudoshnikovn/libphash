@@ -64,7 +64,7 @@ and [`docs/algorithm-provenance.md`](docs/algorithm-provenance.md).
 
 Each tagged release (`vX.Y.Z`) publishes prebuilt archives on the
 [GitHub Releases page](https://github.com/gudoshnikovn/libphash/releases) for
-linux-x86_64, linux-arm64, macos-arm64, macos-x86_64, and windows-x86_64 — both a
+linux-x86_64, linux-arm64, macos-arm64, and windows-x86_64 — both a
 static (`libphash-X.Y.Z-<platform>.tar.gz`/`.zip`) and a shared
 (`libphash-X.Y.Z-<platform>-shared.tar.gz`/`.zip`) build, each containing
 `include/`, `lib/` (plus `LICENSE` and `THIRD-PARTY-NOTICES.md`), and a

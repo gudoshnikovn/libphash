@@ -28,6 +28,14 @@ jobs:
   # "native" leg: TurboJPEG + libpng + libwebp + zlib-ng, PHASH_STRICT_DEPS=ON so a
   # silently-missing backend fails the build instead of shipping a quietly
   # degraded artifact.
+  # macos-x86_64 (the macos-13 runner label) is deliberately not in this matrix.
+  # It was in the originally agreed platform list, but every validation run of
+  # this workflow (R42) sat queued for 20+ minutes with no runner ever assigned,
+  # while every other platform (including macos-arm64, the same build recipe)
+  # started within seconds. GitHub has been shrinking its Intel-Mac hosted
+  # runner pool in favor of Apple Silicon for a while; this isn't something in
+  # our control or specific to this workflow. macos-arm64 still ships. See
+  # tasks/review/PROGRESS.md for the decision to drop it.
   build:
     strategy:
       fail-fast: false
@@ -42,9 +50,6 @@ jobs:
           - platform: macos-arm64
             os: macos-latest
             needs_nasm: false
-          - platform: macos-x86_64
-            os: macos-13
-            needs_nasm: true
           - platform: windows-x86_64
             os: windows-latest
             needs_nasm: true
@@ -117,8 +122,6 @@ jobs:
             os: ubuntu-24.04-arm
           - platform: macos-arm64
             os: macos-latest
-          - platform: macos-x86_64
-            os: macos-13
           - platform: windows-x86_64
             os: windows-latest
     runs-on: ${{ matrix.os }}
