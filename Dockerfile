@@ -23,11 +23,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+RUN useradd --create-home --shell /bin/bash dev
+
 WORKDIR /workspace
 
 # Submodules must already be checked out on the host (`git submodule update --init
 # --recursive`, per CLAUDE.md) — .dockerignore excludes .git, so this image has no git
 # metadata to init them itself. COPY just picks up whatever vendor/ already contains.
-COPY . /workspace
+COPY --chown=dev:dev . /workspace
+
+USER dev
 
 CMD ["/bin/bash"]
