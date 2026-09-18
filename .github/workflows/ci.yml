@@ -425,9 +425,17 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y cmake nasm pkg-config
 
+    # -DCMAKE_POSITION_INDEPENDENT_CODE=ON: the smoke test below also builds a
+    # SHARED libphash against this same archive. Unlike libpng/webp/zlib-ng
+    # (pulled in via add_subdirectory(), which inherits this project's own -fPIC
+    # from CMakeLists.txt), TurboJPEG is built as a fully separate CMake
+    # invocation that never sees that flag -- without it, linking libphash.so
+    # against libturbojpeg.a fails on Linux with "recompile with -fPIC". Found
+    # during R42's release-workflow validation (same TurboJPEG-then-shared-link
+    # shape as here), see tasks/review/PROGRESS.md.
     - name: Build vendored TurboJPEG
       run: |
-        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
+        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
 
     # cmake --install into a throwaway prefix + build a mini find_package(phash)
