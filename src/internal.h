@@ -208,6 +208,7 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
 /*
  * Constants
  */
+#define PH_HASH_FLAGS_ALL (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH)
 #define PH_DCT_SIZE 32
 #define PH_DCT_REDUCTION_SIZE 8     // We use the top-left 8x8 coefficients
 #define PH_CORE_HASH_SIZE 8         // Standard 8x8 grid for ahash/dhash/phash
