@@ -15,7 +15,15 @@
 // --- Platform & Export Macros ---
 #ifndef PH_API
 #if defined(_WIN32) || defined(__CYGWIN__)
-#ifdef LIBPHASH_EXPORTS
+// PHASH_STATIC_DEFINE: set by CMake for a STATIC build (and for anything
+// linking that exported target) -- a static archive has no import library,
+// so neither dllexport (this isn't the DLL build) nor dllimport (there's no
+// DLL to import from) apply; PH_API must be a no-op. A build system other
+// than this project's own CMakeLists.txt that links libphash statically on
+// Windows must define PHASH_STATIC_DEFINE itself for the same reason.
+#ifdef PHASH_STATIC_DEFINE
+#define PH_API
+#elif defined(LIBPHASH_EXPORTS)
 #define PH_API __declspec(dllexport)
 #else
 #define PH_API __declspec(dllimport)

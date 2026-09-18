@@ -168,6 +168,23 @@ if(PHASH_BUILD_SHARED)
     target_compile_definitions(phash PRIVATE LIBPHASH_EXPORTS)
 else()
     add_library(phash STATIC ${SOURCES})
+    # include/libphash.h's PH_API only knew two Windows cases: building the DLL
+    # itself (LIBPHASH_EXPORTS -> dllexport) or consuming one (the fallback,
+    # dllimport). A static build is neither -- PH_API needs to be a no-op --
+    # and without this, MSVC refuses to even compile the static library itself
+    # (C2491, "definition of dllimport function not allowed", since every
+    # PH_API function's own .c file defines a function its own header just
+    # declared dllimport). Found on a real windows-x86_64 runner while
+    # validating R42's release workflow, which was the first thing to actually
+    # attempt a native-toolchain Windows build of this project (the existing
+    # ci.yml minimal-build (windows-latest) leg hits the identical bug -- same
+    # static default, never yet run on a live GH runner either).
+    #
+    # PUBLIC, not PRIVATE: a consumer linking this exported target must see
+    # the same PH_API expansion this library itself was compiled with, or its
+    # calls resolve to (unnecessary, and on some MSVC versions mismatching)
+    # dllimport thunks against a static archive that has none.
+    target_compile_definitions(phash PUBLIC PHASH_STATIC_DEFINE)
 endif()
 
 target_include_directories(phash PUBLIC
@@ -531,6 +548,15 @@ if(PHASH_IS_TOP_LEVEL)
     )
 
     string(REPLACE ";" " " PHASH_PC_LIBS_PRIVATE_STR "${PHASH_PC_LIBS_PRIVATE}")
+
+    # Mirrors the PUBLIC target_compile_definitions(phash PHASH_STATIC_DEFINE)
+    # above for the pkg-config path (e.g. MinGW consumers, who use pkg-config
+    # rather than find_package(phash)) -- a no-op everywhere except Windows,
+    # where PH_API needs it to know a static archive, not a DLL, is being linked.
+    set(PHASH_PC_CFLAGS_EXTRA "")
+    if(NOT PHASH_BUILD_SHARED)
+        set(PHASH_PC_CFLAGS_EXTRA "-DPHASH_STATIC_DEFINE")
+    endif()
 
     # R15/L11: keep libphash.pc relocatable. Substituting CMAKE_INSTALL_FULL_LIBDIR
     # bakes the configure-time absolute path into the file, so moving (or packaging
