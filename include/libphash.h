@@ -220,7 +220,7 @@ PH_API const char *ph_version(void);
 PH_API int ph_version_number(void);
 
 /**
- * @brief Allocates a new context with default settings (Gamma 2.2).
+ * @brief Allocates a new context with default settings (Gamma 1.0, identity).
  * @param[out] out_ctx Pointer to the created context.
  */
 PH_API PH_NODISCARD ph_error_t ph_create(ph_context_t **out_ctx);
@@ -257,23 +257,28 @@ PH_API void ph_free(ph_context_t *ctx);
 /**
  * @brief Sets the gamma value applied by ph_compute_radial_hash(), and by nothing else.
  *
- * Recomputes the internal lookup table (LUT), which is built as
- * `pow(value, 1.0 / gamma)`. Default value is 2.2.
+ * Applied per image, not through a precomputed table: `out = (in / max)^gamma * max`,
+ * where `max` is the largest value already present in the blurred grayscale buffer.
+ * Default value is 1.0 -- an identity transform, exactly, for any image, because
+ * `(v/max)^1.0 * max == v` algebraically whenever `max > 0`.
  *
  * @warning Despite living on the context, this setting affects **only** the Radial
- *          hash, where the LUT is applied to the blurred grayscale buffer before the
- *          radial projections are taken. aHash, dHash, pHash, wHash, mHash, BMH,
- *          ColorHash and ColorMoments ignore it entirely. Setting it and expecting
- *          any of those to change is a mistake the previous wording invited.
+ *          hash, applied to the blurred grayscale buffer before the radial projections
+ *          are taken. aHash, dHash, pHash, wHash, mHash, BMH, ColorHash and
+ *          ColorMoments ignore it entirely. Setting it and expecting any of those to
+ *          change is a mistake the previous wording invited.
  *
- * @note TODO(R52): the default of 2.2 is very likely wrong. It makes the LUT an active
- *       transform (exponent 1/2.2 = 0.4545) where the reference implementation this
- *       algorithm follows -- pHash's radial digest -- defaults to an identity
- *       transform. pHash also uses the reciprocal convention (it raises pixels to
- *       `gamma`, we raise them to `1.0/gamma`, so pHash's `g` is our `1/g`) and
- *       normalizes the buffer before and after the power step, which we do not.
- *       Changing any of this moves Radial hashes, so it is deliberately NOT part of
- *       2.0.0 -- see tasks/review/R52_gamma_default_and_convention.md.
+ * @note Since 2.0.0 (R52) this follows pHash's own header default (`ph_compare_images()`,
+ *       aetilius/pHash) exactly: gamma defaults to 1.0, not 2.2, pixels are raised to
+ *       `gamma` directly rather than `1.0/gamma`, and the buffer is normalised by its
+ *       own maximum before the power step and rescaled by the same maximum after.
+ *       Before this fix the default was an independently-chosen sRGB display gamma
+ *       (2.2) with no connection to Radial's reference implementation, and the older
+ *       convention and lack of normalisation meant an explicit non-default gamma value
+ *       did not mean what a caller porting pHash settings would expect. Changing this
+ *       moved every Radial hash; see docs/algorithm-provenance.md section 7 and
+ *       tasks/review/R52_gamma_default_and_convention.md for the history and the
+ *       measured delta.
  *
  * @note TODO(R53): whether gamma belongs in the shared grayscale path (affecting every
  *       algorithm) is a separate question. No reference implementation does that --
@@ -281,7 +286,7 @@ PH_API void ph_free(ph_context_t *ctx);
  *       before it is attempted, not just a code change.
  *
  * @param ctx The context.
- * @param gamma The gamma value (e.g., 2.2). Must be finite and in (0.001, 1000].
+ * @param gamma The gamma value (e.g., 1.0). Must be finite and in (0.001, 1000].
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
  *         out-of-range @p gamma.
  *
@@ -358,10 +363,19 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
  *        the same all-flat condition @c PH_RADIAL_FLAT_VARIANCE exists to catch -- and the
  *        digest is all zeroes for every image. 2 is the smallest count for which a
  *        projection's variance can be nonzero.
+ * @param sigma Gaussian blur sigma applied before the projections are taken, in
+ *        (0, 64/3] (default 3.5, pHash's own header default -- see
+ *        ph_context_set_gamma()). Since 2.0.0 (R52) this replaces a fixed, unparameterised
+ *        3x3 kernel; passing a value outside the accepted range no longer reproduces the
+ *        old hashes for those images that relied on the previous fixed blur. The upper
+ *        bound is where the underlying blur's kernel radius, ceil(3*sigma), reaches its
+ *        fixed-buffer cap of 64 -- a larger sigma would be silently narrower than
+ *        requested, which this setter refuses rather than clamp.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
  *         out-of-range value.
  */
-PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projections, int samples);
+PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projections, int samples,
+                                               float sigma);
 
 /**
  * @brief Sets the grid resolution for the Block Mean Hash (BMH).

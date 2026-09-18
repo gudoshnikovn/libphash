@@ -41,8 +41,9 @@ void test_bmh_logic() {
  * rounded up to a byte. It is what a caller has to store, so it is part of the contract
  * and not an implementation detail. */
 static void test_bmh_digest_width_follows_block_size() {
-    const int sizes[] = {2, 8, 16, 22, 31, 32}; /* 2 is the setter's lower bound (R74),
-                                                    32 is its upper bound */
+    const int sizes[] = {2,  8, 16, 22,
+                         31, 32}; /* 2 is the setter's lower bound (R74),
+                                      32 is its upper bound */
 
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));

@@ -353,7 +353,8 @@ void test_radial_projection_count_bounds() {
     for (unsigned i = 0; i < sizeof(counts) / sizeof(counts[0]); i++) {
         ph_context_t *ctx = NULL;
         ASSERT_OK(ph_create(&ctx));
-        ASSERT_OK(ph_context_set_radial_params(ctx, counts[i], PH_RADIAL_SAMPLES));
+        ASSERT_OK(ph_context_set_radial_params(ctx, counts[i], PH_RADIAL_SAMPLES,
+                                               PH_RADIAL_DEFAULT_SIGMA));
         ASSERT_OK(ph_load_from_pixels(ctx, px, SIDE, SIDE, 1, 0));
         memset(&d[i], 0xAA, sizeof(d[i]));
         ASSERT_OK(ph_compute_radial_hash(ctx, &d[i]));
@@ -366,9 +367,9 @@ void test_radial_projection_count_bounds() {
      * refuses is left alone -- so the hash computed afterwards is still the default's. */
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
-    ASSERT_INT_EQ(
-        PH_ERR_INVALID_ARGUMENT,
-        ph_context_set_radial_params(ctx, PH_RADIAL_MIN_PROJECTIONS - 1, PH_RADIAL_SAMPLES));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
+                  ph_context_set_radial_params(ctx, PH_RADIAL_MIN_PROJECTIONS - 1,
+                                               PH_RADIAL_SAMPLES, PH_RADIAL_DEFAULT_SIGMA));
     ASSERT_OK(ph_load_from_pixels(ctx, px, SIDE, SIDE, 1, 0));
     ph_digest_t after_refusal;
     ASSERT_OK(ph_compute_radial_hash(ctx, &after_refusal));

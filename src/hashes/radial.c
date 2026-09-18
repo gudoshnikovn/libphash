@@ -47,14 +47,16 @@
  * the invariance lives in the variance vector, and the DCT does not survive a shift. The
  * measured profile is in docs/algorithm-provenance.md section 7.
  *
- * KNOWN DIVERGENCE FROM THE SOURCE, tracked as a defect in
- * docs/algorithm-provenance.md:
- *
- *      pHash defaults gamma to 1.0 and the blur sigma to 3.5 (ph_compare_images() in its
- *      public header; the thesis reports sigma = 1, which the header contradicts). Here
- *      PH_DEFAULT_GAMMA is 2.2 and the blur is a fixed 3x3 kernel, sigma about 0.707, not
- *      parameterised at all -- so the reference and this code see different pixels before
- *      the variance is ever computed.
+ * R52 -- gamma and blur sigma now follow pHash's own header defaults (ph_compare_images(),
+ * aetilius/pHash): gamma 1.0 (identity), sigma 3.5, applied through ph_gaussian_blur_sigma()
+ * rather than a fixed 3x3 kernel. Before this fix gamma defaulted to 2.2, an independently
+ * chosen sRGB display value with no connection to this algorithm's reference, and the blur
+ * was that fixed kernel (effective sigma about 0.707), not parameterised at all -- so the
+ * reference and this code saw different pixels before the variance was ever computed. The
+ * history, the trust placed in pHash's own code as the source for these two parameters
+ * (Zauner's Diplomarbeit reports the authors merely "suggest 1 for both", which pHash's own
+ * header itself does not follow for sigma), and the measured delta this moved are in
+ * docs/algorithm-provenance.md section 7 and tasks/review/R52_gamma_default_and_convention.md.
  *
  * Deliberate differences: a fixed sample count per projection with bilinear
  * interpolation, rather than summing the pixels of a one-pixel-wide strip whose length
@@ -181,20 +183,21 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     if (!gray)
         return PH_ERR_ALLOCATION_FAILED;
 
-    // `blurred` has to survive the call into ph_apply_gaussian_blur() below, which
-    // itself grabs its own scratchpad region — the arena may grow (reallocating and
-    // freeing its backing buffer) to satisfy that nested request, which would
-    // invalidate any pointer of ours already sitting in the arena. So this one stays
-    // a plain heap allocation; only projection_variances (arena-allocated further
-    // down, after every arena-using call has already happened) gets the scratchpad.
+    // `blurred` and `blur_scratch` are plain heap allocations, not arena ones: the
+    // arena is about to be used for projection_variances further down, and (for
+    // blurred specifically) it has to survive past that nested request regardless --
+    // see ph_gaussian_blur_sigma()'s contract, the same pattern mhash.c uses for its
+    // own sigma blur.
     uint8_t *blurred = (uint8_t *)malloc(img_size);
-    if (!blurred)
-        return PH_ERR_ALLOCATION_FAILED;
-
-    if (!ph_apply_gaussian_blur(ctx, gray, ctx->image.width, ctx->image.height, blurred)) {
+    float *blur_scratch = (float *)malloc(img_size * sizeof(float));
+    if (!blurred || !blur_scratch) {
         free(blurred);
+        free(blur_scratch);
         return PH_ERR_ALLOCATION_FAILED;
     }
+    ph_gaussian_blur_sigma(gray, ctx->image.width, ctx->image.height, ctx->config.radial_sigma,
+                           blur_scratch, blurred);
+    free(blur_scratch);
     ph_apply_gamma(ctx, blurred, ctx->image.width, ctx->image.height);
 
     size_t saved_offset = ctx->arena.offset;

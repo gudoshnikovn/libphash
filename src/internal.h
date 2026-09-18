@@ -38,7 +38,8 @@ int ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_
  * the two against each other; production code should call ph_apply_gaussian_blur(). */
 int ph_apply_gaussian_blur_scalar(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst);
 
-/* Applies Gamma Correction (gamma=2.2) to normalize brightness */
+/* Applies gamma correction, normalised by the buffer's own maximum, default gamma=1.0
+ * (identity). See the implementation in src/image/color.c for the exact formula. */
 void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h);
 
 /* Applies 3x3 Laplacian sharpening for edge preservation */
@@ -252,6 +253,24 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
 #define PH_RADIAL_COEFFS 40
 #define PH_RADIAL_SAMPLES 128
 
+/* R52 -- default Gaussian-blur sigma for Radial, aligned on pHash's own header default
+ * (ph_compare_images(), aetilius/pHash), not on Zauner's Diplomarbeit, which reports "the
+ * authors suggest 1 for both variables" (sigma and gamma) and is contradicted by pHash's
+ * own default here. Before 2.0.0 (well, before this fix) Radial's blur was a fixed 3x3
+ * kernel with no sigma at all (effective sigma about 0.707) -- see
+ * docs/algorithm-provenance.md section 7 and tasks/review/R52_gamma_default_and_convention.md
+ * for the measured delta this moved. */
+#define PH_RADIAL_DEFAULT_SIGMA 3.5f
+
+/* Upper bound on radial sigma: ph_gaussian_blur_sigma() (src/image/filters.c) derives its
+ * kernel radius as ceil(3*sigma) and silently clamps it to 64 rather than growing the
+ * fixed-size kernel array further. A sigma above this bound would be silently narrower
+ * than requested -- exactly the clamping R04's setters refuse to do -- so the setter
+ * rejects it instead. Lower bound is a bare `> 0.0f`: that same function leaves `dst`
+ * entirely unwritten for a non-positive sigma (a precondition, not a clamp), so 0 or
+ * negative values must never reach it. */
+#define PH_RADIAL_MAX_SIGMA (64.0f / 3.0f)
+
 /* Below this spread across the projection variances an image has no radial structure to
  * describe -- it is flat, or radially symmetric -- and the digest is all zeroes rather
  * than a standardisation of floating-point residue. No source specifies the value; it is
@@ -398,17 +417,26 @@ _Static_assert(PH_COLOR_BINS <= PH_DIGEST_MAX_BYTES,
                "the colour histogram must fit a digest, one byte per bin");
 #endif
 
-#define PH_DEFAULT_GAMMA 2.2f
+/* R52 -- aligned on pHash's own default (ph_compare_images(), aetilius/pHash), which is
+ * an identity transform: pow(v, 1.0) == v. Before this fix the default was 2.2, an
+ * independently-chosen sRGB display gamma with no connection to Radial's reference
+ * implementation -- see docs/algorithm-provenance.md section 7 and
+ * tasks/review/R52_gamma_default_and_convention.md for the history and the measured
+ * delta this moved (real photographs: mean PCC-distance 0.08-0.10 between the old and
+ * new default, the same order of magnitude as the library's normal intra-class
+ * variation). Gamma now also raises pixels to `gamma` directly, not `1.0/gamma` --
+ * pHash's own convention -- and normalises the buffer by its own maximum before the
+ * power step and rescales by the same maximum after, so a gamma of 1.0 is exactly a
+ * no-op regardless of image content (see ph_apply_gamma(), src/image/color.c). */
+#define PH_DEFAULT_GAMMA 1.0f
 #define PH_GAMMA_EPSILON 0.001f
 
-/* Upper bound on gamma, chosen as the reciprocal of PH_GAMMA_EPSILON so that the
- * exponent actually used by the LUT, 1.0/gamma, spans a range symmetric about 1.0:
- * [1/1000, 1000]. Measured LUT degeneracy is symmetric too -- the 256-entry LUT holds
- * 78 distinct values at gamma = 0.1 and 79 at gamma = 10, and 3 distinct values at
- * gamma = 0.001 (already accepted before 2.0.0) against 4 at gamma = 1000. So this
- * bound does not make the low and high ends behave differently; its job is to keep
- * 1.0/gamma a meaningful exponent and, together with the isfinite() check in
- * ph_context_set_gamma(), to reject the values that used to poison the whole LUT. */
+/* Upper bound on gamma. The exponent applied to a pixel is now `gamma` directly (see
+ * PH_DEFAULT_GAMMA above), so this bound and PH_GAMMA_EPSILON together keep that
+ * exponent inside [0.001, 1000], a range symmetric about 1.0 in log scale -- same
+ * bounds as before this fix, when they bounded 1.0/gamma instead; the isfinite() check
+ * in ph_context_set_gamma() and this bound together reject the values that used to
+ * poison the whole LUT. */
 #define PH_GAMMA_MAX 1000.0f
 
 /* Upper bound on r + g + b in ph_context_set_gray_weights(). The weights are
@@ -560,8 +588,10 @@ struct ph_context {
 
     // User-defined configuration parameters
     struct {
+        // R52: gamma is applied per-image (normalised by the blurred buffer's own
+        // maximum, not by a context-wide precomputed LUT), so there is no gamma_lut
+        // field here any more -- see ph_apply_gamma(), src/image/color.c.
         float gamma;
-        uint8_t gamma_lut[256];
         int gray_r, gray_g, gray_b;
         int load_grayscale;
         int auto_orient; // Off by default: see ph_context_set_auto_orient().
@@ -574,6 +604,7 @@ struct ph_context {
         int phash_reduction_size;
         int radial_projections;
         int radial_samples;
+        float radial_sigma;
         int block_size;
         ph_whash_mode_t whash_mode;
         int whash_remove_max_haar_ll;

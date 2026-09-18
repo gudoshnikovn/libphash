@@ -561,10 +561,12 @@ about σ; N = 180 angles by default;
 **comparison by peak of cross-correlation (PCC)** with a default threshold of 0.9; and,
 uniquely among the four hashes in the thesis, **no normalisation of image resolution**.
 
-**What this implementation does** (`src/hashes/radial.c`), since 2.0.0: 3×3 Gaussian
-blur, gamma correction with a default of **2.2**, then for each of `radial_projections`
-angles (**default 180**) spread over [0, π), sample `radial_samples` points (**default
-128**) bilinearly along the line through the image centre out to `min(w,h)/2` and compute
+**What this implementation does** (`src/hashes/radial.c`), since 2.0.0: a σ-parameterised
+Gaussian blur (**default σ = 3.5**, pHash's own header default) and gamma correction with
+a default of **1.0** — an exact identity, `pow(v/max, 1.0) * max == v` for any `max > 0` —
+then for each of `radial_projections` angles (**default 180**) spread over [0, π), sample
+`radial_samples` points (**default 128**) bilinearly along the line through the image
+centre out to `min(w,h)/2` and compute
 the variance with exactly the source's formula. That vector is standardised to zero mean
 and unit variance, as pHash's `ph_feature_vector()` does; a vector with no spread — a flat
 image, or one radially symmetric enough that every angle sees the same variance — yields
@@ -605,14 +607,13 @@ separability under cross-correlation was 1.75 instead of 2.46.
 | DCT of the radial variance vector, first 40 coefficients | **fixed in 2.0.0** | Was the algorithm's missing final step — the one the paper credits for the improvement. Now applied, over 180 angles, with the 40 back where the source puts it: the coefficient count. |
 | Comparison by the peak of cross-correlation, threshold 0.9 | **fixed in 2.0.0** | `ph_radial_similarity()`, pHash's `ph_crosscorr()`. One deliberate difference: pHash divides by the first digest's variance alone, which makes its score asymmetric — `crosscorr(x,y)` and `crosscorr(y,x)` disagree. This uses the symmetric Pearson correlation. |
 | Rotation robustness is a few degrees, not arbitrary | not a defect — a property of the algorithm | Measured below. The source is not contradicted; `docs/algorithms.md`'s former "unmatched robustness against rotation (up to 360°)" was this project's own wording and is withdrawn. |
-| **Default gamma 2.2 where pHash defaults to 1.0** | **defect** | Already filed as its own task. `ph_compare_images()` defaults `gamma` to 1.0, and [Z10] agrees. Applying a 2.2 correction by default means the reference and this library see different pixel values before the variance is even computed. |
-| Blur is a fixed 3×3 kernel, σ ≈ 0.707, where pHash defaults σ to 3.5 | **defect, larger than previously recorded** | [Z10] reports the authors as suggesting σ = 1, and that was what this document said; pHash's own header defaults `sigma` to **3.5**. Either way the kernel here is not σ-parameterised at all, and the gap to the reference is wider than a factor of one and a half. Belongs with the gamma task. |
+| Default gamma 1.0, pixels raised to `gamma` directly, normalised by the buffer's own maximum before the power step and rescaled by it after | **fixed (R52)** | Was `PH_DEFAULT_GAMMA = 2.2`, pixels raised to `1.0/gamma`, no normalisation. `ph_compare_images()` defaults `gamma` to 1.0, and [Z10] agrees it is what "the authors suggest" -- though that is a suggestion the thesis records, not a formula the source paper gives; see the research-phase note below on how much that is worth trusting. Measured delta from the old default alone, real photo fixtures: mean PCC-distance 0.08-0.10, the same order of magnitude as this library's normal intra-class variation from benign transforms -- not a formality. Full history and measurement in `tasks/review/R52_gamma_default_and_convention.md` and `tasks/review/PROGRESS.md` ("Ключевые находки", 2026-09-18). |
+| Blur is σ-parameterised (`ph_gaussian_blur_sigma()`), default σ = 3.5 | **fixed (R52)** | Was a fixed, unparameterised 3×3 kernel (effective σ ≈ 0.707). pHash's own header defaults `sigma` to 3.5; [Z10] reports the authors as suggesting σ = 1, which pHash's own header does not follow either -- so 3.5 is the reference *implementation's* choice, not a value derived from the paper. |
 | 128 samples per projection, bilinearly interpolated | deliberate | The source integrates over the pixels of a one-pixel-wide strip, whose count varies with the angle and the image size; a fixed sample count is a different estimator of the same quantity. Cheaper and resolution-independent, but it is an approximation, not the definition. |
 | Radius capped at `min(w,h)/2` | deliberate | Keeps every projection inside the image. The source does not normalise resolution and does not discuss the cap. |
 | Grayscale coefficients | pinned (R68) | As for aHash — see §1. |
 | Coefficients quantised by their own min and max | deliberate, and pHash's | Not in the paper, which says nothing about quantisation. It is what pHash's `ph_dct()` does, it keeps the sign, and it makes the digest invariant to a rescaling of the whole variance vector. The pre-DCT "normalise by the maximum, then take the square root" of earlier versions is gone: a square root before a transform is a different signal, not a scaling. |
 | All-zero digest below a variance of 0.001 on every projection | pinned (R68) | Not in the source, and the source could not supply one — it does not discuss degenerate input. `0.001` is chosen, not inherited: small enough that no real image's projection variance falls under it (measured against the full test corpus), large enough to catch the residual floating-point noise a genuinely flat image leaves in `ph_projection_variance()`. Without it the min-max quantiser would stretch that noise across the whole byte range and manufacture detail that is not there. The threshold predates 2.0.0; recorded here as R68's audit of every "undefined" row in this file. |
-| 3×3 box-weight Gaussian, not a σ-parameterised one | defect, tracked, not fixed here | Same row as "Blur is a fixed 3×3 kernel" above — restated here only because it is also a place this document used to say "undefined" without saying why that is acceptable for now. It is not fully acceptable: it is deferred, deliberately, to the same follow-up task as the gamma default above, because both require a validation gate (a hash-value change plus a product decision on what pHash-conformance is worth here) that this audit does not carry. Parameterising σ properly means generating an N×N kernel at runtime for an arbitrary σ, which is more machinery than R68's scope of "name the constants that already exist and justify them." |
 
 ### What "robust to rotation" amounts to here, measured
 
@@ -654,8 +655,19 @@ would be a departure from the source with no defect to justify it. Not done, and
 planned.
 
 Radial now follows its source end to end: the projections, the standardisation, the
-transform, the quantisation and the comparison. The one open divergence is the gamma
-default.
+transform, the quantisation, the comparison, and, since R52, the gamma and blur-sigma
+defaults and the gamma convention. The last of these is worth being precise about: at
+the default of 1.0 the three variants the R52 task file distinguished (the default
+itself, the exponent convention, and normalising by the buffer's own maximum) are
+algebraically identical -- `(v/max)^1.0 * max == v` regardless of which of the three is
+applied -- so fixing the default alone would have produced the same default behaviour
+as fixing all three together. All three were fixed together anyway, because the
+convention and normalisation matter for a caller who sets a non-default gamma
+explicitly, and split fixes across two releases would have meant two golden-hash
+breaks instead of one. Full history, the trust placed in pHash's own code as the
+source for these two parameters specifically, and the measured delta are in
+`tasks/review/R52_gamma_default_and_convention.md` and `tasks/review/PROGRESS.md`
+("Ключевые находки", 2026-09-18).
 
 ---
 

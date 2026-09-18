@@ -3,7 +3,7 @@
  *
  * Unit tests for low-level image processing primitives:
  *   - ph_to_grayscale
- *   - ph_apply_gamma (via LUT baked into ctx)
+ *   - ph_apply_gamma (per-image normalisation, see src/image/color.c)
  *   - ph_resize_box
  *   - ph_apply_gaussian_blur
  *   - ph_apply_laplacian_3x3
@@ -136,10 +136,10 @@ static void test_gray_null_ctx_uses_defaults(void) {
  * ========================================================= */
 
 static void test_gamma_identity_lut(void) {
-    /* gamma=1.0 → pow(x, 1/1.0) = x → LUT is identity */
+    /* gamma=1.0 -> pow(v/max, 1.0)*max = v for any max > 0: an exact identity, and the
+     * default since R52, so this holds even without an explicit set_gamma() call. */
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
-    ph_context_set_gamma(ctx, 1.0f);
     uint8_t data[] = {0, 64, 128, 192, 255};
     uint8_t copy[5];
     memcpy(copy, data, 5);
@@ -151,33 +151,47 @@ static void test_gamma_identity_lut(void) {
 }
 
 static void test_gamma_2_2_midpoint(void) {
-    /* gamma=2.2, input=128 → expected = round(pow(128/255, 1/2.2) * 255) ≈ 186 */
+    /* R52: gamma now raises pixels to `gamma` directly (not `1.0/gamma`) and normalises
+     * by the buffer's own maximum rather than assuming a fixed 0..255 span. With 255
+     * present in the buffer, max=255 and the formula collapses to the same shape the
+     * pre-R52 LUT had, just with the exponent the other way round:
+     * expected = round(pow(128/255, 2.2) * 255) */
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
-    uint8_t expected = ctx->config.gamma_lut[128];
-    double computed = pow(128.0 / 255.0, 1.0 / 2.2) * 255.0;
-    ASSERT_FLOAT_EQ(computed, (double)expected, 1.0);
+    ASSERT_OK(ph_context_set_gamma(ctx, 2.2f));
+    uint8_t data[] = {128, 255}; /* 255 present so max=255, matching the formula below */
+    ph_apply_gamma(ctx, data, 2, 1);
+    double computed = pow(128.0 / 255.0, 2.2) * 255.0;
+    ASSERT_FLOAT_EQ(computed, (double)data[0], 1.0);
+    ASSERT_UINT8_EQ(255, data[1]); /* the max itself is always fixed under the formula */
     ph_free(ctx);
     PASS("test_gamma_2_2_midpoint");
 }
 
 static void test_gamma_uniform_image(void) {
-    /* All pixels the same value → after gamma all still the same value */
+    /* A flat buffer's only value is its own maximum, so normalised == 1 and
+     * pow(1, gamma) == 1 for any gamma: a uniform image is invariant to gamma entirely,
+     * not merely mapped through some non-trivial fixed point. This is the direct
+     * consequence of normalising by the buffer's own maximum (R52) rather than by a
+     * fixed 0..255 span, where a non-255 uniform value would have moved. */
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_context_set_gamma(ctx, 2.2f));
     uint8_t data[16];
     memset(data, 100, 16);
     ph_apply_gamma(ctx, data, 4, 4);
-    uint8_t expected = ctx->config.gamma_lut[100];
     for (int i = 0; i < 16; i++)
-        ASSERT_UINT8_EQ(expected, data[i]);
+        ASSERT_UINT8_EQ(100, data[i]);
     ph_free(ctx);
     PASS("test_gamma_uniform_image");
 }
 
 static void test_gamma_zero_stays_zero(void) {
+    /* A single black pixel has max=0: ph_apply_gamma() treats this as nothing to
+     * normalise by and leaves the buffer untouched, rather than dividing by zero. */
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_context_set_gamma(ctx, 2.2f));
     uint8_t data[] = {0};
     ph_apply_gamma(ctx, data, 1, 1);
     ASSERT_UINT8_EQ(0, data[0]);
@@ -186,8 +200,11 @@ static void test_gamma_zero_stays_zero(void) {
 }
 
 static void test_gamma_255_stays_255(void) {
+    /* A single pixel at 255 is its own maximum: normalised == 1, pow(1, gamma) == 1,
+     * rescaled by 255 again -- fixed under any gamma, not merely under the identity. */
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_context_set_gamma(ctx, 2.2f));
     uint8_t data[] = {255};
     ph_apply_gamma(ctx, data, 1, 1);
     ASSERT_UINT8_EQ(255, data[0]);

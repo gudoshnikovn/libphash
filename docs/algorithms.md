@@ -57,7 +57,7 @@ good at; the second is not in scope.
 | wHash | this library, after ImageHash | **none** — see below | n/a — justified by measurement |
 | mHash | pHash (construction); Marr & Hildreth 1980 (operator) | implementation + paper | no |
 | BMH | Yang, Gu & Niu | paper, 2006 | no |
-| Radial | De Roover, De Vleeschouwer, Lefèbvre & Macq | paper, 2005 | **yes** — two divergences |
+| Radial | De Roover, De Vleeschouwer, Lefèbvre & Macq | paper, 2005 | no — the gamma/sigma divergence (R52) is fixed |
 | ColorHash | Swain & Ballard (method); this library (quantisation) | paper, 1991 — **not read** | n/a — no conformance claimed |
 | ColorMoments | Stricker & Orengo | paper, 1995 | **yes** — colour space (RGB, not HSV) |
 
@@ -253,10 +253,15 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
 - **Tuning**:
   - `radial_projections` — number of **angles**, default 180, 40–131072.
   - `radial_samples` — default 128 samples per projection.
+  - `radial_sigma` — Gaussian-blur σ applied before the projections, default 3.5, (0, 64/3].
+  - gamma (`ph_context_set_gamma()`) — default 1.0 (identity), affects Radial only.
 - **Changed in 2.0.0**: the DCT the source specifies is now applied and the 40 is back on
   the coefficient count rather than the angle count; the variance vector is standardised
-  before the transform; and the source's comparison is exposed. Radial digests from 1.x do
-  not carry over.
+  before the transform; and the source's comparison is exposed. The gamma default moved
+  from 2.2 to 1.0, the gamma exponent convention flipped to match pHash's, gamma now
+  normalises by the buffer's own maximum, and the blur moved from a fixed 3×3 kernel to a
+  σ-parameterised one defaulting to 3.5 (R52). Radial digests from 1.x, and from before
+  this gamma/sigma change, do not carry over.
 - **Rotation: a few degrees, plus an exact half turn — not arbitrary rotation.** Measured
   on `tests/data/photo.jpeg` against a 0.69 baseline for an unrelated image: 1° → 0.993,
   3° → 0.944, 5° → 0.870, 15° → 0.437, 90° → 0.243, 180° → 0.993. That is what the
@@ -264,8 +269,6 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
   the half turn matches because a projection line at α and at α+180 is the same line. See
   [`algorithm-provenance.md`](algorithm-provenance.md) §7 for why the transform does not
   carry a larger rotation.
-- **Remaining divergence**: the default gamma is 2.2 where pHash defaults to 1.0, and the
-  blur is a fixed 3×3 kernel (σ ≈ 0.707) where pHash defaults σ to 3.5.
 - **Blind spot worth knowing**: an image whose variance is the same at every angle — a
   radially symmetric one — has no angular structure for this descriptor, and hashes to all
   zeroes. Two such images compare as identical.

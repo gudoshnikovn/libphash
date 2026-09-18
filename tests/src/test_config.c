@@ -56,7 +56,7 @@ void test_config_radial_params() {
     // Fewer angles. Since 2.0.0 the digest is always the 40 DCT coefficients, so the
     // width does not follow the projection count -- but the hash still has to react to
     // it, or the setting would be doing nothing.
-    ASSERT_OK(ph_context_set_radial_params(ctx, 60, 128));
+    ASSERT_OK(ph_context_set_radial_params(ctx, 60, 128, 3.5f));
     ASSERT_OK(ph_compute_radial_hash(ctx, &d2));
 
     if (d1.size != 40 || d2.size != 40) {
@@ -69,7 +69,24 @@ void test_config_radial_params() {
     }
 
     // Below the coefficient count there is no hash to compute, and the setter says so.
-    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(ctx, 39, 128));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(ctx, 39, 128, 3.5f));
+
+    // sigma (R52): a much narrower blur has to change the hash too, or the parameter
+    // set_gamma()-style would be doing nothing once accepted.
+    ph_digest_t d3;
+    ASSERT_OK(ph_context_set_radial_params(ctx, 180, 128, 0.5f));
+    ASSERT_OK(ph_compute_radial_hash(ctx, &d3));
+    if (memcmp(d1.data, d3.data, d1.size) == 0) {
+        fprintf(stderr, "Radial hash ignored the sigma change\n");
+        exit(1);
+    }
+
+    // sigma out of range: non-positive, non-finite, and above the kernel-radius cap are
+    // all refused; the configuration is left as sigma=0.5f set above.
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(ctx, 180, 128, 0.0f));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(ctx, 180, 128, -3.5f));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
+                  ph_context_set_radial_params(ctx, 180, 128, 64.0f / 3.0f * 1.01f));
 
     ph_free(ctx);
     printf("  [PASS] Radial Parameters\n");

@@ -106,7 +106,8 @@ void test_parameter_validation(void) {
 
     // Radial validation
     int old_proj = ctx->config.radial_projections;
-    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(ctx, 0, 128));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
+                  ph_context_set_radial_params(ctx, 0, 128, PH_RADIAL_DEFAULT_SIGMA));
     if (ctx->config.radial_projections != old_proj) {
         fprintf(stderr, "[FAIL] Radial params accepted 0 projections\n");
         exit(1);
@@ -126,7 +127,8 @@ void test_setter_error_contract(void) {
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_gamma(NULL, 2.2f));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_gray_weights(NULL, 1, 1, 1));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(NULL, 32, 8));
-    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(NULL, 40, 128));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
+                  ph_context_set_radial_params(NULL, 40, 128, PH_RADIAL_DEFAULT_SIGMA));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(NULL, 16));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_whash_mode(NULL, PH_WHASH_FULL));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_load_grayscale(NULL, 1));
@@ -135,8 +137,12 @@ void test_setter_error_contract(void) {
 
     /* --- gamma: non-finite values used to pass validation --- */
     /* Every comparison against NaN is false, so `gamma <= PH_GAMMA_EPSILON` let NAN
-     * through; the LUT filled with NaN and hashes silently became garbage (measured:
-     * aHash = 00000000ffffffff, PH_SUCCESS). INFINITY got through the same guard. */
+     * through; before R52 this filled a context-wide LUT with NaN and every subsequent
+     * hash silently became garbage (measured: aHash = 00000000ffffffff, PH_SUCCESS).
+     * INFINITY got through the same guard. There is no LUT any more (gamma is applied
+     * per-image, see ph_apply_gamma() in src/image/color.c), but ctx->config.gamma
+     * itself must still be left untouched by a rejected call -- that is what the LUT
+     * check used to stand in for, and is checked directly here instead. */
     float good_gamma = ctx->config.gamma;
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_gamma(ctx, (float)NAN));
     ASSERT_FLOAT_EQ((double)good_gamma, (double)ctx->config.gamma, 0.0001);
@@ -144,17 +150,6 @@ void test_setter_error_contract(void) {
     ASSERT_FLOAT_EQ((double)good_gamma, (double)ctx->config.gamma, 0.0001);
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_gamma(ctx, -(float)INFINITY));
     ASSERT_FLOAT_EQ((double)good_gamma, (double)ctx->config.gamma, 0.0001);
-
-    /* The LUT must still be the one built for the default gamma, i.e. strictly
-     * increasing and ending at 255 -- not the all-NaN table the NAN call produced. */
-    for (int i = 1; i < 256; i++) {
-        if (ctx->config.gamma_lut[i] < ctx->config.gamma_lut[i - 1]) {
-            fprintf(stderr, "[FAIL] gamma LUT is not monotonic at %d\n", i);
-            exit(1);
-        }
-    }
-    ASSERT_UINT8_EQ(0, ctx->config.gamma_lut[0]);
-    ASSERT_UINT8_EQ(255, ctx->config.gamma_lut[255]);
 
     /* gamma bounds: the ceiling is accepted, one step above it is not. */
     ASSERT_OK(ph_context_set_gamma(ctx, PH_GAMMA_MAX));

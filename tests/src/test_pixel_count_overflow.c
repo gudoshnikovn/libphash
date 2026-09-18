@@ -10,6 +10,7 @@
 #include "libphash.h"
 #include "test_macros.h"
 #include <limits.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -129,27 +130,41 @@ void test_setter_bounds_reject_out_of_range(void) {
      * than the largest supported image can resolve. */
     const int bad_projections[] = {1, 39, 200000, INT_MAX, PH_RADIAL_MAX_PROJECTIONS + 1};
     for (size_t i = 0; i < sizeof(bad_projections) / sizeof(bad_projections[0]); i++) {
-        ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
-                      ph_context_set_radial_params(ctx, bad_projections[i], 64));
+        ASSERT_INT_EQ(
+            PH_ERR_INVALID_ARGUMENT,
+            ph_context_set_radial_params(ctx, bad_projections[i], 64, PH_RADIAL_DEFAULT_SIGMA));
         ASSERT_INT_EQ(PH_RADIAL_PROJECTIONS, ctx->config.radial_projections);
         ASSERT_INT_EQ(PH_RADIAL_SAMPLES, ctx->config.radial_samples);
     }
-    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
-                  ph_context_set_radial_params(ctx, 180, PH_RADIAL_MAX_SAMPLES + 1));
+    ASSERT_INT_EQ(
+        PH_ERR_INVALID_ARGUMENT,
+        ph_context_set_radial_params(ctx, 180, PH_RADIAL_MAX_SAMPLES + 1, PH_RADIAL_DEFAULT_SIGMA));
     ASSERT_INT_EQ(PH_RADIAL_SAMPLES, ctx->config.radial_samples);
     /* R74: samples == 1 is the old documented minimum, but the variance of one observation
      * is zero by definition, so every projection is flat and the digest is all-zero for
      * every image -- rejected, config untouched. */
-    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(ctx, 180, 1));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
+                  ph_context_set_radial_params(ctx, 180, 1, PH_RADIAL_DEFAULT_SIGMA));
     ASSERT_INT_EQ(PH_RADIAL_PROJECTIONS, ctx->config.radial_projections);
     ASSERT_INT_EQ(PH_RADIAL_SAMPLES, ctx->config.radial_samples);
-    ASSERT_OK(ph_context_set_radial_params(ctx, PH_RADIAL_MAX_PROJECTIONS, PH_RADIAL_MAX_SAMPLES));
+    ASSERT_OK(ph_context_set_radial_params(ctx, PH_RADIAL_MAX_PROJECTIONS, PH_RADIAL_MAX_SAMPLES,
+                                           PH_RADIAL_DEFAULT_SIGMA));
     ASSERT_INT_EQ(PH_RADIAL_MAX_PROJECTIONS, ctx->config.radial_projections);
     ASSERT_INT_EQ(PH_RADIAL_MAX_SAMPLES, ctx->config.radial_samples);
     /* R74: the new minimum, 2, still succeeds. */
-    ASSERT_OK(ph_context_set_radial_params(ctx, 180, PH_RADIAL_MIN_SAMPLES));
+    ASSERT_OK(
+        ph_context_set_radial_params(ctx, 180, PH_RADIAL_MIN_SAMPLES, PH_RADIAL_DEFAULT_SIGMA));
     ASSERT_INT_EQ(180, ctx->config.radial_projections);
     ASSERT_INT_EQ(PH_RADIAL_MIN_SAMPLES, ctx->config.radial_samples);
+
+    /* sigma: non-positive and non-finite values are rejected, as is anything above the
+     * kernel-radius cap; the ceiling itself is accepted. */
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(ctx, 180, 64, 0.0f));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(ctx, 180, 64, -1.0f));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(ctx, 180, 64, (float)NAN));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
+                  ph_context_set_radial_params(ctx, 180, 64, PH_RADIAL_MAX_SIGMA * 1.01f));
+    ASSERT_OK(ph_context_set_radial_params(ctx, 180, 64, PH_RADIAL_MAX_SIGMA));
 
     ph_free(ctx);
     PASS("test_setter_bounds_reject_out_of_range");
@@ -213,7 +228,7 @@ void test_radial_huge_projections(void) {
 
     /* And the normal path is untouched. */
     ph_context_t *ctx = make_ctx_with_tiny_image(32, 32, 3);
-    ASSERT_OK(ph_context_set_radial_params(ctx, 180, 64));
+    ASSERT_OK(ph_context_set_radial_params(ctx, 180, 64, PH_RADIAL_DEFAULT_SIGMA));
     ph_digest_t d;
     ASSERT_OK(ph_compute_radial_hash(ctx, &d));
     ASSERT_INT_EQ(PH_RADIAL_COEFFS, d.size);

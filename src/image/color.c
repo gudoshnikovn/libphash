@@ -1,4 +1,5 @@
 #include "internal.h"
+#include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -124,13 +125,42 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
 
 /* Applied from exactly one place: ph_compute_radial_hash() (src/hashes/radial.c).
  * The setting lives on the context and reads as general preprocessing, but no other
- * algorithm touches it -- see the warning on ph_context_set_gamma(). */
+ * algorithm touches it -- see the warning on ph_context_set_gamma().
+ *
+ * R52: normalises the buffer by its own maximum before the power step and rescales by
+ * that same maximum after -- `out = (in / max)^gamma * max` -- the way pHash's own
+ * radial digest does, rather than treating every buffer as if it already spanned the
+ * full 0..255 range. This is what makes gamma == 1.0 an exact identity for any image,
+ * not only ones that happen to touch 255: (v/max)^1 * max == v algebraically, for any
+ * max > 0. It also means the LUT can no longer be precomputed once per context -- it
+ * depends on this call's own buffer, not only on gamma -- so it is rebuilt here, once
+ * per call over at most 256 entries, not once per pixel. */
 void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h) {
     if (!ctx || !data || w <= 0 || h <= 0)
         return;
-    // Use the thread-local precomputed LUT. size_t: w * h overflows int (R03/H6).
+    // size_t: w * h overflows int (R03/H6).
     size_t num_pixels = (size_t)w * (size_t)h;
-    for (size_t i = 0; i < num_pixels; i++) {
-        data[i] = ctx->config.gamma_lut[data[i]];
+
+    // gamma == 1.0 (the default) is an identity transform regardless of the buffer's
+    // content -- skip the scan and the LUT build entirely, the common case by far.
+    if (ctx->config.gamma == 1.0f)
+        return;
+
+    uint8_t max_val = 0;
+    for (size_t i = 0; i < num_pixels; i++)
+        if (data[i] > max_val)
+            max_val = data[i];
+    if (max_val == 0)
+        return; // an all-black buffer has nothing to normalise by; already all zero
+
+    uint8_t lut[256];
+    double gamma = (double)ctx->config.gamma;
+    double max_d = (double)max_val;
+    for (int i = 0; i <= (int)max_val; i++) {
+        double normalized = (double)i / max_d;
+        double res = pow(normalized, gamma) * max_d;
+        lut[i] = (uint8_t)(res < 0.0 ? 0.0 : res > 255.0 ? 255.0 : res);
     }
+    for (size_t i = 0; i < num_pixels; i++)
+        data[i] = lut[data[i]];
 }

@@ -121,22 +121,16 @@ PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma) {
 
     /* isfinite() has to come first. The previous guard was `gamma <= PH_GAMMA_EPSILON`,
      * and every comparison against NaN is false, so NAN (and INFINITY, which is also
-     * greater than the epsilon) passed validation. pow() then filled all 256 LUT entries
-     * with NaN, the (uint8_t) conversion of a NaN is undefined, and every subsequent hash
-     * became garbage while the call still reported success -- e.g. gamma = NAN yielded
-     * aHash = 00000000ffffffff with PH_SUCCESS. The upper bound keeps 1.0/gamma a
-     * meaningful exponent; see PH_GAMMA_MAX. */
+     * greater than the epsilon) passed validation, which used to poison a precomputed
+     * LUT. There is no LUT here any more (R52 -- gamma is applied per-image, normalised
+     * by the buffer's own maximum, see ph_apply_gamma() in src/image/color.c), but the
+     * bound stays: it is still what keeps the exponent applied to a pixel meaningful.
+     * The upper bound keeps that exponent inside a range symmetric about 1.0; see
+     * PH_GAMMA_MAX. */
     if (!isfinite((double)gamma) || gamma <= PH_GAMMA_EPSILON || gamma > PH_GAMMA_MAX)
         return PH_ERR_INVALID_ARGUMENT;
 
     ctx->config.gamma = gamma;
-    // Precompute LUT for O(1) access during processing
-    for (int i = 0; i < 256; i++) {
-        double val = i / 255.0;
-        // Standard gamma correction: value^(1/gamma)
-        double res = pow(val, 1.0 / (double)gamma) * 255.0;
-        ctx->config.gamma_lut[i] = (uint8_t)(res > 255.0 ? 255.0 : res);
-    }
     return PH_SUCCESS;
 }
 
@@ -201,21 +195,28 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
     return PH_SUCCESS;
 }
 
-PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projections, int samples) {
+PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projections, int samples,
+                                               float sigma) {
     /* projections: the number of angles. At least PH_RADIAL_COEFFS of them, because the
      * hash is that many DCT coefficients of the vector they form; at most as many as the
      * angular resolution of the largest supported image can distinguish.
      * samples: bounded by the diagonal of the largest image the library will process, and
      * at least PH_RADIAL_MIN_SAMPLES, because a single sample per projection has zero
      * variance by definition and yields the all-zero digest for every image (R74).
+     * sigma: the Gaussian blur applied before the projections are taken (R52). Must be
+     * finite and strictly positive -- ph_gaussian_blur_sigma() leaves its output
+     * unwritten otherwise -- and at most PH_RADIAL_MAX_SIGMA, above which its kernel
+     * radius would be silently narrower than requested.
      * Derivations are next to PH_RADIAL_MIN_PROJECTIONS / PH_RADIAL_MAX_PROJECTIONS /
-     * PH_RADIAL_MIN_SAMPLES / PH_RADIAL_MAX_SAMPLES. */
+     * PH_RADIAL_MIN_SAMPLES / PH_RADIAL_MAX_SAMPLES / PH_RADIAL_MAX_SIGMA. */
     if (!ctx || projections < PH_RADIAL_MIN_PROJECTIONS ||
         projections > PH_RADIAL_MAX_PROJECTIONS || samples < PH_RADIAL_MIN_SAMPLES ||
-        samples > PH_RADIAL_MAX_SAMPLES)
+        samples > PH_RADIAL_MAX_SAMPLES || !isfinite((double)sigma) || !(sigma > 0.0f) ||
+        sigma > PH_RADIAL_MAX_SIGMA)
         return PH_ERR_INVALID_ARGUMENT;
     ctx->config.radial_projections = projections;
     ctx->config.radial_samples = samples;
+    ctx->config.radial_sigma = sigma;
     return PH_SUCCESS;
 }
 
@@ -339,6 +340,7 @@ PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     ctx->config.mhash_size = PH_MH_IMAGE_SIZE;
     ctx->config.radial_projections = PH_RADIAL_PROJECTIONS;
     ctx->config.radial_samples = PH_RADIAL_SAMPLES;
+    ctx->config.radial_sigma = PH_RADIAL_DEFAULT_SIGMA;
     ctx->config.block_size = PH_BLOCK_SIZE;
     ctx->config.whash_mode = PH_WHASH_FAST;
     ctx->config.whash_remove_max_haar_ll = 0;
@@ -354,8 +356,8 @@ PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     ctx->config.auto_orient = 1;
 
     /* PH_DEFAULT_GAMMA is in range by construction, so this cannot fail; checked anyway
-     * because a context whose gamma LUT was never filled would hash every image through
-     * an all-zero table, and calloc() makes that failure look like a valid context. */
+     * so a future change to either constant that breaks that invariant fails loudly
+     * here instead of shipping a context with an unset gamma. */
     if (ph_context_set_gamma(ctx, PH_DEFAULT_GAMMA) != PH_SUCCESS) {
         free(ctx);
         return PH_ERR_INVALID_ARGUMENT;

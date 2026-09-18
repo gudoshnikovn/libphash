@@ -434,9 +434,11 @@ void test_parameter_values_that_collapse_the_hash_to_a_constant(void) {
     {
         ph_context_t *ctx = NULL;
         ASSERT_OK(ph_create(&ctx));
-        ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
-                      ph_context_set_radial_params(ctx, PH_RADIAL_PROJECTIONS, 1));
-        ASSERT_OK(ph_context_set_radial_params(ctx, PH_RADIAL_PROJECTIONS, 2));
+        ASSERT_INT_EQ(
+            PH_ERR_INVALID_ARGUMENT,
+            ph_context_set_radial_params(ctx, PH_RADIAL_PROJECTIONS, 1, PH_RADIAL_DEFAULT_SIGMA));
+        ASSERT_OK(
+            ph_context_set_radial_params(ctx, PH_RADIAL_PROJECTIONS, 2, PH_RADIAL_DEFAULT_SIGMA));
 
         ph_digest_t da, db;
         ASSERT_OK(ph_load_from_pixels(ctx, a, SIDE, SIDE, 1, 0));

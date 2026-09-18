@@ -52,11 +52,11 @@ void test_core_setters_happy_and_edge(void) {
     /* Happy paths. Every setter returns ph_error_t since 2.0.0 (R04), so the expected
      * outcome is asserted rather than discarded -- `ph_context_set_phash_params(ctx, 64,
      * 16)` sat in this list as a "happy path" while actually being rejected. */
-    ASSERT_OK(ph_context_set_gamma(ctx, 1.0f));              // Hits precompute loop
-    ASSERT_OK(ph_context_set_gamma(ctx, 2.2f));              // Hits precompute loop again
+    ASSERT_OK(ph_context_set_gamma(ctx, 1.0f));              // The identity fast path
+    ASSERT_OK(ph_context_set_gamma(ctx, 2.2f));              // An active transform
     ASSERT_OK(ph_context_set_gray_weights(ctx, 30, 60, 10)); // Hits normalization
     ASSERT_OK(ph_context_set_phash_params(ctx, 32, 8));
-    ASSERT_OK(ph_context_set_radial_params(ctx, 60, 256));
+    ASSERT_OK(ph_context_set_radial_params(ctx, 60, 256, PH_RADIAL_DEFAULT_SIGMA));
     ASSERT_OK(ph_context_set_block_params(ctx, 8));
     ASSERT_OK(ph_context_set_load_grayscale(ctx, 1));
     ASSERT_OK(ph_context_set_whash_mode(ctx, PH_WHASH_FULL));
@@ -69,8 +69,10 @@ void test_core_setters_happy_and_edge(void) {
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(NULL, 32, 8));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, 0, 8));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, 64, 16));
-    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(NULL, 40, 128));
-    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_radial_params(ctx, 0, 128));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
+                  ph_context_set_radial_params(NULL, 40, 128, PH_RADIAL_DEFAULT_SIGMA));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
+                  ph_context_set_radial_params(ctx, 0, 128, PH_RADIAL_DEFAULT_SIGMA));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(NULL, 16));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, 0));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_load_grayscale(NULL, 1));
