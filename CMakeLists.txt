@@ -69,6 +69,15 @@ option(PHASH_BUILD_FUZZERS "Build libFuzzer harnesses (requires Clang)" OFF)
 option(PHASH_ENABLE_MOCK_BACKEND "Register the DE AD mock decoder in the loader's backend table (test-only; must never be ON in a shipped build)" OFF)
 option(PHASH_STRICT_DEPS "Fail the configure step instead of silently falling back when a bundled decoder dependency (e.g. vendored TurboJPEG/zlib-ng) can't be found" OFF)
 option(PHASH_ENABLE_THREADS "Let ph_hash_files()/ph_hash_buffers() spawn a pool of OS threads (pthreads/Win32) instead of always running sequentially" ON)
+# R24: `make coverage` (Makefile) only ever measures the stb_image-only path -- the
+# native decoders (src/loaders/{jpeg,png,webp}.c) compile to nothing but their
+# ph_can_use_*() stub under that flow, so their max_pixels checks, error-callback
+# plumbing, and overflow guards (the exact code R16-R18 lived in) are invisible to
+# every coverage number this project has produced. This option instruments *this*
+# CMake build instead, so a Release-equivalent config with the vendored decoders on
+# can be measured; scripts/coverage_cmake.sh drives it (also for the spng variant)
+# and merges both into one report.
+option(PHASH_COVERAGE "Instrument phash and its tests with --coverage (gcov/lcov); see scripts/coverage_cmake.sh" OFF)
 
 # libpng and spng are two alternative implementations of the *same* PNG backend:
 # src/loaders/png.c compiles exactly one of them (#ifdef PH_USE_LIBPNG / #elif
@@ -169,6 +178,14 @@ target_include_directories(phash PUBLIC
 )
 
 target_link_libraries(phash PRIVATE m)
+
+if(PHASH_COVERAGE)
+    # -O0: matches Makefile's `coverage` (PHASH_COVERAGE=1 there too, same intent,
+    # unrelated implementation) -- line/branch counts are only trustworthy without
+    # the reordering/inlining -O3 above already applied to `phash`.
+    target_compile_options(phash PRIVATE --coverage -O0 -g)
+    target_link_options(phash PRIVATE --coverage)
+endif()
 
 if(UNIX AND NOT APPLE)
     target_link_libraries(phash PRIVATE dl)
@@ -579,6 +596,10 @@ if(PHASH_BUILD_TESTS)
             # Match the instrumentation of the library the test links against.
             target_compile_options(${test_name} PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS} -g -O1)
             target_link_options(${test_name} PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS})
+        endif()
+        if(PHASH_COVERAGE)
+            target_compile_options(${test_name} PRIVATE --coverage -O0 -g)
+            target_link_options(${test_name} PRIVATE --coverage)
         endif()
         add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
     endforeach()
