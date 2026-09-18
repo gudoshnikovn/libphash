@@ -161,6 +161,12 @@ coverage:
 	@genhtml docs/coverage/coverage.info --output-directory docs/coverage/html
 	@echo "Coverage report generated at docs/coverage/html/index.html"
 
+# R24: coverage for the CMake build's native decoders (libjpeg-turbo/libpng-or-spng/
+# libwebp/zlib-ng) -- `coverage` above only ever measures the stb_image-only
+# Makefile flow. See scripts/coverage_cmake.sh for what this actually runs.
+coverage-cmake:
+	@./scripts/coverage_cmake.sh
+
 # Legacy/Standalone benchmark target (internal use)
 benchmark: test_benchmark
 	./test_benchmark hash tests/data/photo.jpeg 100
@@ -194,4 +200,4 @@ docker-test: docker-build
 docker-shell: docker-build
 	docker run --rm -it $(DOCKER_IMAGE) bash
 
-.PHONY: all debug test clean format benchmark coverage docker-build docker-test docker-shell install-test
+.PHONY: all debug test clean format benchmark coverage coverage-cmake docker-build docker-test docker-shell install-test
