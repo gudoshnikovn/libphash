@@ -212,8 +212,21 @@ if(PHASH_USE_TURBOJPEG)
     # NO_DEFAULT_PATH: otherwise a system copy (e.g. Homebrew's jpeg-turbo)
     # found on the default search path wins over the vendored static build
     # here, even when both exist -- see tasks/PROGRESS.md known bugs (task 7).
+    #
+    # The extra PATHS entries below are multi-config generator output dirs
+    # (Visual Studio on Windows): a single-config generator (Makefiles, Ninja)
+    # writes turbojpeg-static's archive straight into .../build, but a
+    # multi-config one writes .../build/<CMAKE_BUILD_TYPE> instead, and never
+    # both -- found on a real Windows runner while validating R42's release
+    # workflow (this project's own CMAKE_BUILD_TYPE doesn't apply to that
+    # separate submodule configure, so all four common config names are
+    # searched rather than trying to infer which one was actually built).
     find_library(TURBOJPEG_LIB NAMES turbojpeg turbojpeg-static
                  PATHS ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build
+                       ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build/Release
+                       ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build/RelWithDebInfo
+                       ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build/MinSizeRel
+                       ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build/Debug
                  NO_DEFAULT_PATH)
     if(TURBOJPEG_LIB)
         target_compile_definitions(phash PRIVATE PH_USE_TURBOJPEG)
@@ -226,17 +239,25 @@ if(PHASH_USE_TURBOJPEG)
             ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build
         )
         if(PHASH_INSTALL_PRIVATE_DEPS)
+            # CMAKE_STATIC_LIBRARY_PREFIX/SUFFIX, not a hardcoded "libturbojpeg.a":
+            # that name is only right for Unix ar archives. MSVC's find_library
+            # above resolves TURBOJPEG_LIB to a bare "turbojpeg.lib" (no "lib"
+            # prefix, ".lib" not ".a"), and installing/relinking it under the
+            # wrong name broke both this install step and the INSTALL_INTERFACE
+            # path below on Windows -- same R42 validation run as above.
+            set(PHASH_TURBOJPEG_INSTALLED_NAME
+                "${CMAKE_STATIC_LIBRARY_PREFIX}turbojpeg${CMAKE_STATIC_LIBRARY_SUFFIX}")
             target_link_libraries(phash PRIVATE
-                $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/libturbojpeg.a>)
+                $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/${PHASH_TURBOJPEG_INSTALLED_NAME}>)
             install(FILES ${TURBOJPEG_LIB} DESTINATION ${CMAKE_INSTALL_LIBDIR}
-                    RENAME libturbojpeg.a)
+                    RENAME ${PHASH_TURBOJPEG_INSTALLED_NAME})
             list(APPEND PHASH_PC_LIBS_PRIVATE "-lturbojpeg")
         endif()
     else()
         if(PHASH_STRICT_DEPS)
-            message(FATAL_ERROR "libturbojpeg.a not found in vendor/libjpeg-turbo/build (PHASH_STRICT_DEPS=ON). Build the submodule first: cd vendor/libjpeg-turbo && cmake -B build && cmake --build build --target turbojpeg-static")
+            message(FATAL_ERROR "libturbojpeg (static) not found in vendor/libjpeg-turbo/build (PHASH_STRICT_DEPS=ON). Build the submodule first: cd vendor/libjpeg-turbo && cmake -B build && cmake --build build --target turbojpeg-static --config Release")
         else()
-            message(WARNING "libturbojpeg.a not found in vendor/libjpeg-turbo/build. Falling back to stb_image.")
+            message(WARNING "libturbojpeg (static) not found in vendor/libjpeg-turbo/build. Falling back to stb_image.")
         endif()
     endif()
 endif()
