@@ -59,6 +59,22 @@ static int g_checked = 0;
 
 static const char *golden_path(void) { return TEST_DATA_DIR "/golden_hashes.txt"; }
 
+/* The hex field width has to track PH_DIGEST_MAX_BYTES, not sit at a literal that
+ * quietly stops matching it: mHash and ColorHash grew past 64 bytes (128 hex chars) in
+ * 2.0.0, and a fixed "%128s" here silently truncated their lines mid-digest, which
+ * desynced every fscanf() call after it in the file -- not a crash, just wrong data
+ * read into unrelated fields. Stringify the same constant the buffer itself is sized
+ * from (2 hex chars per byte), so the two cannot drift apart again. */
+/* A literal, not `PH_DIGEST_MAX_BYTES * 2`: the preprocessor stringifies tokens, not
+ * evaluated arithmetic, so `#(PH_DIGEST_MAX_BYTES * 2)` would paste the expression
+ * itself into the format string, not a number. The _Static_assert below is what keeps
+ * this literal from drifting out of sync instead. */
+#define PH_GOLDEN_HEX_DIGITS 256
+_Static_assert(PH_GOLDEN_HEX_DIGITS == PH_DIGEST_MAX_BYTES * 2,
+               "PH_GOLDEN_HEX_DIGITS must track PH_DIGEST_MAX_BYTES");
+#define PH_GOLDEN_STR2(x) #x
+#define PH_GOLDEN_STR(x) PH_GOLDEN_STR2(x)
+
 static void load_golden(void) {
     FILE *f = fopen(golden_path(), "r");
     if (!f) {
@@ -66,8 +82,9 @@ static void load_golden(void) {
         exit(1);
     }
     while (g_golden_count < (int)(sizeof(g_golden) / sizeof(g_golden[0])) &&
-           fscanf(f, "%63s %31s %128s", g_golden[g_golden_count].filename,
-                  g_golden[g_golden_count].algo, g_golden[g_golden_count].hex) == 3) {
+           fscanf(f, "%63s %31s %" PH_GOLDEN_STR(PH_GOLDEN_HEX_DIGITS) "s",
+                  g_golden[g_golden_count].filename, g_golden[g_golden_count].algo,
+                  g_golden[g_golden_count].hex) == 3) {
         g_golden_count++;
     }
     fclose(f);
