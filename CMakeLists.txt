@@ -390,10 +390,20 @@ if(PHASH_USE_ZLIB_NG AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/zlib-ng/CMak
     set(PHASH_ZLIB_TARGET zlib-ng)
     if(PHASH_INSTALL_PRIVATE_DEPS)
         install(TARGETS zlib-ng ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        # CMAKE_STATIC_LIBRARY_PREFIX/SUFFIX, not a hardcoded "libz.a": that
+        # name is only right for a Unix ar archive. Reading OUTPUT_NAME back
+        # rather than assuming "z", same reasoning as PHASH_PNG_LIB_NAME below
+        # -- found on the same real windows-x86_64 runner as that fix, one
+        # vendored dependency later (this one erroring on a Windows *consumer*
+        # of the packaged static archive, not this project's own build).
+        get_target_property(PHASH_ZLIB_LIB_NAME zlib-ng OUTPUT_NAME)
+        if(NOT PHASH_ZLIB_LIB_NAME)
+            set(PHASH_ZLIB_LIB_NAME zlib-ng)
+        endif()
         # Appended after the codec blocks below (not here) so it lands last
         # in link order -- libpng/spng need to precede the zlib they use.
         set(PHASH_ZLIB_INSTALL_LINK_LIB
-            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/libz.a>)
+            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/${CMAKE_STATIC_LIBRARY_PREFIX}${PHASH_ZLIB_LIB_NAME}${CMAKE_STATIC_LIBRARY_SUFFIX}>)
     endif()
 else()
     if(PHASH_USE_ZLIB_NG)
@@ -434,8 +444,17 @@ if(PHASH_USE_LIBPNG)
             set(PHASH_PNG_LIB_NAME png_static)
         endif()
         install(TARGETS png_static ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        # CMAKE_STATIC_LIBRARY_PREFIX/SUFFIX, not a hardcoded "lib...a": that's
+        # only right for a Unix ar archive. libpng appends "_static" to
+        # OUTPUT_NAME on Windows specifically to avoid colliding with the
+        # shared import library's name, so the installed file there is
+        # "libpng16_static.lib" (no "lib" prefix, ".lib" not ".a") -- the old
+        # hardcoded form produced a nonexistent "liblibpng16_static.a" and
+        # broke every Windows consumer of the packaged static archive. Found
+        # on a real windows-x86_64 runner while validating R42's release
+        # workflow.
         list(APPEND PHASH_INSTALL_LINK_LIBS
-            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/lib${PHASH_PNG_LIB_NAME}.a>)
+            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/${CMAKE_STATIC_LIBRARY_PREFIX}${PHASH_PNG_LIB_NAME}${CMAKE_STATIC_LIBRARY_SUFFIX}>)
         list(APPEND PHASH_PC_LIBS_PRIVATE "-l${PHASH_PNG_LIB_NAME}")
         set(PHASH_ZLIB_NEEDED ON)
     endif()
@@ -450,8 +469,11 @@ if(PHASH_USE_SPNG)
     target_include_directories(phash PRIVATE vendor/spng/spng)
     if(PHASH_INSTALL_PRIVATE_DEPS)
         install(TARGETS spng_static ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        # CMAKE_STATIC_LIBRARY_PREFIX/SUFFIX: same portability fix as
+        # PHASH_PNG_LIB_NAME above. This target's OUTPUT_NAME is never
+        # overridden, so it's just its target name, spng_static.
         list(APPEND PHASH_INSTALL_LINK_LIBS
-            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/libspng_static.a>)
+            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/${CMAKE_STATIC_LIBRARY_PREFIX}spng_static${CMAKE_STATIC_LIBRARY_SUFFIX}>)
         list(APPEND PHASH_PC_LIBS_PRIVATE "-lspng_static")
         set(PHASH_ZLIB_NEEDED ON)
     endif()
@@ -490,8 +512,15 @@ if(PHASH_USE_WEBP)
         # its archive installed (phash's own libphash.h is the public surface).
         set_target_properties(webpdecoder PROPERTIES PUBLIC_HEADER "")
         install(TARGETS webpdecoder ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+        # CMAKE_STATIC_LIBRARY_PREFIX/SUFFIX + OUTPUT_NAME, same portability
+        # fix as PHASH_PNG_LIB_NAME above -- read back rather than assuming,
+        # since libwebp's own CMakeLists is out of this project's control.
+        get_target_property(PHASH_WEBP_LIB_NAME webpdecoder OUTPUT_NAME)
+        if(NOT PHASH_WEBP_LIB_NAME)
+            set(PHASH_WEBP_LIB_NAME webpdecoder)
+        endif()
         list(APPEND PHASH_INSTALL_LINK_LIBS
-            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/libwebpdecoder.a>)
+            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/${CMAKE_STATIC_LIBRARY_PREFIX}${PHASH_WEBP_LIB_NAME}${CMAKE_STATIC_LIBRARY_SUFFIX}>)
         list(APPEND PHASH_PC_LIBS_PRIVATE "-lwebpdecoder")
     endif()
 endif()
