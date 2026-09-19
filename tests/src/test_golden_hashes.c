@@ -1,6 +1,6 @@
 // Task 13: golden-hash regression test. Computes every algorithm's hash for
 // every valid fixture in tests/data/ and compares against a committed golden
-// file (tests/data/golden_hashes.<backend-set>.txt) -- any unintentional
+// file (tests/data/golden_hashes.<backend-set>.<arch>.txt) -- any unintentional
 // change to hash output (e.g. an optimization that subtly changes results)
 // shows up as a failing test here, instead of silently shipping.
 //
@@ -19,7 +19,7 @@
 //
 // What tolerance is still for, once decoder identity is no longer the
 // variable: the *same* decoder can still round its last couple of bits
-// differently across CPU architectures (NEON vs. SSE4.2 in resize.c/DCT), and
+// differently across CPU architectures (NEON vs. SSE4.2 in resize.c), and
 // two 2.0.0 algorithms quantise a continuous value into a byte -- Radial
 // (PH_DIGEST_KIND_COEFFICIENTS) rescales its 40 coefficients by their own
 // per-image min/max before quantising to 0..255, so a one-ULP perturbation in
@@ -29,11 +29,19 @@
 // per-algorithm tolerance than the generic byte-vector default; see
 // GOLDEN_TOLERANCE_LEVELS_FOR() below for the reasoning per algorithm.
 //
+// pHash (R78) does NOT get folded into that tolerance: its median-of-63-AC-
+// coefficients threshold (strict >, see src/hashes/phash.c) turns a sub-
+// tolerance cross-arch DCT rounding difference into a Hamming distance as
+// large as ~half the hash on ordinary photos -- no fixed bit tolerance both
+// catches a real pHash regression and survives that swing. It gets its own
+// golden-file dimension instead; see PH_GOLDEN_ARCH_TAG below.
+//
 // Run with --update to regenerate the current build's golden file after a
 // verified, intentional change to an algorithm's output. Regenerating one
-// backend set's file does not touch the others -- if the change is real (not
-// decoder-identity noise), regenerate every backend set you can build
-// locally and let CI catch any you can't.
+// backend-set/arch file does not touch the others -- if the change is real
+// (not decoder-identity or cross-arch DCT noise), regenerate every
+// backend-set/arch combination you can build locally and let CI catch any
+// you can't.
 #include "libphash.h"
 #include "test_macros.h"
 #include <stdio.h>
@@ -91,6 +99,33 @@ static int golden_tolerance_levels(const char *algo) {
 
 #define PH_GOLDEN_BACKEND_SET PH_GOLDEN_JPEG_TAG "-" PH_GOLDEN_PNG_TAG "-" PH_GOLDEN_WEBP_TAG
 
+/* R78: pHash's row-DCT dot product (src/hashes/phash.c) has a NEON-vectorized fast
+ * path (4-lane tree reduction) that only exists for __ARM_NEON and only activates at
+ * the library's default dct_size (32); x86_64 has no equivalent SIMD path for this
+ * function at all, so it always takes the plain sequential scalar loop instead.
+ * Floating-point addition isn't associative, so the two computed DCT coefficients
+ * differ by less than test_simd_equivalence.c's tolerance for exactly this pair of
+ * paths -- but pHash thresholds every AC coefficient against their own median with
+ * strict >, and natural photos commonly cluster many near-zero high-frequency
+ * coefficients tightly around that median, so a sub-tolerance perturbation can shift
+ * the median itself and flip every coefficient sitting close to it at once. This is
+ * decoder-identity-independent (reproduces on both stb and TurboJPEG+libpng) and
+ * reproduces on every 2.0.0 build regardless of PH_USE_* backend selection, unlike
+ * the JPEG-IDCT-rounding split PH_GOLDEN_BACKEND_SET exists for above -- it is
+ * purely a function of which architecture's DCT summation order produced the pixels'
+ * hash, so it gets its own, orthogonal namespace dimension instead of folding into
+ * the backend-set tag. Golden files for an architecture not listed here do not
+ * exist; add one (see PH_GOLDEN_ARCH_TAG's #else) rather than reusing another
+ * architecture's numbers, since nothing here has been shown to agree with them. */
+#if defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
+#define PH_GOLDEN_ARCH_TAG "arm64"
+#elif defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64)
+#define PH_GOLDEN_ARCH_TAG "x86_64"
+#else
+#error                                                                                             \
+    "No golden_hashes.<backend-set>.<arch>.txt exists for this architecture yet -- add PH_GOLDEN_ARCH_TAG for it, run this test with --update to generate the file, and commit it."
+#endif
+
 static const char *FIXTURES[] = {
     "photo.jpeg",
     "photo_copy.jpeg",
@@ -124,7 +159,7 @@ static int g_mismatches = 0;
 static int g_checked = 0;
 
 static const char *golden_path(void) {
-    return TEST_DATA_DIR "/golden_hashes." PH_GOLDEN_BACKEND_SET ".txt";
+    return TEST_DATA_DIR "/golden_hashes." PH_GOLDEN_BACKEND_SET "." PH_GOLDEN_ARCH_TAG ".txt";
 }
 
 /* The hex field width has to track PH_DIGEST_MAX_BYTES, not sit at a literal that
