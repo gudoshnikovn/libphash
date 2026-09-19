@@ -277,7 +277,19 @@ if(PHASH_COVERAGE)
     # -O0: matches Makefile's `coverage` (PHASH_COVERAGE=1 there too, same intent,
     # unrelated implementation) -- line/branch counts are only trustworthy without
     # the reordering/inlining -O3 above already applied to `phash`.
-    target_compile_options(phash PRIVATE --coverage -O0 -g)
+    #
+    # -fprofile-update=atomic: this project's tests run gcov-instrumented code from
+    # multiple threads (test_batch_stress, test_thread_safety), and a static inline
+    # function defined in a header (e.g. ph_safe_image_alloc_size() in internal.h)
+    # gets its own counter instance per translation unit -- default (non-atomic)
+    # counter increments race there and corrupt the merged .gcda, surfacing as
+    # `geninfo: ERROR: Unexpected negative count` when scripts/coverage_cmake.sh
+    # runs lcov --capture (confirmed on real CI). This is a known GCC/gcov
+    # limitation (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68080), not a libphash
+    # bug; the fix is atomic counter updates, not suppressing/ignoring the error,
+    # since that would silently under-report coverage on whatever counters actually
+    # raced instead of reporting a real (if slightly slower) number.
+    target_compile_options(phash PRIVATE --coverage -O0 -g -fprofile-update=atomic)
     target_link_options(phash PRIVATE --coverage)
 endif()
 
@@ -738,7 +750,11 @@ if(PHASH_BUILD_TESTS)
             target_link_options(${test_name} PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS})
         endif()
         if(PHASH_COVERAGE)
-            target_compile_options(${test_name} PRIVATE --coverage -O0 -g)
+            # -fprofile-update=atomic: see the matching comment on the `phash`
+            # target above -- must match here too, since test_batch_stress.c and
+            # test_thread_safety.c are themselves gcov-instrumented and call into
+            # the same racing header-inline functions from multiple threads.
+            target_compile_options(${test_name} PRIVATE --coverage -O0 -g -fprofile-update=atomic)
             target_link_options(${test_name} PRIVATE --coverage)
         endif()
         add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
