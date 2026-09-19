@@ -7,6 +7,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _MSC_VER
+#include <windows.h>
+#endif
+
 /* --- Synthetic TIFF/EXIF buffer builders --------------------------------- */
 
 static void put16(uint8_t *p, uint16_t v, int le) {
@@ -906,11 +910,22 @@ void test_auto_orient_load_path_parity(void) {
     memcpy(tagged + 2, app1 + 2, app1_len);
     memcpy(tagged + 2 + app1_len, orig + 2, (size_t)sz - 2);
 
+#ifdef _MSC_VER
+    /* mkstemp() is POSIX-only; GetTempFileName() already creates the file, so a
+     * plain fopen("wb") to truncate it is the MSVC equivalent here. */
+    char tmp_dir[MAX_PATH];
+    char tmp_path[MAX_PATH];
+    ASSERT(GetTempPathA(sizeof(tmp_dir), tmp_dir) > 0);
+    ASSERT(GetTempFileNameA(tmp_dir, "phx", 0, tmp_path) != 0);
+    FILE *out = fopen(tmp_path, "wb");
+    ASSERT_PTR_NOT_NULL(out);
+#else
     char tmp_path[] = "/tmp/ph_exif_parity_test.XXXXXX";
     int fd = mkstemp(tmp_path);
     ASSERT(fd >= 0);
     FILE *out = fdopen(fd, "wb");
     ASSERT_PTR_NOT_NULL(out);
+#endif
     ASSERT_INT_EQ((int)tagged_len, (int)fwrite(tagged, 1, tagged_len, out));
     fclose(out);
 

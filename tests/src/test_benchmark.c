@@ -69,6 +69,13 @@ double get_time_sec() {
     if (tb.denom == 0)
         mach_timebase_info(&tb);
     return (double)mach_absolute_time() * tb.numer / tb.denom / 1e9;
+#elif defined(_MSC_VER)
+    static LARGE_INTEGER freq;
+    LARGE_INTEGER now;
+    if (freq.QuadPart == 0)
+        QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&now);
+    return (double)now.QuadPart / (double)freq.QuadPart;
 #else
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
