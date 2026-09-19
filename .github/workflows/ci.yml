@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'release/**' ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, 'release/**' ]
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -192,34 +193,55 @@ jobs:
     - name: Run Tests
       run: cd build && ctest --output-on-failure
 
-  # Task 16: compares the PR against its base commit built in this same job
-  # (not against hardcoded numbers) to keep GH-hosted-runner noise out of the
+  # Task 16: compares the PR (or, on a plain push -- this repo's internal
+  # feature/... -> release/vX.Y.Z flow never opens a GitHub PR, see R77 --
+  # the pushed commit) against its base commit built in this same job (not
+  # against hardcoded numbers) to keep GH-hosted-runner noise out of the
   # comparison -- see tasks/16_benchmark_regression_gate.md. Warning-only for
   # now (STRICT unset below): flip to STRICT=1 once the signal has proven
-  # stable across a handful of real PRs, per tasks/PROGRESS.md.
+  # stable across a handful of real runs, per tasks/PROGRESS.md.
   benchmark:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout PR branch
+    - name: Checkout head
       uses: actions/checkout@v4
       with:
         submodules: recursive
         path: pr
 
-    - name: Checkout base branch
+    - name: Determine base commit
+      id: base
+      run: |
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          echo "sha=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
+        elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+          # First push of a new branch -- no prior commit on this ref to diff
+          # against (git rev-parse HEAD^ inside the shallow `pr` checkout
+          # would also fail here for the same reason: no parent was fetched).
+          echo "sha=" >> "$GITHUB_OUTPUT"
+        else
+          echo "sha=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Checkout base commit
+      if: steps.base.outputs.sha != ''
       uses: actions/checkout@v4
       with:
         submodules: recursive
-        ref: ${{ github.event.pull_request.base.sha }}
+        ref: ${{ steps.base.outputs.sha }}
         path: base
+
+    - name: No base commit available
+      if: steps.base.outputs.sha == ''
+      run: echo "::notice::Skipping benchmark regression gate -- no prior commit on this ref to diff against (first push of a new branch)."
 
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y cmake nasm jq
 
-    - name: Build PR
+    - name: Build head
       run: |
         cmake -S pr/vendor/libjpeg-turbo -B pr/vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
         cmake --build pr/vendor/libjpeg-turbo/build --target turbojpeg-static -j
@@ -227,6 +249,7 @@ jobs:
         cmake --build pr/build --config Release -j
 
     - name: Build base
+      if: steps.base.outputs.sha != ''
       run: |
         cmake -S base/vendor/libjpeg-turbo -B base/vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
         cmake --build base/vendor/libjpeg-turbo/build --target turbojpeg-static -j
@@ -234,8 +257,9 @@ jobs:
         cmake --build base/build --config Release -j
 
     - name: Run Benchmarks
+      if: steps.base.outputs.sha != ''
       run: |
-        echo "### Performance Benchmark (PR)" > benchmark_report.md
+        echo "### Performance Benchmark" > benchmark_report.md
         echo '```text' >> benchmark_report.md
         ./pr/build/test_benchmark smoke >> benchmark_report.md
         echo '```' >> benchmark_report.md
@@ -248,6 +272,7 @@ jobs:
         cat benchmark_report.md >> $GITHUB_STEP_SUMMARY
 
     - name: Post Performance Report
+      if: github.event_name == 'pull_request' && steps.base.outputs.sha != ''
       uses: thollander/actions-comment-pull-request@v2
       with:
         filePath: benchmark_report.md
