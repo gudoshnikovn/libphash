@@ -146,13 +146,23 @@ static void expect_same(const load_result_t *a, const load_result_t *b, const ch
                 a->field, b->field);                                                               \
         exit(1);                                                                                   \
     }
+    /* uint64_t is `unsigned long` on LP64 (Linux/macOS x86_64/arm64) but `unsigned long
+     * long` on LLP64 (Windows) -- %llu only matches the latter, so casting to
+     * `unsigned long long` here (always at least 64 bits, exactly what %llu expects)
+     * is the portable fix, not swapping the format string per platform. */
+#define CHECK_U64(field)                                                                           \
+    if (a->field != b->field) {                                                                    \
+        fprintf(stderr, "[FAIL] %s: file and memory disagree on " #field " (%llu vs %llu)\n",      \
+                what, (unsigned long long)a->field, (unsigned long long)b->field);                 \
+        exit(1);                                                                                   \
+    }
     CHECK(err, "%d")
     CHECK(width, "%d")
     CHECK(height, "%d")
     CHECK(channels, "%d")
-    CHECK(ahash, "%llu")
-    CHECK(dhash, "%llu")
-    CHECK(phash, "%llu")
+    CHECK_U64(ahash)
+    CHECK_U64(dhash)
+    CHECK_U64(phash)
     if (a->mhash.size != b->mhash.size ||
         memcmp(a->mhash.data, b->mhash.data, a->mhash.size) != 0) {
         fprintf(stderr, "[FAIL] %s: file and memory disagree on mhash\n", what);
@@ -164,6 +174,7 @@ static void expect_same(const load_result_t *a, const load_result_t *b, const ch
         exit(1);
     }
 #undef CHECK
+#undef CHECK_U64
 }
 
 /* Runs one fixture through both entry points in all four combinations of the two
