@@ -61,16 +61,34 @@ endmacro()
 # now, while it still exists in this configure, falling back to CMake's
 # regular static-library defaults for whichever property the vendor's own
 # CMakeLists didn't override -- the same three inputs $<TARGET_FILE_NAME:...>
-# itself would combine, just resolved eagerly instead of deferred. Needed
-# because a vendor can override either PREFIX or OUTPUT_NAME independently:
-# libpng only overrides OUTPUT_NAME (appends "_static" on Windows), while
-# libwebp overrides PREFIX directly, forcing a literal "lib" prefix even on
-# Windows -- found on a real windows-x86_64 runner while validating R42's
-# release workflow, where an earlier version of this fix (CMAKE_STATIC_LIBRARY_PREFIX
-# hardcoded, not read back) missed libwebp's case and shipped a broken
-# INSTALL_INTERFACE path.
+# itself would combine, just resolved eagerly instead of deferred.
+#
+# Optional third argument `src_dir`: a vendor can retarget
+# CMAKE_STATIC_LIBRARY_PREFIX itself (a plain variable, not a target
+# property) from inside its own add_subdirectory() tree -- libwebp does
+# exactly this for MSVC ("match the naming convention used by nmake"),
+# forcing a literal "lib" prefix even on Windows. That assignment is scoped
+# to libwebp's own subdirectory and never reaches this file's scope, so
+# get_target_property(PREFIX) sees nothing and CMAKE_STATIC_LIBRARY_PREFIX
+# here is back to MSVC's own default ("") the moment add_subdirectory()
+# returns. get_directory_property(... DEFINITION ...) against that
+# subdirectory is the one way to read the variable's value as it stood
+# during that directory's own processing. Found on a real windows-x86_64
+# runner while validating R42's release workflow -- two prior versions of
+# this fix (CMAKE_STATIC_LIBRARY_PREFIX hardcoded, then read via
+# get_target_property(PREFIX) with no src_dir fallback) both missed this and
+# shipped a broken INSTALL_INTERFACE path for libwebp specifically.
 function(phash_static_lib_filename out_var target)
+    set(_phash_src_dir "")
+    if(ARGC GREATER 2)
+        set(_phash_src_dir "${ARGV2}")
+    endif()
+
     get_target_property(_phash_prefix ${target} PREFIX)
+    if(NOT _phash_prefix AND _phash_src_dir)
+        get_directory_property(_phash_prefix DIRECTORY "${_phash_src_dir}"
+            DEFINITION CMAKE_STATIC_LIBRARY_PREFIX)
+    endif()
     if(NOT _phash_prefix)
         set(_phash_prefix "${CMAKE_STATIC_LIBRARY_PREFIX}")
     endif()
@@ -540,7 +558,8 @@ if(PHASH_USE_WEBP)
         # too, not just OUTPUT_NAME+SUFFIX: it forces a literal "lib" prefix
         # via its own PREFIX target property even on Windows (installed file
         # is "libwebpdecoder.lib", not "webpdecoder.lib").
-        phash_static_lib_filename(PHASH_WEBP_LIB_FILENAME webpdecoder)
+        phash_static_lib_filename(PHASH_WEBP_LIB_FILENAME webpdecoder
+            "${CMAKE_CURRENT_SOURCE_DIR}/vendor/libwebp")
         list(APPEND PHASH_INSTALL_LINK_LIBS
             $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/${PHASH_WEBP_LIB_FILENAME}>)
         list(APPEND PHASH_PC_LIBS_PRIVATE "-lwebpdecoder")
