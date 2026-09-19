@@ -45,10 +45,19 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     int block_size = ctx->config.block_size;
     if (block_size <= 0)
         return PH_ERR_INVALID_ARGUMENT;
-    /* size_t, not int: block_size = 46341 already overflows the int product.
-     * The upper bound on block_size itself lives in the setter; here we only
-     * guarantee the arithmetic is well-defined and the allocation is honestly sized. */
-    size_t total_pixels = (size_t)block_size * (size_t)block_size;
+    /* R87: casting to size_t before multiplying only guards against overflow where
+     * size_t is wider than int -- on a 32-bit target (size_t == 32-bit int), the product
+     * wraps exactly like the plain int product this comment used to say it fixed:
+     * block_size = 1<<30 wraps to 0 and INT_MAX wraps to 1, both far below any real
+     * block count. That let ph_get_scratchpad() below hand back a tiny (or NULL, in the
+     * 0 case) buffer that ph_resize_box() then addressed as if it were block_size^2
+     * bytes -- a huge out-of-bounds write, not a clean allocation failure. Route through
+     * the same width-independent overflow check ph_safe_image_alloc_size() already
+     * provides (uint64_t arithmetic, checked against SIZE_MAX) instead of repeating the
+     * unsafe pattern locally. */
+    size_t total_pixels;
+    if (!ph_safe_image_alloc_size((uint64_t)block_size, (uint64_t)block_size, 1, &total_pixels))
+        return PH_ERR_ALLOCATION_FAILED;
 
     memset(out_digest, 0, sizeof(ph_digest_t));
     out_digest->kind = (uint8_t)PH_DIGEST_KIND_BITS; /* one bit per block */
