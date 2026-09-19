@@ -27,6 +27,12 @@
  * malloc), so callers must probe at runtime -- arm the shim, call into the
  * library, and check that the counter moved -- rather than trust
  * PH_SHIM_SUPPORTED alone.
+ *
+ * AddressSanitizer is a third case that disables the shim outright (see the
+ * PH_SHIM_SUPPORTED definition below for why): ASan's own startup calls free()
+ * before its shadow memory exists, and that call lands in this file's
+ * ASan-instrumented free() override, segfaulting on the shadow check with no
+ * ASan report to show for it.
  */
 
 #include <errno.h>
@@ -35,6 +41,29 @@
 #include <stdio.h>
 #include <string.h>
 
+/* AddressSanitizer's own startup sequence is incompatible with a statically-linked
+ * malloc/free override: on Linux, __asan_init() -> AsanInitInternal() ->
+ * InitializeAsanInterceptors() resolves real libc symbols via glibc's dlsym/dlvsym
+ * machinery, which calls free() on its internal dlerror buffer (dl_error_free())
+ * *before* ASan has finished mapping its own shadow memory or installing its signal
+ * handlers. Since this file's free() is a strong global symbol, that early call
+ * lands in ph_shim_untrack() -- itself compiled with ASan instrumentation, so its
+ * access to the (shadow-backed) ph_shim.slots[] array segfaults reading shadow
+ * memory that doesn't exist yet, with no ASan report at all (its fault handler
+ * isn't installed yet either). This isn't a bug in the shim's own logic, just a
+ * fundamental ordering conflict with ASan's static-link interception model, so the
+ * override is simply not attempted under ASan; PH_SHIM_SUPPORTED's existing
+ * runtime-probe/graceful-skip contract (see shim_is_effective() in the tests) covers
+ * this the same way it covers a shared-library build. */
+#if defined(__SANITIZE_ADDRESS__)
+#define PH_SHIM_SUPPORTED 0
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define PH_SHIM_SUPPORTED 0
+#endif
+#endif
+
+#ifndef PH_SHIM_SUPPORTED
 #if defined(__APPLE__)
 #define PH_SHIM_SUPPORTED 1
 #include <malloc/malloc.h>
@@ -47,6 +76,7 @@ extern void __libc_free(void *);
 extern void *__libc_memalign(size_t, size_t);
 #else
 #define PH_SHIM_SUPPORTED 0
+#endif
 #endif
 
 /* ---- real allocator access -------------------------------------------- */
