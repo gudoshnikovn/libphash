@@ -6,8 +6,39 @@
 #ifdef PH_USE_TURBOJPEG
 
 #include "turbojpeg.h"
+#include <string.h>
 
 PH_API int ph_can_use_libjpeg(void) { return 1; }
+
+/* Two distinct, independently-worded OOM messages can reach here:
+ *   - libjpeg-turbo's own memory manager (jmemmgr.c) reports a failed internal
+ *     malloc via ERREXIT1(cinfo, JERR_OUT_OF_MEMORY, which), whose message text
+ *     (vendor/libjpeg-turbo/src/jerror.h) is "Insufficient memory (case %d)" --
+ *     the %d varies, hence a substring match, not exact -- an earlier version of
+ *     this check used strncmp() with a hardcoded length one byte too long (20,
+ *     not strlen("Insufficient memory") == 19), which always compared the
+ *     literal's NUL terminator against the real message's following space and
+ *     therefore never matched at all.
+ *   - the TurboJPEG API wrapper's own tj3Decompress8() reports its own allocation
+ *     failure (a buffer it allocates itself, distinct from libjpeg's memory
+ *     manager) as "tj3Decompress8(): Memory allocation failure" -- unrelated
+ *     wording, needs its own check.
+ * Same idea as ph_stb_reason_is_oom() in src/loader.c for the stb_image backend.
+ * Without this, an injected/real allocation failure inside
+ * tjDecompressHeader3()/tjDecompress2() was indistinguishable from actual corrupt
+ * JPEG data -- both returned < 0 and got mapped to PH_ERR_CORRUPT_DATA below.
+ *
+ * Not every allocation failure surfaces with recognizable wording, though: a
+ * malloc failing inside jpeg_read_header()'s marker-processing tables can leave
+ * libjpeg with stale/zeroed state that it then misreports as a substantively
+ * different, memory-silent error ("Could not determine subsampling level of JPEG
+ * image") -- a genuine libjpeg-turbo limitation this wrapper has no way to see
+ * through, since the message it hands back carries no indication that the root
+ * cause was an allocation failure at all. */
+static int ph_tj_message_is_oom(const char *msg) {
+    return msg && (strstr(msg, "Insufficient memory") != NULL ||
+                   strstr(msg, "Memory allocation failure") != NULL);
+}
 
 int ph_can_read_jpeg(const uint8_t *magic, size_t len) {
     return (len >= 2 && magic[0] == 0xFF && magic[1] == 0xD8);
@@ -40,14 +71,24 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size
         return NULL;
 
     tjhandle handle = tjInitDecompress();
-    if (!handle)
+    if (!handle) {
+        /* tjInitDecompress()'s only failure mode is its own internal allocation
+         * failing; leaving *out_err untouched here used to fall through to
+         * ph_decode_buffer()'s PH_SUCCESS-turned-PH_ERR_CORRUPT_DATA fallback
+         * (src/loader.c), misreporting an OOM as corrupt image data. */
+        if (out_err)
+            *out_err = PH_ERR_ALLOCATION_FAILED;
+        ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
         return NULL;
+    }
 
     int w, h, subsamp, colorspace;
     if (tjDecompressHeader3(handle, buffer, size, &w, &h, &subsamp, &colorspace) < 0) {
+        const char *tj_err = tjGetErrorStr2(handle);
         if (out_err)
-            *out_err = PH_ERR_CORRUPT_DATA;
-        ph_set_err_msg(err_msg, err_msg_cap, tjGetErrorStr2(handle));
+            *out_err =
+                ph_tj_message_is_oom(tj_err) ? PH_ERR_ALLOCATION_FAILED : PH_ERR_CORRUPT_DATA;
+        ph_set_err_msg(err_msg, err_msg_cap, tj_err);
         tjDestroy(handle);
         return NULL;
     }
@@ -102,9 +143,11 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size
 
     int flags = TJFLAG_FASTDCT | TJFLAG_NOREALLOC;
     if (tjDecompress2(handle, buffer, size, output, w, pitch, h, pixelFormat, flags) < 0) {
+        const char *tj_err = tjGetErrorStr2(handle);
         if (out_err)
-            *out_err = PH_ERR_CORRUPT_DATA;
-        ph_set_err_msg(err_msg, err_msg_cap, tjGetErrorStr2(handle));
+            *out_err =
+                ph_tj_message_is_oom(tj_err) ? PH_ERR_ALLOCATION_FAILED : PH_ERR_CORRUPT_DATA;
+        ph_set_err_msg(err_msg, err_msg_cap, tj_err);
         free(output);
         tjDestroy(handle);
         return NULL;

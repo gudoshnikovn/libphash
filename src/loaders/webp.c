@@ -62,11 +62,35 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long siz
         return NULL;
     }
 
-    /* Decode into our buffer so we can free() it normally */
-    if (!WebPDecodeRGBInto(buffer, size, output, out_size, (int)stride)) {
+    /* Decode into our buffer so we can free() it normally. WebPDecodeRGBInto()'s
+     * plain int/bool return can't tell a real allocation failure apart from a
+     * corrupt bitstream -- both just come back false. The advanced API's
+     * WebPDecode() reports a VP8StatusCode instead, with VP8_STATUS_OUT_OF_MEMORY
+     * as its own distinct value, so the same external-buffer decode can be
+     * classified precisely instead of guessing from an error string. */
+    WebPDecoderConfig config;
+    if (!WebPInitDecoderConfig(&config)) {
         if (out_err)
-            *out_err = PH_ERR_CORRUPT_DATA;
-        ph_set_err_msg(err_msg, err_msg_cap, "WebP pixel data decode failed (corrupt bitstream)");
+            *out_err = PH_ERR_DECODER_UNAVAILABLE;
+        ph_set_err_msg(err_msg, err_msg_cap, "WebP decoder ABI version mismatch");
+        free(output);
+        return NULL;
+    }
+    config.output.colorspace = MODE_RGB;
+    config.output.is_external_memory = 1;
+    config.output.u.RGBA.rgba = output;
+    config.output.u.RGBA.stride = (int)stride;
+    config.output.u.RGBA.size = out_size;
+
+    VP8StatusCode status = WebPDecode(buffer, size, &config);
+    if (status != VP8_STATUS_OK) {
+        if (out_err)
+            *out_err = (status == VP8_STATUS_OUT_OF_MEMORY) ? PH_ERR_ALLOCATION_FAILED
+                                                            : PH_ERR_CORRUPT_DATA;
+        ph_set_err_msg(err_msg, err_msg_cap,
+                       (status == VP8_STATUS_OUT_OF_MEMORY)
+                           ? "Memory allocation failed"
+                           : "WebP pixel data decode failed (corrupt bitstream)");
         free(output);
         return NULL;
     }

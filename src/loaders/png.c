@@ -51,14 +51,40 @@ typedef struct {
     ph_error_t *out_err;
 } PngErrorCtx;
 
+/* Three distinct, independently-worded OOM messages can reach png_error_fn():
+ *   - libpng's own memory manager (pngmem.c) reports a failed internal malloc via
+ *     png_error(png_ptr, "Out of memory") / png_error(png_ptr, "Out of Memory") --
+ *     two different casings depending on which of its two allocation paths
+ *     failed.
+ *   - zlib running out of memory while inflating IDAT data (pixel decompression,
+ *     not header parsing) surfaces as Z_MEM_ERROR, which png_zstream_error()
+ *     (png.c) translates to the zstream message "insufficient memory" -- a third,
+ *     unrelated wording, since it never goes through libpng's own allocator at
+ *     all.
+ * All three are otherwise ordinary fatal errors indistinguishable from a
+ * malformed bitstream unless checked for here. Same idea as
+ * ph_tj_message_is_oom() in src/loaders/jpeg.c for the TurboJPEG backend. */
+static int ph_png_message_is_oom(const char *msg) {
+    /* Substring, not exact match: a chunk-level failure (e.g. reading IDAT itself
+     * running out of memory) reaches here via png_chunk_error()/png_chunk_benign_error(),
+     * which prepend the chunk name -- "IDAT: out of memory", "IDAT: insufficient
+     * memory" -- to the same wording a bare (non-chunk) png_error() uses on its own. */
+    return msg &&
+           (strstr(msg, "Out of memory") != NULL || strstr(msg, "Out of Memory") != NULL ||
+            strstr(msg, "out of memory") != NULL || strstr(msg, "insufficient memory") != NULL);
+}
+
 static void png_error_fn(png_structp png_ptr, png_const_charp msg) {
     PngErrorCtx *ectx = (PngErrorCtx *)png_get_error_ptr(png_ptr);
     /* If png_warning_fn below already classified this failure (currently: the
      * per-dimension user-limit check), keep its code and message -- the fatal error
      * that follows a user-limit warning is libpng's generic "Invalid IHDR data",
      * which would overwrite a specific answer with a useless one. */
-    if (ectx && (!ectx->out_err || *ectx->out_err == PH_SUCCESS))
+    if (ectx && (!ectx->out_err || *ectx->out_err == PH_SUCCESS)) {
         ph_set_err_msg(ectx->err_msg, ectx->err_msg_cap, msg);
+        if (ectx->out_err && ph_png_message_is_oom(msg))
+            *ectx->out_err = PH_ERR_ALLOCATION_FAILED;
+    }
     longjmp(png_jmpbuf(png_ptr), 1);
 }
 
@@ -104,27 +130,57 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     PngErrorCtx ectx = {.err_msg = err_msg, .err_msg_cap = err_msg_cap, .out_err = out_err};
     png_structp png_ptr =
         png_create_read_struct(PNG_LIBPNG_VER_STRING, &ectx, png_error_fn, png_warning_fn);
-    if (!png_ptr)
+    if (!png_ptr) {
+        /* png_create_read_struct()'s only failure mode is its own allocation failing,
+         * and it fails by returning NULL directly rather than through png_error_fn --
+         * the error callbacks aren't registered on png_ptr yet at this point, since
+         * png_ptr doesn't exist. Leaving *out_err untouched here used to fall through
+         * to ph_decode_buffer()'s PH_SUCCESS-turned-PH_ERR_CORRUPT_DATA fallback
+         * (src/loader.c), misreporting an OOM as corrupt image data. */
+        if (out_err)
+            *out_err = PH_ERR_ALLOCATION_FAILED;
+        ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
         return NULL;
+    }
 
-    /* setjmp() must be armed before ANY other libpng call on png_ptr: png_error_fn
-     * unconditionally longjmp()s to png_jmpbuf(png_ptr), and libpng can raise a fatal
-     * error from inside png_create_info_struct() itself (allocation failure). With the
-     * setjmp() placed after that call, such a failure jumped through an uninitialized
-     * jmp_buf -- undefined behaviour.
+    /* setjmp() must be armed before ANY other libpng call on png_ptr that CAN
+     * longjmp() through png_error_fn -- which, after the correction above,
+     * png_create_info_struct() itself turns out not to be (it deliberately
+     * allocates through libpng's non-erroring png_malloc_base(), see the OOM
+     * comment above), but every other libpng call below this point still can.
      *
      * info_for_cleanup is volatile because it is assigned after setjmp() and read in
      * the longjmp branch: a non-volatile local modified between setjmp and longjmp has
      * an indeterminate value there (C11 7.13.2.1p3). It exists only so the jump branch
      * can free an info struct that may or may not have been created yet; the rest of
-     * the function keeps using the plain info_ptr below. */
+     * the function keeps using the plain info_ptr below.
+     *
+     * data_for_cleanup/row_ptrs_for_cleanup exist for the same reason, covering
+     * png_read_image() below: it can still longjmp here (e.g. Z_MEM_ERROR from zlib
+     * running out of memory mid-IDAT, translated to png_error() by
+     * png_zstream_error()) after this function's own `data`/`row_ptrs` buffers are
+     * already allocated -- without these, that path leaked both, since the plain
+     * `data`/`row_ptrs` locals below aren't in scope up here and can't be read from
+     * the jump branch regardless (same indeterminate-value rule as info_for_cleanup).
+     *
+     * Note the placement of the `volatile` on the two below: `unsigned char *
+     * volatile` (volatile pointer) is what's needed, not `volatile unsigned char *`
+     * (pointer to volatile data) -- the latter leaves the pointer *variable* itself
+     * unprotected across the longjmp, which is exactly the object C11 7.13.2.1p3
+     * calls out as having an indeterminate value. png_infop above sidesteps this
+     * only because the typedef itself already names a pointer type, so `volatile
+     * png_infop` lands the qualifier on the pointer as intended. */
     volatile png_infop info_for_cleanup = NULL;
+    unsigned char *volatile data_for_cleanup = NULL;
+    png_bytep volatile row_ptrs_for_cleanup = NULL;
 
     if (setjmp(png_jmpbuf(png_ptr))) {
         // png_error_fn already captured the message and/or code (PH_ERR_IMAGE_TOO_LARGE
         // sites below set *out_err before their own longjmp-free early returns; this
         // path is libpng's own fatal errors, which are always a malformed bitstream).
         png_infop jumped_info = info_for_cleanup;
+        free(row_ptrs_for_cleanup);
+        free(data_for_cleanup);
         if (out_err && *out_err == PH_SUCCESS)
             *out_err = PH_ERR_CORRUPT_DATA;
         png_destroy_read_struct(&png_ptr, jumped_info ? &jumped_info : NULL, NULL);
@@ -133,6 +189,14 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
 
     png_infop info_ptr = png_create_info_struct(png_ptr);
     if (!info_ptr) {
+        /* Despite the setjmp() comment above, png_create_info_struct() actually
+         * allocates via png_malloc_base() (vendor/libpng/png.c), libpng's
+         * deliberately non-erroring allocator variant, specifically so this call
+         * "always returns ok" instead of going through png_error()/longjmp() --
+         * an OOM here returns NULL directly, bypassing png_error_fn entirely. */
+        if (out_err)
+            *out_err = PH_ERR_ALLOCATION_FAILED;
+        ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
         png_destroy_read_struct(&png_ptr, NULL, NULL);
         return NULL;
     }
@@ -220,6 +284,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return NULL;
     }
+    data_for_cleanup = data;
 
     /* The only allocation in this decoder that used to skip the overflow check while
      * its neighbour above went through ph_safe_image_alloc_size(). `h` comes
@@ -245,6 +310,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return NULL;
     }
+    row_ptrs_for_cleanup = row_ptrs;
 
     for (png_uint_32 i = 0; i < h; i++)
         row_ptrs[i] = data + i * rowbytes;

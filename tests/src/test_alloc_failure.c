@@ -79,6 +79,20 @@ static void guard_check(const uint8_t *front, const uint8_t *back, const char *t
 #define ALLOW_ALLOC 0x1   /* PH_ERR_ALLOCATION_FAILED */
 #define ALLOW_DECODE 0x2  /* PH_ERR_DECODER_UNAVAILABLE: e.g. WebP with no decoder built in */
 #define ALLOW_INVALID 0x4 /* PH_ERR_INVALID_ARGUMENT: e.g. no image loaded */
+/* PH_ERR_CORRUPT_DATA, but ONLY for the JPEG/WebP decode checks below that opt into
+ * this flag -- NOT a blanket allowance. Both TurboJPEG and libwebp have at least one
+ * specific internal allocation whose failure corrupts enough decoder state that the
+ * library reports something that looks like a genuinely broken bitstream instead of
+ * an out-of-memory condition, with no wording this wrapper can recognize as
+ * memory-related (see ph_tj_message_is_oom()'s doc comment in src/loaders/jpeg.c for
+ * the JPEG case; the WebP case is VP8_STATUS_BITSTREAM_ERROR from a decode-time
+ * allocation failure inside libwebp that WebPDecode()'s status code doesn't
+ * distinguish from real corruption either). This is a real, narrow limitation of
+ * those libraries' own error reporting, not a libphash bug -- deliberately scoped to
+ * the two call sites that decode JPEG/WebP, not scen_load_file()/scen_hash_all(),
+ * which decode PNG only and stay strict so a real libpng misclassification
+ * regression still fails loudly there. */
+#define ALLOW_CORRUPT 0x8
 
 static int check(const char *tag, ph_error_t err, int allowed) {
     if (err == PH_SUCCESS)
@@ -88,6 +102,8 @@ static int check(const char *tag, ph_error_t err, int allowed) {
     if (err == PH_ERR_DECODER_UNAVAILABLE && (allowed & ALLOW_DECODE))
         return 0;
     if (err == PH_ERR_INVALID_ARGUMENT && (allowed & ALLOW_INVALID))
+        return 0;
+    if (err == PH_ERR_CORRUPT_DATA && (allowed & ALLOW_CORRUPT))
         return 0;
     defect("%s returned unexpected error %d (%s)", tag, (int)err, ph_get_error_string(err));
     return 0;
@@ -263,7 +279,7 @@ static void scen_load_memory(int recording) {
     if (ph_create(&ctx) != PH_SUCCESS)
         return;
     ph_error_t err = ph_load_from_memory(ctx, g_jpeg.data, g_jpeg.size);
-    check("ph_load_from_memory", err, ALLOW_ALLOC | ALLOW_DECODE);
+    check("ph_load_from_memory", err, ALLOW_ALLOC | ALLOW_DECODE | ALLOW_CORRUPT);
     if (err != PH_SUCCESS && ph_is_loaded(ctx))
         defect("ph_load_from_memory failed but the context reports an image is loaded");
     ph_free(ctx);
@@ -296,7 +312,7 @@ static void scen_batch(int recording) {
         /* A build without a WebP decoder reports PH_ERR_DECODER_UNAVAILABLE here,
          * which ALLOW_DECODE already covers. */
         ph_error_t err = ph_load_from_file(ctx, paths[i]);
-        check("ph_load_from_file(batch)", err, ALLOW_ALLOC | ALLOW_DECODE);
+        check("ph_load_from_file(batch)", err, ALLOW_ALLOC | ALLOW_DECODE | ALLOW_CORRUPT);
 
         guarded_u64_t u;
         guarded_digest_t g;
@@ -395,6 +411,22 @@ static int shim_is_effective(void) {
  * the sibling "unknown image type" mapping the same way. */
 static void test_stb_oom_reason_pinned(void) {
     g_scenario = "stb outofmem reason";
+
+    /* This pins ph_stb_reason_is_oom(), which only matters on the stb_image decode
+     * path -- but JPEG only takes that path when no native JPEG backend is compiled
+     * in. On a TurboJPEG build (ph_can_use_libjpeg() == 1) g_jpeg decodes through
+     * ph_decode_jpeg_tj() instead, which never produces stb's "outofmem" reason at
+     * all -- every injected allocation failure there surfaces libjpeg-turbo's own
+     * "Insufficient memory (case N)" message (or, if unmapped, PH_ERR_CORRUPT_DATA),
+     * so the sweep below would legitimately never see "outofmem" and this assertion
+     * would fail for a reason that has nothing to do with ph_stb_reason_is_oom()
+     * being stale. Skip rather than assert something this build cannot exercise. */
+    if (ph_can_use_libjpeg()) {
+        printf("  %-24s SKIPPED (TurboJPEG compiled in -- JPEG doesn't take the stb "
+               "decode path this pins)\n",
+               "stb oom pinning");
+        return;
+    }
 
     ph_shim_arm(0);
     ph_context_t *ctx = NULL;
