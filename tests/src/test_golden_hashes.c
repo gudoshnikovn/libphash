@@ -134,6 +134,18 @@ static int golden_tolerance_levels(const char *algo) {
 #define PH_GOLDEN_ARCH_TAG "arm64"
 #elif defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64)
 #define PH_GOLDEN_ARCH_TAG "x86_64"
+/* R86: 32-bit x86 (-m32, no explicit -mfpmath=sse) defaults to x87 FPU intermediates for
+ * float math instead of x86-64's SSE2 doubles, which is a second, orthogonal source of the
+ * same class of drift arm64-vs-x86_64 FMA contraction causes above. It surfaces starkest on
+ * photo.png's pHash: that fixture is a solid, uniform-colour image, so every AC coefficient
+ * is nominally zero and its computed value is pure rounding noise. On x86-64 that noise is a
+ * few ULPs off zero in either direction, giving pHash's genuinely-arbitrary-but-stable sign
+ * bits; on i686 it lands on exactly 0.0f, and pHash thresholds with strict '>' against a
+ * median of 0.0f (see the note above PH_GOLDEN_ARCH_TAG's definition), so every AC bit reads
+ * as 0 -- not a bug, the exact "degenerate input such as a solid colour" case that note
+ * already documents, just newly reachable via bit width instead of a NEON/scalar split. */
+#elif defined(__i386__) || defined(_M_IX86)
+#define PH_GOLDEN_ARCH_TAG "i686"
 #else
 #error                                                                                             \
     "No golden_hashes.<backend-set>.<arch>-<compiler>.txt exists for this architecture yet -- add PH_GOLDEN_ARCH_TAG for it, run this test with --update to generate the file, and commit it."
