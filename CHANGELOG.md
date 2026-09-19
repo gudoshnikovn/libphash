@@ -264,6 +264,16 @@ walkthrough.
 
 ### Added
 
+- **Prebuilt release artifacts.** Each tagged release now publishes static and shared
+  archives (headers, library, `LICENSE`, `THIRD-PARTY-NOTICES.md`) for linux-x86_64,
+  linux-arm64, macos-arm64, and windows-x86_64 on the GitHub Releases page, each built
+  with the full vendored decoder set and smoke-tested in isolation before publishing.
+  See the README's "Prebuilt binaries" section. macos-x86_64 was in the originally
+  planned matrix but is not shipped: GitHub's Intel-Mac hosted runner pool consistently
+  left that job queued for 20+ minutes with no runner ever assigned during validation,
+  while every other platform (including macos-arm64, the identical build recipe)
+  started within seconds — an infrastructure constraint outside this project's control.
+
 - **`ph_context_set_decode_scale()`** lets a caller opt into decoding JPEG at 1/2, 1/4 or
   1/8 linear resolution instead of natively, trading accuracy for decode speed via
   libjpeg-turbo's DCT-domain scaling. Default is `PH_DECODE_SCALE_FULL` — behavior and
@@ -419,6 +429,21 @@ walkthrough.
 
 ### Fixed
 
+- **A native-toolchain Windows build (either linkage) could not previously succeed at
+  all**, for any consumer, not just this project's own CI or release artifacts. Building
+  statically failed to even compile (`PH_API` had no case for "this is a static library"
+  on Windows, only "building the DLL" or "importing one" — MSVC rejected every exported
+  function's own definition as a redefinition of a dllimport declaration); building
+  either linkage with the vendored decoder set failed to configure or link over several
+  further issues: `<stdatomic.h>` needs `/experimental:c11atomics` in addition to
+  `/std:c11` on MSVC, `M_PI` needs `_USE_MATH_DEFINES` there, there is no `libm` to link
+  on Windows at all, and the installed link paths for the vendored codec archives assumed
+  Unix `ar` naming (`lib<name>.a`) unconditionally. None of this had ever been exercised
+  on an actual Windows compiler before — CI's own `minimal-build (windows-latest)` leg
+  existed but had likewise never run on a live GitHub Actions runner. New public macro:
+  `PHASH_STATIC_DEFINE`, which a build system other than this project's own CMake must
+  define itself when statically linking libphash on Windows (CMake's exported target and
+  the generated `.pc` file both set it automatically).
 - **pHash thresholds its 8×8 DCT block against the median of its 63 AC coefficients**,
   leaving the DC term out of that median as the reference implementation does. It had been
   included. In practice this changes nothing: no pHash value in the test fixtures moves,
