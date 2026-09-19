@@ -67,8 +67,14 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
     int total = 0;
     size_t i = 0;
 
-    // --- Optimization 1: AVX2 (x86) ---
-#if defined(__AVX2__)
+    // --- Optimization 1: AVX2 (x86-64 only) ---
+    // _mm256_extract_epi64() extracts into a 64-bit GPR, which doesn't exist on 32-bit x86 --
+    // GCC/Clang leave it as an unresolved external there instead of failing to compile, so this
+    // whole block must additionally be gated on a 64-bit target. On 32-bit x86 with __AVX2__
+    // defined, execution falls through to the SSE4.2 block below (AVX2 implies SSE4.2) with 'i'
+    // still 0, so the 32-byte AVX2 lane is simply never taken and the 8-byte SSE4.2 lane covers
+    // it instead.
+#if defined(__AVX2__) && (defined(__x86_64__) || defined(_M_X64))
     const uint8_t *a_ptr = a->data;
     const uint8_t *b_ptr = b->data;
     size_t len32 = len / 32;
