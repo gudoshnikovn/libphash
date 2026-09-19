@@ -271,6 +271,17 @@ jobs:
         cat regression.md >> benchmark_report.md
         cat benchmark_report.md >> $GITHUB_STEP_SUMMARY
 
+    # Downloadable alongside the $GITHUB_STEP_SUMMARY copy above -- the summary
+    # disappears once you're not looking at this specific run's page, an artifact
+    # survives to be diffed against a later run's or pulled into a script.
+    - name: Upload benchmark report
+      if: steps.base.outputs.sha != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-report
+        path: benchmark_report.md
+        retention-days: 90
+
     - name: Post Performance Report
       if: github.event_name == 'pull_request' && steps.base.outputs.sha != ''
       uses: thollander/actions-comment-pull-request@v2
