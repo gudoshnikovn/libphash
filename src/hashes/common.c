@@ -95,20 +95,23 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
 
     // --- Optimization 1b: SSE4.2 (x86) ---
 #if defined(__SSE4_2__) || defined(__AVX2__)
-    // AVX2 implies SSE4.2. We use 'i < len / 8' so it gracefully covers remainders of 32
+    // AVX2 implies SSE4.2, and leaves 'i' as a byte offset (a multiple of 32, hence of 8)
+    // into a->data/b->data -- so it must be converted to a word index here, not compared
+    // directly against len8 (a word count) the way 'i' is used as a byte index everywhere
+    // else in this function.
     const uint64_t *a64 = (const uint64_t *)a->data;
     const uint64_t *b64 = (const uint64_t *)b->data;
     size_t len8 = len / 8;
 
-    for (; i < len8; i++) {
-        uint64_t x = a64[i] ^ b64[i];
+    for (size_t w = i / 8; w < len8; w++) {
+        uint64_t x = a64[w] ^ b64[w];
 #if defined(__GNUC__) || defined(__clang__)
         total += __builtin_popcountll(x);
 #else
         total += (int)_mm_popcnt_u64(x);
 #endif
     }
-    i *= 8; // Advance byte index
+    i = len8 * 8; // Advance byte index
 #endif
 
     // --- Optimization 2: NEON (ARM) ---
