@@ -172,7 +172,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
      * png_infop` lands the qualifier on the pointer as intended. */
     volatile png_infop info_for_cleanup = NULL;
     unsigned char *volatile data_for_cleanup = NULL;
-    png_bytep volatile row_ptrs_for_cleanup = NULL;
+    png_bytep *volatile row_ptrs_for_cleanup = NULL;
 
     if (setjmp(png_jmpbuf(png_ptr))) {
         // png_error_fn already captured the message and/or code (PH_ERR_IMAGE_TOO_LARGE
@@ -331,6 +331,16 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
 
 PH_API int ph_can_use_libpng(void) { return 1; }
 
+/* Unlike libpng's setjmp/longjmp model, every spng call returns its own status
+ * code directly -- SPNG_EMEM is spng's own distinct "an internal allocation
+ * failed" value (vendor/spng/spng/spng.h), so this is a precise, non-string-guess
+ * classification, the same idea as VP8_STATUS_OUT_OF_MEMORY for the WebP backend
+ * (src/loaders/webp.c). Without this, every spng failure -- OOM or genuinely
+ * corrupt data -- collapsed to PH_ERR_CORRUPT_DATA below. */
+static ph_error_t ph_spng_err(int ret) {
+    return (ret == SPNG_EMEM) ? PH_ERR_ALLOCATION_FAILED : PH_ERR_CORRUPT_DATA;
+}
+
 unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
                                  ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
@@ -367,7 +377,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     int ret = spng_set_png_buffer(ctx, buffer, size);
     if (ret != 0) {
         if (out_err)
-            *out_err = PH_ERR_CORRUPT_DATA;
+            *out_err = ph_spng_err(ret);
         ph_set_err_msg(err_msg, err_msg_cap, spng_strerror(ret));
         spng_ctx_free(ctx);
         return NULL;
@@ -377,7 +387,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     ret = spng_get_ihdr(ctx, &ihdr);
     if (ret != 0) {
         if (out_err)
-            *out_err = PH_ERR_CORRUPT_DATA;
+            *out_err = ph_spng_err(ret);
         ph_set_err_msg(err_msg, err_msg_cap, spng_strerror(ret));
         spng_ctx_free(ctx);
         return NULL;
@@ -415,7 +425,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     ret = spng_decoded_image_size(ctx, fmt, &out_size);
     if (ret != 0) {
         if (out_err)
-            *out_err = PH_ERR_CORRUPT_DATA;
+            *out_err = ph_spng_err(ret);
         ph_set_err_msg(err_msg, err_msg_cap, spng_strerror(ret));
         spng_ctx_free(ctx);
         return NULL;
@@ -433,7 +443,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
     ret = spng_decode_image(ctx, data, out_size, fmt, 0);
     if (ret != 0) {
         if (out_err)
-            *out_err = PH_ERR_CORRUPT_DATA;
+            *out_err = ph_spng_err(ret);
         ph_set_err_msg(err_msg, err_msg_cap, spng_strerror(ret));
         free(data);
         spng_ctx_free(ctx);

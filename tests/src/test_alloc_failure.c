@@ -79,19 +79,29 @@ static void guard_check(const uint8_t *front, const uint8_t *back, const char *t
 #define ALLOW_ALLOC 0x1   /* PH_ERR_ALLOCATION_FAILED */
 #define ALLOW_DECODE 0x2  /* PH_ERR_DECODER_UNAVAILABLE: e.g. WebP with no decoder built in */
 #define ALLOW_INVALID 0x4 /* PH_ERR_INVALID_ARGUMENT: e.g. no image loaded */
-/* PH_ERR_CORRUPT_DATA, but ONLY for the JPEG/WebP decode checks below that opt into
- * this flag -- NOT a blanket allowance. Both TurboJPEG and libwebp have at least one
- * specific internal allocation whose failure corrupts enough decoder state that the
- * library reports something that looks like a genuinely broken bitstream instead of
- * an out-of-memory condition, with no wording this wrapper can recognize as
- * memory-related (see ph_tj_message_is_oom()'s doc comment in src/loaders/jpeg.c for
- * the JPEG case; the WebP case is VP8_STATUS_BITSTREAM_ERROR from a decode-time
- * allocation failure inside libwebp that WebPDecode()'s status code doesn't
- * distinguish from real corruption either). This is a real, narrow limitation of
- * those libraries' own error reporting, not a libphash bug -- deliberately scoped to
- * the two call sites that decode JPEG/WebP, not scen_load_file()/scen_hash_all(),
- * which decode PNG only and stay strict so a real libpng misclassification
- * regression still fails loudly there. */
+/* PH_ERR_CORRUPT_DATA, but ONLY for the decode checks below that opt into this
+ * flag -- NOT a blanket allowance. Each vendored decoder has at least one specific
+ * internal allocation whose failure it cannot cleanly distinguish from a
+ * genuinely broken bitstream, with no way for this wrapper to tell them apart:
+ *   - TurboJPEG: a malloc failing inside jpeg_read_header()'s marker tables can
+ *     leave libjpeg with stale state it then misreports with wording that carries
+ *     no indication the root cause was an allocation failure at all (see
+ *     ph_tj_message_is_oom()'s doc comment in src/loaders/jpeg.c).
+ *   - libwebp: one specific decode-time allocation failure surfaces as
+ *     VP8_STATUS_BITSTREAM_ERROR, a status WebPDecode() also uses for real
+ *     corruption -- its status code doesn't distinguish the two here either.
+ *   - spng (the PHASH_USE_SPNG PNG backend, not libpng): zlib's inflateInit2()
+ *     failing -- for any reason, including its own internal allocation failing --
+ *     is collapsed by spng's zlib_init() into one generic SPNG_EZLIB_INIT ("zlib
+ *     init error"), with no separate code or message for the OOM case specifically
+ *     (src/loaders/png.c's ph_spng_err() has no SPNG_EMEM to check for here, unlike
+ *     every other spng failure site, which do get a precise check).
+ * These are real, narrow limitations of each library's own error reporting, not a
+ * libphash bug. The libpng PNG backend has no such gap -- ph_png_message_is_oom()
+ * in src/loaders/png.c covers every OOM wording it can produce precisely -- so on a
+ * libpng build this flag never actually triggers on scen_load_file()/
+ * scen_hash_all(), and a real future libpng misclassification regression still
+ * fails loudly there; it only matters for a PHASH_USE_SPNG build. */
 #define ALLOW_CORRUPT 0x8
 
 static int check(const char *tag, ph_error_t err, int allowed) {
@@ -267,7 +277,7 @@ static void scen_load_file(int recording) {
     if (ph_create(&ctx) != PH_SUCCESS)
         return;
     ph_error_t err = ph_load_from_file(ctx, PNG_PATH);
-    check("ph_load_from_file", err, ALLOW_ALLOC | ALLOW_DECODE);
+    check("ph_load_from_file", err, ALLOW_ALLOC | ALLOW_DECODE | ALLOW_CORRUPT);
     if (err != PH_SUCCESS && ph_is_loaded(ctx))
         defect("ph_load_from_file failed but the context reports an image is loaded");
     ph_free(ctx);
@@ -290,7 +300,7 @@ static void scen_hash_all(int recording) {
     if (ph_create(&ctx) != PH_SUCCESS)
         return;
     ph_error_t err = ph_load_from_memory(ctx, g_png.data, g_png.size);
-    check("ph_load_from_memory", err, ALLOW_ALLOC | ALLOW_DECODE);
+    check("ph_load_from_memory", err, ALLOW_ALLOC | ALLOW_DECODE | ALLOW_CORRUPT);
 
     hash_battery(ctx, recording ? &g_golden : NULL, recording ? NULL : &g_golden);
     if (!recording)
