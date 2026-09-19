@@ -116,14 +116,38 @@ static int golden_tolerance_levels(const char *algo) {
  * hash, so it gets its own, orthogonal namespace dimension instead of folding into
  * the backend-set tag. Golden files for an architecture not listed here do not
  * exist; add one (see PH_GOLDEN_ARCH_TAG's #else) rather than reusing another
- * architecture's numbers, since nothing here has been shown to agree with them. */
+ * architecture's numbers, since nothing here has been shown to agree with them.
+ *
+ * Architecture alone isn't the whole story, though: arm64 always has FMA in
+ * hardware (unlike x86-64's SSE2 baseline, which doesn't), so GCC and Clang's
+ * differing default floating-point-contraction policy (whether a*b+c fuses into one
+ * rounding step or stays two) changes pHash's answer on arm64 between compilers,
+ * confirmed on real CI -- ubuntu-arm64-gcc produced a third value, distinct from
+ * both macos-arm64-clang's and every x86_64 job's, at exactly the same fixture and
+ * dct_size that identifies this whole class of drift. On x86-64 baseline (no FMA
+ * available at all) GCC and Clang happened to agree in the same CI run, but the
+ * compiler tag is still included unconditionally rather than only for arm64, so a
+ * future x86-64 divergence (a different -march baseline, a compiler version that
+ * changes its default) fails loudly with a missing-file #error instead of silently
+ * comparing against numbers from a compiler that was never shown to agree. */
 #if defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
 #define PH_GOLDEN_ARCH_TAG "arm64"
 #elif defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64)
 #define PH_GOLDEN_ARCH_TAG "x86_64"
 #else
 #error                                                                                             \
-    "No golden_hashes.<backend-set>.<arch>.txt exists for this architecture yet -- add PH_GOLDEN_ARCH_TAG for it, run this test with --update to generate the file, and commit it."
+    "No golden_hashes.<backend-set>.<arch>-<compiler>.txt exists for this architecture yet -- add PH_GOLDEN_ARCH_TAG for it, run this test with --update to generate the file, and commit it."
+#endif
+
+#if defined(__clang__)
+#define PH_GOLDEN_COMPILER_TAG "clang"
+#elif defined(_MSC_VER)
+#define PH_GOLDEN_COMPILER_TAG "msvc"
+#elif defined(__GNUC__)
+#define PH_GOLDEN_COMPILER_TAG "gcc"
+#else
+#error                                                                                             \
+    "No golden_hashes.<backend-set>.<arch>-<compiler>.txt exists for this compiler yet -- add PH_GOLDEN_COMPILER_TAG for it, run this test with --update to generate the file, and commit it."
 #endif
 
 static const char *FIXTURES[] = {
@@ -159,7 +183,8 @@ static int g_mismatches = 0;
 static int g_checked = 0;
 
 static const char *golden_path(void) {
-    return TEST_DATA_DIR "/golden_hashes." PH_GOLDEN_BACKEND_SET "." PH_GOLDEN_ARCH_TAG ".txt";
+    return TEST_DATA_DIR "/golden_hashes." PH_GOLDEN_BACKEND_SET "." PH_GOLDEN_ARCH_TAG
+                         "-" PH_GOLDEN_COMPILER_TAG ".txt";
 }
 
 /* The hex field width has to track PH_DIGEST_MAX_BYTES, not sit at a literal that
