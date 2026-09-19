@@ -6,6 +6,34 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* Portable attribute shims: MSVC understands neither __attribute__((unused))
+ * nor __attribute__((format(printf, ...))), and has no direct equivalent, so
+ * these compile away to nothing there instead of failing the build. */
+#if defined(__GNUC__) || defined(__clang__)
+#define PH_TEST_UNUSED __attribute__((unused))
+#define PH_TEST_PRINTF_FORMAT(fmt_idx, arg_idx) __attribute__((format(printf, fmt_idx, arg_idx)))
+#else
+#define PH_TEST_UNUSED
+#define PH_TEST_PRINTF_FORMAT(fmt_idx, arg_idx)
+#endif
+
+/* Portable popcount: MSVC has no __builtin_popcount. __popcnt requires SSE4.2/POPCNT
+ * to be guaranteed present, which isn't assumed for this test-only helper, so a plain
+ * bit-counting loop is used there instead of __popcnt. */
+#if defined(__GNUC__) || defined(__clang__)
+#define PH_TEST_POPCOUNT(x) __builtin_popcount((unsigned int)(x))
+#else
+static __inline int ph_test_popcount(unsigned int x) {
+    int count = 0;
+    while (x) {
+        x &= (x - 1);
+        count++;
+    }
+    return count;
+}
+#define PH_TEST_POPCOUNT(x) ph_test_popcount((unsigned int)(x))
+#endif
+
 /* Simple assertion macros for testing */
 
 #define ASSERT_OK(expr)                                                                            \

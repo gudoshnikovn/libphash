@@ -111,7 +111,7 @@ static void test_multi_writes_exactly_one_slot_per_flag(void) {
     for (uint32_t flags = 1; flags <= ALL_FLAGS_MASK; flags++) {
         if (flags & ~(uint32_t)ALL_FLAGS_MASK)
             continue;
-        int nset = __builtin_popcount(flags);
+        int nset = PH_TEST_POPCOUNT(flags);
 
         /* One slot of slack past the array the caller would legitimately size, so an
          * off-by-one write lands somewhere observable rather than in the caller's stack. */

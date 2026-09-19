@@ -30,7 +30,7 @@ static void test_hash_files_matches_compute_multi() {
     for (uint32_t flags = 1; flags <= ALL_FLAGS_MASK; flags++) {
         if (flags & ~(uint32_t)ALL_FLAGS_MASK)
             continue;
-        int nset = __builtin_popcount(flags);
+        int nset = PH_TEST_POPCOUNT(flags);
 
         for (size_t tc = 0; tc < sizeof(thread_counts) / sizeof(thread_counts[0]); tc++) {
             ph_batch_item_t items[4];

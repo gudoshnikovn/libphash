@@ -32,7 +32,7 @@ static int g_failures = 0;
 static const char *g_scenario = "";
 static long g_fail_at = 0;
 
-static void defect(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void defect(const char *fmt, ...) PH_TEST_PRINTF_FORMAT(1, 2);
 
 static void defect(const char *fmt, ...) {
     va_list ap;

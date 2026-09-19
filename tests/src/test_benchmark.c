@@ -1,5 +1,4 @@
 #include "libphash.h"
-#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,6 +6,57 @@
 
 #ifdef __APPLE__
 #include <mach/mach_time.h>
+#endif
+
+/* MSVC has no <dirent.h>; this benchmark_directory() only ever needs each entry's
+ * name, so a minimal opendir/readdir/closedir built on FindFirstFile/FindNextFile
+ * covers it without pulling in a full POSIX dirent shim. */
+#ifdef _MSC_VER
+#include <windows.h>
+
+typedef struct {
+    HANDLE handle;
+    WIN32_FIND_DATAA find_data;
+    int first_call;
+} DIR;
+
+struct dirent {
+    char d_name[MAX_PATH];
+};
+
+static DIR *opendir(const char *path) {
+    char pattern[MAX_PATH];
+    snprintf(pattern, sizeof(pattern), "%s\\*", path);
+
+    DIR *d = malloc(sizeof(DIR));
+    if (!d)
+        return NULL;
+    d->handle = FindFirstFileA(pattern, &d->find_data);
+    if (d->handle == INVALID_HANDLE_VALUE) {
+        free(d);
+        return NULL;
+    }
+    d->first_call = 1;
+    return d;
+}
+
+static struct dirent *readdir(DIR *d) {
+    static struct dirent ent;
+    if (!d->first_call) {
+        if (!FindNextFileA(d->handle, &d->find_data))
+            return NULL;
+    }
+    d->first_call = 0;
+    snprintf(ent.d_name, sizeof(ent.d_name), "%s", d->find_data.cFileName);
+    return &ent;
+}
+
+static void closedir(DIR *d) {
+    FindClose(d->handle);
+    free(d);
+}
+#else
+#include <dirent.h>
 #endif
 
 /* --- Global State --- */

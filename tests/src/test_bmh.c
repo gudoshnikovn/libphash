@@ -181,7 +181,7 @@ static void test_bmh_bits_are_balanced() {
 
         int ones = 0;
         for (int i = 0; i < d.size; i++)
-            ones += __builtin_popcount(d.data[i]);
+            ones += PH_TEST_POPCOUNT(d.data[i]);
 
         int total = d.size * 8;
         if (ones * 2 < total - total / 8 || ones * 2 > total + total / 8) {

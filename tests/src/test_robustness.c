@@ -153,26 +153,25 @@ static void hashes_of(const rgb_image_t *img, uint64_t out[PH_HASH_FLAGS_COUNT])
 }
 
 // out[] layout matches PH_HASH_FLAGS_COUNT / ph_compute_multi's ascending-bit
-// order: [aHash, dHash, pHash, wHash, mHash, ColorHash].
-static const char *ALGO_NAMES[PH_HASH_FLAGS_COUNT] = {"aHash", "dHash", "pHash",
-                                                      "wHash", "mHash", "ColorHash"};
+// order: [aHash, dHash, pHash, wHash]. mHash and ColorHash were retired from this
+// bitfield in 2.0.0 (see libphash.h), so PH_HASH_FLAGS_COUNT is 4, not 6 -- these
+// arrays used to carry their thresholds too, which made them silently-truncated
+// excess initializers once the flag count dropped (tolerated by GCC/Clang, a hard
+// error on MSVC).
+static const char *ALGO_NAMES[PH_HASH_FLAGS_COUNT] = {"aHash", "dHash", "pHash", "wHash"};
 
 // Contract thresholds (out of 64 bits), per algorithm: a same-scene transform
 // must stay at or under MAX_SIMILAR_DIST[algo], distinct images must clear
 // MIN_DIFFERENT_DIST. Not uniform on purpose -- algorithms genuinely differ
-// in robustness (e.g. mHash, being edge/gradient-based, is measurably more
-// sensitive to a 5% crop than aHash or ColorHash are). Each threshold has
-// headroom over what was actually measured against these fixtures +
-// transforms during development (see tasks/PROGRESS.md, task 13 notes for
-// the measured baseline); MIN_DIFFERENT_DIST is comfortably below the
-// weakest observed different-image separation (ColorHash, ~13).
+// in robustness. Each threshold has headroom over what was actually measured
+// against these fixtures + transforms during development (see tasks/PROGRESS.md,
+// task 13 notes for the measured baseline); MIN_DIFFERENT_DIST is comfortably
+// below the weakest observed different-image separation.
 static const int MAX_SIMILAR_DIST[PH_HASH_FLAGS_COUNT] = {
     10, // aHash
     14, // dHash
     18, // pHash
     14, // wHash
-    24, // mHash
-    8,  // ColorHash
 };
 #define MIN_DIFFERENT_DIST 8
 

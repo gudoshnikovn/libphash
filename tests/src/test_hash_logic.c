@@ -91,7 +91,7 @@ static ph_context_t *load_pgm(int w, int h, const uint8_t *pixels) {
 
 /* Convenience: create a context with image loaded from a PPM pixel array.
  * Kept for future RGB-based tests; suppress unused-function warning. */
-static ph_context_t *load_ppm(int w, int h, const uint8_t *pixels) __attribute__((unused));
+static ph_context_t *load_ppm(int w, int h, const uint8_t *pixels) PH_TEST_UNUSED;
 static ph_context_t *load_ppm(int w, int h, const uint8_t *pixels) {
     size_t sz;
     uint8_t *buf = make_ppm(w, h, pixels, &sz);
