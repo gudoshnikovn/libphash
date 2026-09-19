@@ -339,8 +339,8 @@ typedef enum {
     A_COUNT
 } algo_t;
 
-static const char *ALGO_NAMES[A_COUNT] = {"aHash", "dHash",     "pHash",  "wHash",
-                                          "mHash", "BMH",       "ColorHash", "Radial"};
+static const char *ALGO_NAMES[A_COUNT] = {"aHash", "dHash", "pHash",     "wHash",
+                                          "mHash", "BMH",   "ColorHash", "Radial"};
 
 typedef struct {
     uint64_t bits;   /* the 64-bit algorithms */
