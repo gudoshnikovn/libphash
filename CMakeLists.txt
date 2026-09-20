@@ -189,13 +189,14 @@ endif()
 include(CheckCCompilerFlag)
 
 if(MSVC)
-    # Explicit, not the MSVC default: src/batch.c includes <stdatomic.h>
-    # unconditionally when PHASH_ENABLE_THREADS is on, and MSVC only ships that
-    # header under /std:c11 or later (VS 17.5+). Leaving the standard on
-    # whatever cl.exe defaults to would make the batch thread pool's build
-    # success depend on the toolset version instead of on this file.
+    # src/batch.c includes <stdatomic.h> unconditionally when
+    # PHASH_ENABLE_THREADS is on, and MSVC only ships that header under
+    # /std:c11 or later (VS 17.5+). CMAKE_C_STANDARD (set above, project-wide)
+    # already emits the /std:c1x flag matching it -- not repeated here as an
+    # explicit /std:c11, which would just be a second, possibly conflicting
+    # /std: flag on the same command line.
     #
-    # /std:c11 alone isn't enough, though -- found on a real windows-x86_64 GH
+    # /std:c1x alone isn't enough, though -- found on a real windows-x86_64 GH
     # Actions runner while validating R42's release workflow (the first actual
     # Windows compile of this project; see the PH_API fix earlier in this file
     # for the rest of that story). <stdatomic.h>'s vcruntime_c11_stdatomic.h
@@ -204,7 +205,7 @@ if(MSVC)
     # /std:c11. And M_PI (radial.c) isn't declared by MSVC's <math.h> at all
     # unless _USE_MATH_DEFINES is set before including it -- unlike every
     # other libc this project builds against.
-    add_compile_options(/W3 /O2 /std:c11 /experimental:c11atomics)
+    add_compile_options(/W3 /O2 /experimental:c11atomics)
     add_compile_definitions(_USE_MATH_DEFINES)
 else()
     add_compile_options(-Wall -Wextra -O3 -fPIC)
