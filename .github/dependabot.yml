@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # The five vendored decoders under vendor/ are git submodules; Dependabot opens a
+  # PR bumping the submodule pointer when upstream cuts a new tag. It cannot see the
+  # two stb_image*.h files, which are copied into the tree rather than submoduled --
+  # see SECURITY.md's "Vendored dependencies" section for why those are tracked
+  # manually instead.
+  - package-ecosystem: "gitsubmodule"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+
+  # Keep the Actions themselves (actions/checkout, upload-artifact, etc.) current.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "ci"

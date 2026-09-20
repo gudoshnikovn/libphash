@@ -1,0 +1,58 @@
+name: stb freshness check
+
+# The two copied-in stb headers (vendor/stb_image.h, vendor/stb_image_resize2.h)
+# aren't git submodules, so Dependabot (.github/dependabot.yml) can't see when
+# nothings/stb moves on. This runs scripts/check_stb_freshness.sh on a schedule and
+# opens (or updates) a tracking issue instead of failing anything -- see SECURITY.md's
+# "Vendored dependencies" section for why a bump isn't a drop-in file replacement.
+
+on:
+  schedule:
+    - cron: '0 6 1 * *' # first of the month
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check stb header freshness
+        id: check
+        run: |
+          set +e
+          out=$(bash scripts/check_stb_freshness.sh)
+          status=$?
+          set -e
+          echo "output<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$out" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "stale=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Open or update tracking issue
+        if: steps.check.outputs.stale == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BODY: ${{ steps.check.outputs.output }}
+        run: |
+          title="vendor/stb_image*.h are behind upstream nothings/stb"
+          existing=$(gh issue list --search "in:title \"$title\"" --state open --json number --jq '.[0].number' || true)
+          full_body="Detected by the scheduled \`stb-freshness-check\` workflow.
+
+          \`\`\`
+          $BODY
+          \`\`\`
+
+          Bumping either file needs the local OOM-handling patch reapplied and
+          re-verified against \`tests/src/test_alloc_failure.c\` -- see SECURITY.md's
+          \"Vendored dependencies\" section and \`docs/development.md\`. Not a drop-in
+          file replacement."
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$full_body"
+          else
+            gh issue create --title "$title" --body "$full_body" --label dependencies
+          fi
