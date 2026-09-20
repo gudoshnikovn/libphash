@@ -176,9 +176,13 @@ walkthrough.
   `warn_unused_result`), but calls that used to be silently ignored now leave the
   previous value in place. The bounds are implementation limits, not style:
   `gamma` finite and in (0.001, 1000]; gray weights each ≥ 0 with a sum in
-  (0, INT_MAX/255]; `dct_size` 1..32; `reduction_size` 1..8 and ≤ `dct_size`;
-  radial `projections` 1..64; radial `samples` 1..65536; `block_size` 1..22;
-  `whash_mode` a declared enumerator only.
+  (0, INT_MAX/255]; `dct_size` 1..32; `reduction_size` 2..8 and ≤ `dct_size`;
+  radial `projections` 40..131072 (the lower bound is the fixed coefficient count
+  the DCT keeps, `PH_RADIAL_COEFFS` — fewer angles than that can't produce the hash
+  at all); radial `samples` 2..65536; `block_size` 2..32 (the lower bound is 2, not
+  1 — a single block's mean equals itself, so a one-block grid can't threshold
+  against a median; the upper bound was widened from 22 to 32 when the digest grew
+  to 128 bytes, see above); `whash_mode` a declared enumerator only.
   *Restore the old behaviour:* not possible — pass values inside the documented
   bounds, and check the return value wherever the argument comes from outside your
   own code.
@@ -283,8 +287,8 @@ walkthrough.
   resolution regardless of the setting. Measured tradeoffs (speed saturates around 18%
   at 1/8 because entropy decoding isn't skipped; accuracy holds on photographic content
   but pHash and mHash can exceed this library's own same-scene-transform contract on
-  fine periodic textures) are in the setter's doc comment in `include/libphash.h` and in
-  `tasks/review/PROGRESS.md` ("R57"). Radial, ColorMoments and ColorHash are not
+  fine periodic textures) are in the setter's doc comment in `include/libphash.h`.
+  Radial, ColorMoments and ColorHash are not
   resize-based, so at any scale other than full they operate directly on the reduced
   buffer as their actual input, not as an approximation of the full-resolution result —
   their accuracy at reduced scale has not been measured.

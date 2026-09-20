@@ -115,8 +115,11 @@ if (ph_context_set_phash_params(ctx, dct_size, reduction_size) != PH_SUCCESS) {
 
 Bounds enforced now (previously unchecked): `gamma` finite in `(0.001, 1000]`; gray
 weights each ≥ 0 with a sum in `(0, INT_MAX/255]`; `dct_size` 1..32; `reduction_size`
-1..8 and ≤ `dct_size`; radial `projections` 1..64; radial `samples` 1..65536;
-`block_size` 1..32 (was 1..22, see the `ph_digest_t` entry below); `whash_mode` a
+2..8 and ≤ `dct_size`; radial `projections` 40..131072 (40 is the fixed DCT
+coefficient count the hash keeps — fewer angles can't produce it at all); radial
+`samples` 2..65536; `block_size` 2..32 (was 1..22 — the lower bound is 2, not 1, and
+the upper bound was widened when the digest grew, see the `ph_digest_t` entry
+below); `whash_mode` a
 declared enumerator only.
 
 ## `ph_digest_t` grew and gained a `kind` tag
