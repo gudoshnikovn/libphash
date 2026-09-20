@@ -354,13 +354,48 @@ if(PHASH_USE_TURBOJPEG)
     # workflow (this project's own CMAKE_BUILD_TYPE doesn't apply to that
     # separate submodule configure, so all four common config names are
     # searched rather than trying to infer which one was actually built).
-    find_library(TURBOJPEG_LIB NAMES turbojpeg turbojpeg-static
-                 PATHS ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build
-                       ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build/Release
-                       ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build/RelWithDebInfo
-                       ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build/MinSizeRel
-                       ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build/Debug
-                 NO_DEFAULT_PATH)
+    set(_phash_turbojpeg_find_library_args
+        NAMES turbojpeg turbojpeg-static
+        PATHS ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build
+              ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build/Release
+              ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build/RelWithDebInfo
+              ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build/MinSizeRel
+              ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build/Debug
+        NO_DEFAULT_PATH)
+    find_library(TURBOJPEG_LIB ${_phash_turbojpeg_find_library_args})
+
+    # R90: a plain `cmake -B build` used to silently fall back to stb_image
+    # here, because CI was the only place that ran this sub-build, as a
+    # separate manual step, before configuring the main project. Do that
+    # sub-build ourselves at configure time (once -- cached by TURBOJPEG_LIB
+    # like the pre-built case above) so PHASH_USE_TURBOJPEG=ON works out of
+    # the box, matching what the CI workflow already does by hand.
+    if(NOT TURBOJPEG_LIB AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/CMakeLists.txt)
+        message(STATUS "Vendored TurboJPEG not built yet -- building it now (one-time; cd vendor/libjpeg-turbo to rebuild manually if this ever needs to change).")
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -S ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo
+                                      -B ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build
+                                      -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
+                                      -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+            RESULT_VARIABLE _phash_turbojpeg_configure_result)
+        if(_phash_turbojpeg_configure_result EQUAL 0)
+            execute_process(
+                COMMAND ${CMAKE_COMMAND} --build ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build
+                                          --target turbojpeg-static --config Release
+                RESULT_VARIABLE _phash_turbojpeg_build_result)
+        else()
+            set(_phash_turbojpeg_build_result ${_phash_turbojpeg_configure_result})
+        endif()
+        if(NOT _phash_turbojpeg_build_result EQUAL 0)
+            message(WARNING "Auto-build of vendored TurboJPEG failed (see output above). Falling back to stb_image.")
+        endif()
+        # Re-search now that the sub-build has (hopefully) produced the archive;
+        # the cached NOTFOUND from the first find_library() call must be cleared
+        # first, or find_library() would just return the stale cached result.
+        unset(TURBOJPEG_LIB CACHE)
+        find_library(TURBOJPEG_LIB ${_phash_turbojpeg_find_library_args})
+    endif()
+
     if(TURBOJPEG_LIB)
         target_compile_definitions(phash PRIVATE PH_USE_TURBOJPEG)
         # BUILD_INTERFACE: link the build-tree archive directly, as before.

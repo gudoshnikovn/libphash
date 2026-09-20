@@ -1,8 +1,13 @@
 name: CI
 
+# push is deliberately main-only: feature branches merge into release/** via
+# local rebase + `git merge --ff-only`, never a GitHub PR (see CLAUDE.md), so a
+# push trigger on release/** would fire the full matrix on every single feature
+# merge. Validate a release/** or feature branch on demand via workflow_dispatch
+# (pick the branch in the Actions UI) instead of paying for it automatically.
 on:
   push:
-    branches: [ main, 'release/**' ]
+    branches: [ main ]
   pull_request:
     branches: [ main, 'release/**' ]
   workflow_dispatch: {}

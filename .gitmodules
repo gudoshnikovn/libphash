@@ -1,6 +1,13 @@
 [submodule "vendor/libjpeg-turbo"]
 	path = vendor/libjpeg-turbo
 	url = https://github.com/libjpeg-turbo/libjpeg-turbo.git
+	# Unlike the other vendored decoders (pulled in via add_subdirectory(), which
+	# build inside our own build/), libjpeg-turbo is configured/built in place
+	# (see CMakeLists.txt's PHASH_USE_TURBOJPEG block, R90) -- its own build/
+	# tree lives inside this submodule's working copy, where the top-level
+	# .gitignore can't reach. "untracked" hides that noise from `git status`
+	# while still surfacing a real change to a tracked file or checked-out commit.
+	ignore = untracked
 [submodule "vendor/libpng"]
 	path = vendor/libpng
 	url = https://github.com/pnggroup/libpng.git
