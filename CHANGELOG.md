@@ -426,6 +426,20 @@ walkthrough.
   read them incrementally. For ordinary images the encoded bytes are a small fraction
   of the decoded ones, but callers hashing very large files on a tight memory budget
   should be aware of the change.
+- CMake now pins `CMAKE_C_STANDARD` to 17 (was implicitly whatever the compiler
+  defaulted to, e.g. gnu17 on modern gcc/clang, gnu11 or lower on older ones), with
+  `CMAKE_C_EXTENSIONS` off — nothing in this codebase needs the GNU dialect. A new
+  CI job builds and runs the full test suite under C11/C17/C23 on Linux and macOS to
+  track readiness for raising the default later (Windows/MSVC's C23 support isn't
+  there yet, which is why 23 isn't the default now). Raises the minimum CMake version
+  to 3.21 (needed to recognize the C17/C23 standard values).
+- Clang is now the default compiler in both build systems (`CMakePresets.json`'s
+  `clang` preset; the Makefile's `CC`) — still fully overridable
+  (`-DCMAKE_C_COMPILER=gcc`, `CC=gcc make`, or the `gcc` preset). CI continues to
+  test both compilers on every push.
+- A plain `cmake -B build` now builds the vendored TurboJPEG submodule itself if it
+  isn't built yet, instead of silently falling back to stb_image — previously only
+  the CI workflow did this sub-build, as a separate manual step.
 
 ### Fixed
 
