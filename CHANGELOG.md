@@ -440,6 +440,17 @@ walkthrough.
 - A plain `cmake -B build` now builds the vendored TurboJPEG submodule itself if it
   isn't built yet, instead of silently falling back to stb_image — previously only
   the CI workflow did this sub-build, as a separate manual step.
+- **Minimum supported 32-bit x86 CPU is now one with SSE2** (~Pentium 4/Athlon 64,
+  2000-2003 onward). Both build systems force `-mfpmath=sse -msse2` there to avoid
+  x87 extended-precision float math, whose results depend on the compiler/CPU in a
+  way SSE2's don't — see "Fixed" for the hash-divergence bug this closes. Every other
+  architecture this library targets was already unaffected (fixed-width float ABI).
+- Documented: two hash algorithms can differ by a few bits between CPU architectures
+  for near-uniform/degenerate input (e.g. a single flat colour), because floating-point
+  addition isn't associative and pHash/Radial threshold their coefficients against a
+  median that such input places right at the boundary. Ordinary photographs are not
+  affected. `tests/data/golden_hashes.*` fixtures are namespaced by architecture for
+  this reason.
 
 ### Fixed
 
@@ -543,6 +554,43 @@ walkthrough.
   silently discarded, so only the generic fatal error that followed it reached the
   caller. An intact, ordinary image now correctly reports "too large" rather than
   "corrupt" when it is rejected for size.
+- **`ph_hamming_distance_digest()` silently undercounted on x86_64** for a digest
+  whose size in bytes wasn't a multiple of 32: the AVX2 loop advances its index as a
+  byte offset, but the SSE4.2 loop that follows it compared that same index directly
+  against a word count and indexed into the buffer with it, so for a size like 33 the
+  SSE4.2 loop's body never ran and the scalar tail that should have covered the
+  remainder was skipped too — the last bytes of the digest were dropped from the
+  popcount without any error. Every digest size 2.0.0 ships (mHash 72 bytes, colour
+  histogram 108 bytes, up to 128 bytes generally) can trigger this; arm64 (NEON path)
+  was never affected.
+- PNG/JPEG/WebP native decoders misreported their own internal allocation failures as
+  `PH_ERR_CORRUPT_DATA` on several further paths beyond the ones fixed earlier in this
+  release: `png_create_read_struct()`/`png_create_info_struct()`/`tjInitDecompress()`
+  returning NULL, libpng's and libjpeg-turbo's own out-of-memory message text going
+  unrecognized, and libwebp's simple decode API being unable to distinguish OOM from a
+  corrupt bitstream at all (switched to the advanced `WebPDecode()`/
+  `WebPDecoderConfig` API, which reports a precise `VP8_STATUS_OUT_OF_MEMORY`). Also:
+  `png_read_image()` could still longjmp out after this function's own scratch buffers
+  were allocated, and the cleanup path only freed one of them — a real leak on that
+  path, now fixed alongside the misclassification. The alternative spng PNG backend
+  had the identical classification gap (`SPNG_EMEM`, unchecked) plus, separately, a
+  cleanup pointer declared as a volatile-qualified pointer *to* non-volatile data
+  rather than a volatile pointer, undefined by C11 across the `setjmp`/`longjmp` it
+  was meant to protect.
+- **32-bit x86 (`i686`) builds could produce a different hash than a 64-bit build for
+  the same image**, including a degenerate all-zero pHash for a uniform-colour input
+  that a 64-bit build hashes normally. Root cause: GCC/Clang default to x87 FPU
+  extended-precision intermediates for scalar `float`/`double` math on 32-bit x86,
+  not SSE2, unlike every other architecture this library targets. Both build systems
+  now force `-mfpmath=sse -msse2` on 32-bit x86, which raises the minimum supported
+  32-bit x86 CPU to one with SSE2 (~Pentium 4/Athlon 64, 2000-2003 onward — the same
+  floor most current Linux distributions already assume for `i686`). See "Changed"
+  for the minimum-CPU note.
+- The AVX2 Hamming-distance path called an intrinsic (`_mm256_extract_epi64`) that
+  needs a 64-bit register and does not exist on 32-bit x86 at all, so any 32-bit x86
+  build with AVX2 available failed to link. AVX2 is now gated on `__x86_64__`/`_M_X64`
+  in addition to `__AVX2__`; 32-bit x86 falls through to the SSE4.2 path instead
+  (AVX2 implies SSE4.2).
 
 ### Security
 
@@ -558,6 +606,14 @@ walkthrough.
   the real catch-all backend and intercepted any input beginning with `DE AD`.
 - **Absurd aspect ratios** are rejected by a per-dimension cap of 1000000 pixels that
   no `max_pixels` setting can lift, in every format and every build configuration.
+- **Heap out-of-bounds write / segfault in the Block Mean Hash** on a 32-bit build:
+  `block_size * block_size` was cast to `size_t` before multiplying, which only
+  prevents overflow where `size_t` is wider than `int` — on 32-bit `size_t` it
+  wrapped, in one case masking the correct `PH_ERR_ALLOCATION_FAILED` response for
+  the wrong reason and in another producing a 1-byte scratch buffer that the resize
+  step then wrote a full block into. Routed through the same overflow-checked
+  allocation-size helper (`ph_safe_image_alloc_size()`) the rest of the codebase
+  already uses instead of repeating the unsafe local pattern.
 - **PNG decoder hardening:** overflow-checked `row_ptrs` allocation, the dimension cap
   applied straight from the IHDR, and `setjmp` armed before the info struct exists.
 - The decode path is now fuzzed (libFuzzer) and built under ASan/UBSan in CI.
