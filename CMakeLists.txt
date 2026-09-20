@@ -200,14 +200,41 @@ else()
     if(PHASH_OPTIMIZE_NATIVE)
         add_compile_options(-march=native)
     else()
-        # Architecture specific optimizations
-        if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
-            add_compile_options(-msse4.2)
-            # Dynamically check for AVX2 support and apply ONLY to common.c
-            check_c_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
-            if(COMPILER_SUPPORTS_AVX2)
-                set_source_files_properties(src/hashes/common.c PROPERTIES COMPILE_OPTIONS "-mavx2")
-                set_source_files_properties(src/hashes/color_histogram.c PROPERTIES COMPILE_OPTIONS "-ffast-math")
+        # Architecture specific optimizations.
+        #
+        # CMAKE_SYSTEM_PROCESSOR is NOT reliable for telling 32-bit x86 apart from
+        # 64-bit here: without a real cross-compiling toolchain file (CMAKE_SYSTEM_NAME
+        # set), CMake reports the *host*'s uname -- so build-and-test-32bit's
+        # -DCMAKE_C_FLAGS=-m32 -DCMAKE_SYSTEM_PROCESSOR=i686 in ci.yml is silently
+        # overridden back to the runner's real "x86_64" during project(), and this
+        # branch matched "x86_64|amd64" for that leg too (that's how -mavx2 ever
+        # reached src/hashes/common.c on a 32-bit build in the first place -- see
+        # R82). CMAKE_SIZEOF_VOID_P, by contrast, is derived from an actual compiled
+        # test binary and correctly reflects -m32, so it's what distinguishes the two
+        # x86 widths below.
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|i[3-6]86|^x86$")
+            if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+                add_compile_options(-msse4.2)
+                # Dynamically check for AVX2 support and apply ONLY to common.c
+                check_c_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
+                if(COMPILER_SUPPORTS_AVX2)
+                    set_source_files_properties(src/hashes/common.c PROPERTIES COMPILE_OPTIONS "-mavx2")
+                    set_source_files_properties(src/hashes/color_histogram.c PROPERTIES COMPILE_OPTIONS "-ffast-math")
+                endif()
+            else()
+                # R86/R88/R89: 32-bit x86 has no fixed float ABI of its own -- GCC/Clang
+                # default to x87 FPU extended-precision intermediates for scalar
+                # double/float math there, not SSE2, unless told otherwise. That default
+                # silently changes this library's own floating-point output (e.g.
+                # ph_compute_phash()'s rounding noise on solid-colour input,
+                # tests/src/test_hash_properties.c's synthetic rotation profile) purely
+                # because of how the compiler happens to schedule intermediate
+                # precision, with nothing in the library or its test corpus asking for
+                # it. Force SSE2-based float math so 32-bit and 64-bit x86 builds agree
+                # bit-for-bit wherever they should. Raises the minimum 32-bit CPU to
+                # SSE2-capable hardware (~Pentium 4/Athlon 64, 2000-2003) -- the same
+                # floor most current Linux distributions already assume for i686 builds.
+                add_compile_options(-msse2 -mfpmath=sse)
             endif()
         elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
             add_compile_options(-march=armv8-a+simd)

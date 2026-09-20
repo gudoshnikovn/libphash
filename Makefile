@@ -11,6 +11,20 @@ endif
 ifeq ($(UNAME_M),arm64)
     CFLAGS += -march=armv8-a+simd
 endif
+# R86/R88/R89: 32-bit x86 has no fixed float ABI of its own -- GCC/Clang default to
+# x87 FPU extended-precision intermediates for scalar double/float math there, not
+# SSE2, unless told otherwise. That default silently changes this library's own
+# floating-point output (e.g. ph_compute_phash()'s rounding noise on solid-colour
+# input, tests/src/test_hash_properties.c's synthetic rotation profile) purely
+# because of how the compiler happens to schedule intermediate precision, with
+# nothing in the library or its test corpus asking for it. Force SSE2-based float
+# math so 32-bit and 64-bit x86 builds agree bit-for-bit wherever they should.
+# Raises the minimum 32-bit CPU to SSE2-capable hardware (~Pentium 4/Athlon 64,
+# 2000-2003) -- the same floor most current Linux distributions already assume
+# for i686 builds.
+ifneq (,$(filter i386 i486 i586 i686 x86,$(UNAME_M)))
+    CFLAGS += -msse2 -mfpmath=sse
+endif
 
 # --- WebP Support ---
 # To use WebP in the standalone Makefile, ensure libwebp is installed and paths are set.
