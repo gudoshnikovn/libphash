@@ -1,0 +1,26 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "clang",
+      "displayName": "Clang/LLVM (recommended default)",
+      "description": "Priority toolchain: LLVM is the more actively developed of the two compilers this project tests, and several sanitizer/architecture checks in CMakeLists.txt are already Clang-specific. Not forced anywhere else -- override with -DCMAKE_C_COMPILER=gcc or the 'gcc' preset below.",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "gcc",
+      "displayName": "GCC",
+      "description": "Fully supported alternative -- CI tests both compilers on every push. Use this preset (or plain -DCMAKE_C_COMPILER=gcc) if you don't have clang installed.",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    }
+  ]
+}

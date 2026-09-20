@@ -1,6 +1,18 @@
-cmake_minimum_required(VERSION 3.10)
+# 3.21 for CMAKE_C_STANDARD 17/23 recognition (added in 3.21) and for
+# CMakePresets.json's schema version used by CMakePresets.json at the repo root.
+cmake_minimum_required(VERSION 3.21)
 project(libphash VERSION 2.0.0 LANGUAGES C)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# Explicit C standard (previously unset -- silently fell back to whatever the
+# compiler defaults to, e.g. gnu17 on modern gcc/clang, gnu11 or lower on old
+# ones). C17 is the widest-supported non-legacy standard across the full CI
+# matrix, including windows-latest/MSVC, whose C23 support is still immature.
+# CMAKE_C_EXTENSIONS is OFF because nothing in this codebase uses GNU dialect
+# features (typeof, statement expressions, VLAs) -- plain -std=c17, not gnu17.
+set(CMAKE_C_STANDARD 17)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
 
 # Only install()/export when built standalone -- a parent project that pulls
 # libphash in via add_subdirectory() owns its own install rules.

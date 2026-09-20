@@ -162,6 +162,56 @@ jobs:
     - name: Run Tests
       run: cd build && ctest -C Release --output-on-failure
 
+  # Confirms the code actually compiles and passes under each standard the
+  # project's CMAKE_C_STANDARD default (C17, see CMakeLists.txt) could plausibly
+  # move between -- most importantly C23, which isn't the default yet only
+  # because windows-latest/MSVC's C23 support is still too immature to trust in
+  # the main matrix. No windows-latest here on purpose: this leg exists to watch
+  # for that gap closing, not to re-test something MSVC already covers at C17.
+  # Minimal build (stb_image only) since the standard is what's under test, not
+  # the vendored decoders -- those are already exercised at C17 elsewhere.
+  c-standard-matrix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        std: [11, 17, 23]
+        cc: [gcc, clang]
+        exclude:
+          # macOS gcc is a clang shim in disguise -- redundant with the clang leg.
+          - os: macos-latest
+            cc: gcc
+    runs-on: ${{ matrix.os }}
+    name: c-standard (${{ matrix.os }}, ${{ matrix.cc }}, C${{ matrix.std }})
+    env:
+      CC: ${{ matrix.cc }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake${{ matrix.cc == 'clang' && ' clang' || '' }}
+
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: brew install cmake
+
+    - name: Configure CMake (minimal, stb_image only)
+      run: >
+        cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+        -DCMAKE_C_STANDARD=${{ matrix.std }} -DCMAKE_C_STANDARD_REQUIRED=ON
+        -DPHASH_USE_TURBOJPEG=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
+
+    - name: Build
+      run: cmake --build build --config Release
+
+    - name: Run Tests
+      run: cd build && ctest --output-on-failure
+
   # R26: most overflow findings from this review (e.g. pixel-count overflow, PNG
   # row_ptrs overflow) trigger at much smaller inputs on a 32-bit size_t/int than on
   # 64-bit -- the matrix above never exercised that width at all. Scoped to the

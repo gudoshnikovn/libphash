@@ -1,4 +1,13 @@
-CC ?= gcc
+# Clang/LLVM is the priority default (more actively developed; several other
+# checks in this tree already special-case it), but this stays overridable --
+# `CC=gcc make` or any environment CC keeps working exactly as before. Plain
+# `CC ?= clang` would NOT do that: GNU Make ships a built-in default of
+# `CC = cc`, so by the time this line runs CC already looks "defined" and
+# `?=` becomes a no-op. `origin` distinguishes that built-in default from an
+# actual override and only replaces the former.
+ifeq ($(origin CC),default)
+CC = clang
+endif
 GENERATED_DIR = generated
 CFLAGS = -I./include -I./src -I./$(GENERATED_DIR) -O3 -Wall -Wextra -fPIC
 LDFLAGS = -lm
