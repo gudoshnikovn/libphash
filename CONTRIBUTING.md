@@ -79,8 +79,8 @@ open docs/coverage/html/index.html   # or just point a browser at the file
 
 `make coverage` is a `make clean && make test PHASH_COVERAGE=1` under the hood, so it
 only covers the portable (stb_image) build's code paths — the native decoder backends
-are excluded (a known gap, see `tasks/` for the tracking item if you are looking at the
-maintainer's internal backlog).
+are excluded. See `docs/development.md`'s "Two coverage targets, and why one isn't
+enough" section for `make coverage-cmake`, which covers those instead.
 
 ## Commit and PR conventions
 

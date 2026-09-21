@@ -142,8 +142,7 @@ walkthrough.
   default change alone, real photo fixtures: mean PCC-distance 0.08–0.10, the same order
   of magnitude as this library's normal intra-class variation from benign transforms.
   History, the trust placed in pHash's own code as the source for these two parameters,
-  and the full measurement are in `docs/algorithm-provenance.md` §7 and
-  `tasks/review/R52_gamma_default_and_convention.md`.
+  and the full measurement are in `docs/algorithm-provenance.md` §7.
   *Restore the old behaviour:* not possible; recompute any stored radial digests. A caller
   who explicitly set gamma or relied on the old 3×3 blur must also review that call.
 

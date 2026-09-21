@@ -5,10 +5,27 @@ This guide outlines the standards and procedures for contributing to `libphash`.
 ## Build Environment
 
 ### Toolchains
-The project supports `gcc`, `clang`, and `msvc`. The `Makefile` allows compiler overrides:
+The project supports `gcc`, `clang`, and `msvc`. Clang/LLVM is the priority default in
+both build systems (it's the more actively developed of the two Unix compilers this
+project tests, and several sanitizer/architecture checks in `CMakeLists.txt` are
+already Clang-specific) — still fully overridable, and CI tests both gcc and clang on
+every push:
+
 ```bash
-make CC=clang
+# Makefile: CC defaults to clang, override with CC=
+make CC=gcc
+
+# CMake: use the "clang" or "gcc" preset from CMakePresets.json, or override directly
+cmake --preset clang -DPHASH_BUILD_TESTS=ON -B build
+cmake -B build -DCMAKE_C_COMPILER=gcc  # equivalent, no presets
 ```
+
+The C standard is pinned explicitly: `CMAKE_C_STANDARD 17` (`CMakeLists.txt`), with
+`CMAKE_C_EXTENSIONS OFF` since nothing here needs the GNU dialect. This was previously
+unset, i.e. silently whatever the compiler defaulted to. It is not C23 yet, even though
+every toolchain this project tests on Linux/macOS handles it fine (confirmed locally
+and via the `c-standard-matrix` CI job below) — `windows-latest`'s MSVC support for
+`/std:c23` isn't mature enough to trust as the project-wide default.
 
 ### Build systems and their defaults
 
@@ -32,14 +49,14 @@ sync when you add or flip a switch.**
 | spng instead of libpng | `PHASH_USE_SPNG=OFF` | *n/a* | raw `-D` flag, not an `option()` |
 | libwebp | `PHASH_USE_WEBP=ON` | `USE_WEBP=0` | Makefile path expects a system libwebp |
 | zlib-ng instead of system zlib | `PHASH_USE_ZLIB_NG=ON` | *n/a* | |
-| **Batch thread pool** | `PHASH_ENABLE_THREADS=ON` | `PHASH_ENABLE_THREADS=1` | **matched in R15**; was `0` in the Makefile |
+| **Batch thread pool** | `PHASH_ENABLE_THREADS=ON` | `PHASH_ENABLE_THREADS=1` | was `0` in the Makefile, matched to CMake's default |
 | Shared library | `PHASH_BUILD_SHARED=OFF` | *n/a* (static `libphash.a` only) | |
 | Tests | `PHASH_BUILD_TESTS=ON` | always built by `all` | |
 | `-march=native` | `PHASH_OPTIMIZE_NATIVE=OFF` | *n/a* (fixed `-msse4.2` / `-march=armv8-a+simd`) | |
 | libFuzzer harnesses | `PHASH_BUILD_FUZZERS=OFF` | *n/a* | requires Clang |
 | Test-only mock decoder | `PHASH_ENABLE_MOCK_BACKEND=OFF` | `PHASH_ENABLE_MOCK_BACKEND=0` | must never be on in a shipped build |
 | Strict dependency handling | `PHASH_STRICT_DEPS=OFF` | *n/a* | |
-| Coverage instrumentation | `PHASH_COVERAGE=OFF` | `PHASH_COVERAGE=0` | same flag name, independent implementations (R24) — see below for why one build alone isn't enough |
+| Coverage instrumentation | `PHASH_COVERAGE=OFF` | `PHASH_COVERAGE=0` | same flag name, independent implementations — see below for why one build alone isn't enough |
 
 Both spellings of the thread switch accept the same off-ramp:
 
@@ -48,12 +65,13 @@ make PHASH_ENABLE_THREADS=0                  # portable build without -pthread
 cmake -S . -B build -DPHASH_ENABLE_THREADS=OFF
 ```
 
-**Why the thread default was changed (R15/L13).** The Makefile used to default to
+**Why the thread default was changed.** The Makefile used to default to
 `PHASH_ENABLE_THREADS=0` "to keep the portable build free of pthread linkage". The
 practical effect was not a leaner build but a dead code path: `src/batch.c`'s worker
 pool was compiled out of every local `make test` and every `make coverage` run, so the
 threaded half of `ph_hash_files()`/`ph_hash_buffers()` was never executed or measured
-locally — which is how the Windows thread-pool defect (H1) survived. The default is now
+locally — which is how a real Windows thread-pool defect survived undetected for a while.
+The default is now
 `1`, i.e. `-pthread` *is* a dependency of the portable build. That is a deliberate
 trade: a pthread implementation is present on every platform the Makefile targets
 (it uses `uname` and POSIX tooling throughout), and correctness coverage of the
@@ -66,7 +84,7 @@ re-invoke `make` rather than listing `clean` as a sibling prerequisite. The old
 `debug: clean all` shape raced under `-jN`: `clean` deleted object files while other
 jobs were compiling them. Prefer the same shape for any future instrumented mode.
 
-### Two coverage targets, and why one isn't enough (R24)
+### Two coverage targets, and why one isn't enough
 
 `make coverage` and `make coverage-cmake` measure disjoint code:
 
@@ -85,8 +103,8 @@ jobs were compiling them. Prefer the same shape for any future instrumented mode
   `docs/coverage/cmake/html/index.html`. This is what actually exercises the
   `max_pixels` checks, `png_error_fn`/`png_warning_fn` + the `longjmp` that carries
   libpng's error message out, `spng_strerror()` branches, and the `pitch`/
-  `alloc_size` overflow guards in `jpeg.c` — the code R16, R17 and R18 lived in and
-  that no coverage number before R24 ever measured.
+  `alloc_size` overflow guards in `jpeg.c` — overflow-hardening code that no coverage
+  number from the Makefile-only target ever measured.
 
 Neither target subsumes the other — always read the two side by side, and treat a
 report that only ran one of them as measuring at most half the decoder surface.
@@ -94,8 +112,8 @@ report that only ran one of them as measuring at most half the decoder surface.
 `scripts/coverage_cmake.sh` treats a failing test the same way `make coverage`
 does: coverage is a measurement pass, not a correctness gate, so a `ctest` failure
 prints a warning and the script continues rather than aborting (a failed test still
-executed its lines). If a decoder submodule isn't built locally (e.g. TurboJPEG —
-see `tasks/PROGRESS.md`), that backend's native path simply can't be measured on
+executed its lines). If a decoder submodule isn't built locally, that backend's
+native path simply can't be measured on
 that machine; `find_library(TURBOJPEG_LIB ...)` falls back to stb_image silently in
 that case, same as any other CMake build here, so check the summary's per-file
 breakdown (`lcov --list docs/coverage/cmake/native.info`) rather than assuming the
@@ -110,7 +128,7 @@ a throwaway prefix, builds a consumer through `find_package(phash)` and through
 `pkg-config`, then **moves the prefix** and repeats the `pkg-config` build from the new
 location.
 
-That last step is the regression guard for R15/L11. `libphash.pc.in` writes
+That last step is the regression guard for a real relocation bug found this way. `libphash.pc.in` writes
 
 ```
 prefix=@CMAKE_INSTALL_PREFIX@
@@ -167,7 +185,7 @@ Two rules keep this working, and both were learned the hard way:
   the codecs have to see them `OFF` while they configure. `CMakeLists.txt` therefore
   saves the parent's values, forces its own, and restores them immediately
   (`phash_push/pop_global_build_flags()`). Forcing them and walking away silently
-  turned off a parent's shared build and its `ctest` (R11/H3).
+  turned off a parent's shared build and its `ctest`.
 - **Never force a dependency pin into the parent's cache.** libpng's
   `find_package(ZLIB REQUIRED)` has to be steered at the bundled zlib-ng, which is
   done by pre-setting `ZLIB_INCLUDE_DIR`/`ZLIB_LIBRARY` (and pre-creating the
@@ -179,7 +197,7 @@ Two rules keep this working, and both were learned the hard way:
   aside, the `zlib-ng` target was never created, and the cached absolute path to its
   archive stayed on libpng's link interface — so the parent's link line acquired a
   file dependency nothing produced (`No rule to make target
-  'phash_build/vendor/zlib-ng/libz.a'`, R51). Any second `cmake -S . -B build`, i.e.
+  'phash_build/vendor/zlib-ng/libz.a'`). Any second `cmake -S . -B build`, i.e.
   any normal incremental build, hit it, in both parent configurations. Hence the
   deliberate re-configure step in the smoke script.
 
@@ -202,6 +220,37 @@ We use `clang-format` with a custom style (based on LLVM with minor tweaks).
 - **Types**: Suffix with `_t` (e.g., `ph_context_t`).
 - **Files**: Lowercase with underscores (e.g., `color_hsv.c`).
 
+## CI matrix (`.github/workflows/ci.yml`)
+
+One job per concern, all triggered on push to `main` and on any pull request:
+
+| Job | What it checks |
+|---|---|
+| `format-check` | `clang-format --dry-run --Werror` over `src/`, `tests/src/`, `include/` — fast, no build, catches a formatting diff before the slower jobs run. |
+| `build-and-test` | Full vendored build (TurboJPEG + libpng/spng + libwebp + zlib-ng) across linux-x86_64 (gcc, clang, and a spng variant), linux-arm64, macos-arm64. `PHASH_STRICT_DEPS=ON`, so a decoder silently falling back to stb_image is a hard configure failure, not a quiet pass. |
+| `coverage-cmake` | `scripts/coverage_cmake.sh` — merged lcov report across the vendored and spng decoder sets; published as a downloadable artifact. |
+| `minimal-build` | Zero-dependency build (every `PHASH_USE_*` off, stb_image only) on ubuntu-latest, macos-latest, windows-latest. |
+| `c-standard-matrix` | Full test suite under `-DCMAKE_C_STANDARD=11/17/23`, gcc+clang, Linux+macOS (no Windows — see the Toolchains section above for why). |
+| `build-and-test-32bit` | The native PNG backend (libpng) built `-m32`, catching `size_t`/`int`-width overflow bugs a 64-bit build can't reach. |
+| `benchmark` | Regression gate against the PR's base commit — see the Benchmarks section below. |
+| `sanitizers` | ASan+UBSan via CMake, `-fno-sanitize-recover=all` (first report aborts the run). |
+| `tsan` | ThreadSanitizer over the threaded batch path (`src/batch.c`) and the "one context per thread" contract. |
+| `valgrind` | The allocation-failure test suite (`tests/src/test_alloc_failure.c`) under Valgrind — independent of ASan/LSan, which don't mix with it. |
+| `fuzz` | A short (90s) libFuzzer run per PR — a fast regression check, not real corpus exploration; see "Fuzzing" below for the real thing. |
+| `install-smoke-test` | `scripts/smoke_install.sh` and `scripts/smoke_add_subdirectory.sh` — both consumer routes (`find_package`, pkg-config, `add_subdirectory()`), both link configurations. |
+
+Two more workflows run on their own schedule rather than per-push:
+
+- **`.github/workflows/fuzz-nightly.yml`** — a 30-minute libFuzzer run, sharing the
+  same growing corpus cache across every night and every PR's short run. See
+  "Fuzzing" below.
+- **`.github/workflows/stb-freshness-check.yml`** — monthly, checks whether the two
+  copied-in stb headers (`vendor/stb_image.h`, `vendor/stb_image_resize2.h`) have
+  drifted from upstream and opens a tracking issue if so. See `SECURITY.md`'s
+  "Vendored dependencies" section.
+- **`.github/dependabot.yml`** — weekly PRs bumping the five vendored decoder
+  submodules and the GitHub Actions themselves.
+
 ## Testing Strategy
 
 ### 1. Unit Tests (`tests/test_*.c`)
@@ -210,7 +259,26 @@ Each module should have a corresponding test file. We use a simple `test_macros.
 ### 2. Stability Tests (`tests/test_stability.c`)
 Ensures that different loading modes (RGB vs Grayscale) and different architectures (NEON vs Scalar) produce bit-exact or near-exact results.
 
-### 3. Benchmarks (`tests/src/test_benchmark.c`)
+### 3. Fuzzing (`tests/fuzz/fuzz_load.c`)
+
+A libFuzzer harness over `ph_decode_buffer()` — the same single entry point every
+format-decoding path funnels through (see `docs/architecture.md`). Build it with
+`-DPHASH_BUILD_FUZZERS=ON`; this is a configure-time error under GCC, since libFuzzer
+needs compiler-rt, which only Clang ships:
+
+```bash
+cmake -B build-fuzz -DPHASH_BUILD_FUZZERS=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang
+cmake --build build-fuzz --target fuzz_load -j
+./build-fuzz/fuzz_load -max_total_time=60 tests/fuzz/corpus/
+```
+
+CI runs this two ways: a 90-second smoke run on every PR (the `fuzz` job above, meant
+to catch a fast regression, not explore the input space) and a 30-minute run nightly
+(`fuzz-nightly.yml`) against a corpus that persists and grows across both. Report a
+crash found this way through `SECURITY.md`'s reporting channel if it looks like a real
+memory-safety issue, not a public issue.
+
+### 4. Benchmarks (`tests/src/test_benchmark.c`)
 
 Used for performance regression testing. Run with:
 
@@ -260,7 +328,7 @@ On a shared CI runner the floor is higher than measured here, which is why
 `STRICT=0` (warning-only) stays in place until the signal has been observed
 across several real pull requests.
 
-### 4. Sanitizers (ASan + UBSan)
+### 5. Sanitizers (ASan + UBSan)
 
 ```bash
 make debug        # rebuilds with -O0 -g -fsanitize=address,undefined
@@ -373,9 +441,10 @@ Each change carries the same `/* libphash local patch (not upstream): ... */`
 marker as the resize patch above (search the file for it). Before the patch,
 `test_alloc_failure` reported 5 problems across 83 failure points, all of this
 shape; after it, 83/83. As with the resize patch, **a bump of this vendored file
-must re-apply and re-verify it** — `tasks/review/upstream-stb/` holds a
-standalone reproducer (`repro/`, `make check`) and notes written up for an
-upstream report.
+must re-apply and re-verify it** against `test_alloc_failure`. Consider reporting
+the underlying bug upstream if it hasn't been already -- see SECURITY.md's
+"Vendored dependencies" section for how this project tracks the two copied-in
+stb headers against upstream.
 
 ## Adding New Features
 
