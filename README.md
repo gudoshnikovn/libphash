@@ -4,6 +4,11 @@ A high-performance, portable C library for Perceptual Image Hashing.
 
 `libphash` is designed for speed and efficiency, providing a robust set of algorithms for image fingerprinting with native, SIMD-accelerated decoders and a zero-fragmentation memory model.
 
+**Upgrading from 1.x?** See [`CHANGELOG.md`](CHANGELOG.md) for what changed and
+[`MIGRATION.md`](MIGRATION.md) for what to do about it — 2.0.0 changes some hash values
+silently (no error, no warning), most importantly because EXIF auto-orientation is now
+on by default.
+
 ## What this library is for
 
 **Finding duplicate and near-duplicate images in a collection you control.** Deduplicating
@@ -42,6 +47,10 @@ and [`docs/algorithm-provenance.md`](docs/algorithm-provenance.md).
 * **Fast Grayscale Loading**: Native decoders can perform grayscale conversion during decompression, significantly reducing CPU cycles and memory overhead.
 * **Zero-Fragmentation Arena**: Optimized context-based **Arena Allocator** for internal operations, ensuring predictable performance in high-load environments.
 * **Decompression-Bomb Protection**: Images are rejected with `PH_ERR_IMAGE_TOO_LARGE` before any pixel buffer is allocated if they exceed a configurable pixel-count limit (256 megapixels by default; tune or disable via `ph_context_set_max_pixels()`).
+* **Automatic EXIF/WebP Orientation**: on by default — a hash describes what a viewer displays, not the raw sensor buffer. Opt out with `ph_context_set_auto_orient(ctx, 0)` if you need the old behavior; see [`MIGRATION.md`](MIGRATION.md).
+* **Batch API**: `ph_hash_files()`/`ph_hash_buffers()` hash many images across an optional internal thread pool, and `ph_compute_multi()` computes several of the four `uint64_t` algorithms (aHash/dHash/pHash/wHash) in one call sharing the same grayscale conversion.
+* **Detailed error codes**: `ph_error_t` distinguishes an unsupported format, corrupt data, an unavailable decoder, an I/O failure, and an oversized image, instead of one generic failure — see `include/libphash.h`.
+* **Digest helpers**: `ph_digest_to_hex()`/`ph_digest_from_hex()`/`ph_hash_to_hex()` for storing/transmitting hashes as text, `ph_similarity()`/`ph_similarity_digest()` for a normalized [0,1] score alongside the raw distance functions.
 * **FFI-Friendly**: Clean C API with opaque pointers, designed for seamless integration with Python, Rust, Node.js, and Go.
 * **Cross-Platform**: Optimized for ARM64 (Apple Silicon, Raspberry Pi) and x86_64.
 
@@ -110,34 +119,59 @@ make test
 #include <libphash.h>
 #include <stdio.h>
 
-int main() {
+int main(void) {
     ph_context_t *ctx = NULL;
     uint64_t hash = 0;
 
-    ph_create(&ctx);
-    
+    if (ph_create(&ctx) != PH_SUCCESS) {
+        fprintf(stderr, "ph_create failed\n");
+        return 1;
+    }
+
     // Enable fast grayscale loading (skips RGB conversion)
     ph_context_set_load_grayscale(ctx, 1);
-    
-    if (ph_load_from_file(ctx, "photo.jpg") == PH_SUCCESS) {
-        ph_compute_phash(ctx, &hash);
-        printf("pHash: %016llx\n", (unsigned long long)hash);
+
+    ph_error_t err = ph_load_from_file(ctx, "photo.jpg");
+    if (err == PH_SUCCESS) {
+        err = ph_compute_phash(ctx, &hash);
+        if (err == PH_SUCCESS)
+            printf("pHash: %016llx\n", (unsigned long long)hash);
+        else
+            fprintf(stderr, "hash failed: %s\n", ph_get_error_string(err));
+    } else {
+        fprintf(stderr, "load failed: %s\n", ph_get_error_string(err));
     }
 
     ph_free(ctx);
     return 0;
 }
-
 ```
+
+Full, compiling versions of this and a two-image comparison example are in
+[`examples/`](examples/) — they're built and run in CI, so they're guaranteed to still
+work with the current header.
 
 ### Compiling & Linking
 
-To compile your application with `libphash`:
+`libphash` links several backend libraries when built with the default vendored
+decoder set, so a plain `-lphash` is not enough on its own. Use whichever of these
+matches how you built/installed it:
 
 ```bash
-gcc main.c -o my_app -lphash
-
+# pkg-config (works for either build system, after `make install`/`cmake --install`)
+cc main.c $(pkg-config --cflags --libs libphash) -o my_app
 ```
+
+```cmake
+# CMake, after `find_package`-able install (see "Recommended (CMake)" above)
+find_package(phash 2 REQUIRED)
+target_link_libraries(my_app PRIVATE phash::phash)
+```
+
+Both forms pull in whatever the installed build was actually configured with
+(`-lturbojpeg -lpng16 -lwebp -lz`, or nothing extra for a minimal/stb_image-only
+build) — you don't need to track that list by hand. See `MIGRATION.md` if you're
+moving a 1.x integration that linked by hand onto either of these.
 
 ---
 

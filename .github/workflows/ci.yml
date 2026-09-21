@@ -33,6 +33,9 @@ jobs:
     - name: clang-format --dry-run --Werror
       run: find src tests/src include -name "*.c" -o -name "*.h" | xargs clang-format --dry-run --Werror
 
+    - name: Check documentation coverage
+      run: bash scripts/check_docs_coverage.sh
+
   # Full vendored build (all bundled decoders) across the platforms/arches we
   # actually ship for. PHASH_STRICT_DEPS=ON turns a silent decoder fallback
   # (e.g. TurboJPEG not found) into a hard configure failure, so a CI green
@@ -522,8 +525,8 @@ jobs:
     # from CMakeLists.txt), TurboJPEG is built as a fully separate CMake
     # invocation that never sees that flag -- without it, linking libphash.so
     # against libturbojpeg.a fails on Linux with "recompile with -fPIC". Found
-    # during R42's release-workflow validation (same TurboJPEG-then-shared-link
-    # shape as here), see tasks/review/PROGRESS.md.
+    # during a release-workflow validation run (same TurboJPEG-then-shared-link
+    # shape as here).
     - name: Build vendored TurboJPEG
       run: |
         cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON
@@ -535,8 +538,11 @@ jobs:
       run: |
         ./scripts/smoke_install.sh static
         ./scripts/smoke_install.sh shared
-        # R11/H3 + R51: libphash must not reconfigure a parent that pulls it in
-        # via add_subdirectory(), and the result must build and run -- with the
+        # libphash must not reconfigure a parent that pulls it in via
+        # add_subdirectory(), and the result must build and run -- with the
         # parent static or shared, and across a repeated configure of the same
         # build tree. Only an integration build can show that.
         ./scripts/smoke_add_subdirectory.sh
+
+    - name: Build and run examples/
+      run: ./scripts/build_examples.sh
