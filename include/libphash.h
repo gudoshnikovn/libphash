@@ -230,9 +230,13 @@ typedef struct {
 PH_API const char *ph_version(void);
 
 /**
- * @brief Returns the library version as a single comparable integer:
- *        major*10000 + minor*100 + patch (e.g. 1.11.0 -> 11100).
+ * @brief Returns the library version as a single comparable integer: the same value
+ *        as the @c PH_VERSION_NUMBER macro this build was compiled with
+ *        (major*1000000 + minor*1000 + patch, e.g. 2.0.0 -> 2000000).
  *        Intended for FFI callers doing compatibility checks without string parsing.
+ *
+ * @note The scheme changed in 2.0.0 (was major*10000 + minor*100 + patch, which
+ *       collided as soon as a minor or patch number exceeded 99). See `MIGRATION.md`.
  */
 PH_API int ph_version_number(void);
 

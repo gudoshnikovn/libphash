@@ -57,7 +57,7 @@ good at; the second is not in scope.
 | wHash | this library, after ImageHash | **none** — see below | n/a — justified by measurement |
 | mHash | pHash (construction); Marr & Hildreth 1980 (operator) | implementation + paper | no |
 | BMH | Yang, Gu & Niu | paper, 2006 | no |
-| Radial | De Roover, De Vleeschouwer, Lefèbvre & Macq | paper, 2005 | no — the gamma/sigma divergence (R52) is fixed |
+| Radial | De Roover, De Vleeschouwer, Lefèbvre & Macq | paper, 2005 | no — the gamma/sigma divergence is fixed |
 | ColorHash | Swain & Ballard (method); this library (quantisation) | paper, 1991 — **not read** | n/a — no conformance claimed |
 | ColorMoments | Stricker & Orengo | paper, 1995 | **yes** — colour space (RGB, not HSV) |
 
@@ -118,6 +118,7 @@ portability and comparison against a foreign implementation.
 
 ## 1. aHash (Average Hash)
 
+- **Call**: `ph_compute_ahash()`.
 - **Concept**: downscale to 8×8, convert to grayscale, compute the mean luminance, set
   one bit per pixel for above/below the mean.
 - **Output**: 64-bit.
@@ -127,6 +128,7 @@ portability and comparison against a foreign implementation.
 
 ## 2. dHash (Difference Hash)
 
+- **Call**: `ph_compute_dhash()`.
 - **Concept**: downscale to 9×8 and compare each pixel with its right-hand neighbour,
   giving 8 differences per row over 8 rows.
 - **Output**: 64-bit.
@@ -137,12 +139,13 @@ portability and comparison against a foreign implementation.
 
 ## 3. pHash (DCT-based)
 
+- **Call**: `ph_compute_phash()`.
 - **Concept**: downscale to 32×32, take the two-dimensional type-II DCT, keep the
   low-frequency 8×8 block, and threshold against its median.
 - **Output**: 64-bit.
-- **Tuning**:
-  - `phash_dct_size` — default 32. Larger captures more detail and costs more.
-  - `phash_reduction_size` — default 8, giving 8×8 = 64 bits.
+- **Tuning**: `ph_context_set_phash_params(dct_size, reduction_size)` — `dct_size`
+  default 32 (larger captures more detail and costs more), `reduction_size` default 8
+  (giving 8×8 = 64 bits).
 - **Strength**: robust to scaling and moderate compression; the usual first choice when
   aHash and dHash are not tolerant enough.
 - **The DC coefficient**: DCT(0,0) is thresholded like the other 63 but takes no part in
@@ -156,13 +159,15 @@ portability and comparison against a foreign implementation.
 
 ## 4. wHash (Wavelet Hash)
 
+- **Call**: `ph_compute_whash()`.
 - **Concept**: Haar wavelet decomposition; threshold the low-frequency band against its
   median.
 - **Output**: 64-bit.
-- **Modes**:
+- **Modes** (`ph_context_set_whash_mode()`):
   - `PH_WHASH_FAST` (default) — a fixed 16×16 scale, one decomposition level.
   - `PH_WHASH_FULL` — scale chosen as the largest power of two fitting the image,
     cascaded down to 8×8. Slower, more faithful to the reference implementation.
+- `ph_context_set_whash_remove_max_haar_ll()` — see the ImageHash-compatibility note below.
 - **No primary source, deliberately.** wHash has no paper, and it is *not* the ICIP 2000
   algorithm of Venkatesan et al. that is often cited for wavelet hashing — that one is
   keyed, and its key is not optional. No paper describes an unkeyed deterministic wavelet
@@ -175,6 +180,7 @@ portability and comparison against a foreign implementation.
 
 ## 5. mHash (Marr–Hildreth)
 
+- **Call**: `ph_compute_mhash()`.
 - **Concept**: normalise to 512×512, equalise the histogram, correlate with a
   Laplacian-of-Gaussian kernel (the Mexican hat of Marr & Hildreth 1980), sum the response
   over 16×16 blocks into a 31×31 grid, and emit nine bits per 3×3 window of that grid,
@@ -197,11 +203,13 @@ portability and comparison against a foreign implementation.
 
 ## 6. BMH (Block Mean Hash)
 
+- **Call**: `ph_compute_bmh()`.
 - **Concept**: divide the image into a grid of blocks, take the mean of each, and
   threshold the block values.
 - **Output**: `ph_digest_t`, `block_size²` bits — 256 bits at the default 16×16.
-- **Tuning**: `block_size` via `ph_context_set_block_params`, 1..22 (22×22 bits is the
-  largest grid that fits a digest).
+- **Tuning**: `block_size` via `ph_context_set_block_params`, 2..32 (32×32 bits is the
+  largest grid that fits a digest; the lower bound is 2, since a single block's mean
+  equals itself and can't threshold against a median).
 - **Use case**: when 64 bits are not enough entropy and a lower collision rate is worth
   the extra bytes.
 - **Threshold**: the **median** of the block means, as the paper specifies, which is what
@@ -250,17 +258,17 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
   distance functions: the digest is quantised coefficients, not a bit vector. The score is
   the peak of the cross-correlation, and `PH_RADIAL_PCC_THRESHOLD` (0.9) is the source's
   cut — a documented starting point, not a tuned recommendation for your corpus.
-- **Tuning**:
-  - `radial_projections` — number of **angles**, default 180, 40–131072.
-  - `radial_samples` — default 128 samples per projection.
-  - `radial_sigma` — Gaussian-blur σ applied before the projections, default 3.5, (0, 64/3].
+- **Tuning**: `ph_context_set_radial_params(projections, samples, sigma)`:
+  - `projections` — number of **angles**, default 180, 40–131072.
+  - `samples` — default 128 samples per projection.
+  - `sigma` — Gaussian-blur σ applied before the projections, default 3.5, (0, 64/3].
   - gamma (`ph_context_set_gamma()`) — default 1.0 (identity), affects Radial only.
 - **Changed in 2.0.0**: the DCT the source specifies is now applied and the 40 is back on
   the coefficient count rather than the angle count; the variance vector is standardised
   before the transform; and the source's comparison is exposed. The gamma default moved
   from 2.2 to 1.0, the gamma exponent convention flipped to match pHash's, gamma now
   normalises by the buffer's own maximum, and the blur moved from a fixed 3×3 kernel to a
-  σ-parameterised one defaulting to 3.5 (R52). Radial digests from 1.x, and from before
+  σ-parameterised one defaulting to 3.5. Radial digests from 1.x, and from before
   this gamma/sigma change, do not carry over.
 - **Rotation: a few degrees, plus an exact half turn — not arbitrary rotation.** Measured
   on `tests/data/photo.jpeg` against a 0.69 baseline for an unrelated image: 1° → 0.993,
@@ -272,6 +280,19 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
 - **Blind spot worth knowing**: an image whose variance is the same at every angle — a
   radially symmetric one — has no angular structure for this descriptor, and hashes to all
   zeroes. Two such images compare as identical.
+
+## Computing several `uint64_t` hashes at once
+
+aHash, dHash, pHash and wHash all reduce to grayscale first. `ph_compute_multi()` takes a
+bitwise-OR of `ph_hash_flags_t` and computes any combination of them in one call, sharing
+that grayscale conversion instead of redoing it once per algorithm — the same saving
+`ph_hash_files()`/`ph_hash_buffers()` get internally for a whole batch. Results are
+bit-for-bit identical to calling the individual `ph_compute_*` functions yourself; this is
+purely a shared-work optimisation, not a different algorithm. mHash, BMH, Radial,
+ColorHash and ColorMoments are not part of this — their digests don't fit a `uint64_t`,
+and BMH's median threshold plus the colour algorithms' `PH_ERR_REQUIRES_COLOR` failure
+mode don't fit the "stops at the first failure, other slots partially written" contract
+either — call them directly.
 
 ## Comparison summary
 

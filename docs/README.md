@@ -22,13 +22,15 @@ Welcome to the internal technical documentation for `libphash`. This directory c
 ## Quick Build Reference
 
 ```bash
-# Using standard Makefile
+# Using standard Makefile (portable, stb_image only; Clang by default, CC=gcc to override)
 make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
 make test
 
-# Using CMake (recommended for cross-platform)
-mkdir -p build && cd build
-cmake ..
-make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
-ctest
+# Using CMake (recommended -- bundled high-performance decoders)
+cmake --preset clang -DPHASH_BUILD_TESTS=ON -B build   # or --preset gcc
+cmake --build build -j
+cd build && ctest --output-on-failure
 ```
+
+See [`development.md`](development.md) for the full option table, both build systems'
+defaults, the CI matrix, and how to run the fuzzer.
