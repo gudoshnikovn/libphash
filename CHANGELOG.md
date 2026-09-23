@@ -467,6 +467,18 @@ walkthrough.
   build stays strictly conforming rather than falling back to a GNU dialect. Consumers
   building libphash on Linux need no workaround and no `-std=gnu17`.
 
+- **The library did not compile for any target where `size_t` is not `unsigned long`.**
+  The three native decoder backends (JPEG, PNG, WebP) declared their compressed-buffer
+  length as `unsigned long`, while the internal backend table they are registered in
+  declares it as `size_t`. Those are the same type on every 64-bit Linux and macOS
+  target, so nothing ever complained there; anywhere else they differ, and assigning
+  such a function into the table is a constraint violation — GCC 14 and newer, and
+  Clang 16 and newer, reject it outright, so a 32-bit build failed to compile. On
+  Windows x64 the mismatch compiled but was worse: the caller passed a 64-bit length and
+  the decoder read a 32-bit one. Buffer lengths are `size_t` throughout now. A JPEG
+  buffer larger than the range libjpeg-turbo's own API accepts is reported as
+  `PH_ERR_IMAGE_TOO_LARGE` rather than silently truncated.
+
 - **A native-toolchain Windows build (either linkage) could not previously succeed at
   all**, for any consumer, not just this project's own CI or release artifacts. Building
   statically failed to even compile (`PH_API` had no case for "this is a static library"
