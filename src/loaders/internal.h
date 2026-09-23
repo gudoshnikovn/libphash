@@ -24,7 +24,7 @@ static inline int ph_magic_is_png(const uint8_t *magic, size_t len) {
  * "IHDR", then width and height as big-endian uint32. Returns 1 when the header is too
  * short to judge -- the backend will report the truncation itself, with a better
  * message. */
-static inline int ph_png_dimensions_within_limit(const unsigned char *buffer, unsigned long size) {
+static inline int ph_png_dimensions_within_limit(const unsigned char *buffer, size_t size) {
     if (size < 24)
         return 1;
     if (!(buffer[12] == 'I' && buffer[13] == 'H' && buffer[14] == 'D' && buffer[15] == 'R'))

@@ -13,8 +13,8 @@ int ph_can_read_webp(const uint8_t *magic, size_t len) {
             magic[8] == 'W' && magic[9] == 'E' && magic[10] == 'B' && magic[11] == 'P');
 }
 
-unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long size, int *width,
-                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
+unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int *width, int *height,
+                                  int *channels, int req_comp, uint64_t max_pixels,
                                   ph_decode_scale_t decode_scale, ph_error_t *out_err,
                                   char *err_msg, size_t err_msg_cap) {
     (void)req_comp;

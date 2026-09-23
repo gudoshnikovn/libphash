@@ -248,6 +248,12 @@ jobs:
   # is a much larger, separate lift, and this backend already links the one native
   # decoder (src/loaders/png.c) that the overflow fixes this leg exists to guard
   # (R03/R17) live in.
+  #
+  # -Werror=incompatible-pointer-types belongs on this leg specifically: a decoder
+  # declared with `unsigned long` where the backend table expects `size_t` is the same
+  # type on every LP64 target the rest of the matrix runs on, so only a build where the
+  # two differ can see the mismatch at all. GCC 14 promoted this diagnostic to an error
+  # by default; pinning it here keeps the class caught on the runner's GCC 13 too.
   build-and-test-32bit:
     runs-on: ubuntu-latest
     steps:
@@ -265,7 +271,8 @@ jobs:
       run: >
         cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
         -DPHASH_USE_TURBOJPEG=OFF -DPHASH_USE_LIBPNG=ON -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
-        -DCMAKE_C_FLAGS=-m32 -DCMAKE_EXE_LINKER_FLAGS=-m32 -DCMAKE_SYSTEM_PROCESSOR=i686
+        -DCMAKE_C_FLAGS="-m32 -Werror=incompatible-pointer-types"
+        -DCMAKE_EXE_LINKER_FLAGS=-m32 -DCMAKE_SYSTEM_PROCESSOR=i686
 
     - name: Build
       run: cmake --build build --config Release -j

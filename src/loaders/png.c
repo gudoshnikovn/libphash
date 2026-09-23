@@ -29,8 +29,8 @@ PH_API int ph_can_use_libpng(void) { return 1; }
 // Custom memory read callback for png_set_read_fn
 typedef struct {
     const unsigned char *data;
-    unsigned long size;
-    unsigned long offset;
+    size_t size;
+    size_t offset;
 } PngMemReader;
 
 static void png_mem_read_fn(png_structp png_ptr, png_bytep out, png_size_t count) {
@@ -104,8 +104,8 @@ static void png_warning_fn(png_structp png_ptr, png_const_charp msg) {
     }
 }
 
-unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
-                                 int *height, int *channels, int req_comp, uint64_t max_pixels,
+unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *width, int *height,
+                                 int *channels, int req_comp, uint64_t max_pixels,
                                  ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
                                  size_t err_msg_cap) {
     /* PNG has no format-level scaled decode; decode_scale is a JPEG-only optimization
@@ -341,8 +341,8 @@ static ph_error_t ph_spng_err(int ret) {
     return (ret == SPNG_EMEM) ? PH_ERR_ALLOCATION_FAILED : PH_ERR_CORRUPT_DATA;
 }
 
-unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
-                                 int *height, int *channels, int req_comp, uint64_t max_pixels,
+unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *width, int *height,
+                                 int *channels, int req_comp, uint64_t max_pixels,
                                  ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
                                  size_t err_msg_cap) {
     /* PNG has no format-level scaled decode; decode_scale is a JPEG-only optimization

@@ -63,12 +63,29 @@ static tjscalingfactor ph_jpeg_scaling_factor(ph_decode_scale_t decode_scale) {
     }
 }
 
-unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size, int *width,
-                                 int *height, int *channels, int req_comp, uint64_t max_pixels,
+unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, size_t size, int *width, int *height,
+                                 int *channels, int req_comp, uint64_t max_pixels,
                                  ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
                                  size_t err_msg_cap) {
     if (!buffer || size == 0)
         return NULL;
+
+    /* TurboJPEG takes the compressed size as `unsigned long` (tjDecompressHeader3(),
+     * tjDecompress2()), which is narrower than size_t on LLP64 -- Windows x64. Refusing
+     * an oversized buffer here, by name, is the difference between an honest error and
+     * handing the decoder a silently truncated bitstream that happens to parse. The
+     * guard is compiled out on every target where the two types have the same range
+     * (all LP64 and ILP32 ones), so it never degenerates into an always-false
+     * comparison. */
+#if ULONG_MAX < SIZE_MAX
+    if (size > ULONG_MAX) {
+        if (out_err)
+            *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        ph_set_err_msg(err_msg, err_msg_cap,
+                       "JPEG buffer is larger than the JPEG decoder can address");
+        return NULL;
+    }
+#endif
 
     tjhandle handle = tjInitDecompress();
     if (!handle) {
@@ -83,7 +100,8 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size
     }
 
     int w, h, subsamp, colorspace;
-    if (tjDecompressHeader3(handle, buffer, size, &w, &h, &subsamp, &colorspace) < 0) {
+    if (tjDecompressHeader3(handle, buffer, (unsigned long)size, &w, &h, &subsamp, &colorspace) <
+        0) {
         const char *tj_err = tjGetErrorStr2(handle);
         if (out_err)
             *out_err =
@@ -142,7 +160,8 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size
     }
 
     int flags = TJFLAG_FASTDCT | TJFLAG_NOREALLOC;
-    if (tjDecompress2(handle, buffer, size, output, w, pitch, h, pixelFormat, flags) < 0) {
+    if (tjDecompress2(handle, buffer, (unsigned long)size, output, w, pitch, h, pixelFormat,
+                      flags) < 0) {
         const char *tj_err = tjGetErrorStr2(handle);
         if (out_err)
             *out_err =

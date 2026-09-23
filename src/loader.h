@@ -46,8 +46,8 @@ static inline int ph_magic_is_webp(const uint8_t *magic, size_t len) {
 #ifdef PH_USE_TURBOJPEG
 // --- JPEG: Static TurboJPEG API (tjDecompress2) ---
 // The only backend that honors decode_scale -- see ph_context_set_decode_scale().
-unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size, int *width,
-                                 int *height, int *channels, int req_comp, uint64_t max_pixels,
+unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, size_t size, int *width, int *height,
+                                 int *channels, int req_comp, uint64_t max_pixels,
                                  ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
                                  size_t err_msg_cap);
 #endif
@@ -55,15 +55,15 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, unsigned long size
 #ifdef PH_USE_LIBPNG
 // --- PNG: Static libpng (memory-based reading, ARM NEON optimized) ---
 // PNG has no format-level scaled decode; decode_scale is accepted and ignored.
-unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
-                                 int *height, int *channels, int req_comp, uint64_t max_pixels,
+unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *width, int *height,
+                                 int *channels, int req_comp, uint64_t max_pixels,
                                  ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
                                  size_t err_msg_cap);
 #elif defined(PH_USE_SPNG)
 // --- PNG: Static spng (single-call API, fast on x86) ---
 // PNG has no format-level scaled decode; decode_scale is accepted and ignored.
-unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size, int *width,
-                                 int *height, int *channels, int req_comp, uint64_t max_pixels,
+unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *width, int *height,
+                                 int *channels, int req_comp, uint64_t max_pixels,
                                  ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
                                  size_t err_msg_cap);
 #endif
@@ -72,8 +72,8 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, unsigned long size
 // --- WebP: libwebp (decodes to RGB, no native grayscale) ---
 // libwebp's scaling API resizes *after* a full decode (no decode-time saving), so
 // decode_scale is accepted and ignored here rather than paying a resize for nothing.
-unsigned char *ph_decode_webp_mem(const unsigned char *buffer, unsigned long size, int *width,
-                                  int *height, int *channels, int req_comp, uint64_t max_pixels,
+unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int *width, int *height,
+                                  int *channels, int req_comp, uint64_t max_pixels,
                                   ph_decode_scale_t decode_scale, ph_error_t *out_err,
                                   char *err_msg, size_t err_msg_cap);
 #endif
