@@ -6,6 +6,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* Same reason as src/internal.h's copy: M_PI is POSIX, not ISO, and the tests build
+ * under the same strict -std=c17 as the library. Defined here rather than in each
+ * test that needs it, and separately from src/internal.h because test_dct.c is a
+ * standalone reimplementation that deliberately includes no library header. */
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 /* Portable attribute shims: MSVC understands neither __attribute__((unused))
  * nor __attribute__((format(printf, ...))), and has no direct equivalent, so
  * these compile away to nothing there instead of failing the build. */

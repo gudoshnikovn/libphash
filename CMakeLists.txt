@@ -10,6 +10,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # matrix, including windows-latest/MSVC, whose C23 support is still immature.
 # CMAKE_C_EXTENSIONS is OFF because nothing in this codebase uses GNU dialect
 # features (typeof, statement expressions, VLAs) -- plain -std=c17, not gnu17.
+#
+# That switch costs more than the GNU dialect, though, and the cost is invisible
+# on Darwin: a strict dialect makes the compiler define __STRICT_ANSI__, and glibc
+# hides *every* non-ISO declaration behind it -- POSIX included. The whole tree was
+# audited for such names; the three that were in use are M_PI (defined in
+# src/internal.h and tests/src/test_macros.h now, so no libc has to provide it) and
+# clock_gettime()/openat(), which have no ISO equivalent and are requested with a
+# _POSIX_C_SOURCE in the two test translation units that need them. Anything new
+# that reaches for a non-ISO libc name has to do the same; scripts/check_strict_iso.sh
+# is what notices when it doesn't.
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
@@ -202,11 +212,14 @@ if(MSVC)
     # for the rest of that story). <stdatomic.h>'s vcruntime_c11_stdatomic.h
     # additionally requires /experimental:c11atomics; without it MSVC's own
     # header self-errors with "C atomic support is not enabled" even under
-    # /std:c11. And M_PI (radial.c) isn't declared by MSVC's <math.h> at all
-    # unless _USE_MATH_DEFINES is set before including it -- unlike every
-    # other libc this project builds against.
+    # /std:c11.
+    #
+    # There used to be an _USE_MATH_DEFINES here as well, because MSVC's
+    # <math.h> declares no M_PI without it. It is gone: M_PI is not ISO C on
+    # any platform, and glibc hides it too once CMAKE_C_EXTENSIONS OFF turns
+    # __STRICT_ANSI__ on, so the constant is now defined by src/internal.h and
+    # tests/src/test_macros.h and no longer depends on the libc at all.
     add_compile_options(/W3 /O2 /experimental:c11atomics)
-    add_compile_definitions(_USE_MATH_DEFINES)
 else()
     add_compile_options(-Wall -Wextra -O3 -fPIC)
     

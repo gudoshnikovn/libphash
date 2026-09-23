@@ -1,3 +1,14 @@
+/* mkstemp()/fdopen() (used by the load-path parity test below) are POSIX, not ISO
+ * C, and the tests build as strict ISO (-std=c17), under which glibc hides every
+ * non-ISO declaration. Unlike a missing constant, a missing *function* only warns
+ * on GCC <= 13 -- it becomes an implicit declaration and the test still links to
+ * the real symbol -- so this one stayed invisible until scripts/check_strict_iso.sh
+ * started rejecting implicit declarations outright. GCC >= 14 makes it a hard error.
+ * Darwin declares both regardless. Must precede every #include. */
+#if !defined(__APPLE__) && !defined(_WIN32)
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "alloc_shim.h"
 #include "internal.h"
 #include "libphash.h"

@@ -1,3 +1,18 @@
+/* clock_gettime()/CLOCK_MONOTONIC (below) and opendir()/readdir() (the non-MSVC
+ * branch further down) are POSIX, not ISO C. The project compiles as strict ISO
+ * (-std=c17, not -std=gnu17), so the compiler defines __STRICT_ANSI__ and glibc
+ * hides every non-ISO declaration behind it -- this translation unit is one of the
+ * two that genuinely need POSIX and therefore asks for it explicitly, rather than
+ * the whole project switching to a GNU dialect. Darwin declares these regardless
+ * and additionally needs mach_absolute_time(), which _POSIX_C_SOURCE would hide,
+ * so the request is scoped to the libcs that require it.
+ *
+ * Must precede every #include: feature test macros are read when the first system
+ * header is parsed. */
+#if !defined(__APPLE__) && !defined(_WIN32)
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "libphash.h"
 #include <stdio.h>
 #include <stdlib.h>

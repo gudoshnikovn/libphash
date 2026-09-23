@@ -3,7 +3,21 @@
 
 #include "libphash.h"
 #include <limits.h>
+#include <math.h>
 #include <stdint.h>
+
+/* M_PI is not ISO C -- it comes from POSIX/XSI, and the project compiles as strict
+ * ISO (CMAKE_C_EXTENSIONS OFF => -std=c17, not -std=gnu17). Under a strict dialect
+ * the compiler defines __STRICT_ANSI__, glibc hides every non-ISO name behind it,
+ * and the three call sites in phash.c/radial.c stop compiling; MSVC's <math.h>
+ * never declares it at all without _USE_MATH_DEFINES. Darwin declares it
+ * unconditionally, which is why this only ever showed up on Linux. Defining it here,
+ * after <math.h>, makes the constant a property of this codebase rather than of the
+ * libc it happens to be built against -- the guard keeps the libc's own definition
+ * when there is one. */
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
 
 /*
  * Internal Image Processing Helpers

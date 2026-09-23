@@ -20,6 +20,15 @@
  * Windows has no such interposition, so there the test reports itself skipped
  * rather than pretending to check something. */
 
+/* open()/openat()/AT_FDCWD/fdopen() below are POSIX, not ISO C, and the tests build
+ * as strict ISO (-std=c17), under which glibc hides every non-ISO declaration. This
+ * is the second of the two translation units that genuinely need POSIX, so it asks
+ * for it here instead of the project opening up a GNU dialect for everyone. Darwin
+ * declares them regardless. Must precede every #include. */
+#if !defined(__APPLE__) && !defined(_WIN32)
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "test_macros.h"
 #include <libphash.h>
 #include <stdio.h>

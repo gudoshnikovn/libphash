@@ -184,7 +184,10 @@ jobs:
   # the main matrix. No windows-latest here on purpose: this leg exists to watch
   # for that gap closing, not to re-test something MSVC already covers at C17.
   # Minimal build (stb_image only) since the standard is what's under test, not
-  # the vendored decoders -- those are already exercised at C17 elsewhere.
+  # the vendored decoders -- those are already exercised at C17 elsewhere, by
+  # build-and-test, which is where the full vendored set meets glibc under the
+  # strict -std=c17 dialect. Repeating that set here at three standards would
+  # triple a ten-job leg to prove a property of the vendored code, not of ours.
   c-standard-matrix:
     strategy:
       fail-fast: false
@@ -214,6 +217,16 @@ jobs:
     - name: Install dependencies (macOS)
       if: runner.os == 'macOS'
       run: brew install cmake
+
+    # The build below already compiles src/ and tests/src/ under the strict dialect,
+    # but only names the symptom ("'M_PI' undeclared") and never sees examples/ at
+    # all. This sweep covers every translation unit in the repository, names the
+    # class, and costs seconds -- worth having as its own step because the failure it
+    # guards is invisible on the machine most of this code is written on: a strict
+    # dialect defines __STRICT_ANSI__, glibc then hides every non-ISO declaration,
+    # and Darwin's libc hides nothing.
+    - name: Strict ISO syntax sweep (src/, tests/src/, examples/)
+      run: ./scripts/check_strict_iso.sh ${{ matrix.std }}
 
     - name: Configure CMake (minimal, stb_image only)
       run: >
