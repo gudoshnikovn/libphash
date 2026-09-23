@@ -12,8 +12,11 @@ name: Release
 #    acceptance criteria asks for, exercising the exact same path production
 #    tags use.
 #  - workflow_dispatch: same build+package+smoke pipeline, uploaded as
-#    ordinary workflow artifacts, no GitHub Release created. Lets this
-#    pipeline be validated on a branch before any tag exists.
+#    ordinary workflow artifacts, no GitHub Release created. Note that GitHub
+#    registers workflow_dispatch from the *default branch* copy of this file,
+#    so it is unavailable until this file reaches main; until then, validating
+#    the pipeline on a branch means pushing a throwaway pre-release tag (a tag
+#    containing `-` publishes as a pre-release, see above).
 on:
   push:
     tags:

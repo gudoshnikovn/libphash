@@ -222,7 +222,8 @@ We use `clang-format` with a custom style (based on LLVM with minor tweaks).
 
 ## CI matrix (`.github/workflows/ci.yml`)
 
-One job per concern, all triggered on push to `main` and on any pull request:
+One job per concern, all triggered on push to `main` or to a `release/**` branch,
+and on any pull request targeting either:
 
 | Job | What it checks |
 |---|---|
@@ -250,6 +251,23 @@ Two more workflows run on their own schedule rather than per-push:
   "Vendored dependencies" section.
 - **`.github/dependabot.yml`** — weekly PRs bumping the five vendored decoder
   submodules and the GitHub Actions themselves.
+
+### Running CI on a branch
+
+A release branch validates itself: `ci.yml` triggers on push to `release/**`, so
+every merge into one runs the full matrix. Runs are free here — the repository is
+public and uses standard runners, so every leg bills zero job-minutes.
+
+For a branch that is *not* `main` or `release/**`, open a draft pull request against
+`release/**`. For a `pull_request` event GitHub takes the workflow definition from the
+merge ref, so this works even when the branch is the only place the workflow change
+exists.
+
+`workflow_dispatch` ("Run workflow" in the Actions UI) is the one route that does not
+work from an arbitrary branch: GitHub registers it from the copy of the workflow file
+on the **default branch**, and ignores a declaration that exists only elsewhere. The
+same applies to `schedule`, Dependabot, and issue/PR templates — all of them are read
+from the default branch only.
 
 ## Testing Strategy
 

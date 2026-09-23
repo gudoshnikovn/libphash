@@ -1,13 +1,25 @@
 name: CI
 
-# push is deliberately main-only: feature branches merge into release/** via
-# local rebase + `git merge --ff-only`, never a GitHub PR (see CLAUDE.md), so a
-# push trigger on release/** would fire the full matrix on every single feature
-# merge. Validate a release/** or feature branch on demand via workflow_dispatch
-# (pick the branch in the Actions UI) instead of paying for it automatically.
+# Triggers, and what each one is actually good for:
+#
+#  - push to main: the shipped default branch.
+#  - push to release/**: how a release branch gets validated. Feature branches
+#    merge into release/** via local rebase + `git merge --ff-only`, never a
+#    GitHub PR (see CLAUDE.md), so without this trigger nothing on a release
+#    branch is ever built by CI. It does mean the full matrix runs on every
+#    feature merge, which is the point -- and the cost is runner time, not
+#    money: this repository is public and on standard runners, so every leg
+#    bills zero (a full run is ~4.5 minutes wall clock, ~26 job-minutes).
+#  - pull_request against main or release/**: for a `pull_request` event GitHub
+#    takes the workflow from the merge ref, so a draft PR validates a branch
+#    whose workflow changes have not landed anywhere yet.
+#  - workflow_dispatch: registered by GitHub from the *default branch* copy of
+#    this file only. It does not work for a branch whose version of this file
+#    declares it and main's does not -- use one of the triggers above until
+#    this file reaches main.
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'release/**' ]
   pull_request:
     branches: [ main, 'release/**' ]
   workflow_dispatch: {}
