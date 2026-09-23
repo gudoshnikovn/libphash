@@ -457,6 +457,16 @@ walkthrough.
 
 ### Fixed
 
+- **The library did not compile on Linux/glibc.** Fixing the C standard also turned off
+  the compiler's language extensions, which makes it define `__STRICT_ANSI__`; glibc
+  hides every declaration that is not ISO C behind that macro, so `M_PI`,
+  `clock_gettime()`, `openat()` and `mkstemp()` disappeared and the recommended CMake
+  build failed outright on any glibc system. macOS was unaffected, which is why it went
+  unnoticed. The library now defines `M_PI` itself instead of expecting a libc to, and
+  the few test translation units that genuinely need POSIX request it explicitly, so the
+  build stays strictly conforming rather than falling back to a GNU dialect. Consumers
+  building libphash on Linux need no workaround and no `-std=gnu17`.
+
 - **A native-toolchain Windows build (either linkage) could not previously succeed at
   all**, for any consumer, not just this project's own CI or release artifacts. Building
   statically failed to even compile (`PH_API` had no case for "this is a static library"
@@ -464,8 +474,8 @@ walkthrough.
   function's own definition as a redefinition of a dllimport declaration); building
   either linkage with the vendored decoder set failed to configure or link over several
   further issues: `<stdatomic.h>` needs `/experimental:c11atomics` in addition to
-  `/std:c11` on MSVC, `M_PI` needs `_USE_MATH_DEFINES` there, there is no `libm` to link
-  on Windows at all, and the installed link paths for the vendored codec archives assumed
+  `/std:c11` on MSVC, `M_PI` is not declared by its `<math.h>` at all, there is no `libm`
+  to link on Windows at all, and the installed link paths for the vendored codec archives assumed
   Unix `ar` naming (`lib<name>.a`) unconditionally. None of this had ever been exercised
   on an actual Windows compiler before — CI's own `minimal-build (windows-latest)` leg
   existed but had likewise never run on a live GitHub Actions runner. New public macro:
