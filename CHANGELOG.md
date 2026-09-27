@@ -511,6 +511,9 @@ walkthrough.
 
 ### Fixed
 
+- **`ph_get_last_error_message()` could return invalid UTF-8.** A message quoting a long
+  non-ASCII path (about 75 Cyrillic characters) was cut in the middle of a character. The
+  cut now always falls on a character boundary.
 - **An encoded buffer over 2 GiB was decoded from a truncated length.** In a build where
   the format went to `stb_image`, the length was cut to an `int`: a valid image in a
   2 GiB + 4 KiB buffer was reported as not an image, and past 4 GiB the length wrapped
