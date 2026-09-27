@@ -98,18 +98,10 @@ jobs:
       CC: ${{ matrix.cc }}
     steps:
     - uses: actions/checkout@v4
+
+    - uses: ./.github/actions/setup-build
       with:
-        submodules: recursive
-
-    - name: Install dependencies (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake${{ matrix.needs_nasm && ' nasm' || '' }}${{ matrix.cc == 'clang' && ' clang' || '' }}
-
-    - name: Install dependencies (macOS)
-      if: runner.os == 'macOS'
-      run: brew install cmake
+        apt-packages: cmake${{ matrix.needs_nasm && ' nasm' || '' }}${{ matrix.cc == 'clang' && ' clang' || '' }}
 
     # libjpeg-turbo doesn't like add_subdirectory (see CMakeLists.txt), so its
     # submodule is built separately; the main configure below then finds the
@@ -139,13 +131,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-      with:
-        submodules: recursive
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake nasm lcov
+    - uses: ./.github/actions/setup-build
+      with:
+        apt-packages: cmake nasm lcov
 
     - name: Build vendored TurboJPEG
       run: |
@@ -172,8 +161,14 @@ jobs:
     name: minimal-build (${{ matrix.os }})
     steps:
     - uses: actions/checkout@v4
+
+    # Nothing to install: cmake ships on all three runner images, and this job never
+    # did install anything. The submodules are still fetched, as they always were,
+    # although this stb-only build does not read vendor/.
+    - uses: ./.github/actions/setup-build
       with:
-        submodules: recursive
+        apt-packages: ''
+        brew-packages: ''
 
     - name: Configure CMake (minimal, stb_image only)
       run: >
@@ -219,18 +214,10 @@ jobs:
       CC: ${{ matrix.cc }}
     steps:
     - uses: actions/checkout@v4
+
+    - uses: ./.github/actions/setup-build
       with:
-        submodules: recursive
-
-    - name: Install dependencies (Linux)
-      if: runner.os == 'Linux'
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake ${{ matrix.cc }}
-
-    - name: Install dependencies (macOS)
-      if: runner.os == 'macOS'
-      run: brew install cmake
+        apt-packages: cmake ${{ matrix.cc }}
 
     # The build below already compiles src/ and tests/src/ under the strict dialect,
     # but only names the symptom ("'M_PI' undeclared") and never sees examples/ at
@@ -280,14 +267,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-      with:
-        submodules: recursive
 
     - name: Install 32-bit toolchain and zlib
-      run: |
-        sudo dpkg --add-architecture i386
-        sudo apt-get update
-        sudo apt-get install -y cmake gcc-multilib g++-multilib zlib1g-dev:i386
+      uses: ./.github/actions/setup-build
+      with:
+        apt-architectures: i386
+        apt-packages: cmake gcc-multilib g++-multilib zlib1g-dev:i386
 
     - name: Configure CMake (32-bit, libpng)
       run: >
@@ -319,7 +304,6 @@ jobs:
     - name: Checkout head
       uses: actions/checkout@v4
       with:
-        submodules: recursive
         path: pr
 
     - name: Determine base commit
@@ -340,7 +324,6 @@ jobs:
       if: steps.base.outputs.sha != ''
       uses: actions/checkout@v4
       with:
-        submodules: recursive
         ref: ${{ steps.base.outputs.sha }}
         path: base
 
@@ -348,10 +331,20 @@ jobs:
       if: steps.base.outputs.sha == ''
       run: echo "::notice::Skipping benchmark regression gate -- no prior commit on this ref to diff against (first push of a new branch)."
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake nasm jq
+    # The head's copy of the action serves both trees: the base commit may predate
+    # it, and the prologue is not what this job compares.
+    - name: Set up head (submodules + dependencies)
+      uses: ./pr/.github/actions/setup-build
+      with:
+        path: pr
+        apt-packages: cmake nasm jq
+
+    - name: Set up base (submodules)
+      if: steps.base.outputs.sha != ''
+      uses: ./pr/.github/actions/setup-build
+      with:
+        path: base
+        apt-packages: ''
 
     - name: Build head
       run: |
@@ -412,13 +405,10 @@ jobs:
       UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
     steps:
     - uses: actions/checkout@v4
-      with:
-        submodules: recursive
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake clang nasm
+    - uses: ./.github/actions/setup-build
+      with:
+        apt-packages: cmake clang nasm
 
     - name: Build vendored TurboJPEG
       run: |
@@ -450,10 +440,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake clang
+    - uses: ./.github/actions/setup-build
+      with:
+        submodules: 'false'
+        apt-packages: cmake clang
 
     - name: Configure CMake (TSan, stb_image only)
       run: >
@@ -483,10 +473,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake valgrind
+    - uses: ./.github/actions/setup-build
+      with:
+        submodules: 'false'
+        apt-packages: cmake valgrind
 
     - name: Configure CMake (stb_image only, no sanitizers)
       run: >
@@ -513,13 +503,10 @@ jobs:
       UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
     steps:
     - uses: actions/checkout@v4
-      with:
-        submodules: recursive
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake clang nasm
+    - uses: ./.github/actions/setup-build
+      with:
+        apt-packages: cmake clang nasm
 
     - name: Build vendored TurboJPEG
       run: |
@@ -565,13 +552,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-      with:
-        submodules: recursive
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake nasm pkg-config
+    - uses: ./.github/actions/setup-build
+      with:
+        apt-packages: cmake nasm pkg-config
 
     # -DCMAKE_POSITION_INDEPENDENT_CODE=ON: the smoke test below also builds a
     # SHARED libphash against this same archive. Unlike libpng/webp/zlib-ng

@@ -248,6 +248,15 @@ and on any pull request targeting either:
 | `fuzz` | A short (90s) libFuzzer run per PR — a fast regression check, not real corpus exploration; see "Fuzzing" below for the real thing. |
 | `install-smoke-test` | `scripts/smoke_install.sh` and `scripts/smoke_add_subdirectory.sh` — both consumer routes (`find_package`, pkg-config, `add_subdirectory()`), both link configurations. |
 
+Every build job starts the same way: a plain `actions/checkout`, then the local
+composite action [`.github/actions/setup-build`](../.github/actions/setup-build/action.yml),
+which fetches the vendored submodules and installs the job's packages (apt on Linux,
+Homebrew on macOS). A job passes only what differs — its package list, or
+`submodules: 'false'` for the stb-only jobs that never read `vendor/`. The checkout
+itself cannot move into the action, because a local action is read from the working
+copy. Configure and build steps stay in the jobs, since their arguments are what
+distinguishes one job from another.
+
 Two more workflows run on their own schedule rather than per-push:
 
 - **`.github/workflows/fuzz-nightly.yml`** — a 30-minute libFuzzer run, sharing the

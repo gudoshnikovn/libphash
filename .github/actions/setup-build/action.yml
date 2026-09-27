@@ -1,0 +1,61 @@
+# The prologue every build job in ci.yml used to repeat by hand: fetch the vendored
+# decoder submodules and install the job's build dependencies from the platform's
+# package manager. One definition, so a change to how that is done (a new package,
+# a retry, a mirror) is made once and not in ten places.
+#
+# It cannot include the checkout itself: a local action is read from the working
+# copy, so `actions/checkout` has to run before `uses: ./.github/actions/setup-build`
+# can resolve. Jobs keep a plain checkout (no `submodules:`) and call this right
+# after it. Configure stays in the jobs as well -- its arguments are the part that
+# differs from job to job, which is exactly what should stay visible there.
+name: Set up build
+description: Fetch vendored submodules and install build dependencies (apt on Linux, Homebrew on macOS).
+
+inputs:
+  path:
+    description: Checkout to operate on, relative to the workspace (for jobs that check out more than one tree).
+    default: '.'
+  submodules:
+    description: Fetch the vendored decoder submodules (recursive). 'false' for stb-only jobs that never read vendor/.
+    default: 'true'
+  apt-packages:
+    description: Space-separated apt packages to install on Linux. Empty skips apt entirely.
+    default: cmake
+  apt-architectures:
+    description: Extra dpkg architectures to enable before installing (e.g. i386 for a -m32 build).
+    default: ''
+  brew-packages:
+    description: Space-separated Homebrew formulae to install on macOS. Empty skips Homebrew.
+    default: cmake
+
+runs:
+  using: composite
+  steps:
+    - name: Fetch submodules
+      if: inputs.submodules == 'true'
+      shell: bash
+      working-directory: ${{ inputs.path }}
+      run: git submodule update --init --recursive --depth 1
+
+    - name: Install dependencies (Linux)
+      if: runner.os == 'Linux' && inputs.apt-packages != ''
+      shell: bash
+      env:
+        APT_PACKAGES: ${{ inputs.apt-packages }}
+        APT_ARCHITECTURES: ${{ inputs.apt-architectures }}
+      run: |
+        for arch in $APT_ARCHITECTURES; do
+          sudo dpkg --add-architecture "$arch"
+        done
+        sudo apt-get update
+        # Word splitting is the point here: one package per word.
+        # shellcheck disable=SC2086
+        sudo apt-get install -y $APT_PACKAGES
+
+    - name: Install dependencies (macOS)
+      if: runner.os == 'macOS' && inputs.brew-packages != ''
+      shell: bash
+      env:
+        BREW_PACKAGES: ${{ inputs.brew-packages }}
+      # shellcheck disable=SC2086
+      run: brew install $BREW_PACKAGES
