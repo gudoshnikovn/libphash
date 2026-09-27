@@ -919,6 +919,7 @@ if(PHASH_BUILD_TESTS)
         add_executable(test_abi_short_enums ${CMAKE_CURRENT_SOURCE_DIR}/tests/src/test_abi.c)
         target_include_directories(test_abi_short_enums PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_BINARY_DIR}/generated
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/src
         )
         target_compile_options(test_abi_short_enums PRIVATE ${PHASH_OWN_COMPILE_OPTIONS} -fshort-enums)

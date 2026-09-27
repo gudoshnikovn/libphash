@@ -50,7 +50,14 @@ fi
 echo "==> Public header check: $CC_BIN -std=$STD"
 "$CC_BIN" --version | head -n1
 
-FLAGS=(-std="$STD" -Wall -Wextra -Wpedantic -I "$ROOT_DIR/include")
+# The consumer's view is the installed layout: libphash.h and the generated
+# phash_version.h it includes, side by side in one directory, and nothing else.
+mkdir -p "$WORK_DIR/include"
+cp "$ROOT_DIR/include/libphash.h" "$WORK_DIR/include/"
+"$ROOT_DIR/scripts/gen_version.sh" "$ROOT_DIR/CMakeLists.txt" \
+    "$ROOT_DIR/include/phash_version.h.in" "$WORK_DIR/include/phash_version.h"
+
+FLAGS=(-std="$STD" -Wall -Wextra -Wpedantic -I "$WORK_DIR/include")
 
 cat > "$WORK_DIR/standalone.c" <<'EOF'
 #include <libphash.h>

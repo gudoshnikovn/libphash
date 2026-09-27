@@ -32,7 +32,7 @@ esac
 STAGE_DIR=$(find "$WORK_DIR" -mindepth 1 -maxdepth 1 -type d | head -n1)
 [ -n "$STAGE_DIR" ] || { echo "smoke_release_artifact.sh: archive was empty" >&2; exit 1; }
 
-for f in "$STAGE_DIR/include/libphash.h" "$STAGE_DIR/LICENSE" "$STAGE_DIR/THIRD-PARTY-NOTICES.md"; do
+for f in "$STAGE_DIR/include/libphash.h" "$STAGE_DIR/include/phash_version.h" "$STAGE_DIR/LICENSE" "$STAGE_DIR/THIRD-PARTY-NOTICES.md"; do
     [ -f "$f" ] || { echo "!!! missing $f in archive" >&2; exit 1; }
 done
 

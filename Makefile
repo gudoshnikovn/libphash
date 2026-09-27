@@ -180,7 +180,7 @@ $(OBJ_DIR)/image/stb_resize_impl.o: $(SRC_DIR)/image/stb_resize_impl.c
 # Test compilation
 # test_abi.c built again under -fshort-enums, which shrinks any public enum that lost its
 # width spacer. Header-only by design, so it is not linked against the library.
-test_abi_short_enums: $(TEST_DIR)/test_abi.c
+test_abi_short_enums: $(TEST_DIR)/test_abi.c $(GENERATED_DIR)/phash_version.h
 	$(CC) $(CFLAGS) -fshort-enums $< -o $@ $(LDFLAGS)
 
 test_%: $(TEST_DIR)/test_%.c $(LIB_NAME)
