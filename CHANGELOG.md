@@ -511,6 +511,10 @@ walkthrough.
 
 ### Fixed
 
+- **An oversized image was reported as corrupt in the minimal build.** A header that
+  `stb_image` refuses for its size (a 20000×20000 PNG, for one) came back as
+  `PH_ERR_CORRUPT_DATA`; the native decoders answer the same header with
+  `PH_ERR_IMAGE_TOO_LARGE`, and now every build does.
 - **A truncated JPEG or PNG loaded successfully in the minimal build.** `stb_image`, the
   only decoder of a build without the vendored libraries, decodes what it could read of a
   half-downloaded file and reports success, while the native decoders reject the same
