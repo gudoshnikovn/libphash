@@ -158,12 +158,12 @@ static int gaussian_blur_impl(ph_context_t *ctx, uint8_t *src, int w, int h, uin
         return 1;
     }
 
-    size_t saved_offset = ctx->arena.offset;
+    ph_arena_mark_t arena_mark = ph_arena_mark(ctx);
     uint8_t *temp = ph_get_scratchpad(ctx, nbytes);
     if (!temp) {
         /* Allocation failure, not the legitimate small-image passthrough above: the
          * caller must be told rather than silently getting the unblurred image back. */
-        ctx->arena.offset = saved_offset;
+        ph_arena_release(ctx, arena_mark);
         return 0;
     }
 
@@ -177,7 +177,7 @@ static int gaussian_blur_impl(ph_context_t *ctx, uint8_t *src, int w, int h, uin
     gaussian_blur_scalar_impl(src, w, h, temp, dst);
 #endif
 
-    ctx->arena.offset = saved_offset;
+    ph_arena_release(ctx, arena_mark);
     return 1;
 }
 

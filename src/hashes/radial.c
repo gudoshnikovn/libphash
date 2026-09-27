@@ -199,7 +199,7 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     free(blur_scratch);
     ph_apply_gamma(ctx, blurred, ctx->image.width, ctx->image.height);
 
-    size_t saved_offset = ctx->arena.offset;
+    ph_arena_mark_t arena_mark = ph_arena_mark(ctx);
     double *projection_variances =
         (double *)ph_get_scratchpad(ctx, (size_t)projections * sizeof(double));
     if (!projection_variances) {
@@ -247,7 +247,7 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     double mean_v = sum_v / (double)projections;
     double spread_sq = sum_v_sq / (double)projections - mean_v * mean_v;
     if (spread_sq <= PH_RADIAL_FLAT_VARIANCE) {
-        ctx->arena.offset = saved_offset;
+        ph_arena_release(ctx, arena_mark);
         free(blurred);
         return PH_SUCCESS;
     }
@@ -261,7 +261,7 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     ph_error_t err =
         ph_dct1d_partial(projection_variances, projections, PH_RADIAL_COEFFS, coefficients);
 
-    ctx->arena.offset = saved_offset;
+    ph_arena_release(ctx, arena_mark);
     free(blurred);
 
     if (err != PH_SUCCESS)

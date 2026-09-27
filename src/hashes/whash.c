@@ -192,7 +192,7 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
     size_t sz_d = (size_t)image_scale * image_scale * sizeof(float);
     size_t sz_temps = (size_t)image_scale * 2 * sizeof(float);
 
-    size_t saved_offset = ctx->arena.offset;
+    ph_arena_mark_t arena_mark = ph_arena_mark(ctx);
     uint8_t *scratch_mem = ph_get_scratchpad(ctx, sz_scaled + sz_d + sz_temps);
     if (!scratch_mem)
         return PH_ERR_ALLOCATION_FAILED;
@@ -204,7 +204,7 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
 
     if (!ph_resize_box(full_gray, ctx->image.width, ctx->image.height, scaled_img, image_scale,
                        image_scale)) {
-        ctx->arena.offset = saved_offset;
+        ph_arena_release(ctx, arena_mark);
         return PH_ERR_ALLOCATION_FAILED;
     }
 
@@ -233,7 +233,7 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
     }
 
     *out_hash = ph_median_bitpack(ll_band, 64);
-    ctx->arena.offset = saved_offset;
+    ph_arena_release(ctx, arena_mark);
     return PH_SUCCESS;
 }
 

@@ -166,7 +166,7 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     size_t sz2 = use_cache ? 0 : ((size_t)dct_size * dct_size * sizeof(float)); // dct_mat
     size_t sz3 = (size_t)reduction_size * reduction_size * sizeof(float);       // dct_out
 
-    size_t saved_offset = ctx->arena.offset;
+    ph_arena_mark_t arena_mark = ph_arena_mark(ctx);
     uint8_t *scratch = ph_get_scratchpad(ctx, sz1 + sz2 + sz3);
     if (!scratch)
         return PH_ERR_ALLOCATION_FAILED;
@@ -187,13 +187,13 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
 
     if (!ph_resize_box(gray_full, ctx->image.width, ctx->image.height, dct_input, dct_size,
                        dct_size)) {
-        ctx->arena.offset = saved_offset;
+        ph_arena_release(ctx, arena_mark);
         return PH_ERR_ALLOCATION_FAILED;
     }
 
     ph_error_t err = ph_dct2_partial(dct_mat, dct_input, dct_size, reduction_size, dct_out);
     if (err != PH_SUCCESS) {
-        ctx->arena.offset = saved_offset;
+        ph_arena_release(ctx, arena_mark);
         return err;
     }
 
@@ -201,7 +201,7 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
      * part in choosing the threshold. See the note at the top of this file. */
     *out_hash = ph_median_bitpack_from(dct_out, reduction_size * reduction_size, 1);
 
-    ctx->arena.offset = saved_offset;
+    ph_arena_release(ctx, arena_mark);
     return PH_SUCCESS;
 }
 

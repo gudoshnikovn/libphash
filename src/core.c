@@ -456,6 +456,10 @@ PH_API void ph_free(ph_context_t *ctx) {
     }
 }
 
+ph_arena_mark_t ph_arena_mark(const ph_context_t *ctx) { return ctx->arena.offset; }
+
+void ph_arena_release(ph_context_t *ctx, ph_arena_mark_t mark) { ctx->arena.offset = mark; }
+
 uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size) {
     if (!ctx || size == 0)
         return NULL;

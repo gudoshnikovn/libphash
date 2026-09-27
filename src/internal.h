@@ -665,9 +665,31 @@ static inline size_t ph_arena_align_up(size_t n) {
     return (n + (PH_ARENA_ALIGNMENT - 1)) & ~(size_t)(PH_ARENA_ALIGNMENT - 1);
 }
 
-/* Ensures the context's scratchpad is at least 'size' bytes.
- * Returns NULL on failure, pointer to buffer on success. The pointer is aligned to
- * PH_ARENA_ALIGNMENT. */
+/* The context's scratch arena: the fields of ctx->arena belong to src/core.c; everything
+ * else goes through the three functions below.
+ *
+ * ph_get_scratchpad() hands out a block of at least `size` bytes, aligned to
+ * PH_ARENA_ALIGNMENT, or NULL on failure (the arena is then unchanged). A block stays
+ * valid only until the next ph_get_scratchpad() on the same context: growing the arena
+ * moves its backing buffer, so every pointer handed out before is stale. A caller that
+ * needs several buffers at once takes one block and carves it (ph_arena_align_up()).
+ *
+ * Every caller brackets its blocks with a mark and a release, and releases on EVERY
+ * return path, the error paths included:
+ *
+ *     ph_arena_mark_t mark = ph_arena_mark(ctx);
+ *     uint8_t *buf = ph_get_scratchpad(ctx, n);
+ *     ...
+ *     ph_arena_release(ctx, mark);
+ *
+ * A missed release is silent -- nothing leaks and the result is right -- but the arena
+ * stays grown for the life of the context and stops trimming itself, since it trims only
+ * when nothing is handed out. tests/src/test_arena.c checks the balance for every
+ * public entry point. */
+typedef size_t ph_arena_mark_t;
+
+ph_arena_mark_t ph_arena_mark(const ph_context_t *ctx);
+void ph_arena_release(ph_context_t *ctx, ph_arena_mark_t mark);
 uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size);
 
 #endif /* INTERNAL_H */

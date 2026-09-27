@@ -204,18 +204,18 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
      * the byte buffer, which needs no alignment, goes last. */
     const int kernel_half = (int)(4.0f * powf(ctx->config.mhash_alpha, ctx->config.mhash_level));
     size_t work_bytes = ph_mh_block_sums_scratch(n, kernel_half);
-    size_t saved_offset = ctx->arena.offset;
-    uint8_t *arena = ph_get_scratchpad(ctx, work_bytes + npix);
-    if (!arena) {
+    ph_arena_mark_t arena_mark = ph_arena_mark(ctx);
+    uint8_t *scratch = ph_get_scratchpad(ctx, work_bytes + npix);
+    if (!scratch) {
         free(blurred);
         return PH_ERR_ALLOCATION_FAILED;
     }
-    uint8_t *work = arena;
-    uint8_t *norm = arena + work_bytes;
+    uint8_t *work = scratch;
+    uint8_t *norm = scratch + work_bytes;
 
     if (!ph_resize_mitchell(blurred, ctx->image.width, ctx->image.height, norm, n, n)) {
         free(blurred);
-        ctx->arena.offset = saved_offset;
+        ph_arena_release(ctx, arena_mark);
         return PH_ERR_ALLOCATION_FAILED;
     }
     free(blurred);
@@ -227,7 +227,7 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
     int side = ph_mh_kernel(ctx->config.mhash_alpha, ctx->config.mhash_level, kernel,
                             PH_MH_MAX_KERNEL_SIDE);
     if (side <= 0) {
-        ctx->arena.offset = saved_offset;
+        ph_arena_release(ctx, arena_mark);
         return PH_ERR_INVALID_ARGUMENT;
     }
     int half = side / 2;
@@ -239,7 +239,7 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
     /* The scratch was sized from the kernel half-width computed above; the kernel the
      * builder actually produced must agree, or the block sums would run off the end. */
     if (half != kernel_half) {
-        ctx->arena.offset = saved_offset;
+        ph_arena_release(ctx, arena_mark);
         return PH_ERR_INVALID_ARGUMENT;
     }
     float blocks[PH_MH_GRID * PH_MH_GRID];
@@ -269,6 +269,6 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
         }
     }
 
-    ctx->arena.offset = saved_offset;
+    ph_arena_release(ctx, arena_mark);
     return PH_SUCCESS;
 }
