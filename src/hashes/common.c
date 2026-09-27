@@ -276,21 +276,40 @@ PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *
 
 static const char PH_HEX_DIGITS[] = "0123456789abcdef";
 
+/* The text form of a digest is "<kind>:<hex>". The kind names are the lowercase suffixes
+ * of the ph_digest_kind_t enumerators, indexed by value, so a binding can derive them
+ * from the header mechanically. */
+static const char *const PH_DIGEST_KIND_NAMES[] = {
+    "unspecified", "bits", "coefficients", "vector", "histogram", "vector16",
+};
+#define PH_DIGEST_KIND_COUNT (sizeof(PH_DIGEST_KIND_NAMES) / sizeof(*PH_DIGEST_KIND_NAMES))
+
+_Static_assert(PH_DIGEST_KIND_COUNT == PH_DIGEST_KIND_VECTOR16 + 1,
+               "every digest kind needs a name in its text form");
+_Static_assert(sizeof("coefficients:") - 1 + PH_DIGEST_MAX_BYTES * 2 + 1 ==
+                   PH_DIGEST_HEX_BUFFER_SIZE,
+               "PH_DIGEST_HEX_BUFFER_SIZE must fit the longest kind name");
+
 PH_API ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out, size_t out_size) {
-    /* size == 0 is accepted here and renders as an empty string: ph_digest_from_hex("")
-     * produces such a digest, so rejecting it would break the round trip. */
-    if (!ph_digest_is_valid(d) || !out)
+    /* size == 0 is accepted here and renders as a bare prefix: ph_digest_from_hex() of
+     * that produces such a digest, so rejecting it would break the round trip. */
+    if (!ph_digest_is_valid(d) || !out || d->kind >= PH_DIGEST_KIND_COUNT)
         return PH_ERR_INVALID_ARGUMENT;
 
-    size_t needed = (size_t)d->size * 2 + 1;
+    const char *name = PH_DIGEST_KIND_NAMES[d->kind];
+    size_t name_len = strlen(name);
+    size_t needed = name_len + 1 + (size_t)d->size * 2 + 1;
     if (out_size < needed)
         return PH_ERR_INVALID_ARGUMENT;
 
+    memcpy(out, name, name_len);
+    out[name_len] = ':';
+    char *hex = out + name_len + 1;
     for (size_t i = 0; i < d->size; i++) {
-        out[i * 2] = PH_HEX_DIGITS[(d->data[i] >> 4) & 0x0F];
-        out[i * 2 + 1] = PH_HEX_DIGITS[d->data[i] & 0x0F];
+        hex[i * 2] = PH_HEX_DIGITS[(d->data[i] >> 4) & 0x0F];
+        hex[i * 2 + 1] = PH_HEX_DIGITS[d->data[i] & 0x0F];
     }
-    out[d->size * 2] = '\0';
+    hex[d->size * 2] = '\0';
     return PH_SUCCESS;
 }
 
@@ -304,27 +323,42 @@ static int ph_hex_nibble(char c) {
     return -1;
 }
 
-PH_API ph_error_t ph_digest_from_hex(const char *hex, ph_digest_t *out) {
-    if (!hex || !out)
+PH_API ph_error_t ph_digest_from_hex(const char *text, ph_digest_t *out) {
+    if (!text || !out)
         return PH_ERR_INVALID_ARGUMENT;
 
+    const char *colon = strchr(text, ':');
+    if (!colon)
+        return PH_ERR_INVALID_ARGUMENT;
+    size_t name_len = (size_t)(colon - text);
+    size_t kind = 0;
+    while (kind < PH_DIGEST_KIND_COUNT &&
+           !(strlen(PH_DIGEST_KIND_NAMES[kind]) == name_len &&
+             memcmp(PH_DIGEST_KIND_NAMES[kind], text, name_len) == 0))
+        kind++;
+    if (kind == PH_DIGEST_KIND_COUNT)
+        return PH_ERR_INVALID_ARGUMENT;
+
+    const char *hex = colon + 1;
     size_t len = strlen(hex);
     if (len % 2 != 0 || len / 2 > PH_DIGEST_MAX_BYTES)
         return PH_ERR_INVALID_ARGUMENT;
 
+    /* Decode into a local first: a malformed string must leave `out` untouched. */
+    ph_digest_t decoded;
     size_t n_bytes = len / 2;
     for (size_t i = 0; i < n_bytes; i++) {
         int hi = ph_hex_nibble(hex[i * 2]);
         int lo = ph_hex_nibble(hex[i * 2 + 1]);
         if (hi < 0 || lo < 0)
             return PH_ERR_INVALID_ARGUMENT;
-        out->data[i] = (uint8_t)((hi << 4) | lo);
+        decoded.data[i] = (uint8_t)((hi << 4) | lo);
     }
-    memset(out->data + n_bytes, 0, PH_DIGEST_MAX_BYTES - n_bytes);
-    out->size = (uint8_t)n_bytes;
-    /* Decoded from text: nothing says what the bytes mean, so nothing is claimed. */
-    out->kind = (uint8_t)PH_DIGEST_KIND_UNSPECIFIED;
-    memset(out->reserved, 0, sizeof(out->reserved));
+    memset(decoded.data + n_bytes, 0, PH_DIGEST_MAX_BYTES - n_bytes);
+    decoded.size = (uint8_t)n_bytes;
+    decoded.kind = (uint8_t)kind;
+    memset(decoded.reserved, 0, sizeof(decoded.reserved));
+    *out = decoded;
     return PH_SUCCESS;
 }
 

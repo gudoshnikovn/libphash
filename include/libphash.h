@@ -213,7 +213,9 @@ PH_API const char *ph_get_last_error_message(const ph_context_t *ctx);
  * Not every digest is a bit vector. Comparing quantised DCT coefficients by Hamming
  * distance, or a histogram by L2, returns a plausible number that means nothing. This
  * tag exists so that such a call **fails** instead: it is never used to pick a metric
- * for you, only to refuse the wrong one.
+ * for you, only to refuse the wrong one. It survives storage: ph_digest_to_hex() writes
+ * it into the text and ph_digest_from_hex() restores it, so two digests read back from
+ * a database are protected exactly as two freshly computed ones are.
  *
  * @c PH_DIGEST_KIND_VECTOR16 is @c PH_DIGEST_KIND_VECTOR with two bytes per feature and a
  * sign, which ColorMoments needs because the third moment is a direction, not a size. The
@@ -1135,25 +1137,46 @@ PH_NODISCARD PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const 
 PH_NODISCARD PH_API ph_error_t ph_histogram_intersection(const ph_digest_t *a, const ph_digest_t *b,
                                                          double *out_similarity);
 
+/** Buffer size that holds the text form of any digest, terminator included: the longest
+ *  kind name plus its colon ("coefficients:", 13 characters), two hex digits per byte of
+ *  a full @c PH_DIGEST_MAX_BYTES digest, and the NUL. */
+#define PH_DIGEST_HEX_BUFFER_SIZE (13 + PH_DIGEST_MAX_BYTES * 2 + 1)
+
 /**
- * @brief Encodes a digest as a lowercase hex string (big-endian, i.e. data[0]
- * produces the first two hex characters).
+ * @brief Encodes a digest as text: its kind, a colon, then its bytes in lowercase hex.
+ *
+ * The kind is the lowercase suffix of its ph_digest_kind_t name -- `unspecified`, `bits`,
+ * `coefficients`, `vector`, `histogram`, `vector16` -- so a radial digest reads
+ * `coefficients:1f80...`. The bytes follow in order, data[0] first. Carrying the kind is
+ * what keeps the comparison functions able to refuse the wrong metric for digests that
+ * were stored and read back (see ph_digest_kind_t).
+ *
  * @param d Digest to encode.
- * @param out Output buffer.
- * @param out_size Size of 'out' in bytes; must be at least d->size * 2 + 1.
- * @return PH_SUCCESS, or PH_ERR_INVALID_ARGUMENT if arguments are invalid or
- * 'out_size' is too small.
+ * @param out Output buffer. @c PH_DIGEST_HEX_BUFFER_SIZE bytes always suffice.
+ * @param out_size Size of 'out' in bytes; at least the kind name's length + 1 +
+ *                 d->size * 2 + 1.
+ * @return PH_SUCCESS, or PH_ERR_INVALID_ARGUMENT if arguments are invalid, the digest's
+ * kind is not a ph_digest_kind_t value, or 'out_size' is too small.
  */
 PH_NODISCARD PH_API ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out, size_t out_size);
 
 /**
- * @brief Decodes a hex string produced by ph_digest_to_hex() back into a digest.
- * @param hex NUL-terminated hex string; must have an even number of hex digits
- * and decode to at most PH_DIGEST_MAX_BYTES bytes.
- * @param out Output digest.
- * @return PH_SUCCESS, or PH_ERR_INVALID_ARGUMENT if 'hex' is malformed or too long.
+ * @brief Decodes the text form produced by ph_digest_to_hex() back into a digest,
+ * kind included.
+ *
+ * The kind prefix is required and must be one of the names ph_digest_to_hex() writes,
+ * in lowercase; the hex digits after the colon may be either case. A bare hex string
+ * without a prefix -- the format of 2.0 pre-releases -- is rejected rather than read as
+ * an untagged digest: prefix it with `unspecified:` to accept it knowingly, or better,
+ * with the kind of the algorithm that produced it.
+ *
+ * @param text NUL-terminated string `<kind>:<hex>`; the hex part must have an even number
+ * of digits and decode to at most PH_DIGEST_MAX_BYTES bytes.
+ * @param out Output digest. Untouched on error.
+ * @return PH_SUCCESS, or PH_ERR_INVALID_ARGUMENT if 'text' is malformed, has no or an
+ * unknown kind prefix, or is too long.
  */
-PH_NODISCARD PH_API ph_error_t ph_digest_from_hex(const char *hex, ph_digest_t *out);
+PH_NODISCARD PH_API ph_error_t ph_digest_from_hex(const char *text, ph_digest_t *out);
 
 /**
  * @brief Encodes a 64-bit hash as a fixed 16-character lowercase hex string

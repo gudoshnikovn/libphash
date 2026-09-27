@@ -23,15 +23,16 @@ void test_digest_hex_roundtrip() {
     for (int i = 0; i < d.size; i++)
         d.data[i] = (uint8_t)(i * 17 + 3);
 
-    char hex[PH_DIGEST_MAX_BYTES * 2 + 1];
+    char hex[PH_DIGEST_HEX_BUFFER_SIZE];
     ASSERT_OK(ph_digest_to_hex(&d, hex, sizeof(hex)));
-    ASSERT_INT_EQ((int)(d.size * 2), (int)strlen(hex));
+    ASSERT_STR_EQ("unspecified:031425364758697a", hex);
 
     ph_digest_t d2;
     memset(&d2, 0xAA, sizeof(d2));
     ASSERT_OK(ph_digest_from_hex(hex, &d2));
     ASSERT_INT_EQ(d.size, d2.size);
     ASSERT(memcmp(d.data, d2.data, d.size) == 0);
+    ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_UNSPECIFIED, d2.kind);
 
     // Full 64-byte digest round-trips too.
     ph_digest_t big;
@@ -40,13 +41,16 @@ void test_digest_hex_roundtrip() {
     for (int i = 0; i < big.size; i++)
         big.data[i] = (uint8_t)(255 - i);
 
-    char big_hex[PH_DIGEST_MAX_BYTES * 2 + 1];
+    big.kind = PH_DIGEST_KIND_COEFFICIENTS; /* the longest kind name */
+    char big_hex[PH_DIGEST_HEX_BUFFER_SIZE];
     ASSERT_OK(ph_digest_to_hex(&big, big_hex, sizeof(big_hex)));
+    ASSERT_INT_EQ(PH_DIGEST_HEX_BUFFER_SIZE - 1, (int)strlen(big_hex));
 
     ph_digest_t big2;
     ASSERT_OK(ph_digest_from_hex(big_hex, &big2));
     ASSERT_INT_EQ(big.size, big2.size);
     ASSERT(memcmp(big.data, big2.data, big.size) == 0);
+    ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_COEFFICIENTS, big2.kind);
 
     PASS("test_digest_hex_roundtrip");
 }
@@ -56,22 +60,50 @@ void test_digest_hex_errors() {
     memset(&d, 0, sizeof(d));
     d.size = 4;
 
-    char small[4]; // too small for size 4 (needs 9 bytes)
+    /* "unspecified:" + 8 hex digits + NUL = 21 bytes; one short must be refused. */
+    char small[20];
     ASSERT(ph_digest_to_hex(&d, small, sizeof(small)) == PH_ERR_INVALID_ARGUMENT);
+    char exact[21];
+    ASSERT_OK(ph_digest_to_hex(&d, exact, sizeof(exact)));
     ASSERT(ph_digest_to_hex(NULL, small, sizeof(small)) == PH_ERR_INVALID_ARGUMENT);
     ASSERT(ph_digest_to_hex(&d, NULL, 32) == PH_ERR_INVALID_ARGUMENT);
+    /* A kind byte that names no ph_digest_kind_t value has no text form. */
+    d.kind = PH_DIGEST_KIND_VECTOR16 + 1;
+    ASSERT(ph_digest_to_hex(&d, exact, sizeof(exact)) == PH_ERR_INVALID_ARGUMENT);
+    d.kind = 0xFF;
+    ASSERT(ph_digest_to_hex(&d, exact, sizeof(exact)) == PH_ERR_INVALID_ARGUMENT);
 
     ph_digest_t out;
-    ASSERT(ph_digest_from_hex("abc", &out) == PH_ERR_INVALID_ARGUMENT); // odd length
-    ASSERT(ph_digest_from_hex("zz", &out) == PH_ERR_INVALID_ARGUMENT);  // invalid hex digit
+    ASSERT(ph_digest_from_hex("bits:abc", &out) == PH_ERR_INVALID_ARGUMENT); // odd length
+    ASSERT(ph_digest_from_hex("bits:zz", &out) == PH_ERR_INVALID_ARGUMENT);  // invalid digit
     ASSERT(ph_digest_from_hex(NULL, &out) == PH_ERR_INVALID_ARGUMENT);
-    ASSERT(ph_digest_from_hex("ab", NULL) == PH_ERR_INVALID_ARGUMENT);
+    ASSERT(ph_digest_from_hex("bits:ab", NULL) == PH_ERR_INVALID_ARGUMENT);
 
-    // Longer than PH_DIGEST_MAX_BYTES*2 hex chars must fail.
-    char too_long[PH_DIGEST_MAX_BYTES * 2 + 3];
-    memset(too_long, 'a', sizeof(too_long) - 1);
+    /* The kind prefix is required, exact and lowercase: a bare hex string (the 2.0
+     * pre-release format) must not silently come back untagged. */
+    ASSERT(ph_digest_from_hex("abcd", &out) == PH_ERR_INVALID_ARGUMENT);
+    ASSERT(ph_digest_from_hex("", &out) == PH_ERR_INVALID_ARGUMENT);
+    ASSERT(ph_digest_from_hex(":abcd", &out) == PH_ERR_INVALID_ARGUMENT);
+    ASSERT(ph_digest_from_hex("bit:abcd", &out) == PH_ERR_INVALID_ARGUMENT);
+    ASSERT(ph_digest_from_hex("bitsx:abcd", &out) == PH_ERR_INVALID_ARGUMENT);
+    ASSERT(ph_digest_from_hex("BITS:abcd", &out) == PH_ERR_INVALID_ARGUMENT);
+    ASSERT(ph_digest_from_hex("bits:ab:cd", &out) == PH_ERR_INVALID_ARGUMENT);
+    ASSERT(ph_digest_from_hex(" bits:abcd", &out) == PH_ERR_INVALID_ARGUMENT);
+
+    // Longer than PH_DIGEST_MAX_BYTES*2 hex digits must fail.
+    char too_long[5 + PH_DIGEST_MAX_BYTES * 2 + 3];
+    memcpy(too_long, "bits:", 5);
+    memset(too_long + 5, 'a', sizeof(too_long) - 6);
     too_long[sizeof(too_long) - 1] = '\0';
     ASSERT(ph_digest_from_hex(too_long, &out) == PH_ERR_INVALID_ARGUMENT);
+
+    /* A refused string leaves the output alone, even when the failure is found halfway
+     * through the digits. */
+    ph_digest_t keep;
+    memset(&keep, 0x5A, sizeof(keep));
+    ph_digest_t before = keep;
+    ASSERT(ph_digest_from_hex("bits:0011zz", &keep) == PH_ERR_INVALID_ARGUMENT);
+    ASSERT_INT_EQ(0, memcmp(&before, &keep, sizeof(keep)));
 
     PASS("test_digest_hex_errors");
 }
@@ -139,7 +171,7 @@ void test_digest_oversized_size_rejected() {
 void test_digest_zero_size_not_comparable() {
     ph_digest_t empty = {0};
     ph_digest_t other = {0};
-    char hex[PH_DIGEST_MAX_BYTES * 2 + 1];
+    char hex[PH_DIGEST_HEX_BUFFER_SIZE];
 
     empty.size = 0;
     other.size = 4;
@@ -149,14 +181,14 @@ void test_digest_zero_size_not_comparable() {
     ASSERT(ph_similarity_digest(&empty, &empty) < 0.0);
     ASSERT(ph_l2_distance(&empty, &empty) < 0.0);
 
-    /* ph_digest_to_hex still accepts it: ph_digest_from_hex("") produces exactly
-     * this digest, so rejecting it here would break the round trip. */
+    /* ph_digest_to_hex still accepts it: ph_digest_from_hex("unspecified:") produces
+     * exactly this digest, so rejecting it here would break the round trip. */
     ASSERT_OK(ph_digest_to_hex(&empty, hex, sizeof(hex)));
-    ASSERT_STR_EQ("", hex);
+    ASSERT_STR_EQ("unspecified:", hex);
 
     ph_digest_t from_empty = {0};
     from_empty.size = 42; /* must be overwritten */
-    ASSERT_OK(ph_digest_from_hex("", &from_empty));
+    ASSERT_OK(ph_digest_from_hex("unspecified:", &from_empty));
     ASSERT_INT_EQ(0, from_empty.size);
 
     PASS("test_digest_zero_size_not_comparable");
@@ -185,11 +217,12 @@ void test_digest_hex_roundtrip_random_and_uppercase() {
     unsigned seed = 12345u; /* fixed: a failure must be reproducible */
     for (int iter = 0; iter < 1000; iter++) {
         ph_digest_t src = {0}, back = {0};
-        char lower[PH_DIGEST_MAX_BYTES * 2 + 1];
-        char upper[PH_DIGEST_MAX_BYTES * 2 + 1];
+        char lower[PH_DIGEST_HEX_BUFFER_SIZE];
+        char upper[PH_DIGEST_HEX_BUFFER_SIZE];
 
         seed = seed * 1103515245u + 12345u;
         src.size = (uint8_t)(1 + (seed >> 16) % PH_DIGEST_MAX_BYTES);
+        src.kind = (uint8_t)((seed >> 8) % (PH_DIGEST_KIND_VECTOR16 + 1));
         for (int i = 0; i < src.size; i++) {
             seed = seed * 1103515245u + 12345u;
             src.data[i] = (uint8_t)(seed >> 16);
@@ -199,11 +232,13 @@ void test_digest_hex_roundtrip_random_and_uppercase() {
         ASSERT_OK(ph_digest_from_hex(lower, &back));
         ASSERT_INT_EQ(src.size, back.size);
         ASSERT_INT_EQ(0, memcmp(src.data, back.data, src.size));
+        ASSERT_INT_EQ(src.kind, back.kind);
 
-        /* Same string uppercased must parse identically. */
+        /* Same digits uppercased must parse identically; the kind name stays lowercase. */
+        const char *digits = strchr(lower, ':') + 1;
         for (size_t i = 0; i < sizeof(upper); i++) {
             char c = lower[i];
-            upper[i] = (c >= 'a' && c <= 'f') ? (char)(c - 'a' + 'A') : c;
+            upper[i] = (&lower[i] >= digits && c >= 'a' && c <= 'f') ? (char)(c - 'a' + 'A') : c;
             if (c == 0)
                 break;
         }
@@ -211,6 +246,7 @@ void test_digest_hex_roundtrip_random_and_uppercase() {
         ASSERT_OK(ph_digest_from_hex(upper, &from_upper));
         ASSERT_INT_EQ(src.size, from_upper.size);
         ASSERT_INT_EQ(0, memcmp(src.data, from_upper.data, src.size));
+        ASSERT_INT_EQ(src.kind, from_upper.kind);
     }
     PASS("test_digest_hex_roundtrip_random_and_uppercase");
 }
@@ -292,20 +328,23 @@ static void test_computed_digests_carry_their_kind(void) {
     ASSERT_OK(ph_compute_color_moments_hash(ctx, &d));
     ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_VECTOR16, d.kind);
 
-    /* Decoded from text, nothing is claimed about the bytes. */
+    /* Decoded from text, the digest claims exactly what the text says -- and nothing
+     * when the text says "unspecified". */
     ph_digest_t from_text;
-    ASSERT_OK(ph_digest_from_hex("00ff8040", &from_text));
+    ASSERT_OK(ph_digest_from_hex("coefficients:00ff8040", &from_text));
+    ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_COEFFICIENTS, from_text.kind);
+    ASSERT_OK(ph_digest_from_hex("unspecified:00ff8040", &from_text));
     ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_UNSPECIFIED, from_text.kind);
 
     ph_free(ctx);
     PASS("test_computed_digests_carry_their_kind");
 }
 
-/* The buffer-size contracts are stated to the byte ("at least d->size * 2 + 1", "at least
- * 17"), and both were only ever tested well inside the bound. An off-by-one either way is
- * the difference between a rejected call and a one-byte overflow in the caller's buffer,
- * so both sides of both bounds are pinned here -- with a guard byte after the buffer to
- * catch the overflow if the check is ever loosened. */
+/* The buffer-size contracts are stated to the byte ("the kind name's length + 1 +
+ * d->size * 2 + 1", "at least 17"), and both were only ever tested well inside the bound. An
+ * off-by-one either way is the difference between a rejected call and a one-byte overflow in the
+ * caller's buffer, so both sides of both bounds are pinned here -- with a guard byte after the
+ * buffer to catch the overflow if the check is ever loosened. */
 static void test_hex_output_buffer_bounds() {
     ph_digest_t d;
     memset(&d, 0, sizeof(d));
@@ -313,25 +352,37 @@ static void test_hex_output_buffer_bounds() {
     for (int i = 0; i < d.size; i++)
         d.data[i] = (uint8_t)(0x10 * i + i);
 
-    /* Exactly d.size * 2 + 1 must succeed; one byte less must be refused. */
-    char exact[5 * 2 + 1 + 1];
+    /* "bits:" + d.size * 2 + 1 must succeed; one byte less must be refused. */
+    d.kind = PH_DIGEST_KIND_BITS;
+    char exact[5 + 5 * 2 + 1 + 1];
     exact[sizeof(exact) - 1] = '#'; /* guard, past the size handed to the function */
     ASSERT_OK(ph_digest_to_hex(&d, exact, sizeof(exact) - 1));
-    ASSERT_INT_EQ((int)(d.size * 2), (int)strlen(exact));
+    ASSERT_INT_EQ(5 + (int)(d.size * 2), (int)strlen(exact));
     ASSERT_INT_EQ('#', exact[sizeof(exact) - 1]);
 
-    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_digest_to_hex(&d, exact, d.size * 2));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_digest_to_hex(&d, exact, sizeof(exact) - 2));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_digest_to_hex(&d, exact, 0));
 
-    /* An empty digest still needs one byte, for the terminator. */
+    /* An empty digest still needs its prefix and the terminator. */
     ph_digest_t empty;
     memset(&empty, 0, sizeof(empty));
-    char one[2];
-    one[1] = '#';
-    ASSERT_OK(ph_digest_to_hex(&empty, one, 1));
-    ASSERT_INT_EQ('\0', one[0]);
-    ASSERT_INT_EQ('#', one[1]);
-    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_digest_to_hex(&empty, one, 0));
+    char prefix_only[sizeof("unspecified:") + 1];
+    prefix_only[sizeof(prefix_only) - 1] = '#';
+    ASSERT_OK(ph_digest_to_hex(&empty, prefix_only, sizeof("unspecified:")));
+    ASSERT_STR_EQ("unspecified:", prefix_only);
+    ASSERT_INT_EQ('#', prefix_only[sizeof(prefix_only) - 1]);
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
+                  ph_digest_to_hex(&empty, prefix_only, sizeof("unspecified:") - 1));
+
+    /* PH_DIGEST_HEX_BUFFER_SIZE is enough for a full digest of every kind. */
+    for (int kind = 0; kind <= PH_DIGEST_KIND_VECTOR16; kind++) {
+        ph_digest_t full;
+        memset(&full, 0xAB, sizeof(full));
+        full.size = PH_DIGEST_MAX_BYTES;
+        full.kind = (uint8_t)kind;
+        char buf[PH_DIGEST_HEX_BUFFER_SIZE];
+        ASSERT_OK(ph_digest_to_hex(&full, buf, sizeof(buf)));
+    }
 
     /* ph_hash_to_hex is fixed-width: 17 is the exact requirement, 16 is not enough. */
     char h[18];
@@ -353,9 +404,10 @@ static void test_hex_output_buffer_bounds() {
     bytes.data[0] = 0xAB;
     bytes.data[1] = 0xCD;
     bytes.data[2] = 0xEF;
-    char order[8];
+    bytes.kind = PH_DIGEST_KIND_HISTOGRAM;
+    char order[32];
     ASSERT_OK(ph_digest_to_hex(&bytes, order, sizeof(order)));
-    ASSERT_STR_EQ("abcdef", order); /* data[0] first, lowercase */
+    ASSERT_STR_EQ("histogram:abcdef", order); /* data[0] first, lowercase */
 
     PASS("test_hex_output_buffer_bounds");
 }
@@ -368,38 +420,41 @@ static void test_digest_from_hex_clears_the_whole_struct() {
     ph_digest_t d;
     memset(&d, 0xEE, sizeof(d)); /* every byte dirty, including kind and reserved */
 
-    ASSERT_OK(ph_digest_from_hex("0011223344", &d));
+    ASSERT_OK(ph_digest_from_hex("vector:0011223344", &d));
     ASSERT_INT_EQ(5, d.size);
     ASSERT_UINT8_EQ(0x00, d.data[0]);
     ASSERT_UINT8_EQ(0x44, d.data[4]);
     for (int i = d.size; i < PH_DIGEST_MAX_BYTES; i++)
         ASSERT_UINT8_EQ(0, d.data[i]);
-    ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_UNSPECIFIED, d.kind);
+    ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_VECTOR, d.kind);
     for (size_t i = 0; i < sizeof(d.reserved); i++)
         ASSERT_UINT8_EQ(0, d.reserved[i]);
 
     /* Decoding a shorter string over a longer digest must shrink it, tail and all. */
-    ASSERT_OK(ph_digest_from_hex("ff", &d));
+    ASSERT_OK(ph_digest_from_hex("bits:ff", &d));
     ASSERT_INT_EQ(1, d.size);
+    ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_BITS, d.kind);
     for (int i = 1; i < PH_DIGEST_MAX_BYTES; i++)
         ASSERT_UINT8_EQ(0, d.data[i]);
 
     /* A rejected string must leave the digest exactly as it was: a half-decoded digest
      * reported through an error code is the one thing worse than either outcome. */
     ph_digest_t before = d;
-    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_digest_from_hex("00zz", &d));
-    ASSERT_INT_EQ(before.size, d.size);
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_digest_from_hex("bits:00zz", &d));
+    ASSERT_INT_EQ(0, memcmp(&before, &d, sizeof(d)));
 
     /* Exactly PH_DIGEST_MAX_BYTES * 2 digits is the largest accepted string; two more is
      * one byte too many. */
-    char max_len[PH_DIGEST_MAX_BYTES * 2 + 1];
-    memset(max_len, 'f', sizeof(max_len) - 1);
+    char max_len[5 + PH_DIGEST_MAX_BYTES * 2 + 1];
+    memcpy(max_len, "bits:", 5);
+    memset(max_len + 5, 'f', sizeof(max_len) - 6);
     max_len[sizeof(max_len) - 1] = '\0';
     ASSERT_OK(ph_digest_from_hex(max_len, &d));
     ASSERT_INT_EQ(PH_DIGEST_MAX_BYTES, d.size);
 
-    char over_len[PH_DIGEST_MAX_BYTES * 2 + 3];
-    memset(over_len, 'f', sizeof(over_len) - 1);
+    char over_len[5 + PH_DIGEST_MAX_BYTES * 2 + 3];
+    memcpy(over_len, "bits:", 5);
+    memset(over_len + 5, 'f', sizeof(over_len) - 6);
     over_len[sizeof(over_len) - 1] = '\0';
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_digest_from_hex(over_len, &d));
 
@@ -432,23 +487,55 @@ static void test_digest_hex_roundtrip_on_computed_digests() {
         ASSERT(digests[i].size > 0);
         ASSERT(digests[i].size <= PH_DIGEST_MAX_BYTES);
 
-        char hex[PH_DIGEST_MAX_BYTES * 2 + 1];
+        char hex[PH_DIGEST_HEX_BUFFER_SIZE];
         ASSERT_OK(ph_digest_to_hex(&digests[i], hex, sizeof(hex)));
-        ASSERT_INT_EQ((int)(digests[i].size * 2), (int)strlen(hex));
+        const char *digits = strchr(hex, ':');
+        ASSERT_PTR_NOT_NULL((void *)digits);
+        ASSERT_INT_EQ((int)(digests[i].size * 2), (int)strlen(digits + 1));
 
         ph_digest_t back;
         ASSERT_OK(ph_digest_from_hex(hex, &back));
         ASSERT_INT_EQ(digests[i].size, back.size);
         ASSERT_INT_EQ(0, memcmp(digests[i].data, back.data, digests[i].size));
 
-        /* The text carries no kind, so the decoded digest is untagged -- and therefore
-         * still comparable against the tagged original, which is what makes storing a
-         * digest as hex usable at all. */
-        ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_UNSPECIFIED, back.kind);
+        /* Every algorithm tags its digest, and the text carries the tag: a digest read
+         * back from storage is protected by it exactly as the live one is. */
+        ASSERT(digests[i].kind != PH_DIGEST_KIND_UNSPECIFIED);
+        ASSERT_INT_EQ(digests[i].kind, back.kind);
     }
 
     ph_free(ctx);
     PASS("test_digest_hex_roundtrip_on_computed_digests");
+}
+
+/* The case the kind tag was lost in before: both sides of a comparison read back from
+ * storage. Two radial digests stored as text and decoded again must still be refused by
+ * the bit metrics -- it used to come back as a plausible Hamming distance of 206 and a
+ * similarity of 0.356, next to a correct radial correlation of 0.357 -- and still be
+ * accepted by the radial metric. */
+static void test_stored_digests_keep_their_protection() {
+    const char *paths[2] = {TEST_DATA_DIR "/photo.jpeg", TEST_DATA_DIR "/photo_rotated_90.jpeg"};
+    ph_digest_t stored[2];
+    for (int i = 0; i < 2; i++) {
+        ph_context_t *ctx = NULL;
+        ASSERT_OK(ph_create(&ctx));
+        ASSERT_OK(ph_load_from_file(ctx, paths[i]));
+        ph_digest_t live;
+        ASSERT_OK(ph_compute_radial_hash(ctx, &live));
+        ph_free(ctx);
+
+        char text[PH_DIGEST_HEX_BUFFER_SIZE];
+        ASSERT_OK(ph_digest_to_hex(&live, text, sizeof(text)));
+        ASSERT_OK(ph_digest_from_hex(text, &stored[i]));
+    }
+
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&stored[0], &stored[1]));
+    ASSERT(ph_similarity_digest(&stored[0], &stored[1]) < 0.0);
+    double pcc = 0.0;
+    ASSERT_OK(ph_radial_similarity(&stored[0], &stored[1], &pcc));
+    ASSERT(pcc >= -1.0 && pcc <= 1.0);
+
+    PASS("test_stored_digests_keep_their_protection");
 }
 
 /* ph_l2_distance() had no negative-path coverage of its own: it was only reached through
@@ -524,6 +611,7 @@ int main() {
     test_hex_output_buffer_bounds();
     test_digest_from_hex_clears_the_whole_struct();
     test_digest_hex_roundtrip_on_computed_digests();
+    test_stored_digests_keep_their_protection();
     test_l2_distance_contract();
     test_similarity_agrees_with_hamming();
     return 0;

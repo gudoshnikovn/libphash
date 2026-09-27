@@ -268,8 +268,13 @@ static void check_uint64(const char *filename, const char *algo, uint64_t value,
 
 static void check_digest(const char *filename, const char *algo, const ph_digest_t *value,
                          FILE *update_out) {
-    char hex[PH_DIGEST_MAX_BYTES * 2 + 1];
-    ASSERT_OK(ph_digest_to_hex(value, hex, sizeof(hex)));
+    /* The golden files store the bytes alone, without the "<kind>:" prefix of the public
+     * text form: the kind is not what they pin (it comes from the algorithm, and
+     * test_digest_helpers checks it), and keeping the bytes bare leaves every existing
+     * golden file valid. */
+    char text[PH_DIGEST_HEX_BUFFER_SIZE];
+    ASSERT_OK(ph_digest_to_hex(value, text, sizeof(text)));
+    const char *hex = strchr(text, ':') + 1;
     if (update_out) {
         fprintf(update_out, "%s %s %s\n", filename, algo, hex);
         return;
@@ -283,8 +288,11 @@ static void check_digest(const char *filename, const char *algo, const ph_digest
         g_mismatches++;
         return;
     }
+    char expected_text[PH_DIGEST_HEX_BUFFER_SIZE];
+    ASSERT(strlen(expected_hex) <= PH_DIGEST_MAX_BYTES * 2);
+    snprintf(expected_text, sizeof(expected_text), "unspecified:%s", expected_hex);
     ph_digest_t expected;
-    ASSERT_OK(ph_digest_from_hex(expected_hex, &expected));
+    ASSERT_OK(ph_digest_from_hex(expected_text, &expected));
     g_checked++;
     if (expected.size != value->size) {
         fprintf(stderr, "[FAIL] test_golden_hashes - %s/%s changed size: %d -> %d\n", filename,
