@@ -233,8 +233,13 @@ if(MSVC)
     # tests/src/test_macros.h and no longer depends on the libc at all.
     add_compile_options(/experimental:c11atomics)
 
-    # /utf-8: the sources carry non-ASCII text (em dashes in comments), which MSVC
-    # otherwise decodes in the machine's ANSI code page and reports as C4819.
+    # /utf-8: the sources are UTF-8 and carry non-ASCII text (em dashes, in comments
+    # only). Without the flag MSVC reads them in the machine's ANSI code page. On a
+    # single-byte page such as the CI runners' 1252 every byte decodes to something,
+    # so nothing is reported (confirmed on windows-latest without the flag). On a
+    # double-byte page (932/936/949, CJK locales) the same bytes draw C4819, and a
+    # multi-byte lead byte at the end of a // comment can swallow the newline and
+    # comment out the next line of code.
     set(PHASH_OWN_COMPILE_OPTIONS /W3 /utf-8)
 else()
     # -fPIC stays directory-wide: the vendored decoders are linked into the same
