@@ -511,6 +511,10 @@ walkthrough.
 
 ### Fixed
 
+- **ThreadSanitizer reported a data race on the first parallel PNG decodes.** zlib-ng
+  initialises its CPU dispatch table lazily and unsynchronised; the first concurrent
+  decodes of a process (a cold `ph_hash_files()`, or your own threads) raced on it. The
+  library now completes that initialisation once, under a lock, before its first decode.
 - **`ph_get_last_error_message()` could return invalid UTF-8.** A message quoting a long
   non-ASCII path (about 75 Cyrillic characters) was cut in the middle of a character. The
   cut now always falls on a character boundary.
