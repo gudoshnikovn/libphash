@@ -479,6 +479,16 @@ walkthrough.
   buffer larger than the range libjpeg-turbo's own API accepts is reported as
   `PH_ERR_IMAGE_TOO_LARGE` rather than silently truncated.
 
+- **`libphash.h` could not be included by GCC in C23 mode.** Every exported function was
+  declared with the C23 `[[nodiscard]]` attribute placed after the visibility attribute,
+  a position C23 does not allow. Clang tolerates it; GCC 14 and newer reject it with one
+  error per declaration, so any program compiled with `gcc -std=c23` — and, since GCC 15
+  defaults to C23, any program compiled with plain `gcc` — failed to build as soon as it
+  included the header. The same affected the portable Makefile build of the library
+  itself, which passed no `-std` and so inherited GCC 15's default. The attributes are in
+  the conforming order now, discarding a `PH_NODISCARD` result still warns, and the
+  Makefile pins `-std=c17`, the same dialect the CMake build uses.
+
 - **A native-toolchain Windows build (either linkage) could not previously succeed at
   all**, for any consumer, not just this project's own CI or release artifacts. Building
   statically failed to even compile (`PH_API` had no case for "this is a static library"
