@@ -264,6 +264,12 @@ walkthrough.
   *Restore the old behaviour:* not possible by path — read the stream into memory
   yourself and call `ph_load_from_memory()`, which is the supported way to hash
   something that is not a file on disk.
+- **Public enums are 32 bits wide under `-fshort-enums`.** Each public enum now ends in a
+  `*_FORCE_INT32_` enumerator that is not a real value. Under `-fshort-enums` — the
+  default ABI on ARM EABI — the enums used to shrink to one byte, so a library and a
+  consumer built with different settings silently disagreed on every `ph_error_t` return
+  value and on the batch `status` field. Only code built with that flag sees a change.
+  *Restore the old behaviour:* not applicable — rebuild against the 2.0 header.
 
 ### Added
 
