@@ -188,17 +188,22 @@ jobs:
   # build-and-test, which is where the full vendored set meets glibc under the
   # strict -std=c17 dialect. Repeating that set here at three standards would
   # triple a ten-job leg to prove a property of the vendored code, not of ours.
+  #
+  # gcc-14, not the runner's default gcc: ubuntu-latest ships GCC 13, whose -std=c2x
+  # reports __STDC_VERSION__ 202000L rather than 202311L, so the "C23" job on it never
+  # compiled a single C23-only branch of the public header -- and a header that GCC
+  # 14+ rejects in C23 stayed green here. 14 is the first GCC that is actually C23.
   c-standard-matrix:
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
         std: [11, 17, 23]
-        cc: [gcc, clang]
+        cc: [gcc-14, clang]
         exclude:
           # macOS gcc is a clang shim in disguise -- redundant with the clang leg.
           - os: macos-latest
-            cc: gcc
+            cc: gcc-14
     runs-on: ${{ matrix.os }}
     name: c-standard (${{ matrix.os }}, ${{ matrix.cc }}, C${{ matrix.std }})
     env:
@@ -212,7 +217,7 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake${{ matrix.cc == 'clang' && ' clang' || '' }}
+        sudo apt-get install -y cmake ${{ matrix.cc }}
 
     - name: Install dependencies (macOS)
       if: runner.os == 'macOS'
@@ -227,6 +232,14 @@ jobs:
     # and Darwin's libc hides nothing.
     - name: Strict ISO syntax sweep (src/, tests/src/, examples/)
       run: ./scripts/check_strict_iso.sh ${{ matrix.std }}
+
+    # The consumer's view of the same question: a TU that includes only libphash.h
+    # must compile warning-free, and PH_NODISCARD must still fire. The sweep above
+    # would catch a header that fails to parse, but as one error per file per
+    # declaration without naming why, and it cannot see an attribute that is
+    # silently ignored -- which is a warning, not an error.
+    - name: Public header check (self-contained, PH_NODISCARD live)
+      run: ./scripts/check_public_header.sh ${{ matrix.std }}
 
     - name: Configure CMake (minimal, stb_image only)
       run: >
