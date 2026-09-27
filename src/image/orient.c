@@ -214,11 +214,12 @@ static inline void ph_orient_copy_px(uint8_t *dst, const uint8_t *src, int chann
  * slower, 128 is a wash), and a tile still fits in L1 at 4 channels. */
 #define PH_ORIENT_TILE 64
 
-void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int channels,
-                               int orientation) {
-    if (!data || !*data || !width || !height || channels <= 0 || orientation <= 1 ||
-        orientation > 8)
-        return; // Orientation 1 (and anything unknown) needs no transform at all.
+ph_error_t ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int channels,
+                                     int orientation) {
+    if (!data || !*data || !width || !height || channels <= 0)
+        return PH_ERR_INVALID_ARGUMENT;
+    if (orientation <= 1 || orientation > 8)
+        return PH_SUCCESS; // Orientation 1 (and anything unknown) needs no transform at all.
 
     int W = *width, H = *height;
     int Wd, Hd;
@@ -232,11 +233,11 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
 
     size_t out_size;
     if (!ph_safe_image_alloc_size((uint64_t)Wd, (uint64_t)Hd, (uint64_t)channels, &out_size))
-        return; // Can't safely size the output; leave the image untouched.
+        return PH_ERR_IMAGE_TOO_LARGE; // Can't safely size the output; image untouched.
 
     uint8_t *out = (uint8_t *)malloc(out_size);
     if (!out)
-        return;
+        return PH_ERR_ALLOCATION_FAILED;
 
     const uint8_t *src = *data;
     const size_t px = (size_t)channels;
@@ -299,4 +300,5 @@ void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int chan
     *data = out;
     *width = Wd;
     *height = Hd;
+    return PH_SUCCESS;
 }

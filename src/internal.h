@@ -214,10 +214,15 @@ int ph_exif_orientation_from_png(const uint8_t *data, size_t len);
 /* Applies one of the 8 EXIF orientation transforms (rotate/mirror) to a
  * decoded pixel buffer in place, reallocating *data and updating *width/
  * *height as needed (values 5-8 swap the dimensions). orientation 1 (or any
- * value outside 1..8) is a no-op. Leaves the image untouched on allocation
- * failure. */
-void ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int channels,
-                               int orientation);
+ * value outside 1..8) is a no-op and PH_SUCCESS.
+ *
+ * On failure -- PH_ERR_ALLOCATION_FAILED for the output buffer,
+ * PH_ERR_IMAGE_TOO_LARGE when its size overflows, PH_ERR_INVALID_ARGUMENT for a
+ * NULL pointer or channels <= 0 -- the image is left untouched, i.e. still in
+ * the stored orientation. That is not a usable result: a caller that asked for
+ * the orientation must treat it as a failed load, not hash the unrotated image. */
+ph_error_t ph_apply_exif_orientation(uint8_t **data, int *width, int *height, int channels,
+                                     int orientation);
 
 /*
  * Constants

@@ -666,7 +666,7 @@ void test_apply_orientation_known_values(void) {
         uint8_t *data = (uint8_t *)malloc(6);
         memcpy(data, src, 6);
         int w = 3, h = 2;
-        ph_apply_exif_orientation(&data, &w, &h, 1, cases[c].orientation);
+        ASSERT_OK(ph_apply_exif_orientation(&data, &w, &h, 1, cases[c].orientation));
         ASSERT_INT_EQ(cases[c].wd, w);
         ASSERT_INT_EQ(cases[c].hd, h);
         if (memcmp(data, cases[c].expected, 6) != 0) {
@@ -684,25 +684,26 @@ void test_apply_orientation_noop_and_invalid(void) {
     memcpy(data, (uint8_t[]){0, 1, 2, 3, 4, 5}, 6);
     int w = 3, h = 2;
 
-    ph_apply_exif_orientation(&data, &w, &h, 1, 1); // orientation 1: no-op
+    ASSERT_OK(ph_apply_exif_orientation(&data, &w, &h, 1, 1)); // orientation 1: no-op
     ASSERT_INT_EQ(3, w);
     ASSERT_INT_EQ(2, h);
     ASSERT_UINT8_EQ(0, data[0]);
 
-    ph_apply_exif_orientation(&data, &w, &h, 1, 0); // out of range: no-op
-    ph_apply_exif_orientation(&data, &w, &h, 1, 9); // out of range: no-op
+    ASSERT_OK(ph_apply_exif_orientation(&data, &w, &h, 1, 0)); // out of range: no-op
+    ASSERT_OK(ph_apply_exif_orientation(&data, &w, &h, 1, 9)); // out of range: no-op
     ASSERT_INT_EQ(3, w);
     ASSERT_INT_EQ(2, h);
 
     // Every argument the top-of-function guard checks, exercised on its own:
-    // none of these may crash, and none may touch `data`/`w`/`h`.
+    // none of these may crash, all are reported, and none may touch `data`/`w`/`h`.
     uint8_t *null_data = NULL;
-    ph_apply_exif_orientation(NULL, &w, &h, 1, 2);       // data == NULL
-    ph_apply_exif_orientation(&null_data, &w, &h, 1, 2); // *data == NULL
-    ph_apply_exif_orientation(&data, NULL, &h, 1, 2);    // width == NULL
-    ph_apply_exif_orientation(&data, &w, NULL, 1, 2);    // height == NULL
-    ph_apply_exif_orientation(&data, &w, &h, 0, 2);      // channels == 0
-    ph_apply_exif_orientation(&data, &w, &h, -1, 2);     // channels < 0
+    const ph_error_t inval = PH_ERR_INVALID_ARGUMENT;
+    ASSERT_INT_EQ(inval, ph_apply_exif_orientation(NULL, &w, &h, 1, 2));       // data == NULL
+    ASSERT_INT_EQ(inval, ph_apply_exif_orientation(&null_data, &w, &h, 1, 2)); // *data == NULL
+    ASSERT_INT_EQ(inval, ph_apply_exif_orientation(&data, NULL, &h, 1, 2));    // width == NULL
+    ASSERT_INT_EQ(inval, ph_apply_exif_orientation(&data, &w, NULL, 1, 2));    // height == NULL
+    ASSERT_INT_EQ(inval, ph_apply_exif_orientation(&data, &w, &h, 0, 2));      // channels == 0
+    ASSERT_INT_EQ(inval, ph_apply_exif_orientation(&data, &w, &h, -1, 2));     // channels < 0
     ASSERT_INT_EQ(3, w);
     ASSERT_INT_EQ(2, h);
     ASSERT_UINT8_EQ(0, data[0]);
@@ -728,8 +729,8 @@ void test_apply_orientation_roundtrip(void) {
         memcpy(data, original, 20);
         int w = W, h = H;
 
-        ph_apply_exif_orientation(&data, &w, &h, 1, o);
-        ph_apply_exif_orientation(&data, &w, &h, 1, inverse_of[o]);
+        ASSERT_OK(ph_apply_exif_orientation(&data, &w, &h, 1, o));
+        ASSERT_OK(ph_apply_exif_orientation(&data, &w, &h, 1, inverse_of[o]));
 
         ASSERT_INT_EQ(W, w);
         ASSERT_INT_EQ(H, h);
@@ -822,7 +823,7 @@ void test_apply_orientation_matches_reference(void) {
                 ASSERT_PTR_NOT_NULL(got);
                 memcpy(got, original, n);
                 int w = W, h = H;
-                ph_apply_exif_orientation(&got, &w, &h, ch, o);
+                ASSERT_OK(ph_apply_exif_orientation(&got, &w, &h, ch, o));
 
                 if (w != ref_w || h != ref_h || memcmp(got, ref, n) != 0) {
                     fprintf(stderr, "[FAIL] orientation %d, %dx%d x%d: got %dx%d, expected %dx%d\n",
@@ -864,9 +865,10 @@ void test_apply_orientation_alloc_failure(void) {
     tiny[2] = 3;
     tiny[3] = 4;
     uint8_t *saved_ptr = tiny;
-    int w = 2000000000, h = 2000000000;             // both within INT_MAX
-    ph_apply_exif_orientation(&tiny, &w, &h, 5, 2); // 2e9 * 2e9 * 5 overflows size_t
-    ASSERT(tiny == saved_ptr);                      // untouched: bailed out before any malloc
+    int w = 2000000000, h = 2000000000; // both within INT_MAX
+    // 2e9 * 2e9 * 5 overflows size_t
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_apply_exif_orientation(&tiny, &w, &h, 5, 2));
+    ASSERT(tiny == saved_ptr); // untouched: bailed out before any malloc
     ASSERT_INT_EQ(2000000000, w);
     ASSERT_INT_EQ(2000000000, h);
     ASSERT_UINT8_EQ(1, tiny[0]);
@@ -883,12 +885,13 @@ void test_apply_orientation_alloc_failure(void) {
     uint8_t *before = data;
 
     ph_shim_arm(1);
-    ph_apply_exif_orientation(&data, &w2, &h2, 1, 2);
+    ph_error_t err = ph_apply_exif_orientation(&data, &w2, &h2, 1, 2);
     long injected = ph_shim_injected();
     ph_shim_disarm();
 
     ASSERT_INT_EQ(1, (int)injected); // confirms the injection actually fired
-    ASSERT(data == before);          // untouched: malloc() returned NULL
+    ASSERT_INT_EQ(PH_ERR_ALLOCATION_FAILED, err);
+    ASSERT(data == before); // untouched: malloc() returned NULL
     ASSERT_INT_EQ(3, w2);
     ASSERT_INT_EQ(2, h2);
     ASSERT_UINT8_EQ(0, data[0]);

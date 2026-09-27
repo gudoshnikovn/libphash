@@ -344,6 +344,60 @@ static void scen_batch(int recording) {
     ph_free(ctx);
 }
 
+/* A photo stored in sensor orientation with an EXIF tag saying "rotate 90°" (6), loaded
+ * with auto-orientation on (the default). The rotation takes a second full-size buffer;
+ * when that allocation failed, the load used to report success and leave the image
+ * unrotated, so every hash described an orientation the caller never asked for. Rule:
+ * a load that reports success hashes exactly like the un-injected one. */
+static blob_t g_oriented;
+static uint64_t g_oriented_ahash, g_oriented_phash;
+
+static void build_oriented_jpeg(void) {
+    /* APP1 "Exif", little-endian TIFF, IFD0 with one SHORT Orientation entry = 6. */
+    static const uint8_t app1[] = {
+        0xFF, 0xE1, 0x00, 0x22, 'E',  'x',  'i',  'f',  0x00, 0x00, 'I',  'I',
+        0x2A, 0x00, 0x08, 0x00, 0x00, 0x00, 0x01, 0x00, 0x12, 0x01, 0x03, 0x00,
+        0x01, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    };
+    g_oriented.size = g_jpeg.size + sizeof(app1);
+    g_oriented.data = (uint8_t *)malloc(g_oriented.size);
+    ASSERT_PTR_NOT_NULL(g_oriented.data);
+    memcpy(g_oriented.data, g_jpeg.data, 2); /* SOI */
+    memcpy(g_oriented.data + 2, app1, sizeof(app1));
+    memcpy(g_oriented.data + 2 + sizeof(app1), g_jpeg.data + 2, g_jpeg.size - 2);
+}
+
+static void scen_load_oriented(int recording) {
+    ph_context_t *ctx = NULL;
+    if (ph_create(&ctx) != PH_SUCCESS)
+        return;
+    ph_error_t err = ph_load_from_memory(ctx, g_oriented.data, g_oriented.size);
+    check("ph_load_from_memory(oriented)", err, ALLOW_ALLOC | ALLOW_DECODE | ALLOW_CORRUPT);
+    if (err != PH_SUCCESS) {
+        if (ph_is_loaded(ctx))
+            defect("the oriented load failed but the context reports an image is loaded");
+        ph_free(ctx);
+        return;
+    }
+
+    uint64_t ahash = 0, phash = 0;
+    ph_shim_disarm(); /* the load is what is under test; the hashes must not fail */
+    ph_error_t ea = ph_compute_ahash(ctx, &ahash);
+    ph_error_t ep = ph_compute_phash(ctx, &phash);
+    if (ea != PH_SUCCESS || ep != PH_SUCCESS) {
+        defect("hashing the oriented image failed with the shim disarmed (%d, %d)", (int)ea,
+               (int)ep);
+    } else if (recording) {
+        g_oriented_ahash = ahash;
+        g_oriented_phash = phash;
+    } else if (ahash != g_oriented_ahash || phash != g_oriented_phash) {
+        defect("the oriented load reported success but hashes differently from the reference "
+               "(aHash %016llx vs %016llx) -- the orientation was not applied",
+               (unsigned long long)ahash, (unsigned long long)g_oriented_ahash);
+    }
+    ph_free(ctx);
+}
+
 typedef void (*scenario_fn)(int recording);
 
 typedef struct {
@@ -357,6 +411,7 @@ static const scenario_t SCENARIOS[] = {
     {"load_from_memory", scen_load_memory},
     {"load + every hash", scen_hash_all},
     {"batch over one context", scen_batch},
+    {"load, EXIF orientation", scen_load_oriented},
 };
 
 /* ---- driver ------------------------------------------------------------ */
@@ -498,6 +553,7 @@ int main(void) {
 
     g_png = read_file(PNG_PATH);
     g_jpeg = read_file(JPEG_PATH);
+    build_oriented_jpeg();
 
     test_stb_oom_reason_pinned();
 
@@ -524,6 +580,7 @@ int main(void) {
 
     free(g_png.data);
     free(g_jpeg.data);
+    free(g_oriented.data);
 
     if (g_failures != 0) {
         fprintf(stderr, "\n%d problem(s) found across %ld failure points\n", g_failures,

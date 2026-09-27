@@ -785,9 +785,17 @@ static ph_error_t ph_load_encoded_bytes(ph_context_t *ctx, const uint8_t *data, 
 
     if (ctx->config.auto_orient) {
         int orientation = ph_scan_orientation(data, length);
-        if (orientation != 1)
+        ph_error_t orient_err =
             ph_apply_exif_orientation(&ctx->image.raw_rgb, &ctx->image.width, &ctx->image.height,
                                       ctx->image.channels, orientation);
+        if (orient_err != PH_SUCCESS) {
+            /* The image is decoded but still in its stored orientation. Keeping it would
+             * hash what the caller asked not to hash, so the load fails as a whole. */
+            ph_reset_loaded_image(ctx);
+            ph_set_err_msg(ctx->last_error, sizeof(ctx->last_error),
+                           "could not apply the EXIF orientation to the decoded image");
+            return orient_err;
+        }
     }
     return PH_SUCCESS;
 }

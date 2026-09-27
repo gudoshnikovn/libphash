@@ -595,6 +595,10 @@ PH_API ph_error_t ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
  *
  * @note Missing or malformed orientation metadata is treated as "no transform
  * needed" rather than an error — this never causes a load to fail.
+ * @note Applying a real orientation (2-8) takes a second buffer the size of the
+ * decoded image. If that allocation fails, the load returns
+ * @c PH_ERR_ALLOCATION_FAILED and no image is loaded, even though the decode itself
+ * succeeded: the library never hashes the image in an orientation you did not ask for.
  * @param ctx The context.
  * @param enable 1 to auto-orient using EXIF metadata (default), 0 to hash the
  * raw decoded buffer as-is. Any non-zero value enables it.
