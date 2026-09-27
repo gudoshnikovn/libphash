@@ -708,6 +708,15 @@ static inline size_t ph_arena_align_up(size_t n) {
     return (n + (PH_ARENA_ALIGNMENT - 1)) & ~(size_t)(PH_ARENA_ALIGNMENT - 1);
 }
 
+/* How many CPUs this process may use (src/batch.c): the online count, narrowed by the
+ * affinity mask (Linux, Windows) and by a cgroup CPU quota (Linux). Always >= 1. This is
+ * what `threads = 0` means in the batch API. */
+int ph_available_cpus(void);
+
+/* ceil(quota / period) from a "<quota> <period>" string in the form of cgroup v2's
+ * cpu.max; 0 for "max ..." (no quota) or anything unparseable. */
+int ph_cpu_quota_limit(const char *cpu_max);
+
 /* The context's scratch arena: the fields of ctx->arena belong to src/core.c; everything
  * else goes through the three functions below.
  *

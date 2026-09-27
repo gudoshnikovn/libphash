@@ -1,3 +1,9 @@
+/* sched_getaffinity() and CPU_COUNT() are GNU extensions; the rest of this file is ISO C
+ * plus POSIX threads. Defined before any header, as feature-test macros must be. */
+#if defined(__linux__) && !defined(_GNU_SOURCE)
+#define _GNU_SOURCE
+#endif
+
 #include "internal.h"
 
 /* MSVC only ships <stdatomic.h> under /std:c11 or later (VS 17.5+); the CMake
@@ -9,16 +15,20 @@
 #error "src/batch.c requires <stdatomic.h>: build MSVC with /std:c11 or later"
 #endif
 #include <stdatomic.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(PH_ENABLE_THREADS)
 #if defined(_WIN32)
 #include <windows.h>
 #else
-#include <pthread.h>
 #include <unistd.h>
+#if defined(PH_ENABLE_THREADS)
+#include <pthread.h>
 #endif
+#endif
+#if defined(__linux__)
+#include <sched.h>
 #endif
 
 static int ph_flags_are_valid(uint32_t flags) {
@@ -32,6 +42,88 @@ static void clear_hashes(uint64_t hashes[PH_BATCH_HASHES_CAPACITY]) {
     for (int i = 0; i < PH_BATCH_HASHES_CAPACITY; i++) {
         hashes[i] = 0;
     }
+}
+
+/* --- How many CPUs this process may use --------------------------------------------
+ *
+ * Not how many the machine has: a container limited with --cpuset-cpus or --cpus, a
+ * `taskset`, or a Kubernetes CPU limit leaves the machine count unchanged, and one worker
+ * per host CPU there means several times the memory for no throughput (each worker holds
+ * a decoded image) and throttled, ragged latency under a CFS quota. */
+
+int ph_cpu_quota_limit(const char *cpu_max) {
+    if (!cpu_max)
+        return 0;
+    long long quota = 0, period = 0;
+    /* cgroup v2 cpu.max: "<quota> <period>" or "max <period>"; v1 is read into the same
+     * form by the caller. */
+    if (sscanf(cpu_max, "%lld %lld", &quota, &period) != 2 || quota <= 0 || period <= 0)
+        return 0;
+    long long cpus = (quota + period - 1) / period;
+    return cpus > INT_MAX ? INT_MAX : (int)cpus;
+}
+
+#if defined(__linux__)
+/* Reads at most `cap - 1` bytes of a small text file; 1 on success. */
+static int ph_read_small_file(const char *path, char *buf, size_t cap) {
+    FILE *f = fopen(path, "r");
+    if (!f)
+        return 0;
+    size_t n = fread(buf, 1, cap - 1, f);
+    fclose(f);
+    buf[n] = '\0';
+    return n > 0;
+}
+
+/* The CPU quota of the cgroup the process sees at the conventional mount point -- inside
+ * a container that is the container's own. 0 when there is none or it cannot be read. */
+static int ph_cgroup_cpu_limit(void) {
+    char buf[128];
+    if (ph_read_small_file("/sys/fs/cgroup/cpu.max", buf, sizeof(buf)))
+        return ph_cpu_quota_limit(buf); /* cgroup v2 */
+    char quota[64], period[64];
+    if (ph_read_small_file("/sys/fs/cgroup/cpu/cpu.cfs_quota_us", quota, sizeof(quota)) &&
+        ph_read_small_file("/sys/fs/cgroup/cpu/cpu.cfs_period_us", period, sizeof(period))) {
+        snprintf(buf, sizeof(buf), "%lld %lld", atoll(quota), atoll(period));
+        return ph_cpu_quota_limit(buf); /* cgroup v1: quota -1 means none */
+    }
+    return 0;
+}
+#endif
+
+int ph_available_cpus(void) {
+    int n = 0;
+#if defined(_WIN32)
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    n = si.dwNumberOfProcessors > 0 ? (int)si.dwNumberOfProcessors : 1;
+    /* The process affinity mask, within the current processor group (see the note on the
+     * 64-processor limit below). */
+    DWORD_PTR process_mask = 0, system_mask = 0;
+    if (GetProcessAffinityMask(GetCurrentProcess(), &process_mask, &system_mask) &&
+        process_mask != 0) {
+        int allowed = 0;
+        for (DWORD_PTR m = process_mask; m; m &= m - 1)
+            allowed++;
+        if (allowed < n)
+            n = allowed;
+    }
+#else
+    long online = sysconf(_SC_NPROCESSORS_ONLN);
+    n = online > 0 ? (online > INT_MAX ? INT_MAX : (int)online) : 1;
+#if defined(__linux__)
+    cpu_set_t set;
+    if (sched_getaffinity(0, sizeof(set), &set) == 0) {
+        int allowed = CPU_COUNT(&set);
+        if (allowed > 0 && allowed < n)
+            n = allowed;
+    }
+    int quota = ph_cgroup_cpu_limit();
+    if (quota > 0 && quota < n)
+        n = quota;
+#endif
+#endif
+    return n > 0 ? n : 1;
 }
 
 static void process_file_item(ph_context_t *ctx, ph_batch_item_t *item, uint32_t flags) {
@@ -175,17 +267,7 @@ static void *ph_batch_worker_pthread(void *arg) {
  * Note this is not the cause of the MAXIMUM_WAIT_OBJECTS defect fixed previously: the wait
  * there is now batched, so it is correct for any worker count. The 64-processor cap merely kept
  * `threads = 0` from ever reaching that limit, which is why the defect went unnoticed. */
-static int ph_detect_num_cores(void) {
-#if defined(_WIN32)
-    SYSTEM_INFO si;
-    GetSystemInfo(&si);
-    return si.dwNumberOfProcessors > 0 ? (int)si.dwNumberOfProcessors : 1;
-#else
-    long n = sysconf(_SC_NPROCESSORS_ONLN);
-    return n > 0 ? (int)n : 1;
-#endif
-}
-
+static int ph_detect_num_cores(void) { return ph_available_cpus(); }
 /* Runs the batch on `nthreads` workers. On return, *out_started is the number of items
  * that were started -- the prefix [0, *out_started) -- which is n unless the batch was
  * cancelled or no worker ever ran. */

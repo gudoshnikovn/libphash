@@ -961,13 +961,20 @@ typedef struct {
  * @param flags Bitwise-OR of `ph_hash_flags_t` values selecting which algorithms to
  *              compute for every item. See `ph_compute_multi()` for the `hashes[]`
  *              packing convention.
- * @param threads Worker thread count. 0 = one per detected CPU core, 1 = run sequentially
- *                on the calling thread with no thread creation, >1 = that many workers.
+ * @param threads Worker thread count. 0 = one per CPU this process may use (see below),
+ *                1 = run sequentially on the calling thread with no thread creation,
+ *                >1 = that many workers.
  *                Ignored (always sequential) if the library was built without
  *                `PHASH_ENABLE_THREADS` (default ON in CMake, OFF in the Makefile) or if
  *                `n` is smaller than the requested thread count.
  *
- *                Platform note for `threads = 0`: on POSIX the detected count covers every
+ *                What `threads = 0` counts: the online CPUs, narrowed on Linux by the
+ *                process's affinity mask (`taskset`, `docker --cpuset-cpus`) and by a cgroup
+ *                v1/v2 CPU quota rounded up (`docker --cpus`, Kubernetes CPU limits), and on
+ *                Windows by the process affinity mask. macOS has neither and uses the
+ *                online count.
+ *
+ *                Platform note for `threads = 0`: on POSIX the count can reach every
  *                online CPU, but on Windows it covers only the *current processor group*,
  *                which the OS caps at 64 logical processors. On a machine with more than
  *                that (large servers, some CI runners) `threads = 0` therefore uses at most
@@ -1041,7 +1048,7 @@ typedef struct {
      *  + ph_compute_multi() on this context would. It is read once, on the calling
      *  thread, before any worker starts; an image loaded on it is ignored. */
     const ph_context_t *config;
-    /** Worker count, as in ph_hash_files(): 0 = one per detected core, 1 = sequential on
+    /** Worker count, as in ph_hash_files(): 0 = one per usable CPU, 1 = sequential on
      *  the calling thread, >1 = that many. Default 0. */
     int threads;
     /** Optional; NULL never stops. See ph_batch_continue_fn. */
