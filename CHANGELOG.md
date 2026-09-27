@@ -479,6 +479,16 @@ walkthrough.
   buffer larger than the range libjpeg-turbo's own API accepts is reported as
   `PH_ERR_IMAGE_TOO_LARGE` rather than silently truncated.
 
+- **On arm64, hash values depended on the compiler and the C dialect libphash was built
+  with.** Whether the compiler fused multiply-add sequences into single FMA instructions
+  was left at its default, and that default differs between GCC and Clang, and for GCC
+  between `-std=gnu17` and `-std=c17`. Because pHash thresholds each coefficient against
+  the median, a last-bit difference could flip bits: the same image gave different pHash
+  values from a GCC build and a Clang build. libphash now always builds with
+  `-ffp-contract=off`, so GCC and Clang builds on arm64 produce identical hashes. x86-64
+  hashes are unchanged. On arm64 some pHash and Radial values differ from earlier 2.0.0
+  development builds.
+
 - **The CMake build ignored `CMAKE_BUILD_TYPE` for the optimisation level.** `-O3`
   (`/O2` on MSVC) was forced on top of every build type, so a `Debug` build was
   optimised and `RelWithDebInfo`/`MinSizeRel` were silently turned into `-O3`. Each build
