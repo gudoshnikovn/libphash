@@ -1,6 +1,8 @@
 #include "loader.h"
 #include "../vendor/stb_image.h"
 #include "loaders/internal.h"
+#include <stdatomic.h>
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -231,6 +233,48 @@ static const ph_image_backend_t backends[] = {
 #endif
     {ph_can_read_stb, ph_decode_stb_mem},   {NULL, NULL}};
 
+#if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
+/* zlib-ng -- the inflate under both native PNG backends -- picks its CPU-specific
+ * routines on first use by writing a global function table that other threads then read
+ * without synchronisation. All writers store the same pointers, so nothing observable goes
+ * wrong, but it is a data race under the C memory model, and ThreadSanitizer reports it
+ * with a stack through ph_hash_files() for anyone who runs their application under it.
+ * So the first decode of the process happens here, once, under a lock, before any
+ * backend is dispatched: decoding one pixel of PNG runs zlib-ng's initialisation to
+ * completion, and every later call only reads the table. Harmless with a zlib that has
+ * no such table. Do not "simplify" this away without a TSan run of
+ * tests/src/test_cold_parallel_decode.c on a libpng + zlib-ng build. */
+static const uint8_t ph_warmup_png[] = {
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48,
+    0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x00, 0x00, 0x00,
+    0x00, 0x3A, 0x7E, 0x9B, 0x55, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78,
+    0x9C, 0x63, 0x68, 0x00, 0x00, 0x00, 0x82, 0x00, 0x81, 0x77, 0xCD, 0x72, 0xB6, 0x00,
+    0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82};
+
+static atomic_flag s_warmup_lock = ATOMIC_FLAG_INIT;
+static atomic_bool s_warmup_done = false;
+
+static void ph_warm_decoder_dispatch(void) {
+    if (atomic_load(&s_warmup_done))
+        return;
+    while (atomic_flag_test_and_set(&s_warmup_lock)) {
+    }
+    if (!atomic_load(&s_warmup_done)) {
+        int w, h, ch;
+        ph_error_t err = PH_SUCCESS;
+        uint8_t *px = ph_decode_png_mem(ph_warmup_png, sizeof(ph_warmup_png), &w, &h, &ch, 0, 0,
+                                        PH_DECODE_SCALE_FULL, &err, NULL, 0);
+        /* A failure here (out of memory) leaves the dispatch cold; the real decode that
+         * follows reports its own error, and the next call tries again. */
+        if (px) {
+            ph_free_image(px);
+            atomic_store(&s_warmup_done, true);
+        }
+    }
+    atomic_flag_clear(&s_warmup_lock);
+}
+#endif
+
 /* --- Container completeness -------------------------------------------------
  *
  * stb_image decodes whatever part of a truncated JPEG or PNG it could read, fills the
@@ -340,6 +384,10 @@ uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int 
         ph_set_err_msg(err_msg, err_msg_cap, "Encoded image is larger than 2 GiB - 1 byte");
         return NULL;
     }
+
+#if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
+    ph_warm_decoder_dispatch();
+#endif
 
     /* PNG is judged here rather than in a backend, so that the per-dimension cap holds
      * in a stb_image-only build too and every configuration answers the same input with
