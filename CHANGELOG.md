@@ -326,6 +326,9 @@ walkthrough.
   workers). Per-item failures are reported in `ph_batch_item_t::status` /
   `ph_batch_buffer_item_t::status` and never abort the batch; the return value
   reports only failures that stopped the batch from being worked on at all.
+  Each item's `hashes[]` holds `PH_BATCH_HASHES_CAPACITY` (8) slots rather than one
+  per currently defined algorithm, so new `uint64_t` algorithms can be added inside
+  2.x without changing the structs' size or layout.
 - **`ph_compute_multi()`** computes several `uint64_t` algorithms in one call,
   selected by a `ph_hash_flags_t` bitmask, sharing the grayscale conversion across
   them. Results are bit-for-bit identical to the individual `ph_compute_*` calls.
