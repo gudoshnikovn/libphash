@@ -245,7 +245,6 @@ else()
                 check_c_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
                 if(COMPILER_SUPPORTS_AVX2)
                     set_source_files_properties(src/hashes/common.c PROPERTIES COMPILE_OPTIONS "-mavx2")
-                    set_source_files_properties(src/hashes/color_histogram.c PROPERTIES COMPILE_OPTIONS "-ffast-math")
                 endif()
             else()
                 # R86/R88/R89: 32-bit x86 has no fixed float ABI of its own -- GCC/Clang

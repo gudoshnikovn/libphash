@@ -127,31 +127,36 @@ PH_API ph_error_t ph_histogram_intersection(const ph_digest_t *a, const ph_diges
      * asymmetric -- H(t,r) and H(r,t) differ whenever the two hold different pixel counts.
      * Each side is normalised by its own sum here instead, which is the same quantity
      * whenever the two images have the same number of pixels and is symmetric when they
-     * do not. A comparison that depends on the order of its arguments is a defect. */
-    double sum_a = 0.0, sum_b = 0.0;
+     * do not. A comparison that depends on the order of its arguments is a defect.
+     *
+     * Computed exactly, in integers: sum_i min(a_i / A, b_i / B) = sum_i min(a_i * B,
+     * b_i * A) / (A * B). Summing a_i / A in floating point does not reach 1.0 in general
+     * -- about a third of random histograms compared with themselves came out one ulp
+     * short -- and the shortfall moved with the platform and the compiler's
+     * floating-point flags. Here every term is exact (bins are bytes and there are at
+     * most PH_DIGEST_MAX_BYTES of them, so A * B stays below 2^31 and converts to double
+     * without loss), the only rounding is the final division, and identical shapes score
+     * exactly 1.0. min(a_i * B, b_i * A) <= a_i * B, so the numerator never exceeds the
+     * denominator and the score is in [0, 1] without clamping. */
+    uint64_t sum_a = 0, sum_b = 0;
     for (int i = 0; i < a->size; i++) {
-        sum_a += (double)a->data[i];
-        sum_b += (double)b->data[i];
+        sum_a += a->data[i];
+        sum_b += b->data[i];
     }
-    if (sum_a <= 0.0 || sum_b <= 0.0) {
+    if (sum_a == 0 || sum_b == 0) {
         /* An empty histogram intersects nothing -- unless the other is empty too, in
          * which case the two images are equally devoid of pixels. */
-        *out_similarity = (sum_a <= 0.0 && sum_b <= 0.0) ? 1.0 : 0.0;
+        *out_similarity = (sum_a == 0 && sum_b == 0) ? 1.0 : 0.0;
         return PH_SUCCESS;
     }
 
-    double intersection = 0.0;
+    uint64_t overlap = 0;
     for (int i = 0; i < a->size; i++) {
-        double pa = (double)a->data[i] / sum_a;
-        double pb = (double)b->data[i] / sum_b;
-        intersection += pa < pb ? pa : pb;
+        uint64_t wa = (uint64_t)a->data[i] * sum_b;
+        uint64_t wb = (uint64_t)b->data[i] * sum_a;
+        overlap += wa < wb ? wa : wb;
     }
 
-    /* Both sides sum to one, so the intersection is in [0, 1] up to rounding. */
-    if (intersection > 1.0)
-        intersection = 1.0;
-    if (intersection < 0.0)
-        intersection = 0.0;
-    *out_similarity = intersection;
+    *out_similarity = (double)overlap / (double)(sum_a * sum_b);
     return PH_SUCCESS;
 }

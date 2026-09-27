@@ -79,12 +79,12 @@ void test_histogram_intersection_unit() {
     /* Identical distributions score 1.0, and so do two scalings of the same shape --
      * the normalisation is by each side's own total. */
     ASSERT_OK(ph_histogram_intersection(&a, &a, &v));
-    ASSERT_FLOAT_EQ(1.0, v, 1e-9);
+    ASSERT(v == 1.0);
     ph_digest_t scaled = a;
     scaled.data[0] = 40;
     scaled.data[1] = 40;
     ASSERT_OK(ph_histogram_intersection(&a, &scaled, &v));
-    ASSERT_FLOAT_EQ(1.0, v, 1e-9);
+    ASSERT(v == 1.0);
 
     /* Disjoint distributions score 0.0. */
     ph_digest_t c;
@@ -125,6 +125,60 @@ void test_histogram_intersection_unit() {
     ASSERT_FLOAT_EQ(-9.0, v, 1e-9);
 
     PASS("test_histogram_intersection_unit");
+}
+
+/* The score is computed exactly, so the identities it promises hold bit for bit rather
+ * than to within a tolerance. Summing a_i / S in floating point does not reach 1.0 in
+ * general -- about a third of random histograms came out one ulp short -- and a caller
+ * writing `sim == 1.0` would get a different answer per histogram, per platform and per
+ * set of floating-point flags. A fixed LCG, not rand(), so every platform walks the same
+ * histograms. */
+void test_histogram_intersection_is_exact() {
+    uint32_t state = 12345u;
+    for (int n = 1; n <= PH_DIGEST_MAX_BYTES; n++) {
+        for (int round = 0; round < 64; round++) {
+            ph_digest_t a, b, scaled;
+            memset(&a, 0, sizeof(a));
+            a.size = (uint8_t)n;
+            a.kind = (uint8_t)PH_DIGEST_KIND_HISTOGRAM;
+            b = a;
+            int nonzero = 0;
+            for (int i = 0; i < n; i++) {
+                state = state * 1664525u + 1013904223u;
+                a.data[i] = (uint8_t)(state >> 24);
+                state = state * 1664525u + 1013904223u;
+                b.data[i] = (uint8_t)(state >> 24);
+                nonzero |= a.data[i];
+            }
+            if (!nonzero)
+                a.data[0] = 1;
+
+            /* Same shape at twice the scale: bins halved so the doubled copy fits a byte. */
+            scaled = a;
+            for (int i = 0; i < n; i++) {
+                a.data[i] = (uint8_t)(a.data[i] / 2);
+                scaled.data[i] = (uint8_t)(a.data[i] * 2);
+            }
+            if (!nonzero || a.data[0] == 0) {
+                a.data[0] = 1;
+                scaled.data[0] = 2;
+            }
+
+            double v = -9.0;
+            ASSERT_OK(ph_histogram_intersection(&a, &a, &v));
+            ASSERT(v == 1.0);
+            ASSERT_OK(ph_histogram_intersection(&a, &scaled, &v));
+            ASSERT(v == 1.0);
+
+            double ab = -9.0, ba = -9.0;
+            ASSERT_OK(ph_histogram_intersection(&a, &b, &ab));
+            ASSERT_OK(ph_histogram_intersection(&b, &a, &ba));
+            ASSERT(ab == ba);
+            ASSERT(ab >= 0.0 && ab <= 1.0);
+        }
+    }
+
+    PASS("test_histogram_intersection_is_exact");
 }
 
 static void flat_digest(int r, int g, int b, ph_digest_t *out) {
@@ -355,6 +409,7 @@ int main() {
     test_color_histogram_bin_unit();
     test_color_histogram_counts_are_scaled_against_the_largest_bin();
     test_histogram_intersection_unit();
+    test_histogram_intersection_is_exact();
     test_color_hash_separates_flat_colours();
     test_color_hash_e2e();
     test_color_hash_requires_color();
