@@ -101,9 +101,35 @@ PH_API ph_error_t ph_digest_info(const ph_context_t *ctx, ph_algorithm_t algo, s
     return PH_SUCCESS;
 }
 
-/* Stores a uint64_t hash as a digest: 8 bytes, most significant first. */
-static ph_error_t ph_uint64_digest(ph_context_t *ctx, ph_algorithm_t algo, ph_error_t err,
-                                   uint64_t hash, ph_digest_t *out) {
+/* Computes a uint64_t algorithm and stores the hash as a digest: 8 bytes, most
+ * significant first. */
+static ph_error_t ph_uint64_digest(ph_context_t *ctx, ph_algorithm_t algo, ph_digest_t *out) {
+    if (!out)
+        return PH_ERR_INVALID_ARGUMENT;
+    uint64_t hash = 0;
+    ph_error_t err;
+    switch (algo) {
+        case PH_ALGO_AHASH:
+            err = ph_compute_ahash(ctx, &hash);
+            break;
+        case PH_ALGO_DHASH:
+            err = ph_compute_dhash(ctx, &hash);
+            break;
+        case PH_ALGO_PHASH:
+            err = ph_compute_phash(ctx, &hash);
+            break;
+        case PH_ALGO_WHASH:
+            err = ph_compute_whash(ctx, &hash);
+            break;
+        case PH_ALGO_BMH:
+        case PH_ALGO_MHASH:
+        case PH_ALGO_RADIAL:
+        case PH_ALGO_COLOR_HASH:
+        case PH_ALGO_COLOR_MOMENTS:
+        case PH_ALGO_FORCE_INT32_:
+        default:
+            return PH_ERR_INVALID_ARGUMENT; /* not a uint64_t algorithm */
+    }
     if (err != PH_SUCCESS)
         return err;
     ph_digest_begin(out, ctx, algo);
@@ -114,26 +140,12 @@ static ph_error_t ph_uint64_digest(ph_context_t *ctx, ph_algorithm_t algo, ph_er
 
 PH_API ph_error_t ph_compute_digest(ph_context_t *ctx, ph_algorithm_t algo,
                                     ph_digest_t *out_digest) {
-    /* The digest algorithms check their own arguments; the uint64_t ones write into a
-     * local hash, so the output pointer is checked here for them. */
-    uint64_t hash = 0;
     switch (algo) {
         case PH_ALGO_AHASH:
-            if (!out_digest)
-                return PH_ERR_INVALID_ARGUMENT;
-            return ph_uint64_digest(ctx, algo, ph_compute_ahash(ctx, &hash), hash, out_digest);
         case PH_ALGO_DHASH:
-            if (!out_digest)
-                return PH_ERR_INVALID_ARGUMENT;
-            return ph_uint64_digest(ctx, algo, ph_compute_dhash(ctx, &hash), hash, out_digest);
         case PH_ALGO_PHASH:
-            if (!out_digest)
-                return PH_ERR_INVALID_ARGUMENT;
-            return ph_uint64_digest(ctx, algo, ph_compute_phash(ctx, &hash), hash, out_digest);
         case PH_ALGO_WHASH:
-            if (!out_digest)
-                return PH_ERR_INVALID_ARGUMENT;
-            return ph_uint64_digest(ctx, algo, ph_compute_whash(ctx, &hash), hash, out_digest);
+            return ph_uint64_digest(ctx, algo, out_digest);
         case PH_ALGO_BMH:
             return ph_compute_bmh(ctx, out_digest);
         case PH_ALGO_MHASH:
