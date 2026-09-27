@@ -9,7 +9,11 @@ ifeq ($(origin CC),default)
 CC = clang
 endif
 GENERATED_DIR = generated
-CFLAGS = -I./include -I./src -I./$(GENERATED_DIR) -O3 -Wall -Wextra -fPIC
+# The same dialect CMakeLists.txt pins (CMAKE_C_STANDARD 17, extensions OFF).
+# Left unset, the dialect is whatever the compiler defaults to, and that default
+# moves: GCC 15 switched to gnu23, so this build silently changed standard under
+# anyone who upgraded.
+CFLAGS = -std=c17 -I./include -I./src -I./$(GENERATED_DIR) -O3 -Wall -Wextra -fPIC
 LDFLAGS = -lm
 
 # Architecture-specific optimizations
