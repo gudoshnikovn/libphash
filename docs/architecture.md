@@ -164,3 +164,35 @@ contract.
   synthetic) instead of encoded bytes. No format to detect, no decoder involved, and
   therefore none of `ph_error_t`'s format-related codes apply — see its doc comment in
   `include/libphash.h` for the exact contract on `width`/`height`/`channels`/`stride`.
+
+## Batch hashing
+
+`ph_hash_files()`/`ph_hash_buffers()` hash an array of files or in-memory buffers, each
+item loaded and hashed with `ph_compute_multi()` independently, optionally across an
+internal pool of worker threads. Each worker creates and owns its own `ph_context_t`,
+claims the next unstarted item from a shared atomic index, and writes only into that
+item — per-item failures land in the item's `status` and never stop the batch.
+
+`ph_hash_files_ex()`/`ph_hash_buffers_ex()` take a `ph_batch_options_t` (initialise it
+with `ph_batch_options_init()`) and add what the plain pair cannot do:
+
+- **Configuration.** `options.config` is a template context: its whole configuration —
+  gray weights, algorithm parameters, `max_pixels`, decode scale, auto-orient — is copied
+  on the calling thread into every worker's context, so the batch hashes an item exactly
+  as that context would. The plain pair always runs on the defaults, including the
+  default `max_pixels`, whatever was configured elsewhere.
+- **Cancellation.** `options.should_continue` is called before each item; once it
+  returns 0 no new item is started, the call returns `PH_ERR_CANCELLED`, and every item
+  not started carries `PH_ERR_CANCELLED`. The plain pair blocks until the last item.
+- **Progress.** `options.on_progress` is called after each finished item.
+
+Both callbacks run on the worker threads, possibly concurrently, so they must be
+thread-safe.
+
+**Memory.** Each worker holds one decoded image at a time: its RGB pixels plus a
+grayscale copy, about 4 bytes per pixel. The peak is therefore roughly
+`workers × 4 × the largest image's pixel count` — linear in the thread count, and
+`threads = 0` means one worker per core. At the default `max_pixels` (256 Mi pixels) that
+bound is about 1 GB per worker; measured on 20-megapixel JPEGs it is about 80 MB per
+worker (94 MB at one thread, 1.35 GB at sixteen). To bound it, pass an explicit thread
+count, a lower `max_pixels` on the template, or both.

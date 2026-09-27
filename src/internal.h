@@ -600,8 +600,9 @@ struct ph_context {
     // Diagnostic message for the most recent failed load; empty string if none.
     char last_error[PH_LAST_ERROR_MAX];
 
-    // User-defined configuration parameters
-    struct {
+    // User-defined configuration parameters. Plain values only, no pointers: the batch
+    // API copies it by value from a caller's template context into each worker's.
+    struct ph_context_config {
         // gamma is applied per-image (normalised by the blurred buffer's own
         // maximum, not by a context-wide precomputed LUT), so there is no gamma_lut
         // field here any more -- see ph_apply_gamma(), src/image/color.c.

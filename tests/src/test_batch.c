@@ -340,6 +340,184 @@ static void test_batch_item_status_matches_single_call() {
     PASS("test_batch_item_status_matches_single_call");
 }
 
+/* --- ph_hash_files_ex() / ph_hash_buffers_ex() --- */
+
+/* The documented difference, pinned: a configured context and the plain batch give
+ * different hashes for the same file, because the plain batch ignores the configuration.
+ * With that context as the template, the _ex batch gives the configured context's hashes
+ * exactly -- sequentially and across threads, for files and for buffers. */
+static void test_batch_ex_applies_the_template_configuration() {
+    const char *path = TEST_DATA_DIR "/photo_complex.png";
+    const uint32_t flags = PH_HASH_AHASH | PH_HASH_PHASH;
+
+    ph_context_t *config = NULL;
+    ASSERT_OK(ph_create(&config));
+    ASSERT_OK(ph_context_set_gray_weights(config, 100, 10, 18));
+    ASSERT_OK(ph_context_set_phash_params(config, 16, 6));
+    uint64_t configured[PH_HASH_FLAGS_COUNT] = {0};
+    ASSERT_OK(ph_load_from_file(config, path));
+    ASSERT_OK(ph_compute_multi(config, flags, configured));
+
+    uint64_t defaults[PH_HASH_FLAGS_COUNT] = {0};
+    reference_multi(path, flags, defaults);
+    ASSERT(configured[0] != defaults[0]); /* otherwise the test proves nothing */
+
+    ph_batch_item_t plain[1] = {{.path = path}};
+    ASSERT_OK(ph_hash_files(plain, 1, flags, 1));
+    ASSERT(plain[0].hashes[0] == defaults[0] && plain[0].hashes[1] == defaults[1]);
+
+    size_t len = 0;
+    uint8_t *bytes = read_whole_file(path, &len);
+    const int thread_counts[] = {1, 3};
+    for (size_t t = 0; t < 2; t++) {
+        ph_batch_options_t options;
+        ASSERT_OK(ph_batch_options_init(&options));
+        options.config = config;
+        options.threads = thread_counts[t];
+
+        ph_batch_item_t items[3] = {{.path = path}, {.path = path}, {.path = path}};
+        ASSERT_OK(ph_hash_files_ex(items, 3, flags, &options));
+        ph_batch_buffer_item_t bitems[3] = {
+            {.buffer = bytes, .length = len},
+            {.buffer = bytes, .length = len},
+            {.buffer = bytes, .length = len},
+        };
+        ASSERT_OK(ph_hash_buffers_ex(bitems, 3, flags, &options));
+        for (int i = 0; i < 3; i++) {
+            ASSERT_INT_EQ(PH_SUCCESS, items[i].status);
+            ASSERT_INT_EQ(PH_SUCCESS, bitems[i].status);
+            ASSERT(items[i].hashes[0] == configured[0] && items[i].hashes[1] == configured[1]);
+            ASSERT(bitems[i].hashes[0] == configured[0] && bitems[i].hashes[1] == configured[1]);
+        }
+    }
+
+    /* The template is only read: its own image and configuration are as they were. */
+    uint64_t again[PH_HASH_FLAGS_COUNT] = {0};
+    ASSERT_OK(ph_compute_multi(config, flags, again));
+    ASSERT(again[0] == configured[0] && again[1] == configured[1]);
+
+    free(bytes);
+    ph_free(config);
+    PASS("test_batch_ex_applies_the_template_configuration");
+}
+
+/* max_pixels is the setting whose silent loss matters most: it is the guard against
+ * decompression bombs. From the template it must reach every worker. */
+static void test_batch_ex_honours_the_template_max_pixels() {
+    ph_context_t *config = NULL;
+    ASSERT_OK(ph_create(&config));
+    ASSERT_OK(ph_context_set_max_pixels(config, 64));
+
+    ph_batch_options_t options;
+    ASSERT_OK(ph_batch_options_init(&options));
+    options.config = config;
+    const int thread_counts[] = {1, 4};
+    for (size_t t = 0; t < 2; t++) {
+        options.threads = thread_counts[t];
+        ph_batch_item_t items[4] = {
+            {.path = TEST_DATA_DIR "/photo.jpeg"},
+            {.path = TEST_DATA_DIR "/photo.png"},
+            {.path = TEST_DATA_DIR "/photo_copy.jpeg"},
+            {.path = TEST_DATA_DIR "/photo_complex.png"},
+        };
+        ASSERT_OK(ph_hash_files_ex(items, 4, PH_HASH_AHASH, &options));
+        for (int i = 0; i < 4; i++)
+            ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, items[i].status);
+    }
+    ph_free(config);
+    PASS("test_batch_ex_honours_the_template_max_pixels");
+}
+
+static void test_batch_ex_options_validation() {
+    ph_batch_item_t items[1] = {{.path = TEST_DATA_DIR "/photo.jpeg"}};
+    ph_batch_options_t options;
+
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_batch_options_init(NULL));
+    memset(&options, 0x7F, sizeof(options));
+    ASSERT_OK(ph_batch_options_init(&options));
+    ASSERT_INT_EQ((int)sizeof(ph_batch_options_t), (int)options.struct_size);
+    ASSERT(options.config == NULL && options.threads == 0 && options.should_continue == NULL &&
+           options.on_progress == NULL && options.user_data == NULL);
+
+    /* NULL options are the defaults. */
+    ASSERT_OK(ph_hash_files_ex(items, 1, PH_HASH_AHASH, NULL));
+    ASSERT_INT_EQ(PH_SUCCESS, items[0].status);
+
+    /* A struct_size no version of the struct has, a negative thread count, and bad flags
+     * are all refused before anything is written -- and before the n == 0 shortcut. */
+    options.struct_size = sizeof(ph_batch_options_t) - 1;
+    items[0].status = STATUS_UNWRITTEN;
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_files_ex(items, 1, PH_HASH_AHASH, &options));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_files_ex(NULL, 0, PH_HASH_AHASH, &options));
+    ASSERT_INT_EQ(STATUS_UNWRITTEN, items[0].status);
+    options.struct_size = 0;
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_buffers_ex(NULL, 0, PH_HASH_AHASH, &options));
+
+    ASSERT_OK(ph_batch_options_init(&options));
+    options.threads = -1;
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_files_ex(NULL, 0, PH_HASH_AHASH, &options));
+    ASSERT_OK(ph_batch_options_init(&options));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_files_ex(items, 1, 0, &options));
+    ASSERT_OK(ph_hash_files_ex(NULL, 0, PH_HASH_AHASH, &options));
+    PASS("test_batch_ex_options_validation");
+}
+
+/* Sequentially the callbacks are simple enough to pin exactly: should_continue before
+ * each item, on_progress after each one, done counting 1..n in order, and a stop leaving
+ * the rest of the items cancelled. The threaded version is in test_batch_stress.c. */
+typedef struct {
+    int continue_calls;
+    int allow;
+    size_t progress[8];
+    int progress_calls;
+} seq_state_t;
+
+static int seq_continue(void *user_data) {
+    seq_state_t *st = (seq_state_t *)user_data;
+    return st->continue_calls++ < st->allow;
+}
+
+static void seq_progress(size_t done, size_t total, void *user_data) {
+    seq_state_t *st = (seq_state_t *)user_data;
+    ASSERT_INT_EQ(5, (int)total);
+    st->progress[st->progress_calls++] = done;
+}
+
+static void test_batch_ex_sequential_callbacks() {
+    for (int allow = 0; allow <= 6; allow++) {
+        seq_state_t st = {.allow = allow};
+        ph_batch_options_t options;
+        ASSERT_OK(ph_batch_options_init(&options));
+        options.threads = 1;
+        options.should_continue = seq_continue;
+        options.on_progress = seq_progress;
+        options.user_data = &st;
+
+        ph_batch_item_t items[5] = {
+            {.path = TEST_DATA_DIR "/photo.jpeg"}, {.path = TEST_DATA_DIR "/corrupted.jpg"},
+            {.path = TEST_DATA_DIR "/photo.png"},  {.path = NULL},
+            {.path = TEST_DATA_DIR "/photo.jpeg"},
+        };
+        ph_error_t err = ph_hash_files_ex(items, 5, PH_HASH_AHASH, &options);
+
+        const int started = allow < 5 ? allow : 5;
+        ASSERT_INT_EQ(started < 5 ? PH_ERR_CANCELLED : PH_SUCCESS, err);
+        ASSERT_INT_EQ(started, st.progress_calls);
+        for (int i = 0; i < started; i++) {
+            ASSERT_INT_EQ(i + 1, (int)st.progress[i]);
+            ASSERT(items[i].status != PH_ERR_CANCELLED);
+        }
+        for (int i = started; i < 5; i++) {
+            ASSERT_INT_EQ(PH_ERR_CANCELLED, items[i].status);
+            ASSERT(items[i].hashes[0] == 0);
+        }
+        /* A failing item is still a finished item: it is reported, not cancelled. */
+        if (started >= 2)
+            ASSERT(items[1].status != PH_SUCCESS);
+    }
+    PASS("test_batch_ex_sequential_callbacks");
+}
+
 int main() {
     test_hash_files_matches_compute_multi();
     test_hash_files_partial_failure();
@@ -350,5 +528,9 @@ int main() {
     test_hash_buffers_partial_failure();
     test_batch_all_items_failing_is_not_a_hard_failure();
     test_batch_item_status_matches_single_call();
+    test_batch_ex_applies_the_template_configuration();
+    test_batch_ex_honours_the_template_max_pixels();
+    test_batch_ex_options_validation();
+    test_batch_ex_sequential_callbacks();
     return 0;
 }

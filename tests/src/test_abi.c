@@ -75,10 +75,26 @@ static void test_batch_struct_layout(void) {
     PASS("test_batch_struct_layout");
 }
 
+/* The options struct carries its own size, so later fields can be appended; the fields
+ * that exist must still never move. */
+static void test_batch_options_layout(void) {
+    ASSERT_INT_EQ(0, (int)offsetof(ph_batch_options_t, struct_size));
+    if (sizeof(void *) == 8) {
+        ASSERT_INT_EQ(8, (int)offsetof(ph_batch_options_t, config));
+        ASSERT_INT_EQ(16, (int)offsetof(ph_batch_options_t, threads));
+        ASSERT_INT_EQ(24, (int)offsetof(ph_batch_options_t, should_continue));
+        ASSERT_INT_EQ(32, (int)offsetof(ph_batch_options_t, on_progress));
+        ASSERT_INT_EQ(40, (int)offsetof(ph_batch_options_t, user_data));
+        ASSERT_INT_EQ(48, (int)sizeof(ph_batch_options_t));
+    }
+    PASS("test_batch_options_layout");
+}
+
 int main(void) {
     test_public_enums_are_32_bit();
     test_batch_hash_capacity_is_decoupled_from_flag_count();
     test_batch_struct_layout();
+    test_batch_options_layout();
     printf("test_abi: PASSED\n");
     return 0;
 }

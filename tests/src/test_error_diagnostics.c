@@ -83,6 +83,7 @@ static int ph_error_kind(ph_error_t err) {
         case PH_ERR_DECODER_UNAVAILABLE:
         case PH_ERR_IO:
         case PH_ERR_REQUIRES_COLOR:
+        case PH_ERR_CANCELLED:
             return 1;
         case PH_ERR_FORCE_INT32_: /* width spacer, not a code: deliberately not in the table */
             return -1;
@@ -113,6 +114,7 @@ static const error_code_entry_t all_error_codes[] = {
     {PH_ERR_DECODER_UNAVAILABLE, "PH_ERR_DECODER_UNAVAILABLE"},
     {PH_ERR_IO, "PH_ERR_IO"},
     {PH_ERR_REQUIRES_COLOR, "PH_ERR_REQUIRES_COLOR"},
+    {PH_ERR_CANCELLED, "PH_ERR_CANCELLED"},
 };
 #define NUM_ERROR_CODES (sizeof(all_error_codes) / sizeof(*all_error_codes))
 
@@ -630,6 +632,25 @@ static void row_allocation_failed(ph_context_t *ctx) {
     ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.png"));
 }
 
+/* --- PH_ERR_CANCELLED: a batch whose should_continue said stop --- */
+static int stop_immediately(void *user_data) {
+    (void)user_data;
+    return 0;
+}
+
+static void row_cancelled(ph_context_t *ctx) {
+    ph_batch_item_t items[2] = {{.path = TEST_DATA_DIR "/photo.png"},
+                                {.path = TEST_DATA_DIR "/photo.jpeg"}};
+    ph_batch_options_t options;
+    ASSERT_OK(ph_batch_options_init(&options));
+    options.threads = 1;
+    options.should_continue = stop_immediately;
+    expect(ctx, "batch, should_continue = 0", ph_hash_files_ex(items, 2, PH_HASH_AHASH, &options),
+           PH_ERR_CANCELLED, MSG_BACKEND_DEPENDENT);
+    ASSERT_INT_EQ(PH_ERR_CANCELLED, items[0].status);
+    ASSERT_INT_EQ(PH_ERR_CANCELLED, items[1].status);
+}
+
 static void test_input_to_error_code_table(ph_context_t *ctx) {
     row_io_errors(ctx);
     row_invalid_arguments(ctx);
@@ -640,6 +661,7 @@ static void test_input_to_error_code_table(ph_context_t *ctx) {
     row_decoder_unavailable(ctx);
     row_requires_color(ctx);
     row_allocation_failed(ctx);
+    row_cancelled(ctx);
 }
 
 int main(void) {

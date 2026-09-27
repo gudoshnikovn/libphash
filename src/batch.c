@@ -10,6 +10,7 @@
 #endif
 #include <stdatomic.h>
 #include <stdlib.h>
+#include <string.h>
 
 #if defined(PH_ENABLE_THREADS)
 #if defined(_WIN32)
@@ -65,6 +66,26 @@ static void process_buffer_item(ph_context_t *ctx, ph_batch_buffer_item_t *item,
 
 typedef void (*ph_batch_process_fn)(ph_context_t *ctx, void *item, uint32_t flags);
 
+/* Everything about one batch call beyond its items: the configuration every worker
+ * context starts from (NULL = ph_create()'s defaults) and the caller's callbacks. */
+typedef struct {
+    const struct ph_context_config *config;
+    ph_batch_continue_fn should_continue;
+    ph_batch_progress_fn on_progress;
+    void *user_data;
+} ph_batch_hooks_t;
+
+static ph_error_t ph_batch_create_context(const ph_batch_hooks_t *hooks, ph_context_t **out) {
+    ph_error_t err = ph_create(out);
+    if (err == PH_SUCCESS && hooks->config)
+        (*out)->config = *hooks->config;
+    return err;
+}
+
+static int ph_batch_should_stop(const ph_batch_hooks_t *hooks) {
+    return hooks->should_continue && !hooks->should_continue(hooks->user_data);
+}
+
 static void process_file_item_v(ph_context_t *ctx, void *item, uint32_t flags) {
     process_file_item(ctx, (ph_batch_item_t *)item, flags);
 }
@@ -81,7 +102,14 @@ typedef struct {
     size_t n;
     uint32_t flags;
     ph_batch_process_fn process;
+    const ph_batch_hooks_t *hooks;
+    /* Items are claimed in index order, so the claimed ones are always the prefix
+     * [0, min(next, n)): after the join, everything from there on was never started. */
     atomic_size_t next;
+    /* Items finished, for the progress callback's `done`. */
+    atomic_size_t done;
+    /* Set by the first worker whose should_continue returned 0; the others stop claiming. */
+    atomic_int stop;
     /* Number of workers that got a context and therefore actually drained the index.
      * Zero means no item was looked at at all -- see the return contract below. */
     atomic_int workers_ready;
@@ -89,7 +117,7 @@ typedef struct {
 
 static void ph_batch_worker_run(ph_batch_shared_t *shared) {
     ph_context_t *ctx = NULL;
-    if (ph_create(&ctx) != PH_SUCCESS) {
+    if (ph_batch_create_context(shared->hooks, &ctx) != PH_SUCCESS) {
         /* Leave this thread's would-be share unclaimed; other workers (if any)
          * still drain the shared index and will pick it up. Items are pre-set
          * to PH_ERR_ALLOCATION_FAILED, so nothing is left uninitialized even
@@ -98,11 +126,20 @@ static void ph_batch_worker_run(ph_batch_shared_t *shared) {
     }
     atomic_fetch_add(&shared->workers_ready, 1);
 
+    const ph_batch_hooks_t *hooks = shared->hooks;
     for (;;) {
+        if (atomic_load(&shared->stop))
+            break;
+        if (ph_batch_should_stop(hooks)) {
+            atomic_store(&shared->stop, 1);
+            break;
+        }
         size_t idx = atomic_fetch_add(&shared->next, 1);
         if (idx >= shared->n)
             break;
         shared->process(ctx, shared->items_base + idx * shared->item_stride, shared->flags);
+        if (hooks->on_progress)
+            hooks->on_progress(atomic_fetch_add(&shared->done, 1) + 1, shared->n, hooks->user_data);
     }
 
     ph_free(ctx);
@@ -149,16 +186,24 @@ static int ph_detect_num_cores(void) {
 #endif
 }
 
+/* Runs the batch on `nthreads` workers. On return, *out_started is the number of items
+ * that were started -- the prefix [0, *out_started) -- which is n unless the batch was
+ * cancelled or no worker ever ran. */
 static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, size_t n,
-                                        uint32_t flags, ph_batch_process_fn process, int nthreads) {
+                                        uint32_t flags, ph_batch_process_fn process, int nthreads,
+                                        const ph_batch_hooks_t *hooks, size_t *out_started) {
+    *out_started = 0;
     ph_batch_shared_t shared = {
         .items_base = (uint8_t *)items_base,
         .item_stride = item_stride,
         .n = n,
         .flags = flags,
         .process = process,
+        .hooks = hooks,
     };
     atomic_init(&shared.next, 0);
+    atomic_init(&shared.done, 0);
+    atomic_init(&shared.stop, 0);
     atomic_init(&shared.workers_ready, 0);
 
 #if defined(_WIN32)
@@ -245,6 +290,8 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
     if (spawned == 0 || atomic_load(&shared.workers_ready) == 0)
         return PH_ERR_ALLOCATION_FAILED;
 
+    size_t claimed = atomic_load(&shared.next);
+    *out_started = claimed < n ? claimed : n;
     return PH_SUCCESS;
 }
 
@@ -266,62 +313,134 @@ static int ph_resolve_thread_count(int threads, size_t n) {
     return count;
 }
 
+/* The single-threaded path: the calling thread, one context, items in order. Same
+ * *out_started contract as ph_batch_run_threaded(). */
+static ph_error_t ph_batch_run_sequential(void *items_base, size_t item_stride, size_t n,
+                                          uint32_t flags, ph_batch_process_fn process,
+                                          const ph_batch_hooks_t *hooks, size_t *out_started) {
+    *out_started = 0;
+    ph_context_t *ctx = NULL;
+    if (ph_batch_create_context(hooks, &ctx) != PH_SUCCESS)
+        return PH_ERR_ALLOCATION_FAILED;
+    size_t started = 0;
+    while (started < n && !ph_batch_should_stop(hooks)) {
+        process(ctx, (uint8_t *)items_base + started * item_stride, flags);
+        started++;
+        if (hooks->on_progress)
+            hooks->on_progress(started, n, hooks->user_data);
+    }
+    ph_free(ctx);
+    *out_started = started;
+    return PH_SUCCESS;
+}
+
+/* Sets an item's status and zeroes its hashes: the pre-set value every item starts from,
+ * and the final value of every item a cancellation kept from being started. */
+typedef void (*ph_batch_reset_fn)(void *item, ph_error_t status);
+
 static ph_error_t ph_hash_batch(void *items_base, size_t item_stride, size_t n, uint32_t flags,
-                                int threads, ph_batch_process_fn process,
-                                void (*init_defaults)(void *item)) {
+                                const ph_batch_options_t *options, ph_batch_process_fn process,
+                                ph_batch_reset_fn reset) {
+    ph_batch_options_t defaults;
+    ph_batch_options_init(&defaults);
+    if (!options)
+        options = &defaults;
+
     /* Validation runs before the `n == 0` shortcut: an empty batch must not swallow a
-     * malformed call. `flags` and `threads` are checked unconditionally; `items_base` is
+     * malformed call. `flags` and the options are checked unconditionally; `items_base` is
      * only required when there is something to dereference, so a (NULL, 0) pair -- the
-     * natural spelling of an empty array -- stays a no-op success. */
-    if (threads < 0 || !ph_flags_are_valid(flags))
+     * natural spelling of an empty array -- stays a no-op success. Only the first version
+     * of the options struct exists, so anything shorter is a caller error. */
+    if (options->struct_size < sizeof(ph_batch_options_t) || options->threads < 0 ||
+        !ph_flags_are_valid(flags))
         return PH_ERR_INVALID_ARGUMENT;
     if (!items_base && n > 0)
         return PH_ERR_INVALID_ARGUMENT;
     if (n == 0)
         return PH_SUCCESS;
 
-    for (size_t i = 0; i < n; i++) {
-        init_defaults((uint8_t *)items_base + i * item_stride);
+    /* The template's configuration is copied here, on the calling thread, so no worker
+     * ever reads the caller's context. */
+    struct ph_context_config config;
+    ph_batch_hooks_t hooks = {
+        .config = NULL,
+        .should_continue = options->should_continue,
+        .on_progress = options->on_progress,
+        .user_data = options->user_data,
+    };
+    if (options->config) {
+        config = options->config->config;
+        hooks.config = &config;
     }
 
-    int nthreads = ph_resolve_thread_count(threads, n);
+    for (size_t i = 0; i < n; i++) {
+        reset((uint8_t *)items_base + i * item_stride, PH_ERR_ALLOCATION_FAILED);
+    }
 
+    int nthreads = ph_resolve_thread_count(options->threads, n);
+    (void)nthreads; /* always 1 without threads: ph_resolve_thread_count() clamps */
+    size_t started = 0;
+    ph_error_t err;
 #if defined(PH_ENABLE_THREADS)
     if (nthreads > 1)
-        return ph_batch_run_threaded(items_base, item_stride, n, flags, process, nthreads);
-#else
-    (void)nthreads; /* always 1: ph_resolve_thread_count() clamps without threads */
+        err = ph_batch_run_threaded(items_base, item_stride, n, flags, process, nthreads, &hooks,
+                                    &started);
+    else
 #endif
-
-    ph_context_t *ctx = NULL;
-    if (ph_create(&ctx) != PH_SUCCESS)
-        return PH_ERR_ALLOCATION_FAILED;
-    for (size_t i = 0; i < n; i++) {
-        process(ctx, (uint8_t *)items_base + i * item_stride, flags);
+        err = ph_batch_run_sequential(items_base, item_stride, n, flags, process, &hooks, &started);
+    if (err != PH_SUCCESS)
+        return err;
+    if (started == n)
+        return PH_SUCCESS;
+    for (size_t i = started; i < n; i++) {
+        reset((uint8_t *)items_base + i * item_stride, PH_ERR_CANCELLED);
     }
-    ph_free(ctx);
+    return PH_ERR_CANCELLED;
+}
+
+static void reset_file_item(void *item, ph_error_t status) {
+    ph_batch_item_t *i = (ph_batch_item_t *)item;
+    clear_hashes(i->hashes);
+    i->status = status;
+}
+
+static void reset_buffer_item(void *item, ph_error_t status) {
+    ph_batch_buffer_item_t *i = (ph_batch_buffer_item_t *)item;
+    clear_hashes(i->hashes);
+    i->status = status;
+}
+
+PH_API ph_error_t ph_batch_options_init(ph_batch_options_t *options) {
+    if (!options)
+        return PH_ERR_INVALID_ARGUMENT;
+    memset(options, 0, sizeof(*options));
+    options->struct_size = sizeof(*options);
     return PH_SUCCESS;
 }
 
-static void init_file_item_defaults(void *item) {
-    ph_batch_item_t *i = (ph_batch_item_t *)item;
-    clear_hashes(i->hashes);
-    i->status = PH_ERR_ALLOCATION_FAILED;
+PH_API ph_error_t ph_hash_files_ex(ph_batch_item_t *items, size_t n, uint32_t flags,
+                                   const ph_batch_options_t *options) {
+    return ph_hash_batch(items, sizeof(ph_batch_item_t), n, flags, options, process_file_item_v,
+                         reset_file_item);
 }
 
-static void init_buffer_item_defaults(void *item) {
-    ph_batch_buffer_item_t *i = (ph_batch_buffer_item_t *)item;
-    clear_hashes(i->hashes);
-    i->status = PH_ERR_ALLOCATION_FAILED;
+PH_API ph_error_t ph_hash_buffers_ex(ph_batch_buffer_item_t *items, size_t n, uint32_t flags,
+                                     const ph_batch_options_t *options) {
+    return ph_hash_batch(items, sizeof(ph_batch_buffer_item_t), n, flags, options,
+                         process_buffer_item_v, reset_buffer_item);
 }
 
 PH_API ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, uint32_t flags, int threads) {
-    return ph_hash_batch(items, sizeof(ph_batch_item_t), n, flags, threads, process_file_item_v,
-                         init_file_item_defaults);
+    ph_batch_options_t options;
+    ph_batch_options_init(&options);
+    options.threads = threads;
+    return ph_hash_files_ex(items, n, flags, &options);
 }
 
 PH_API ph_error_t ph_hash_buffers(ph_batch_buffer_item_t *items, size_t n, uint32_t flags,
                                   int threads) {
-    return ph_hash_batch(items, sizeof(ph_batch_buffer_item_t), n, flags, threads,
-                         process_buffer_item_v, init_buffer_item_defaults);
+    ph_batch_options_t options;
+    ph_batch_options_init(&options);
+    options.threads = threads;
+    return ph_hash_buffers_ex(items, n, flags, &options);
 }

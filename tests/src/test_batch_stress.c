@@ -19,6 +19,7 @@
 
 #include "libphash.h"
 #include "test_macros.h"
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -293,10 +294,83 @@ static void test_stress_buffers_match_sequential(void) {
     PASS("test_stress_buffers_match_sequential");
 }
 
+/* Cancellation and progress under real concurrency -- the TSan leg builds this file, so
+ * the callbacks' cross-thread use is checked for races too. should_continue says stop
+ * after a fixed number of calls, from whichever worker gets there; afterwards:
+ *
+ *   - the call returns PH_ERR_CANCELLED (a batch this long cannot finish first),
+ *   - the started items are a prefix and match the sequential reference,
+ *   - every other item is PH_ERR_CANCELLED with zeroed hashes,
+ *   - on_progress saw every finished item exactly once, numbered 1..finished. */
+#define CANCEL_AFTER_CALLS 40
+
+typedef struct {
+    atomic_int calls;
+    atomic_size_t progress_calls;
+    atomic_uchar seen[STRESS_N + 1];
+} cancel_state_t;
+
+static int stop_after_some(void *user_data) {
+    cancel_state_t *st = (cancel_state_t *)user_data;
+    return atomic_fetch_add(&st->calls, 1) < CANCEL_AFTER_CALLS;
+}
+
+static void record_progress(size_t done, size_t total, void *user_data) {
+    cancel_state_t *st = (cancel_state_t *)user_data;
+    if (total != STRESS_N || done == 0 || done > STRESS_N ||
+        atomic_exchange(&st->seen[done], 1) != 0) {
+        fprintf(stderr, "[FAIL] on_progress(done=%zu, total=%zu) out of range or repeated\n", done,
+                total);
+        exit(1);
+    }
+    atomic_fetch_add(&st->progress_calls, 1);
+}
+
+static void test_stress_cancel_midway(void) {
+    ph_batch_item_t *reference = alloc_items(STRESS_N);
+    reference_run(reference, STRESS_N);
+
+    const int thread_counts[] = {1, 4, 16};
+    for (size_t t = 0; t < sizeof(thread_counts) / sizeof(*thread_counts); t++) {
+        cancel_state_t *st = (cancel_state_t *)calloc(1, sizeof(*st));
+        ASSERT_PTR_NOT_NULL(st);
+        ph_batch_item_t *items = alloc_items(STRESS_N);
+
+        ph_batch_options_t options;
+        ASSERT_OK(ph_batch_options_init(&options));
+        options.threads = thread_counts[t];
+        options.should_continue = stop_after_some;
+        options.on_progress = record_progress;
+        options.user_data = st;
+        ASSERT_INT_EQ(PH_ERR_CANCELLED, ph_hash_files_ex(items, STRESS_N, STRESS_FLAGS, &options));
+
+        size_t started = 0;
+        while (started < STRESS_N && items[started].status != PH_ERR_CANCELLED)
+            started++;
+        ASSERT(started > 0 && started < STRESS_N);
+        compare_or_die(items, reference, started, thread_counts[t], "cancelled prefix");
+        for (size_t i = started; i < STRESS_N; i++) {
+            ASSERT_INT_EQ(PH_ERR_CANCELLED, items[i].status);
+            for (int k = 0; k < PH_BATCH_HASHES_CAPACITY; k++)
+                ASSERT(items[i].hashes[k] == 0);
+        }
+        ASSERT_INT_EQ((int)started, (int)atomic_load(&st->progress_calls));
+        for (size_t d = 1; d <= started; d++)
+            ASSERT_INT_EQ(1, (int)atomic_load(&st->seen[d]));
+
+        free(items);
+        free(st);
+    }
+
+    free(reference);
+    PASS("test_stress_cancel_midway");
+}
+
 int main(void) {
     test_stress_files_match_sequential();
     test_stress_more_threads_than_items();
     test_stress_items_freeable_on_return();
     test_stress_buffers_match_sequential();
+    test_stress_cancel_midway();
     return 0;
 }

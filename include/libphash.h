@@ -147,6 +147,11 @@ typedef enum {
                                      ///< ph_compute_color_moments_hash()) was asked to run on an
                                      ///< image that carries fewer than 3 channels -- see
                                      ///< ph_context_set_load_grayscale().
+    PH_ERR_CANCELLED = -12,          ///< A batch was stopped by its should_continue callback
+                                     ///< (see ph_batch_options_t) before this item was
+                                     ///< started. Returned by ph_hash_files_ex() /
+                                     ///< ph_hash_buffers_ex() and stored in the `status` of
+                                     ///< every item they never reached.
     PH_ERR_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE ///< Not an error code -- see "Enum width".
 } ph_error_t;
 
@@ -869,6 +874,26 @@ typedef struct {
  * recorded in that item's `status` and does not stop the rest of the batch from being
  * processed.
  *
+ * This is ph_hash_files_ex() with every option at its default, and three of those
+ * defaults matter:
+ *
+ * - **Default configuration.** Every item is hashed as by a freshly created context:
+ *   nothing set with a `ph_context_set_*` function applies, so for a context whose
+ *   configuration you changed, the batch and the single-image path give *different*
+ *   hashes for the same file. That includes `max_pixels`, the decompression-bomb guard:
+ *   the batch uses the default limit (see ph_context_set_max_pixels()), not a stricter
+ *   one you set elsewhere. Pass a configured context through ph_hash_files_ex() instead.
+ * - **Blocking and not cancellable.** The call returns only after the last item, and
+ *   reports no progress. To bound the time, split the list yourself, or use
+ *   ph_hash_files_ex() with a `should_continue` callback.
+ * - **Peak memory grows with the thread count.** Each worker holds one decoded image at a
+ *   time -- its RGB pixels plus a grayscale copy, about 4 bytes per pixel -- so the peak
+ *   is roughly `workers x 4 x the largest image's pixel count`. At the default
+ *   `max_pixels` limit that is up to about 1 GB per worker, and `threads = 0` starts one
+ *   worker per core: on a 64-core machine, images near that limit can need 64 GB.
+ *   Measured: 20-megapixel JPEGs take about 80 MB per worker. Cap it by passing an
+ *   explicit thread count, a lower `max_pixels` through ph_hash_files_ex(), or both.
+ *
  * Return contract -- the overall return value reports only failures that stopped the batch
  * from being *worked on at all*; anything that happened to an individual image is in that
  * item's `status` and never in the return value:
@@ -927,10 +952,97 @@ PH_NODISCARD PH_API ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, u
  * An entry whose `buffer` is NULL or whose `length` is 0 is a per-item
  * PH_ERR_INVALID_ARGUMENT in `status`, not an overall failure. The `threads = 0` platform
  * note from `ph_hash_files()` applies here unchanged: on Windows the auto-detected count is
- * limited to the current processor group's 64 logical processors.
+ * limited to the current processor group's 64 logical processors. So do its three notes on
+ * defaults -- default configuration, no cancellation, memory per worker -- and
+ * ph_hash_buffers_ex() is the way around them. The encoded buffers themselves are the
+ * caller's and are not copied, so they add nothing per worker.
  */
 PH_NODISCARD PH_API ph_error_t ph_hash_buffers(ph_batch_buffer_item_t *items, size_t n,
                                                uint32_t flags, int threads);
+
+/**
+ * @brief Called before a batch worker starts each item; return 0 to stop the batch.
+ *
+ * Called from worker threads -- possibly several at once -- so it must be thread-safe;
+ * typically it reads an atomic flag or a deadline. After it returns 0 once, no worker
+ * starts another item, items already in progress finish normally, and every item not
+ * started gets @c PH_ERR_CANCELLED. It may still be called a few more times by workers
+ * that had not yet seen the stop.
+ */
+typedef int (*ph_batch_continue_fn)(void *user_data);
+
+/**
+ * @brief Called after a batch worker finishes an item, successfully or not.
+ *
+ * @p done counts finished items: each value from 1 up to the number of items finished
+ * is passed exactly once, but calls come from worker threads, possibly concurrently and
+ * not in order, so it must be thread-safe. @p total is the batch size. Not called for
+ * items skipped by a cancellation.
+ */
+typedef void (*ph_batch_progress_fn)(size_t done, size_t total, void *user_data);
+
+/**
+ * @brief Options for ph_hash_files_ex() and ph_hash_buffers_ex().
+ *
+ * Initialise with ph_batch_options_init(), then set the fields you need: that fills in
+ * @c struct_size and the defaults, and keeps working when later versions append fields.
+ * A caller that fills the struct by hand must set @c struct_size to sizeof of the struct
+ * it was compiled with.
+ */
+typedef struct {
+    /** sizeof(ph_batch_options_t) as the caller compiled it. Lets a later version add
+     *  fields at the end and still accept a struct from an older caller. */
+    size_t struct_size;
+    /** Configuration template, or NULL for the defaults. Everything set on it with a
+     *  `ph_context_set_*` function -- including `max_pixels` -- is copied into every
+     *  worker's own context, so the batch hashes each item exactly as ph_load_from_file()
+     *  + ph_compute_multi() on this context would. It is read once, on the calling
+     *  thread, before any worker starts; an image loaded on it is ignored. */
+    const ph_context_t *config;
+    /** Worker count, as in ph_hash_files(): 0 = one per detected core, 1 = sequential on
+     *  the calling thread, >1 = that many. Default 0. */
+    int threads;
+    /** Optional; NULL never stops. See ph_batch_continue_fn. */
+    ph_batch_continue_fn should_continue;
+    /** Optional; NULL reports nothing. See ph_batch_progress_fn. */
+    ph_batch_progress_fn on_progress;
+    /** Passed unchanged to both callbacks. */
+    void *user_data;
+} ph_batch_options_t;
+
+/**
+ * @brief Fills @p options with the defaults and the right @c struct_size.
+ * @return PH_SUCCESS, or PH_ERR_INVALID_ARGUMENT for a NULL @p options.
+ */
+PH_API ph_error_t ph_batch_options_init(ph_batch_options_t *options);
+
+/**
+ * @brief ph_hash_files() with options: a configuration template, cancellation and
+ *        progress.
+ *
+ * Same items, flags, per-item statuses and validation as ph_hash_files(). @p options may
+ * be NULL, which means every default -- the call is then ph_hash_files() with
+ * `threads = 0`. With a configuration template the peak-memory note on ph_hash_files()
+ * applies with that template's `max_pixels` as the bound.
+ *
+ * @return
+ * - @c PH_ERR_INVALID_ARGUMENT: as ph_hash_files(), or @c struct_size smaller than any
+ *   version of the struct, or a negative @c threads; nothing was written.
+ * - @c PH_ERR_ALLOCATION_FAILED: as ph_hash_files() -- no item was worked on.
+ * - @c PH_ERR_CANCELLED: @c should_continue stopped the batch before every item was
+ *   started. The items that were started have their real status; the rest have
+ *   @c PH_ERR_CANCELLED and zeroed hashes.
+ * - @c PH_SUCCESS: every item was processed; inspect each `status`.
+ */
+PH_NODISCARD PH_API ph_error_t ph_hash_files_ex(ph_batch_item_t *items, size_t n, uint32_t flags,
+                                                const ph_batch_options_t *options);
+
+/**
+ * @brief ph_hash_buffers() with options; see ph_hash_files_ex().
+ */
+PH_NODISCARD PH_API ph_error_t ph_hash_buffers_ex(ph_batch_buffer_item_t *items, size_t n,
+                                                  uint32_t flags,
+                                                  const ph_batch_options_t *options);
 
 // --- Digest Hash Algorithms ---
 
