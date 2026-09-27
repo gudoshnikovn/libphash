@@ -369,6 +369,9 @@ walkthrough.
   is `<kind>:<hex>` (e.g. `coefficients:1f80…`), and decoding restores the kind, so
   digests read back from storage still refuse the wrong comparison metric.
   `PH_DIGEST_HEX_BUFFER_SIZE` is a buffer size that fits any digest.
+- **`libphash.h` includes `phash_version.h`**, so `PH_VERSION_NUMBER` and the other
+  version macros are available to anyone who includes the public header. The two files
+  are installed side by side; code that copies the header by hand needs both.
 - **`ph_get_build_info()`** returns one line describing how the library was built —
   version, JPEG/PNG/WebP backends, zlib, whether the batch functions can use threads,
   the SIMD target, and whether the test-only mock decoder is compiled in — for logs and
