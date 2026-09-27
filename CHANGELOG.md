@@ -511,6 +511,13 @@ walkthrough.
 
 ### Fixed
 
+- **A truncated JPEG or PNG loaded successfully in the minimal build.** `stb_image`, the
+  only decoder of a build without the vendored libraries, decodes what it could read of a
+  half-downloaded file and reports success, while the native decoders reject the same
+  bytes; the same file was an error in one build and a hash of part of a picture in
+  another. Every build now requires the file to reach its own end (JPEG end-of-image
+  marker, PNG `IEND`, the WebP RIFF size) and returns `PH_ERR_CORRUPT_DATA` otherwise.
+  Data after that end is still accepted.
 - **A load could succeed with the EXIF orientation silently not applied.** When the buffer
   for rotating an oriented photo could not be allocated, `ph_load_from_file()`/
   `ph_load_from_memory()` returned `PH_SUCCESS` with the image left in sensor orientation,
