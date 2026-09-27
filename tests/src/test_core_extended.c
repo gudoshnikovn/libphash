@@ -285,7 +285,64 @@ void test_error_handling(void) {
     PASS("test_error_handling");
 }
 
+/* A failed file/memory load drops the previous image, and its dimensions with it: they
+ * used to survive, so ph_context_get_dimensions() reported the size of an image that was
+ * no longer there. A failed ph_load_from_pixels() is deliberately different -- it keeps
+ * the previous image -- and that asymmetry is pinned here too. */
+void test_dimensions_follow_the_loaded_image(void) {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    int w = -1, h = -1, c = -1;
+
+    ph_context_get_dimensions(ctx, &w, &h, &c);
+    ASSERT(w == 0 && h == 0 && c == 0);
+    ASSERT_INT_EQ(0, ph_is_loaded(ctx));
+
+    uint8_t pixels[7 * 5 * 3];
+    memset(pixels, 0x80, sizeof(pixels));
+    ASSERT_OK(ph_load_from_pixels(ctx, pixels, 7, 5, 3, 7 * 3));
+    ph_context_get_dimensions(ctx, &w, &h, &c);
+    ASSERT(w == 7 && h == 5 && c == 3);
+
+    static const uint8_t junk[8] = {'n', 'o', 't', ' ', 'a', 'n', ' ', 'i'};
+    ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, ph_load_from_memory(ctx, junk, sizeof(junk)));
+    ASSERT_INT_EQ(0, ph_is_loaded(ctx));
+    w = h = c = -1;
+    ph_context_get_dimensions(ctx, &w, &h, &c);
+    ASSERT(w == 0 && h == 0 && c == 0);
+
+    ASSERT_OK(ph_load_from_pixels(ctx, pixels, 7, 5, 3, 7 * 3));
+    ASSERT_INT_EQ(PH_ERR_IO, ph_load_from_file(ctx, TEST_DATA_DIR "/does_not_exist.png"));
+    ASSERT_INT_EQ(0, ph_is_loaded(ctx));
+    ph_context_get_dimensions(ctx, &w, &h, &c);
+    ASSERT(w == 0 && h == 0 && c == 0);
+
+    /* The exception: a rejected ph_load_from_pixels() leaves the image it found. */
+    ASSERT_OK(ph_load_from_pixels(ctx, pixels, 7, 5, 3, 7 * 3));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_load_from_pixels(ctx, pixels, 7, 5, 2, 7 * 3));
+    ASSERT_INT_EQ(1, ph_is_loaded(ctx));
+    ph_context_get_dimensions(ctx, &w, &h, &c);
+    ASSERT(w == 7 && h == 5 && c == 3);
+
+    /* NULL-tolerant both ways: no context writes nothing, NULL outputs are skipped. */
+    w = h = c = 42;
+    ph_context_get_dimensions(NULL, &w, &h, &c);
+    ASSERT(w == 42 && h == 42 && c == 42);
+    ph_context_get_dimensions(ctx, NULL, NULL, NULL);
+    ASSERT_INT_EQ(0, ph_is_loaded(NULL));
+
+    /* Both accessors take a const context. */
+    const ph_context_t *view = ctx;
+    ASSERT_INT_EQ(1, ph_is_loaded(view));
+    ph_context_get_dimensions(view, &w, NULL, NULL);
+    ASSERT_INT_EQ(7, w);
+
+    ph_free(ctx);
+    PASS("test_dimensions_follow_the_loaded_image");
+}
+
 int main(void) {
+    test_dimensions_follow_the_loaded_image();
     test_scratchpad_management();
     test_scratchpad_autotrim();
     test_parameter_validation();

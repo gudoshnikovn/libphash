@@ -190,7 +190,8 @@ PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma) {
     return PH_SUCCESS;
 }
 
-PH_API void ph_context_get_dimensions(ph_context_t *ctx, int *width, int *height, int *channels) {
+PH_API void ph_context_get_dimensions(const ph_context_t *ctx, int *width, int *height,
+                                      int *channels) {
     if (!ctx)
         return;
     if (width)
@@ -201,7 +202,7 @@ PH_API void ph_context_get_dimensions(ph_context_t *ctx, int *width, int *height
         *channels = ctx->image.channels;
 }
 
-PH_API int ph_is_loaded(ph_context_t *ctx) { return (ctx && ctx->image.raw_rgb) ? 1 : 0; }
+PH_API int ph_is_loaded(const ph_context_t *ctx) { return (ctx && ctx->image.raw_rgb) ? 1 : 0; }
 
 PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, int b) {
     if (!ctx)
@@ -715,6 +716,11 @@ static void ph_reset_loaded_image(ph_context_t *ctx) {
         ph_free_image(ctx->image.raw_rgb);
     ctx->image.raw_rgb = NULL;
     ctx->image.is_loaded = 0;
+    /* The dimensions go with the pixels: ph_context_get_dimensions() on an empty
+     * context reports 0/0/0, not the size of an image that is no longer there. */
+    ctx->image.width = 0;
+    ctx->image.height = 0;
+    ctx->image.channels = 0;
     if (ctx->image.gray_cache) {
         free(ctx->image.gray_cache);
         ctx->image.gray_cache = NULL;

@@ -685,18 +685,24 @@ PH_API ph_error_t ph_context_set_decode_scale(ph_context_t *ctx, ph_decode_scale
 
 /**
  * @brief Returns the dimensions of the currently loaded image.
- * @param ctx The context.
- * @param width Output for width.
- * @param height Output for height.
- * @param channels Output for number of channels.
+ *
+ * With no image loaded -- a fresh context, or one whose last ph_load_from_file() /
+ * ph_load_from_memory() failed -- every output is set to 0. A failed
+ * ph_load_from_pixels() is the exception: it keeps the previous image, and so its
+ * dimensions. ph_is_loaded() tells "no image" apart from anything else.
+ * @param ctx The context. With NULL, nothing is written.
+ * @param width Output for width; may be NULL.
+ * @param height Output for height; may be NULL.
+ * @param channels Output for number of channels; may be NULL.
  */
-PH_API void ph_context_get_dimensions(ph_context_t *ctx, int *width, int *height, int *channels);
+PH_API void ph_context_get_dimensions(const ph_context_t *ctx, int *width, int *height,
+                                      int *channels);
 
 /**
  * @brief Checks if an image is currently loaded in the context.
- * @return 1 if loaded, 0 otherwise.
+ * @return 1 if loaded, 0 otherwise (including for a NULL @p ctx).
  */
-PH_API int ph_is_loaded(ph_context_t *ctx);
+PH_API int ph_is_loaded(const ph_context_t *ctx);
 
 // --- Loading ---
 
