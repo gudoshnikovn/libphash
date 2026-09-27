@@ -275,10 +275,12 @@ walkthrough.
   *Restore the old behaviour:* not possible by path — read the stream into memory
   yourself and call `ph_load_from_memory()`, which is the supported way to hash
   something that is not a file on disk.
-- **`ph_can_use_libpng()` is renamed `ph_can_use_png()`.** It answered `1` in a build
-  using spng, where libpng is not linked at all; the new name says what it answers —
-  whether a native PNG decoder, libpng or spng, is compiled in.
-  *Restore the old behaviour:* rename the call; the return value is unchanged.
+- **`ph_can_use_libjpeg()`/`ph_can_use_libpng()` are renamed `ph_can_use_jpeg()`/
+  `ph_can_use_png()`**, so all three capability checks, with `ph_can_use_webp()`, are
+  named after the format. `ph_can_use_libpng()` answered `1` in a build using spng, where
+  libpng is not linked at all; the new name says what it answers — whether a native PNG
+  decoder, libpng or spng, is compiled in.
+  *Restore the old behaviour:* rename the calls; the return values are unchanged.
 - **Public enums are 32 bits wide under `-fshort-enums`.** Each public enum now ends in a
   `*_FORCE_INT32_` enumerator that is not a real value. Under `-fshort-enums` — the
   default ABI on ARM EABI — the enums used to shrink to one byte, so a library and a
