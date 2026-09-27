@@ -248,6 +248,21 @@ else()
 
     set(PHASH_OWN_COMPILE_OPTIONS -Wall -Wextra)
 
+    # Floating-point contraction (fusing a*b+c into one FMA with a single rounding) is
+    # off, explicitly. Left to the compiler, it depended on things that have nothing to
+    # do with the hash: GCC fuses freely under -std=gnuNN and not at all under a strict
+    # -std=cNN, Clang fuses within an expression either way, and only targets with
+    # hardware FMA (arm64 always; x86-64 only with -mfma) are affected at all. pHash's
+    # median threshold turns that last-bit difference into flipped bits -- switching
+    # this project from gnu17 to strict c17 alone moved photo.png's pHash on Linux
+    # arm64 GCC by 10 bits. Off is the source-as-written semantics, which x86-64's
+    # baseline and MSVC (whose default /fp:precise does not contract) already have, so
+    # a hash no longer depends on the dialect or compiler it was built with.
+    check_c_compiler_flag("-ffp-contract=off" PHASH_HAS_FP_CONTRACT_OFF)
+    if(PHASH_HAS_FP_CONTRACT_OFF)
+        list(APPEND PHASH_OWN_COMPILE_OPTIONS -ffp-contract=off)
+    endif()
+
     # Warnings the library's own sources are clean under, on both GCC and Clang. They
     # cost nothing today and catch regressions from here on. Applied to `phash` only:
     # tests and the fuzzer keep the -Wall -Wextra baseline (the test sources were

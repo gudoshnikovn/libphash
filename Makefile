@@ -13,7 +13,11 @@ GENERATED_DIR = generated
 # Left unset, the dialect is whatever the compiler defaults to, and that default
 # moves: GCC 15 switched to gnu23, so this build silently changed standard under
 # anyone who upgraded.
-CFLAGS = -std=c17 -I./include -I./src -I./$(GENERATED_DIR) -O3 -Wall -Wextra -fPIC
+#
+# -ffp-contract=off: the same explicit no-FMA-fusion policy CMakeLists.txt sets, and
+# for the same reason -- left to the compiler it follows the dialect (GCC fuses under
+# gnuNN, not under cNN) and moves pHash's bits on any target with hardware FMA.
+CFLAGS = -std=c17 -ffp-contract=off -I./include -I./src -I./$(GENERATED_DIR) -O3 -Wall -Wextra -fPIC
 LDFLAGS = -lm
 
 # Architecture-specific optimizations
