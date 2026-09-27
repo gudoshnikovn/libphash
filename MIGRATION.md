@@ -92,6 +92,38 @@ default:
 }
 ```
 
+## Error codes: `PH_ERR_NOT_IMPLEMENTED` is gone, and "no image" is `PH_ERR_EMPTY_IMAGE`
+
+Two codes were declared in 1.x that nothing returned. 2.0 settles both:
+
+- **`PH_ERR_NOT_IMPLEMENTED` (`-4`) is removed**, for the same reason as
+  `PH_ERR_DECODE_FAILED`: a check against it could never fire. Its value is retired and
+  will not be reused. Delete any branch that tests for it. A feature missing from a build
+  is `PH_ERR_DECODER_UNAVAILABLE` for a decoder; a build without threads simply runs a
+  batch sequentially.
+- **Hashing a context that holds no image now returns `PH_ERR_EMPTY_IMAGE` (`-5`)**
+  from every `ph_compute_*` function and from `ph_compute_multi()`, instead of
+  `PH_ERR_INVALID_ARGUMENT`. "No image" covers a fresh context and one whose last
+  `ph_load_from_file()`/`ph_load_from_memory()` failed. `PH_ERR_INVALID_ARGUMENT` now
+  means only what it says: a NULL pointer or an out-of-range value. Pointer arguments
+  are checked first, so a NULL output pointer is still `PH_ERR_INVALID_ARGUMENT`,
+  whether or not an image is loaded.
+
+```c
+/* Before (1.x): "forgot to load" and "passed NULL" were the same code */
+if (ph_compute_phash(ctx, &hash) == PH_ERR_INVALID_ARGUMENT) { ... }
+
+/* After (2.0) */
+switch (ph_compute_phash(ctx, &hash)) {
+case PH_ERR_EMPTY_IMAGE:      /* the load before this failed, or never happened */
+    break;
+case PH_ERR_INVALID_ARGUMENT: /* a bug in the call itself */
+    break;
+default:
+    break;
+}
+```
+
 ## Config setters now return `ph_error_t`, not `void`
 
 Every `ph_context_set_*()` function has this contract now: a valid argument returns

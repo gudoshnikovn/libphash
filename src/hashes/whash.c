@@ -237,8 +237,10 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
 }
 
 PH_API ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash) {
-    if (!ctx || !ctx->image.is_loaded || !out_hash)
+    if (!ctx || !out_hash)
         return PH_ERR_INVALID_ARGUMENT;
+    if (!ctx->image.is_loaded)
+        return PH_ERR_EMPTY_IMAGE;
 
     if (ctx->config.whash_mode == PH_WHASH_FULL) {
         return ph_compute_whash_full(ctx, out_hash);

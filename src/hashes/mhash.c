@@ -162,8 +162,10 @@ void ph_mh_block_sums(const uint8_t *img, int n, int block, const float *kernel,
 }
 
 PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
-    if (!ctx || !ctx->image.is_loaded || !out_digest)
+    if (!ctx || !out_digest)
         return PH_ERR_INVALID_ARGUMENT;
+    if (!ctx->image.is_loaded)
+        return PH_ERR_EMPTY_IMAGE;
 
     const int n = ctx->config.mhash_size;
     if (n < PH_MH_MIN_IMAGE_SIZE || n > PH_MH_MAX_IMAGE_SIZE)

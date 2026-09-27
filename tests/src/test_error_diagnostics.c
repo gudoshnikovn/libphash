@@ -14,7 +14,7 @@
  *      ph_error_kind() below is a `switch` with no `default:` and with -Wswitch
  *      promoted to an error, so appending an enumerator to the header without
  *      coming back here is a *compile* failure rather than a silent gap.
- *   2. Values that are NOT enumerators -- the retired -2 and everything past the
+ *   2. Values that are NOT enumerators -- the retired -2 and -4 and everything past the
  *      last code -- must fall through to "Unknown error"
  *      (test_unassigned_values_are_unknown). This is what makes part 1 honest: it
  *      fails the moment a new code gets a string but no table entry.
@@ -22,10 +22,11 @@
  *      (test_input_to_error_code_table): each row feeds a real input through the
  *      public API and pins the code it must produce.
  *
- * Two codes have no row in part 3 because nothing a caller can pass reaches them;
- * see the comment on `unreachable_by_design` below. PH_ERR_ALLOCATION_FAILED used to
- * be a third, but is now exercised directly (row_allocation_failed) using the same
- * allocation-failure shim as tests/src/test_alloc_failure.c.
+ * Every code has a row in part 3. PH_ERR_ALLOCATION_FAILED is exercised with the same
+ * allocation-failure shim as tests/src/test_alloc_failure.c (row_allocation_failed).
+ * Two codes used to be declared without any input reaching them; one was removed
+ * (-4, PH_ERR_NOT_IMPLEMENTED) and the other, PH_ERR_EMPTY_IMAGE, is what every hash
+ * function now returns on a context with no image (row_empty_image).
  */
 
 #include "alloc_shim.h"
@@ -75,7 +76,6 @@ static int ph_error_kind(ph_error_t err) {
             return 0;
         case PH_ERR_ALLOCATION_FAILED:
         case PH_ERR_INVALID_ARGUMENT:
-        case PH_ERR_NOT_IMPLEMENTED:
         case PH_ERR_EMPTY_IMAGE:
         case PH_ERR_IMAGE_TOO_LARGE:
         case PH_ERR_UNSUPPORTED_FORMAT:
@@ -106,7 +106,6 @@ static const error_code_entry_t all_error_codes[] = {
     {PH_SUCCESS, "PH_SUCCESS"},
     {PH_ERR_ALLOCATION_FAILED, "PH_ERR_ALLOCATION_FAILED"},
     {PH_ERR_INVALID_ARGUMENT, "PH_ERR_INVALID_ARGUMENT"},
-    {PH_ERR_NOT_IMPLEMENTED, "PH_ERR_NOT_IMPLEMENTED"},
     {PH_ERR_EMPTY_IMAGE, "PH_ERR_EMPTY_IMAGE"},
     {PH_ERR_IMAGE_TOO_LARGE, "PH_ERR_IMAGE_TOO_LARGE"},
     {PH_ERR_UNSUPPORTED_FORMAT, "PH_ERR_UNSUPPORTED_FORMAT"},
@@ -185,8 +184,8 @@ static int is_assigned_code(int value) {
 }
 
 /* Everything that is not an enumerator must land on the fallback string -- including
- * -2, which is retired (it was PH_ERR_DECODE_FAILED) and must never be handed out
- * again, and every value past the last code.
+ * -2 and -4, which are retired (they were PH_ERR_DECODE_FAILED and PH_ERR_NOT_IMPLEMENTED)
+ * and must never be handed out again, and every value past the last code.
  *
  * This is what keeps the table in part 1 complete: the day someone appends
  * PH_ERR_SOMETHING = -12 with a description, the sweep below sees a real string at
@@ -209,6 +208,7 @@ static void test_unassigned_values_are_unknown(void) {
         checked++;
     }
     ASSERT_INT_EQ(-1, ph_error_kind((ph_error_t)-2)); /* retired, never reissued */
+    ASSERT_INT_EQ(-1, ph_error_kind((ph_error_t)-4)); /* retired, never reissued */
     printf("  %d unassigned values -> '%s'\n", checked, UNKNOWN_ERROR_STRING);
 }
 
@@ -344,8 +344,55 @@ static void row_invalid_arguments(ph_context_t *ctx) {
      * nothing to sniff, so it never becomes a question about an image format. */
     expect(ctx, "load_from_memory(len 0)", ph_load_from_memory(ctx, one_byte, 0),
            PH_ERR_INVALID_ARGUMENT, MSG_BACKEND_DEPENDENT);
-    expect(ctx, "compute with no image", ph_compute_ahash(ctx, &hash), PH_ERR_INVALID_ARGUMENT,
+    /* A NULL argument outranks the missing image: this context holds none, and the
+     * answer is still about the call, not about the context's state. */
+    expect(ctx, "compute(NULL out)", ph_compute_ahash(ctx, NULL), PH_ERR_INVALID_ARGUMENT,
            MSG_BACKEND_DEPENDENT);
+    expect(ctx, "compute(NULL ctx)", ph_compute_ahash(NULL, &hash), PH_ERR_INVALID_ARGUMENT,
+           MSG_BACKEND_DEPENDENT);
+}
+
+/* --- PH_ERR_EMPTY_IMAGE: a well-formed call on a context that holds no image ---
+ *
+ * It used to come back as PH_ERR_INVALID_ARGUMENT, indistinguishable from a NULL
+ * pointer. Every hash entry point is covered, on a fresh context and on one whose
+ * image was dropped by a failed load after a successful one. */
+static void expect_every_hash_is_empty(ph_context_t *ctx, const char *state) {
+    uint64_t hash = 0;
+    uint64_t multi[PH_HASH_FLAGS_COUNT] = {0};
+    ph_digest_t digest;
+    const struct {
+        const char *name;
+        ph_error_t observed;
+    } calls[] = {
+        {"ahash", ph_compute_ahash(ctx, &hash)},
+        {"dhash", ph_compute_dhash(ctx, &hash)},
+        {"phash", ph_compute_phash(ctx, &hash)},
+        {"whash", ph_compute_whash(ctx, &hash)},
+        {"multi", ph_compute_multi(ctx, PH_HASH_AHASH | PH_HASH_WHASH, multi)},
+        {"bmh", ph_compute_bmh(ctx, &digest)},
+        {"mhash", ph_compute_mhash(ctx, &digest)},
+        {"radial", ph_compute_radial_hash(ctx, &digest)},
+        {"color hash", ph_compute_color_hash(ctx, &digest)},
+        {"color moments", ph_compute_color_moments_hash(ctx, &digest)},
+    };
+    for (size_t i = 0; i < sizeof(calls) / sizeof(*calls); i++) {
+        char what[64];
+        snprintf(what, sizeof(what), "%s, %s", calls[i].name, state);
+        expect(ctx, what, calls[i].observed, PH_ERR_EMPTY_IMAGE, MSG_BACKEND_DEPENDENT);
+    }
+}
+
+static void row_empty_image(ph_context_t *ctx) {
+    ph_context_t *fresh = NULL;
+    ASSERT_OK(ph_create(&fresh));
+    expect_every_hash_is_empty(fresh, "fresh ctx");
+    ph_free(fresh);
+
+    static const unsigned char junk[8] = {'n', 'o', 't', ' ', 'a', 'n', ' ', 'i'};
+    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.png"));
+    ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, ph_load_from_memory(ctx, junk, sizeof(junk)));
+    expect_every_hash_is_empty(ctx, "after failed load");
 }
 
 /* --- PH_ERR_UNSUPPORTED_FORMAT / PH_ERR_CORRUPT_DATA: the bytes are the problem ---
@@ -583,40 +630,16 @@ static void row_allocation_failed(ph_context_t *ctx) {
     ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.png"));
 }
 
-/* Two codes are declared and described but cannot be produced by any input a
- * caller can construct. They are listed here rather than left unmentioned, because
- * "no test reaches it" is a fact about the code, not an oversight in this file:
- *
- *   PH_ERR_NOT_IMPLEMENTED   -- src/batch.c returns it in the branch reached when
- *       the thread pool is absent AND more than one thread was requested; the
- *       clamp in ph_resolve_thread_count() makes that combination impossible, and
- *       the source says so on the line itself.
- *   PH_ERR_EMPTY_IMAGE       -- guarded by `is_loaded && width <= 0` in
- *       ph_compute_color_hash()/ph_compute_color_moments_hash(). Every path that
- *       sets is_loaded rejects a non-positive dimension first, so the guard is
- *       defensive only.
- *
- * They still have to describe themselves (part 1 covers that), and if one of them
- * ever becomes reachable it belongs in the table above. */
-static const error_code_entry_t unreachable_by_design[] = {
-    {PH_ERR_NOT_IMPLEMENTED, "PH_ERR_NOT_IMPLEMENTED"},
-    {PH_ERR_EMPTY_IMAGE, "PH_ERR_EMPTY_IMAGE"},
-};
-
 static void test_input_to_error_code_table(ph_context_t *ctx) {
     row_io_errors(ctx);
     row_invalid_arguments(ctx);
+    row_empty_image(ctx);
     row_message_is_about_this_call(ctx);
     row_bad_bytes(ctx);
     row_image_too_large(ctx);
     row_decoder_unavailable(ctx);
     row_requires_color(ctx);
     row_allocation_failed(ctx);
-
-    for (size_t i = 0; i < sizeof(unreachable_by_design) / sizeof(*unreachable_by_design); i++) {
-        printf("  %-28s -> %s (no reachable input)\n", "(not exercised)",
-               unreachable_by_design[i].name);
-    }
 }
 
 int main(void) {

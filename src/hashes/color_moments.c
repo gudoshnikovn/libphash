@@ -35,8 +35,11 @@
 #include <string.h>
 
 PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *out_digest) {
-    if (!ctx || !ctx->image.is_loaded || !out_digest) {
+    if (!ctx || !out_digest) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
+    if (!ctx->image.is_loaded) {
+        return PH_ERR_EMPTY_IMAGE;
     }
 
     if (ctx->image.width <= 0 || ctx->image.height <= 0)

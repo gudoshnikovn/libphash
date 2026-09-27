@@ -286,22 +286,21 @@ static ph_error_t ph_hash_batch(void *items_base, size_t item_stride, size_t n, 
 
     int nthreads = ph_resolve_thread_count(threads, n);
 
-    if (nthreads <= 1) {
-        ph_context_t *ctx = NULL;
-        if (ph_create(&ctx) != PH_SUCCESS)
-            return PH_ERR_ALLOCATION_FAILED;
-        for (size_t i = 0; i < n; i++) {
-            process(ctx, (uint8_t *)items_base + i * item_stride, flags);
-        }
-        ph_free(ctx);
-        return PH_SUCCESS;
-    }
-
 #if defined(PH_ENABLE_THREADS)
-    return ph_batch_run_threaded(items_base, item_stride, n, flags, process, nthreads);
+    if (nthreads > 1)
+        return ph_batch_run_threaded(items_base, item_stride, n, flags, process, nthreads);
 #else
-    return PH_ERR_NOT_IMPLEMENTED; /* unreachable: ph_resolve_thread_count clamps to 1 */
+    (void)nthreads; /* always 1: ph_resolve_thread_count() clamps without threads */
 #endif
+
+    ph_context_t *ctx = NULL;
+    if (ph_create(&ctx) != PH_SUCCESS)
+        return PH_ERR_ALLOCATION_FAILED;
+    for (size_t i = 0; i < n; i++) {
+        process(ctx, (uint8_t *)items_base + i * item_stride, flags);
+    }
+    ph_free(ctx);
+    return PH_SUCCESS;
 }
 
 static void init_file_item_defaults(void *item) {

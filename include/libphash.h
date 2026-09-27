@@ -116,9 +116,20 @@ typedef enum {
      * is not reused -- see the ABI rule above. Migration: PH_ERR_CORRUPT_DATA,
      * PH_ERR_UNSUPPORTED_FORMAT, PH_ERR_IMAGE_TOO_LARGE, PH_ERR_IO,
      * PH_ERR_DECODER_UNAVAILABLE. */
-    PH_ERR_INVALID_ARGUMENT = -3,
-    PH_ERR_NOT_IMPLEMENTED = -4,
-    PH_ERR_EMPTY_IMAGE = -5,
+    PH_ERR_INVALID_ARGUMENT = -3, ///< A NULL pointer, or a value outside the documented range.
+                                  ///< Always a mistake in the call itself -- a hash function
+                                  ///< called before any image was loaded is
+                                  ///< PH_ERR_EMPTY_IMAGE instead.
+    /* -4 is retired: it was PH_ERR_NOT_IMPLEMENTED, removed in 2.0.0 for the same reason
+     * as -2 -- nothing returned it. A feature missing from a build is reported as
+     * PH_ERR_DECODER_UNAVAILABLE (a decoder) or degrades without an error (threads: the
+     * batch runs sequentially). The value is not reused. */
+    PH_ERR_EMPTY_IMAGE = -5, ///< A hash was requested from a context that holds no image:
+                             ///< nothing was loaded yet, or the last ph_load_from_file() /
+                             ///< ph_load_from_memory() failed (a failed ph_load_from_pixels()
+                             ///< keeps the previous image). Returned by every ph_compute_*
+                             ///< function and ph_compute_multi(), after their pointer
+                             ///< arguments have been checked.
     PH_ERR_IMAGE_TOO_LARGE = -6,
     PH_ERR_UNSUPPORTED_FORMAT = -7,  ///< The data isn't any image format libphash recognizes.
     PH_ERR_CORRUPT_DATA = -8,        ///< A recognized format's magic/header matched, but the
@@ -797,7 +808,8 @@ typedef enum {
  * On @c PH_SUCCESS exactly as many slots as there are bits in @p flags are written, and
  * nothing beyond them is ever touched.
  *
- * @param ctx The context. Must have an image already loaded.
+ * @param ctx The context. Must have an image already loaded, or the call returns
+ *            @c PH_ERR_EMPTY_IMAGE.
  * @param flags Bitwise-OR of `ph_hash_flags_t` values selecting which hashes to compute.
  * @param[out] out Array written with one uint64_t per flag that was set, in ascending
  *                 bit order (e.g. for `PH_HASH_DHASH | PH_HASH_COLOR_HASH`, `out[0]` receives

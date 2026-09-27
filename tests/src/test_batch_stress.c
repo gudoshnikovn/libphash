@@ -23,6 +23,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Not an error code: set before a batch call so that a status the batch never wrote
+ * stands out. */
+#define STATUS_UNWRITTEN ((ph_error_t)0x5EED)
+
 /* Prime, > 200, and coprime with every thread count used below, so work distribution
  * is uneven and the last chunk of items is always claimed by an arbitrary worker. */
 #define STRESS_N 251
@@ -72,7 +76,7 @@ static ph_batch_item_t *alloc_items(size_t n) {
     ASSERT_PTR_NOT_NULL(items);
     for (size_t i = 0; i < n; i++) {
         items[i].path = stress_path(i);
-        items[i].status = PH_ERR_NOT_IMPLEMENTED;
+        items[i].status = STATUS_UNWRITTEN;
         memset(items[i].hashes, 0xAB, sizeof(items[i].hashes));
     }
     return items;
@@ -260,7 +264,7 @@ static void test_stress_buffers_match_sequential(void) {
             const int is_png = (i % 3) != 0;
             items[i].buffer = is_png ? png : jpeg;
             items[i].length = is_png ? png_len : jpeg_len;
-            items[i].status = PH_ERR_NOT_IMPLEMENTED;
+            items[i].status = STATUS_UNWRITTEN;
             memset(items[i].hashes, 0xAB, sizeof(items[i].hashes));
         }
 

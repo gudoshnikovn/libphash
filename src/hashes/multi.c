@@ -1,9 +1,11 @@
 #include "internal.h"
 
 PH_API ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flags, uint64_t out[]) {
-    if (!ctx || !ctx->image.is_loaded || !out || flags == 0 ||
-        (flags & ~(uint32_t)PH_HASH_FLAGS_ALL)) {
+    if (!ctx || !out || flags == 0 || (flags & ~(uint32_t)PH_HASH_FLAGS_ALL)) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
+    if (!ctx->image.is_loaded) {
+        return PH_ERR_EMPTY_IMAGE;
     }
 
     int idx = 0;

@@ -18,8 +18,11 @@
 #include <stdlib.h>
 
 PH_API ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out_hash) {
-    if (!ctx || !ctx->image.is_loaded || !out_hash) {
+    if (!ctx || !out_hash) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
+    if (!ctx->image.is_loaded) {
+        return PH_ERR_EMPTY_IMAGE;
     }
 
     uint8_t *gray_input = ph_get_gray(ctx);

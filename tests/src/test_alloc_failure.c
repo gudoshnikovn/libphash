@@ -76,9 +76,9 @@ static void guard_check(const uint8_t *front, const uint8_t *back, const char *t
 
 /* ---- result checking --------------------------------------------------- */
 
-#define ALLOW_ALLOC 0x1   /* PH_ERR_ALLOCATION_FAILED */
-#define ALLOW_DECODE 0x2  /* PH_ERR_DECODER_UNAVAILABLE: e.g. WebP with no decoder built in */
-#define ALLOW_INVALID 0x4 /* PH_ERR_INVALID_ARGUMENT: e.g. no image loaded */
+#define ALLOW_ALLOC 0x1  /* PH_ERR_ALLOCATION_FAILED */
+#define ALLOW_DECODE 0x2 /* PH_ERR_DECODER_UNAVAILABLE: e.g. WebP with no decoder built in */
+#define ALLOW_EMPTY 0x4  /* PH_ERR_EMPTY_IMAGE: the load before the hash failed */
 /* PH_ERR_CORRUPT_DATA, but ONLY for the decode checks below that opt into this
  * flag -- NOT a blanket allowance. Each vendored decoder has at least one specific
  * internal allocation whose failure it cannot cleanly distinguish from a
@@ -111,7 +111,7 @@ static int check(const char *tag, ph_error_t err, int allowed) {
         return 0;
     if (err == PH_ERR_DECODER_UNAVAILABLE && (allowed & ALLOW_DECODE))
         return 0;
-    if (err == PH_ERR_INVALID_ARGUMENT && (allowed & ALLOW_INVALID))
+    if (err == PH_ERR_EMPTY_IMAGE && (allowed & ALLOW_EMPTY))
         return 0;
     if (err == PH_ERR_CORRUPT_DATA && (allowed & ALLOW_CORRUPT))
         return 0;
@@ -162,7 +162,7 @@ static golden_t g_golden;
 static void hash_battery(ph_context_t *ctx, golden_t *out, const golden_t *ref) {
     guarded_u64_t u;
     guarded_digest_t g;
-    int allowed = ALLOW_ALLOC | ALLOW_INVALID;
+    int allowed = ALLOW_ALLOC | ALLOW_EMPTY;
 
 #define U64_HASH(call, field, tag)                                                                 \
     do {                                                                                           \
@@ -327,17 +327,17 @@ static void scen_batch(int recording) {
         guarded_u64_t u;
         guarded_digest_t g;
         guard_init(&u, sizeof(u));
-        check("ph_compute_ahash(batch)", ph_compute_ahash(ctx, &u.v), ALLOW_ALLOC | ALLOW_INVALID);
+        check("ph_compute_ahash(batch)", ph_compute_ahash(ctx, &u.v), ALLOW_ALLOC | ALLOW_EMPTY);
         guard_check(u.front, u.back, "ph_compute_ahash(batch)");
         guard_init(&u, sizeof(u));
-        check("ph_compute_phash(batch)", ph_compute_phash(ctx, &u.v), ALLOW_ALLOC | ALLOW_INVALID);
+        check("ph_compute_phash(batch)", ph_compute_phash(ctx, &u.v), ALLOW_ALLOC | ALLOW_EMPTY);
         guard_check(u.front, u.back, "ph_compute_phash(batch)");
         guard_init(&g, sizeof(g));
-        check("ph_compute_bmh(batch)", ph_compute_bmh(ctx, &g.d), ALLOW_ALLOC | ALLOW_INVALID);
+        check("ph_compute_bmh(batch)", ph_compute_bmh(ctx, &g.d), ALLOW_ALLOC | ALLOW_EMPTY);
         guard_check(g.front, g.back, "ph_compute_bmh(batch)");
         guard_init(&g, sizeof(g));
         check("ph_compute_radial_hash(batch)", ph_compute_radial_hash(ctx, &g.d),
-              ALLOW_ALLOC | ALLOW_INVALID);
+              ALLOW_ALLOC | ALLOW_EMPTY);
         guard_check(g.front, g.back, "ph_compute_radial_hash(batch)");
     }
 

@@ -75,8 +75,6 @@ PH_API const char *ph_get_error_string(ph_error_t err) {
             return "Memory allocation failed";
         case PH_ERR_INVALID_ARGUMENT:
             return "Invalid argument";
-        case PH_ERR_NOT_IMPLEMENTED:
-            return "Not implemented";
         case PH_ERR_EMPTY_IMAGE:
             return "Empty image (no image loaded)";
         case PH_ERR_IMAGE_TOO_LARGE:

@@ -78,8 +78,10 @@ static void test_multi_invalid_args() {
 
     uint64_t out[PH_HASH_FLAGS_COUNT] = {0};
 
-    /* No image loaded yet. */
-    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_compute_multi(ctx, PH_HASH_AHASH, out));
+    /* No image loaded yet: the call is well-formed, the context is empty. A bad flag set
+     * still outranks the empty context -- arguments are checked first. */
+    ASSERT_INT_EQ(PH_ERR_EMPTY_IMAGE, ph_compute_multi(ctx, PH_HASH_AHASH, out));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_compute_multi(ctx, 0, out));
 
     ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
 

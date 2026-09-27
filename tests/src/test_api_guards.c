@@ -18,7 +18,8 @@ void test_core_lifecycle_and_errors(void) {
      * rule in libphash.h gets enforced instead of just documented. */
     ASSERT_STR_EQ("Unknown error", ph_get_error_string((ph_error_t)-2));
     ASSERT_STR_EQ("Invalid argument", ph_get_error_string(PH_ERR_INVALID_ARGUMENT));
-    ASSERT_STR_EQ("Not implemented", ph_get_error_string(PH_ERR_NOT_IMPLEMENTED));
+    /* -4 was PH_ERR_NOT_IMPLEMENTED, removed in 2.0.0 and retired the same way. */
+    ASSERT_STR_EQ("Unknown error", ph_get_error_string((ph_error_t)-4));
     ASSERT_STR_EQ("Empty image (no image loaded)", ph_get_error_string(PH_ERR_EMPTY_IMAGE));
     ASSERT_STR_EQ("Unknown error", ph_get_error_string((ph_error_t)999));
     /* The codes that replaced the removed catch-all must all have real strings. */

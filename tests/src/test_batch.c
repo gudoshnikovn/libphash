@@ -4,6 +4,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Not an error code: set before a batch call so that a status the batch never wrote
+ * stands out. */
+#define STATUS_UNWRITTEN ((ph_error_t)0x5EED)
+
 /* Every combination of the 6 ph_hash_flags_t bits, including the empty and full sets. */
 #define ALL_FLAGS_MASK (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH)
 
@@ -36,7 +40,7 @@ static void test_hash_files_matches_compute_multi() {
             ph_batch_item_t items[4];
             for (size_t i = 0; i < n; i++) {
                 items[i].path = paths[i];
-                items[i].status = PH_ERR_NOT_IMPLEMENTED;
+                items[i].status = STATUS_UNWRITTEN;
             }
 
             ASSERT_OK(ph_hash_files(items, n, flags, thread_counts[tc]));
@@ -252,7 +256,7 @@ static void test_hash_buffers_partial_failure() {
             {.buffer = png, .length = png_size},
         };
         for (size_t i = 0; i < 6; i++)
-            items[i].status = PH_ERR_NOT_IMPLEMENTED; /* must be overwritten by every item */
+            items[i].status = STATUS_UNWRITTEN; /* must be overwritten by every item */
 
         /* The batch itself was worked on, so the return value is success whatever
          * happened to the individual images. */

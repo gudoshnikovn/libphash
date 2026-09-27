@@ -151,8 +151,10 @@ ph_error_t ph_dct1d_partial(const double *in, int n, int coeffs, double *out) {
 }
 
 PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_digest) {
-    if (!ctx || !ctx->image.is_loaded || !out_digest)
+    if (!ctx || !out_digest)
         return PH_ERR_INVALID_ARGUMENT;
+    if (!ctx->image.is_loaded)
+        return PH_ERR_EMPTY_IMAGE;
 
     int projections = ctx->config.radial_projections;
     int samples = ctx->config.radial_samples;

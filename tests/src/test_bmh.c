@@ -149,8 +149,8 @@ static void test_bmh_invalid_args() {
     ph_digest_t d;
     ASSERT_OK(ph_create(&ctx));
 
-    /* No image loaded yet. */
-    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_compute_bmh(ctx, &d));
+    /* No image loaded yet: the call is well-formed, the context is empty. */
+    ASSERT_INT_EQ(PH_ERR_EMPTY_IMAGE, ph_compute_bmh(ctx, &d));
 
     ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_compute_bmh(NULL, &d));

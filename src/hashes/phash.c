@@ -133,8 +133,10 @@ static float dot_product_f32_u8_neon(const float *f, const uint8_t *u, int n) {
 #endif
 
 PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
-    if (!ctx || !ctx->image.is_loaded || !out_hash)
+    if (!ctx || !out_hash)
         return PH_ERR_INVALID_ARGUMENT;
+    if (!ctx->image.is_loaded)
+        return PH_ERR_EMPTY_IMAGE;
 
     int dct_size = ctx->config.phash_dct_size;
     int reduction_size = ctx->config.phash_reduction_size;
