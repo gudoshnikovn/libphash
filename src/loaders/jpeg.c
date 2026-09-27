@@ -8,7 +8,7 @@
 #include "turbojpeg.h"
 #include <string.h>
 
-PH_API int ph_can_use_libjpeg(void) { return 1; }
+PH_API int ph_can_use_jpeg(void) { return 1; }
 
 /* Two distinct, independently-worded OOM messages can reach here:
  *   - libjpeg-turbo's own memory manager (jmemmgr.c) reports a failed internal
@@ -182,5 +182,5 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, size_t size, int *
 
 #else
 // No TurboJPEG — stb_image will handle JPEG
-PH_API int ph_can_use_libjpeg(void) { return 0; }
+PH_API int ph_can_use_jpeg(void) { return 0; }
 #endif // PH_USE_TURBOJPEG

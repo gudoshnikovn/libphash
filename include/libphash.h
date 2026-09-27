@@ -1344,12 +1344,17 @@ PH_NODISCARD PH_API ph_error_t ph_hash_to_hex(uint64_t hash, char *out, size_t o
  */
 PH_NODISCARD PH_API ph_error_t ph_hash_from_hex(const char *hex, uint64_t *out);
 
+/* The three capability checks are named after the format, not the library behind it:
+ * ph_can_use_jpeg(), ph_can_use_png(), ph_can_use_webp(). 1.x had ph_can_use_libjpeg()
+ * and ph_can_use_libpng(); both were renamed in 2.0.0. ph_get_build_info() names the
+ * library. */
+
 /**
- * @brief Whether this build decodes JPEG with libjpeg-turbo, decided when the library
- * was compiled.
+ * @brief Whether this build has a native JPEG decoder (libjpeg-turbo), decided when the
+ * library was compiled.
  * @return 1 if it does, 0 if JPEG goes through the bundled stb_image fallback.
  */
-PH_API int ph_can_use_libjpeg(void);
+PH_API int ph_can_use_jpeg(void);
 
 /**
  * @brief Whether this build has a native PNG decoder, decided when the library was
@@ -1388,7 +1393,7 @@ PH_API int ph_can_use_webp(void);
  *
  * Keys keep their meaning; later versions may add keys at the end and add values to a
  * key's list. Meant to be logged, not parsed for decisions -- to branch on a decoder,
- * use ph_can_use_libjpeg(), ph_can_use_png() and ph_can_use_webp().
+ * use ph_can_use_jpeg(), ph_can_use_png() and ph_can_use_webp().
  * @return A static NUL-terminated string. Never NULL; the caller must not free it.
  */
 PH_API const char *ph_get_build_info(void);

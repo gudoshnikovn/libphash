@@ -336,10 +336,12 @@ track that list by hand for a static link.
 
 These only affect you if your code specifically depends on the old behavior:
 
-- **`ph_can_use_libpng()` is now `ph_can_use_png()`.** The old name answered `1` in a
-  build using spng, where libpng is not linked at all; the new one means "a native PNG
-  decoder (libpng or spng) is compiled in", which is what it always returned. Rename the
-  call. To tell the two backends apart, or to log how a library was built, use the new
+- **`ph_can_use_libjpeg()`/`ph_can_use_libpng()` are now `ph_can_use_jpeg()`/
+  `ph_can_use_png()`**, matching `ph_can_use_webp()`: all three are named after the
+  format. The PNG one had a real defect — it answered `1` in a build using spng, where
+  libpng is not linked at all; the new name means "a native PNG decoder (libpng or spng)
+  is compiled in", which is what it always returned. Return values are unchanged; rename
+  the calls. To tell the two backends apart, or to log how a library was built, use the new
   `ph_get_build_info()`.
 
 - **The test-only mock decoder is no longer compiled into a normal Release build.**

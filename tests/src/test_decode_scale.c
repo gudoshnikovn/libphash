@@ -47,7 +47,7 @@ void test_decode_scale_setter_validation(void) {
 /* On a build without the native JPEG backend (PH_USE_TURBOJPEG), decode_scale is
  * documented as ignored -- stb_image has no scaled-decode path, so the loaded image
  * stays at full resolution whatever the setting. Gate the scaled-size assertions on
- * ph_can_use_libjpeg() so this test asserts the right thing in both build
+ * ph_can_use_jpeg() so this test asserts the right thing in both build
  * configurations rather than only passing on one of them. */
 void test_decode_scale_jpeg_scaled(void) {
     struct {
@@ -67,7 +67,7 @@ void test_decode_scale_jpeg_scaled(void) {
 
         int w, h, ch;
         ph_context_get_dimensions(ctx, &w, &h, &ch);
-        int expected = ph_can_use_libjpeg() ? cases[i].expected_side_if_native : 400;
+        int expected = ph_can_use_jpeg() ? cases[i].expected_side_if_native : 400;
         ASSERT_INT_EQ(expected, w);
         ASSERT_INT_EQ(expected, h);
 

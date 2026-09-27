@@ -88,7 +88,7 @@ static void expect_value(const char *info, const char *key, const char *expected
 }
 
 static void test_capability_checks_match_the_build(void) {
-    ASSERT_INT_EQ(EXPECT_NATIVE_JPEG, ph_can_use_libjpeg());
+    ASSERT_INT_EQ(EXPECT_NATIVE_JPEG, ph_can_use_jpeg());
     ASSERT_INT_EQ(EXPECT_NATIVE_PNG, ph_can_use_png());
     ASSERT_INT_EQ(EXPECT_NATIVE_WEBP, ph_can_use_webp());
     PASS("test_capability_checks_match_the_build");

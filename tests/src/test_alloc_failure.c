@@ -424,14 +424,14 @@ static void test_stb_oom_reason_pinned(void) {
 
     /* This pins ph_stb_reason_is_oom(), which only matters on the stb_image decode
      * path -- but JPEG only takes that path when no native JPEG backend is compiled
-     * in. On a TurboJPEG build (ph_can_use_libjpeg() == 1) g_jpeg decodes through
+     * in. On a TurboJPEG build (ph_can_use_jpeg() == 1) g_jpeg decodes through
      * ph_decode_jpeg_tj() instead, which never produces stb's "outofmem" reason at
      * all -- every injected allocation failure there surfaces libjpeg-turbo's own
      * "Insufficient memory (case N)" message (or, if unmapped, PH_ERR_CORRUPT_DATA),
      * so the sweep below would legitimately never see "outofmem" and this assertion
      * would fail for a reason that has nothing to do with ph_stb_reason_is_oom()
      * being stale. Skip rather than assert something this build cannot exercise. */
-    if (ph_can_use_libjpeg()) {
+    if (ph_can_use_jpeg()) {
         printf("  %-24s SKIPPED (TurboJPEG compiled in -- JPEG doesn't take the stb "
                "decode path this pins)\n",
                "stb oom pinning");

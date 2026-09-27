@@ -17,8 +17,7 @@ void test_jpeg_loading() {
 
     int w, h, ch;
     ph_context_get_dimensions(ctx, &w, &h, &ch);
-    printf("JPEG Loader stats: w=%d, h=%d, ch=%d, turbo_active=%d\n", w, h, ch,
-           ph_can_use_libjpeg());
+    printf("JPEG Loader stats: w=%d, h=%d, ch=%d, turbo_active=%d\n", w, h, ch, ph_can_use_jpeg());
 
     ph_free(ctx);
     printf("test_jpeg_loading: PASSED\n");

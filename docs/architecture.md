@@ -138,7 +138,7 @@ contract.
   `PH_NODISCARD`; check its return before using the context.
 - `ph_version()`/`ph_version_number()` — the library version as a string or a single
   comparable integer (see `MIGRATION.md` for the 2.0.0 numbering-scheme change).
-- `ph_can_use_libjpeg()`/`ph_can_use_png()`/`ph_can_use_webp()` — whether this build
+- `ph_can_use_jpeg()`/`ph_can_use_png()`/`ph_can_use_webp()` — whether this build
   was compiled with the corresponding native decoder, for a caller that wants to know
   without triggering a `PH_ERR_DECODER_UNAVAILABLE` first. `ph_can_use_png()` answers
   for either native PNG backend (libpng or spng).
