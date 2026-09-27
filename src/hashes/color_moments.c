@@ -51,10 +51,8 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
     if (ctx->image.channels < 3)
         return PH_ERR_REQUIRES_COLOR;
 
-    memset(out_digest, 0, sizeof(ph_digest_t));
-    out_digest->size = PH_COLOR_MOMENTS_DIGEST_BYTES;
-    out_digest->kind = (uint8_t)PH_DIGEST_KIND_VECTOR16; /* nine signed 16-bit fixed-point
-                                                            moments: use ph_l2_distance() */
+    /* Nine signed 16-bit fixed-point moments: compare with ph_l2_distance(). */
+    ph_digest_begin(out_digest, ctx, PH_ALGO_COLOR_MOMENTS);
 
     /* size_t, not int: width * height overflows int above ~46340x46340. */
     size_t num_pixels = (size_t)ctx->image.width * (size_t)ctx->image.height;

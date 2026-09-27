@@ -83,9 +83,7 @@ PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_dige
     if (ctx->image.channels < 3)
         return PH_ERR_REQUIRES_COLOR;
 
-    memset(out_digest, 0, sizeof(ph_digest_t));
-    out_digest->size = (uint8_t)PH_COLOR_BINS;
-    out_digest->kind = (uint8_t)PH_DIGEST_KIND_HISTOGRAM;
+    ph_digest_begin(out_digest, ctx, PH_ALGO_COLOR_HASH);
 
     /* size_t and uint64_t throughout: width * height overflows int above ~46340x46340,
      * and so does a per-bin counter on an image that large. */

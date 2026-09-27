@@ -62,25 +62,15 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     if (!ph_safe_image_alloc_size((uint64_t)block_size, (uint64_t)block_size, 1, &total_pixels))
         return PH_ERR_ALLOCATION_FAILED;
 
-    memset(out_digest, 0, sizeof(ph_digest_t));
-    out_digest->kind = (uint8_t)PH_DIGEST_KIND_BITS; /* one bit per block */
-    size_t req_bytes = (total_pixels + 7) / 8;
-    if (req_bytes > PH_DIGEST_MAX_BYTES) {
-        /* Unreachable through the public API since 2.0.0: ph_context_set_block_params()
-         * rejects block_size > PH_BLOCK_MAX_SIZE (32 since the digest grew to 128 bytes),
-         * and 32*32 bits = 128 bytes is the largest grid that fits a ph_digest_t. Kept as defence
-         * in depth for a config field written by some other route (tests do exactly that).
-         *
-         * Note what this branch does, and why the setter bound matters: it truncates the
-         * reported digest size to 64 bytes but keeps hashing all `total_pixels` blocks,
-         * so the caller received PH_SUCCESS together with a silently partial hash -- the
-         * same anti-pattern the setter's out-of-range rejection exists to prevent. It is
-         * not turned into an error here because the size
-         * is the only thing wrong and the setter now makes the situation impossible. */
-        out_digest->size = PH_DIGEST_MAX_BYTES;
-    } else {
-        out_digest->size = (uint8_t)req_bytes;
-    }
+    /* One bit per block. The size is capped at PH_DIGEST_MAX_BYTES inside
+     * ph_digest_shape(): unreachable through the public API since 2.0.0, because
+     * ph_context_set_block_params() rejects block_size > PH_BLOCK_MAX_SIZE (32, whose
+     * 32*32 bits = 128 bytes exactly fill a digest). Kept as defence in depth for a
+     * config field written by some other route (tests do exactly that). Note what the cap
+     * does and why the setter bound matters: the reported size is truncated while all
+     * `total_pixels` blocks are still hashed, so the caller would get PH_SUCCESS with a
+     * silently partial hash -- the anti-pattern the setter's rejection prevents. */
+    ph_digest_begin(out_digest, ctx, PH_ALGO_BMH);
 
     uint8_t *full_gray = ph_get_gray(ctx);
     if (!full_gray)

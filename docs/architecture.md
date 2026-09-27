@@ -197,3 +197,23 @@ grayscale copy, about 4 bytes per pixel. The peak is therefore roughly
 bound is about 1 GB per worker; measured on 20-megapixel JPEGs it is about 80 MB per
 worker (94 MB at one thread, 1.35 GB at sixteen). To bound it, pass an explicit thread
 count, a lower `max_pixels` on the template, or both.
+
+## Algorithms as values
+
+For code that chooses the algorithm at run time — a binding, a configuration file, a
+column in a database — every algorithm is also a `ph_algorithm_t` value, contiguous from
+0 to `PH_ALGORITHM_COUNT - 1`:
+
+- `ph_compute_digest(ctx, algo, &digest)` computes any of them into a `ph_digest_t`. The
+  four `uint64_t` algorithms come back as 8-byte `bits` digests, most significant byte
+  first, so every algorithm can be stored and compared through the digest functions alone.
+- `ph_digest_info(ctx, algo, &size, &kind)` says what that digest will be without an image
+  (`ctx` may be NULL for the defaults). Only BMH's size depends on the configuration.
+- `ph_algorithm_name()`/`ph_algorithm_from_name()` convert to and from the stable names
+  (`"ahash"`, …, `"color_moments"`).
+
+A digest's size and kind are decided in one place, `ph_digest_shape()` in
+`src/hashes/algorithm.c`: every `ph_compute_*` that returns a digest takes them from it,
+and `ph_digest_info()` reports it, so the two cannot drift; `tests/src/test_algorithms.c`
+checks every algorithm, and BMH at every block size, against an actual computation. For the
+`uint64_t` algorithms the `ph_hash_flags_t` bit is `1 << ph_algorithm_t value`.

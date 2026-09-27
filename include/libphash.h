@@ -1074,6 +1074,90 @@ PH_NODISCARD PH_API ph_error_t ph_hash_buffers_ex(ph_batch_buffer_item_t *items,
                                                   uint32_t flags,
                                                   const ph_batch_options_t *options);
 
+// --- Algorithms as values ---
+
+/**
+ * @brief Every hash algorithm, as a value -- for code that picks the algorithm at run time
+ * (a binding, a configuration file, a database column) instead of calling one of the
+ * ph_compute_* functions by name.
+ *
+ * The values are contiguous from 0 to @c PH_ALGORITHM_COUNT - 1, so `for (a = 0; a <
+ * PH_ALGORITHM_COUNT; a++)` visits every algorithm. For the four uint64_t algorithms the
+ * matching ph_hash_flags_t bit is `1u << value`: @c PH_HASH_DHASH == 1u << @c PH_ALGO_DHASH.
+ * New algorithms are appended; existing values never change.
+ */
+typedef enum {
+    PH_ALGO_AHASH = 0,         ///< ph_compute_ahash(); "ahash".
+    PH_ALGO_DHASH = 1,         ///< ph_compute_dhash(); "dhash".
+    PH_ALGO_PHASH = 2,         ///< ph_compute_phash(); "phash".
+    PH_ALGO_WHASH = 3,         ///< ph_compute_whash(); "whash".
+    PH_ALGO_BMH = 4,           ///< ph_compute_bmh(); "bmh".
+    PH_ALGO_MHASH = 5,         ///< ph_compute_mhash(); "mhash".
+    PH_ALGO_RADIAL = 6,        ///< ph_compute_radial_hash(); "radial".
+    PH_ALGO_COLOR_HASH = 7,    ///< ph_compute_color_hash(); "color_hash".
+    PH_ALGO_COLOR_MOMENTS = 8, ///< ph_compute_color_moments_hash(); "color_moments".
+    PH_ALGO_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE ///< Not an algorithm -- see "Enum width".
+} ph_algorithm_t;
+
+/** Number of ph_algorithm_t values: every algorithm is in [0, PH_ALGORITHM_COUNT). */
+#define PH_ALGORITHM_COUNT 9
+
+/**
+ * @brief Computes any algorithm's hash into a digest.
+ *
+ * Exactly the result of the algorithm's own ph_compute_* function, same errors included
+ * (@c PH_ERR_EMPTY_IMAGE, @c PH_ERR_REQUIRES_COLOR, ...). The four uint64_t algorithms
+ * come back as an 8-byte @c PH_DIGEST_KIND_BITS digest holding the hash most significant
+ * byte first -- the order ph_hash_to_hex() writes -- so ph_hamming_distance_digest() on
+ * two of them equals ph_hamming_distance() on the two hashes, and every algorithm can be
+ * stored and compared through the digest functions alone.
+ *
+ * @param ctx The context, with an image loaded.
+ * @param algo The algorithm.
+ * @param[out] out_digest Receives the digest; its size and kind are what ph_digest_info()
+ *                        reports for this context and algorithm.
+ * @return As the algorithm's ph_compute_* function, or @c PH_ERR_INVALID_ARGUMENT for an
+ *         @p algo that is not a ph_algorithm_t value.
+ */
+PH_NODISCARD PH_API ph_error_t ph_compute_digest(ph_context_t *ctx, ph_algorithm_t algo,
+                                                 ph_digest_t *out_digest);
+
+/**
+ * @brief Tells what digest an algorithm produces, without an image and without computing
+ * anything: its size in bytes and its kind (which decides the comparison metric).
+ *
+ * The answer comes from the same code that sets the size and kind of every computed digest,
+ * so it cannot disagree with ph_compute_digest() or the ph_compute_* functions. Only BMH's
+ * size depends on the configuration (ph_context_set_block_params()); the others are fixed.
+ *
+ * @param ctx The configuration to answer for, or NULL for the defaults. Its image, if any,
+ *            is not looked at.
+ * @param algo The algorithm.
+ * @param[out] out_size Receives the digest size in bytes (8 for the uint64_t algorithms, as
+ *                      ph_compute_digest() returns them). May be NULL.
+ * @param[out] out_kind Receives the digest kind. May be NULL.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for an @p algo that is not a
+ *         ph_algorithm_t value (nothing is written then).
+ */
+PH_NODISCARD PH_API ph_error_t ph_digest_info(const ph_context_t *ctx, ph_algorithm_t algo,
+                                              size_t *out_size, ph_digest_kind_t *out_kind);
+
+/**
+ * @brief The algorithm's stable lowercase name: "ahash", "dhash", "phash", "whash", "bmh",
+ * "mhash", "radial", "color_hash", "color_moments".
+ * @return A static string, never NULL; "unknown" for a value that is not an algorithm.
+ */
+PH_API const char *ph_algorithm_name(ph_algorithm_t algo);
+
+/**
+ * @brief The inverse of ph_algorithm_name(): exact, lowercase match.
+ * @param name The name.
+ * @param[out] out_algo Receives the algorithm. Untouched on error.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for a NULL argument or a name that
+ *         is not one ph_algorithm_name() returns.
+ */
+PH_NODISCARD PH_API ph_error_t ph_algorithm_from_name(const char *name, ph_algorithm_t *out_algo);
+
 // --- Digest Hash Algorithms ---
 
 /**

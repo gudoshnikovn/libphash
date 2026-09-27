@@ -641,6 +641,18 @@ struct ph_context {
     } arena;
 };
 
+/* Fills a configuration with the defaults of a freshly created context (src/core.c). */
+void ph_config_init_defaults(struct ph_context_config *config);
+
+/* The one place a digest's size and kind are decided (src/hashes/algorithm.c).
+ * ph_digest_info() reports it, and every ph_compute_* that returns a digest starts from
+ * ph_digest_begin(), so the two cannot disagree. `algo` must be a valid ph_algorithm_t. */
+void ph_digest_shape(const struct ph_context_config *config, ph_algorithm_t algo, uint8_t *size,
+                     uint8_t *kind);
+
+/* Zeroes *out and sets its size and kind from ph_digest_shape(). */
+void ph_digest_begin(ph_digest_t *out, const ph_context_t *ctx, ph_algorithm_t algo);
+
 /* Ensures the context's scratchpad is at least 'size' bytes.
  * Returns NULL on failure, pointer to buffer on success. */
 uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size);

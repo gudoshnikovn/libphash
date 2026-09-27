@@ -172,12 +172,9 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     if ((size_t)projections > SIZE_MAX / sizeof(double))
         return PH_ERR_ALLOCATION_FAILED;
 
-    memset(out_digest, 0, sizeof(ph_digest_t));
-    /* The digest is the DCT coefficients, so its width no longer follows the angle
-     * count: it is PH_RADIAL_COEFFS whatever the configuration. */
-    out_digest->size = (uint8_t)PH_RADIAL_COEFFS;
-    out_digest->kind = (uint8_t)PH_DIGEST_KIND_COEFFICIENTS; /* quantised DCT coefficients: compare
-                                                                with ph_radial_similarity() */
+    /* Quantised DCT coefficients, PH_RADIAL_COEFFS of them whatever the angle count:
+     * compare with ph_radial_similarity(). */
+    ph_digest_begin(out_digest, ctx, PH_ALGO_RADIAL);
 
     size_t img_size = (size_t)ctx->image.width * (size_t)ctx->image.height;
 

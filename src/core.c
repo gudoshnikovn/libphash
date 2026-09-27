@@ -380,6 +380,37 @@ PH_API ph_error_t ph_context_set_decode_scale(ph_context_t *ctx, ph_decode_scale
     return PH_SUCCESS;
 }
 
+/* The configuration of a freshly created context. Shared with ph_digest_info(), which
+ * answers for "the defaults" without creating a context. */
+void ph_config_init_defaults(struct ph_context_config *config) {
+    memset(config, 0, sizeof(*config));
+    config->gray_r = PH_GRAY_R;
+    config->gray_g = PH_GRAY_G;
+    config->gray_b = PH_GRAY_B;
+    config->phash_dct_size = PH_DCT_SIZE;
+    config->phash_reduction_size = PH_DCT_REDUCTION_SIZE;
+    config->mhash_alpha = PH_MH_ALPHA;
+    config->mhash_level = PH_MH_LEVEL;
+    config->mhash_size = PH_MH_IMAGE_SIZE;
+    config->radial_projections = PH_RADIAL_PROJECTIONS;
+    config->radial_samples = PH_RADIAL_SAMPLES;
+    config->radial_sigma = PH_RADIAL_DEFAULT_SIGMA;
+    config->block_size = PH_BLOCK_SIZE;
+    config->whash_mode = PH_WHASH_FAST;
+    config->whash_remove_max_haar_ll = 0;
+    config->max_pixels = PH_DEFAULT_MAX_PIXELS;
+    config->decode_scale = PH_DECODE_SCALE_FULL;
+
+    /* Optimization Default: disabled by default for compatibility with
+     * ColorHash and custom weights. */
+    config->load_grayscale = 0;
+    /* Applying EXIF/WebP-metadata orientation defaults to on: an image hashed
+     * "as the sensor stored it" instead of "as it displays" is a correctness
+     * bug, not a neutral choice. See ph_context_set_auto_orient(). */
+    config->auto_orient = 1;
+    config->gamma = PH_DEFAULT_GAMMA;
+}
+
 PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     if (!out_ctx)
         return PH_ERR_INVALID_ARGUMENT;
@@ -395,31 +426,7 @@ PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     ctx->image.channels = 0;
     ctx->image.is_loaded = 0;
 
-    /* Defaults */
-    ctx->config.gray_r = PH_GRAY_R;
-    ctx->config.gray_g = PH_GRAY_G;
-    ctx->config.gray_b = PH_GRAY_B;
-    ctx->config.phash_dct_size = PH_DCT_SIZE;
-    ctx->config.phash_reduction_size = PH_DCT_REDUCTION_SIZE;
-    ctx->config.mhash_alpha = PH_MH_ALPHA;
-    ctx->config.mhash_level = PH_MH_LEVEL;
-    ctx->config.mhash_size = PH_MH_IMAGE_SIZE;
-    ctx->config.radial_projections = PH_RADIAL_PROJECTIONS;
-    ctx->config.radial_samples = PH_RADIAL_SAMPLES;
-    ctx->config.radial_sigma = PH_RADIAL_DEFAULT_SIGMA;
-    ctx->config.block_size = PH_BLOCK_SIZE;
-    ctx->config.whash_mode = PH_WHASH_FAST;
-    ctx->config.whash_remove_max_haar_ll = 0;
-    ctx->config.max_pixels = PH_DEFAULT_MAX_PIXELS;
-    ctx->config.decode_scale = PH_DECODE_SCALE_FULL;
-
-    /* Optimization Default: disabled by default for compatibility with
-     * ColorHash and custom weights. */
-    ctx->config.load_grayscale = 0;
-    /* Applying EXIF/WebP-metadata orientation defaults to on: an image hashed
-     * "as the sensor stored it" instead of "as it displays" is a correctness
-     * bug, not a neutral choice. See ph_context_set_auto_orient(). */
-    ctx->config.auto_orient = 1;
+    ph_config_init_defaults(&ctx->config);
 
     /* PH_DEFAULT_GAMMA is in range by construction, so this cannot fail; checked anyway
      * so a future change to either constant that breaks that invariant fails loudly

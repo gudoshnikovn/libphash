@@ -23,6 +23,7 @@ static void test_public_enums_are_32_bit(void) {
     ASSERT_INT_EQ(4, (int)sizeof(ph_hash_flags_t));
     ASSERT_INT_EQ(4, (int)sizeof(ph_whash_mode_t));
     ASSERT_INT_EQ(4, (int)sizeof(ph_decode_scale_t));
+    ASSERT_INT_EQ(4, (int)sizeof(ph_algorithm_t));
     PASS("test_public_enums_are_32_bit");
 }
 

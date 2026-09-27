@@ -175,9 +175,7 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
     const int block = n / PH_MH_GRID;
     const size_t npix = (size_t)n * (size_t)n;
 
-    memset(out_digest, 0, sizeof(ph_digest_t));
-    out_digest->size = (uint8_t)PH_MH_BYTES;
-    out_digest->kind = (uint8_t)PH_DIGEST_KIND_BITS;
+    ph_digest_begin(out_digest, ctx, PH_ALGO_MHASH);
 
     uint8_t *gray = ph_get_gray(ctx);
     if (!gray)
