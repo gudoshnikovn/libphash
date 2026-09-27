@@ -353,7 +353,10 @@ walkthrough.
   numpy, a video frame), skipping the encode/decode round-trip. Accepts 1, 3 or 4
   channels and an arbitrary row stride.
 - **Hex and similarity helpers:** `ph_digest_to_hex()`, `ph_digest_from_hex()`,
-  `ph_hash_to_hex()`, `ph_similarity()`, `ph_similarity_digest()`.
+  `ph_hash_to_hex()`, `ph_similarity()`, `ph_similarity_digest()`. A digest's text form
+  is `<kind>:<hex>` (e.g. `coefficients:1f80…`), and decoding restores the kind, so
+  digests read back from storage still refuse the wrong comparison metric.
+  `PH_DIGEST_HEX_BUFFER_SIZE` is a buffer size that fits any digest.
 - **`ph_get_last_error_message()`** returns a short diagnostic string about the most
   recent failure on a context (e.g. the decoder-reported reason a load failed).
 - **`ph_version_number()`** returns the version as one comparable integer, for FFI
