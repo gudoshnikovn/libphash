@@ -511,6 +511,10 @@ walkthrough.
 
 ### Fixed
 
+- **pHash with an odd `dct_size` read and wrote misaligned `float`s.** Every odd value from
+  3 to 31 — all accepted by `ph_context_set_phash_params()` — placed the DCT buffers at an
+  odd address: undefined behaviour, reported by UBSan and a crash on strict-alignment
+  targets. Hash values do not change.
 - **`ph_context_get_dimensions()` reported an image that was no longer loaded.** A failed
   `ph_load_from_file()`/`ph_load_from_memory()` drops the previous image, but its width,
   height and channel count stayed behind; they are now reset to 0 with it. It and
