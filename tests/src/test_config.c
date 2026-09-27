@@ -24,6 +24,41 @@ void test_config_gray_weights() {
     printf("  [PASS] Custom Gray Weights\n");
 }
 
+/* The setter normalizes its input to a sum of 128, so what is stored is not what was
+ * passed; the getter reads the stored values. */
+void test_config_gray_weights_read_back() {
+    ph_context_t *ctx;
+    ASSERT_OK(ph_create(&ctx));
+    int r = -1, g = -1, b = -1;
+
+    ASSERT_OK(ph_context_get_gray_weights(ctx, &r, &g, &b));
+    ASSERT(r == 38 && g == 75 && b == 15); /* the documented defaults */
+
+    ASSERT_OK(ph_context_set_gray_weights(ctx, 100, 10, 18));
+    ASSERT_OK(ph_context_get_gray_weights(ctx, &r, &g, &b));
+    ASSERT(r == 100 && g == 10 && b == 18);
+
+    ASSERT_OK(ph_context_set_gray_weights(ctx, 1, 1, 1));
+    ASSERT_OK(ph_context_get_gray_weights(ctx, &r, &g, &b));
+    ASSERT(r == 42 && g == 42 && b == 44);
+    ASSERT_INT_EQ(128, r + g + b);
+
+    /* A rejected set leaves the stored weights alone, and the getter shows it. */
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_gray_weights(ctx, -1, 1, 1));
+    ASSERT_OK(ph_context_get_gray_weights(ctx, &r, &g, &b));
+    ASSERT(r == 42 && g == 42 && b == 44);
+
+    r = g = b = 7;
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_get_gray_weights(NULL, &r, &g, &b));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_get_gray_weights(ctx, NULL, &g, &b));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_get_gray_weights(ctx, &r, NULL, &b));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_get_gray_weights(ctx, &r, &g, NULL));
+    ASSERT(r == 7 && g == 7 && b == 7);
+
+    ph_free(ctx);
+    printf("  [PASS] Gray weights read back\n");
+}
+
 void test_config_phash_params() {
     ph_context_t *ctx;
     ASSERT_OK(ph_create(&ctx));
@@ -115,6 +150,7 @@ void test_config_block_size() {
 int main() {
     printf("Running Configuration Tests...\n");
     test_config_gray_weights();
+    test_config_gray_weights_read_back();
     test_config_phash_params();
     test_config_radial_params();
     test_config_block_size();

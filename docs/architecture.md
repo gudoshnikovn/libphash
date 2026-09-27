@@ -153,7 +153,8 @@ contract.
   call on the same context.
 - `ph_context_set_gray_weights(r, g, b)` — override the default BT.601-derived
   grayscale weights (see `docs/algorithm-provenance.md`) for callers whose images
-  aren't sRGB photographs.
+  aren't sRGB photographs. The weights are normalized to sum to 128;
+  `ph_context_get_gray_weights()` reads back the values actually stored.
 - `ph_context_set_decode_scale()` — opt into decoding a JPEG at 1/2, 1/4 or 1/8 linear
   resolution via libjpeg-turbo's DCT-domain scaling, trading accuracy for decode speed.
   JPEG only; PNG has no format-level scaled decode and libwebp's scaling API resizes

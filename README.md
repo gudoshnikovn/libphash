@@ -50,7 +50,7 @@ and [`docs/algorithm-provenance.md`](docs/algorithm-provenance.md).
 * **Automatic EXIF/WebP Orientation**: on by default — a hash describes what a viewer displays, not the raw sensor buffer. Opt out with `ph_context_set_auto_orient(ctx, 0)` if you need the old behavior; see [`MIGRATION.md`](MIGRATION.md).
 * **Batch API**: `ph_hash_files()`/`ph_hash_buffers()` hash many images across an optional internal thread pool, and `ph_compute_multi()` computes several of the four `uint64_t` algorithms (aHash/dHash/pHash/wHash) in one call sharing the same grayscale conversion.
 * **Detailed error codes**: `ph_error_t` distinguishes an unsupported format, corrupt data, an unavailable decoder, an I/O failure, and an oversized image, instead of one generic failure — see `include/libphash.h`.
-* **Digest helpers**: `ph_digest_to_hex()`/`ph_digest_from_hex()`/`ph_hash_to_hex()` for storing/transmitting hashes as text, `ph_similarity()`/`ph_similarity_digest()` for a normalized [0,1] score alongside the raw distance functions.
+* **Digest helpers**: `ph_digest_to_hex()`/`ph_digest_from_hex()`/`ph_hash_to_hex()`/`ph_hash_from_hex()` for storing/transmitting hashes as text, `ph_similarity()`/`ph_similarity_digest()` for a normalized [0,1] score alongside the raw distance functions.
 * **FFI-Friendly**: Clean C API with opaque pointers, designed for seamless integration with Python, Rust, Node.js, and Go.
 * **Cross-Platform**: Optimized for ARM64 (Apple Silicon, Raspberry Pi) and x86_64.
 

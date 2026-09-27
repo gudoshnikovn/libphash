@@ -392,6 +392,22 @@ PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma);
 PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, int b);
 
 /**
+ * @brief Reads back the grayscale weights the context actually uses.
+ *
+ * These are the normalized values, summing to 128, not the ones passed to
+ * ph_context_set_gray_weights(): (100, 10, 18) is stored as (100, 10, 18) because it
+ * already sums to 128, but (1, 1, 1) is stored as (42, 42, 44). The only configuration
+ * getter, because this is the only setter that transforms its input; the others store
+ * exactly what they were given.
+ * @param ctx The context.
+ * @param[out] r,g,b Receive the weights. None may be NULL.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for a NULL argument (nothing is
+ *         written then).
+ */
+PH_NODISCARD PH_API ph_error_t ph_context_get_gray_weights(const ph_context_t *ctx, int *r, int *g,
+                                                           int *b);
+
+/**
  * @brief Sets pHash parameters.
  *
  * Both values are hard-bounded by the implementation:
@@ -1314,6 +1330,19 @@ PH_NODISCARD PH_API ph_error_t ph_digest_from_hex(const char *text, ph_digest_t 
  * 'out_size' is too small.
  */
 PH_NODISCARD PH_API ph_error_t ph_hash_to_hex(uint64_t hash, char *out, size_t out_size);
+
+/**
+ * @brief Decodes the text ph_hash_to_hex() writes back into a 64-bit hash.
+ *
+ * Exactly 16 hex digits, most significant byte first, either case; nothing before or
+ * after them (no "0x", no whitespace). Unlike the digest text form there is no kind
+ * prefix: a uint64_t hash is always a bit vector.
+ * @param hex NUL-terminated string of 16 hex digits.
+ * @param[out] out Receives the hash. Untouched on error.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for a NULL argument or any other
+ *         length or character.
+ */
+PH_NODISCARD PH_API ph_error_t ph_hash_from_hex(const char *hex, uint64_t *out);
 
 /**
  * @brief Whether this build decodes JPEG with libjpeg-turbo, decided when the library

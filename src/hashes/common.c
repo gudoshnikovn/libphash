@@ -374,3 +374,19 @@ PH_API ph_error_t ph_hash_to_hex(uint64_t hash, char *out, size_t out_size) {
     out[16] = '\0';
     return PH_SUCCESS;
 }
+
+PH_API ph_error_t ph_hash_from_hex(const char *hex, uint64_t *out) {
+    if (!hex || !out)
+        return PH_ERR_INVALID_ARGUMENT;
+    uint64_t value = 0;
+    for (int i = 0; i < 16; i++) {
+        int nibble = ph_hex_nibble(hex[i]); /* also stops at a NUL before the 16th digit */
+        if (nibble < 0)
+            return PH_ERR_INVALID_ARGUMENT;
+        value = (value << 4) | (uint64_t)nibble;
+    }
+    if (hex[16] != '\0')
+        return PH_ERR_INVALID_ARGUMENT;
+    *out = value;
+    return PH_SUCCESS;
+}

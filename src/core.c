@@ -204,6 +204,15 @@ PH_API void ph_context_get_dimensions(const ph_context_t *ctx, int *width, int *
 
 PH_API int ph_is_loaded(const ph_context_t *ctx) { return (ctx && ctx->image.raw_rgb) ? 1 : 0; }
 
+PH_API ph_error_t ph_context_get_gray_weights(const ph_context_t *ctx, int *r, int *g, int *b) {
+    if (!ctx || !r || !g || !b)
+        return PH_ERR_INVALID_ARGUMENT;
+    *r = ctx->config.gray_r;
+    *g = ctx->config.gray_g;
+    *b = ctx->config.gray_b;
+    return PH_SUCCESS;
+}
+
 PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, int b) {
     if (!ctx)
         return PH_ERR_INVALID_ARGUMENT;

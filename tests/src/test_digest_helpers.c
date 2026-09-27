@@ -16,6 +16,49 @@ void test_hash_to_hex() {
     PASS("test_hash_to_hex");
 }
 
+void test_hash_from_hex() {
+    uint64_t h = 0;
+    ASSERT_OK(ph_hash_from_hex("0123456789abcdef", &h));
+    ASSERT(h == 0x0123456789abcdefULL);
+    ASSERT_OK(ph_hash_from_hex("DEADBEEFcafeF00D", &h));
+    ASSERT(h == 0xdeadbeefcafef00dULL);
+    ASSERT_OK(ph_hash_from_hex("0000000000000000", &h));
+    ASSERT(h == 0);
+
+    /* Round trip through ph_hash_to_hex() for values that exercise every byte. */
+    unsigned seed = 777u;
+    for (int i = 0; i < 1000; i++) {
+        seed = seed * 1103515245u + 12345u;
+        uint64_t v = ((uint64_t)seed << 32) ^ (seed * 2654435761u);
+        char hex[17];
+        ASSERT_OK(ph_hash_to_hex(v, hex, sizeof(hex)));
+        uint64_t back = ~v;
+        ASSERT_OK(ph_hash_from_hex(hex, &back));
+        ASSERT(back == v);
+    }
+
+    /* Exactly 16 hex digits and nothing else; a refused string leaves `out` alone. */
+    const char *bad[] = {
+        "",
+        "0123456789abcde",
+        "0123456789abcdef0",
+        "0x0123456789abcd",
+        " 0123456789abcdef",
+        "0123456789abcdef ",
+        "0123456789abcdeg",
+        "bits:0123456789ab",
+    };
+    for (size_t i = 0; i < sizeof(bad) / sizeof(*bad); i++) {
+        h = 42;
+        ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_from_hex(bad[i], &h));
+        ASSERT(h == 42);
+    }
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_from_hex(NULL, &h));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_from_hex("0123456789abcdef", NULL));
+
+    PASS("test_hash_from_hex");
+}
+
 void test_digest_hex_roundtrip() {
     ph_digest_t d;
     memset(&d, 0, sizeof(d));
@@ -599,6 +642,7 @@ static void test_similarity_agrees_with_hamming() {
 
 int main() {
     test_hash_to_hex();
+    test_hash_from_hex();
     test_digest_kind_refuses_the_wrong_metric();
     test_computed_digests_carry_their_kind();
     test_digest_hex_roundtrip();
