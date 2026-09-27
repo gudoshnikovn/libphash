@@ -372,6 +372,9 @@ walkthrough.
 - **`libphash.h` includes `phash_version.h`**, so `PH_VERSION_NUMBER` and the other
   version macros are available to anyone who includes the public header. The two files
   are installed side by side; code that copies the header by hand needs both.
+- **`ph_hash_from_hex()`** decodes the 16-digit text `ph_hash_to_hex()` writes, and
+  **`ph_context_get_gray_weights()`** reads back the grayscale weights a context uses —
+  the normalized values, which differ from what was passed to the setter.
 - **`ph_get_build_info()`** returns one line describing how the library was built —
   version, JPEG/PNG/WebP backends, zlib, whether the batch functions can use threads,
   the SIMD target, and whether the test-only mock decoder is compiled in — for logs and
