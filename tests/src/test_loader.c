@@ -866,8 +866,72 @@ void test_truncated_input_rejected_in_every_build() {
     printf("test_truncated_input_rejected_in_every_build: PASSED\n");
 }
 
+static uint32_t png_crc32(const uint8_t *p, size_t n) {
+    uint32_t c = 0xFFFFFFFFu;
+    for (size_t i = 0; i < n; i++) {
+        c ^= p[i];
+        for (int k = 0; k < 8; k++)
+            c = (c >> 1) ^ (0xEDB88320u & (0u - (c & 1u)));
+    }
+    return c ^ 0xFFFFFFFFu;
+}
+
+static void put_be32(uint8_t *p, uint32_t v) {
+    p[0] = (uint8_t)(v >> 24);
+    p[1] = (uint8_t)(v >> 16);
+    p[2] = (uint8_t)(v >> 8);
+    p[3] = (uint8_t)v;
+}
+
+/* A header that stb_image refuses for its size is too large, not corrupt, and every
+ * build says so. stb checks the size inside stbi_info() already, so the header never
+ * reached the library's own pixel-limit check and the refusal arrived as the reason
+ * "too large", which used to fall through to PH_ERR_CORRUPT_DATA. The native PNG
+ * decoders answer the same header with PH_ERR_IMAGE_TOO_LARGE; the stb build pins the
+ * literal (a vendor bump that rewords it fails here). */
+void test_stb_too_large_is_image_too_large() {
+    static const uint32_t sides[] = {20000, 46341, 65536};
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    for (size_t i = 0; i < sizeof(sides) / sizeof(sides[0]); i++) {
+        /* Signature, IHDR, an empty IDAT (libpng reads the header up to the first IDAT
+         * before it judges the size), IEND. */
+        uint8_t png[8 + 25 + 12 + 12];
+        static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+        memcpy(png, sig, 8);
+        uint8_t *ihdr = png + 8;
+        put_be32(ihdr, 13);
+        memcpy(ihdr + 4, "IHDR", 4);
+        put_be32(ihdr + 8, sides[i]);
+        put_be32(ihdr + 12, sides[i]);
+        ihdr[16] = 8; /* bit depth */
+        ihdr[17] = 2; /* RGB */
+        ihdr[18] = ihdr[19] = ihdr[20] = 0;
+        put_be32(ihdr + 21, png_crc32(ihdr + 4, 17));
+        uint8_t *idat = ihdr + 25;
+        put_be32(idat, 0);
+        memcpy(idat + 4, "IDAT", 4);
+        put_be32(idat + 8, png_crc32(idat + 4, 4));
+        uint8_t *iend = idat + 12;
+        put_be32(iend, 0);
+        memcpy(iend + 4, "IEND", 4);
+        put_be32(iend + 8, png_crc32(iend + 4, 4));
+
+        ph_error_t err = ph_load_from_memory(ctx, png, sizeof(png));
+        if (err != PH_ERR_IMAGE_TOO_LARGE) {
+            fprintf(stderr, "[FAIL] %ux%u PNG header: expected %d, got %d (%s)\n",
+                    (unsigned)sides[i], (unsigned)sides[i], (int)PH_ERR_IMAGE_TOO_LARGE, (int)err,
+                    ph_get_last_error_message(ctx));
+            exit(1);
+        }
+    }
+    ph_free(ctx);
+    printf("test_stb_too_large_is_image_too_large: PASSED\n");
+}
+
 int main() {
     test_truncated_input_rejected_in_every_build();
+    test_stb_too_large_is_image_too_large();
     test_jpeg_loading();
     test_png_loading();
     test_webp_loading_or_unavailable();

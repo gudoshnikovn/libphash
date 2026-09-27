@@ -106,6 +106,32 @@ static int ph_stb_reason_is_oom(const char *reason) {
     return 0;
 }
 
+/* Third pinned mapping: "too large" is stb_image's answer to its own size and overflow
+ * checks -- STBI_MAX_DIMENSIONS, stbi__mad2sizes_valid()/stbi__mad3sizes_valid(), and the
+ * two per-row buffer size checks in the PNG decoder that say "Corrupt PNG" in their long
+ * form but test an overflowing computed size, not the bitstream. None of its eleven
+ * sites is about damaged data, so it maps to PH_ERR_IMAGE_TOO_LARGE, which is what the
+ * native decoders answer for the same headers. It matters because stb checks these
+ * inside stbi_info() too: a header it refuses there never reaches the pixel-limit check
+ * in ph_decode_stb_mem(), and the decode that follows fails with this reason.
+ *
+ * Pinned to vendor/stb_image.h v2.30, like the two arrays above;
+ * test_stb_too_large_is_image_too_large() in tests/src/test_loader.c pins it. */
+static const char *const ph_stb_too_large_reasons[] = {
+    "too large",
+};
+
+static int ph_stb_reason_is_too_large(const char *reason) {
+    if (!reason)
+        return 0;
+    for (size_t i = 0; i < sizeof(ph_stb_too_large_reasons) / sizeof(*ph_stb_too_large_reasons);
+         i++) {
+        if (strcmp(reason, ph_stb_too_large_reasons[i]) == 0)
+            return 1;
+    }
+    return 0;
+}
+
 static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *h, int *ch,
                                   int req_comp, uint64_t max_pixels, ph_decode_scale_t decode_scale,
                                   ph_error_t *out_err, char *err_msg, size_t err_msg_cap) {
@@ -146,6 +172,8 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
                 *out_err = PH_ERR_UNSUPPORTED_FORMAT;
             else if (ph_stb_reason_is_oom(reason))
                 *out_err = PH_ERR_ALLOCATION_FAILED;
+            else if (ph_stb_reason_is_too_large(reason))
+                *out_err = PH_ERR_IMAGE_TOO_LARGE;
             else
                 *out_err = PH_ERR_CORRUPT_DATA;
         }
