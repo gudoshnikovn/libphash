@@ -165,6 +165,17 @@ walkthrough.
   `PH_ERR_UNSUPPORTED_FORMAT`, `PH_ERR_IMAGE_TOO_LARGE`, `PH_ERR_IO`,
   `PH_ERR_DECODER_UNAVAILABLE`. A code-to-code mapping table is in `MIGRATION.md`.
 
+- **Hashing a context with no image returns `PH_ERR_EMPTY_IMAGE`, and
+  `PH_ERR_NOT_IMPLEMENTED` was removed.** Every `ph_compute_*` function and
+  `ph_compute_multi()` used to report "no image loaded" as `PH_ERR_INVALID_ARGUMENT`,
+  indistinguishable from a NULL pointer, while `PH_ERR_EMPTY_IMAGE` — the code that
+  describes exactly that — was never returned. Arguments are still checked first, so a
+  NULL pointer stays `PH_ERR_INVALID_ARGUMENT`. `PH_ERR_NOT_IMPLEMENTED` was returned
+  from nowhere; its value `-4` is retired like `-2`.
+  *Restore the old behaviour:* treat `PH_ERR_EMPTY_IMAGE` the way you treated
+  `PH_ERR_INVALID_ARGUMENT` after a hash call, and delete any check for
+  `PH_ERR_NOT_IMPLEMENTED`. See `MIGRATION.md`.
+
 - **Every `ph_context_set_*` function returns `ph_error_t` instead of `void`, and
   invalid input is now rejected.** One contract for all of them: a valid argument
   returns `PH_SUCCESS`; anything else returns `PH_ERR_INVALID_ARGUMENT` and leaves
