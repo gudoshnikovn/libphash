@@ -212,6 +212,14 @@ guarded by `if(NOT ZLIB_LIBRARY)` and only feeds
 We use `clang-format` with a custom style (based on LLVM with minor tweaks).
 - **Indentation**: 4 spaces.
 - **Rule**: Run `make format` before every commit.
+- **Version**: clang-format **23**, pinned (`pip install clang-format==23.1.1`).
+  Different major versions format the same code differently, so `make format` refuses
+  to run with any other major. The pin is raised only in a commit of its own, together
+  with whatever reformatting the new version produces.
+- **Scope**: `src/`, `include/`, all of `tests/` (including `tests/fuzz/`) and
+  `examples/`. `scripts/format.sh` holds both the scope and the version; `make format`
+  and the CI `format-check` job both run it (`scripts/format.sh --check` for the CI
+  check).
 
 ## Naming Conventions
 
@@ -227,7 +235,7 @@ and on any pull request targeting either:
 
 | Job | What it checks |
 |---|---|
-| `format-check` | `clang-format --dry-run --Werror` over `src/`, `tests/src/`, `include/` — fast, no build, catches a formatting diff before the slower jobs run. |
+| `format-check` | `scripts/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`. Fast, no build, catches a formatting diff before the slower jobs run. |
 | `build-and-test` | Full vendored build (TurboJPEG + libpng/spng + libwebp + zlib-ng) across linux-x86_64 (gcc, clang, and a spng variant), linux-arm64, macos-arm64. `PHASH_STRICT_DEPS=ON`, so a decoder silently falling back to stb_image is a hard configure failure, not a quiet pass. |
 | `coverage-cmake` | `scripts/coverage_cmake.sh` — merged lcov report across the vendored and spng decoder sets; published as a downloadable artifact. |
 | `minimal-build` | Zero-dependency build (every `PHASH_USE_*` off, stb_image only) on ubuntu-latest, macos-latest, windows-latest. |

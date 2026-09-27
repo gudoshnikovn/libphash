@@ -152,9 +152,10 @@ debug:
 	@$(MAKE) clean
 	@$(MAKE) all PHASH_SANITIZE=1
 
-# Reformat code
+# Reformat code. The perimeter and the pinned clang-format major live in the
+# script, which the CI format-check job calls too.
 format:
-	find $(SRC_DIR) $(TEST_DIR) $(INC_DIR) -name "*.c" -o -name "*.h" | xargs clang-format -i
+	./scripts/format.sh
 
 # Library build
 $(LIB_NAME): $(OBJS)

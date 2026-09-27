@@ -30,20 +30,29 @@ permissions:
 
 jobs:
   # R26: fast, no submodules/build needed -- catches an unformatted diff before
-  # the much slower legs below spend minutes on it. .clang-format already backs
-  # `make format`; this is the same check, just enforced.
+  # the much slower legs below spend minutes on it. scripts/format.sh is the same
+  # script `make format` runs, so the perimeter and the clang-format major cannot
+  # drift apart between the two.
+  #
+  # clang-format comes from PyPI at an exact version, not from apt: the runner
+  # image's clang-format is whatever major that image ships, and a different major
+  # formats differently -- the job would turn red on unchanged code the day the
+  # image moved. setup-python rather than the system pip, which Ubuntu 24.04 marks
+  # externally managed (PEP 668) and refuses to install into.
   format-check:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install clang-format
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y clang-format
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
 
-    - name: clang-format --dry-run --Werror
-      run: find src tests/src include -name "*.c" -o -name "*.h" | xargs clang-format --dry-run --Werror
+    - name: Install clang-format (pinned)
+      run: pip install clang-format==23.1.1
+
+    - name: clang-format --dry-run --Werror (scripts/format.sh --check)
+      run: ./scripts/format.sh --check
 
     - name: Check documentation coverage
       run: bash scripts/check_docs_coverage.sh

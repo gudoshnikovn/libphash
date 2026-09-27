@@ -37,9 +37,13 @@ minimum:
 
 ```bash
 make -j8 && make test     # portable build, every tests/src/test_*.c binary
-make format                # clang-format -i; the diff after this must be empty
+make format                # clang-format 23 -i; the diff after this must be empty
 make debug && make test    # -fsanitize=address,undefined rebuild, then rerun the suite
 ```
+
+`make format` requires clang-format **23** and refuses to run with any other major
+version, because a different major formats the same code differently. Install the
+pinned version with `pip install clang-format==23.1.1`.
 
 If your change touches `CMakeLists.txt`, a native decoder backend
 (`src/loaders/*.c`), or the batch thread pool (`src/batch.c`), also run the CMake
