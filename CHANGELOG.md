@@ -511,6 +511,10 @@ walkthrough.
 
 ### Fixed
 
+- **`threads = 0` ignored container and affinity CPU limits.** The batch API started one
+  worker per CPU of the machine, so a container limited to 2 of 6 CPUs ran 6 workers —
+  three times the memory for no throughput. It now counts the CPUs the process may use:
+  the affinity mask on Linux and Windows, and the cgroup CPU quota on Linux.
 - **ThreadSanitizer reported a data race on the first parallel PNG decodes.** zlib-ng
   initialises its CPU dispatch table lazily and unsynchronised; the first concurrent
   decodes of a process (a cold `ph_hash_files()`, or your own threads) raced on it. The
