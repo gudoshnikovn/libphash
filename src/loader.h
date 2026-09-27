@@ -44,12 +44,12 @@ static inline int ph_magic_is_webp(const uint8_t *magic, size_t len) {
 // depending on how the library was compiled. ph_set_err_msg() never allocates.
 
 #ifdef PH_USE_TURBOJPEG
-// --- JPEG: Static TurboJPEG API (tjDecompress2) ---
+// --- JPEG: vendored libjpeg-turbo through its libjpeg API (jpeg-static) ---
 // The only backend that honors decode_scale -- see ph_context_set_decode_scale().
-unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, size_t size, int *width, int *height,
-                                 int *channels, int req_comp, uint64_t max_pixels,
-                                 ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
-                                 size_t err_msg_cap);
+unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int *width, int *height,
+                                  int *channels, int req_comp, uint64_t max_pixels,
+                                  ph_decode_scale_t decode_scale, ph_error_t *out_err,
+                                  char *err_msg, size_t err_msg_cap);
 #endif
 
 #ifdef PH_USE_LIBPNG

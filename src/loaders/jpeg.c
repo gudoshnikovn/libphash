@@ -5,110 +5,126 @@
 
 #ifdef PH_USE_TURBOJPEG
 
-#include "turbojpeg.h"
+/* The vendored libjpeg-turbo, through its libjpeg API (the jpeg-static archive), not the
+ * TurboJPEG API. libjpeg-turbo 3.x compiles its own copies of zlib and spng into the
+ * TurboJPEG archive -- for tj3LoadImage()/tj3SaveImage(), which this library never calls --
+ * with global symbols, and on macOS libpng and spng bound to those copies instead of the
+ * vendored zlib-ng and spng. jpeg-static has neither.
+ *
+ * The decode reproduces what TurboJPEG's tjDecompress2() did with the flags this backend
+ * passed (TJFLAG_FASTDCT), so the pixels -- and every hash -- are unchanged: the fast
+ * integer IDCT, fancy (smooth) chroma upsampling, DCT-domain scaling for decode_scale, and
+ * any libjpeg warning (a truncated stream, stray bytes before a marker) turned into a
+ * failure, as TurboJPEG turns it into a -1 return. */
+#include <setjmp.h>
 #include <string.h>
 
-PH_API int ph_can_use_jpeg(void) { return 1; }
+/* jpeglib.h first: it pulls in jconfig.h, whose JPEG_LIB_VERSION jerror.h tests. */
+#include "jpeglib.h"
 
-/* Two distinct, independently-worded OOM messages can reach here:
- *   - libjpeg-turbo's own memory manager (jmemmgr.c) reports a failed internal
- *     malloc via ERREXIT1(cinfo, JERR_OUT_OF_MEMORY, which), whose message text
- *     (vendor/libjpeg-turbo/src/jerror.h) is "Insufficient memory (case %d)" --
- *     the %d varies, hence a substring match, not exact -- an earlier version of
- *     this check used strncmp() with a hardcoded length one byte too long (20,
- *     not strlen("Insufficient memory") == 19), which always compared the
- *     literal's NUL terminator against the real message's following space and
- *     therefore never matched at all.
- *   - the TurboJPEG API wrapper's own tj3Decompress8() reports its own allocation
- *     failure (a buffer it allocates itself, distinct from libjpeg's memory
- *     manager) as "tj3Decompress8(): Memory allocation failure" -- unrelated
- *     wording, needs its own check.
- * Same idea as ph_stb_reason_is_oom() in src/loader.c for the stb_image backend.
- * Without this, an injected/real allocation failure inside
- * tjDecompressHeader3()/tjDecompress2() was indistinguishable from actual corrupt
- * JPEG data -- both returned < 0 and got mapped to PH_ERR_CORRUPT_DATA below.
- *
- * Not every allocation failure surfaces with recognizable wording, though: a
- * malloc failing inside jpeg_read_header()'s marker-processing tables can leave
- * libjpeg with stale/zeroed state that it then misreports as a substantively
- * different, memory-silent error ("Could not determine subsampling level of JPEG
- * image") -- a genuine libjpeg-turbo limitation this wrapper has no way to see
- * through, since the message it hands back carries no indication that the root
- * cause was an allocation failure at all. */
-static int ph_tj_message_is_oom(const char *msg) {
-    return msg && (strstr(msg, "Insufficient memory") != NULL ||
-                   strstr(msg, "Memory allocation failure") != NULL);
-}
+#include "jerror.h"
+
+PH_API int ph_can_use_jpeg(void) { return 1; }
 
 int ph_can_read_jpeg(const uint8_t *magic, size_t len) {
     return (len >= 2 && magic[0] == 0xFF && magic[1] == 0xD8);
 }
 
-/* decode_scale -> a libjpeg-turbo scaling factor. TJSCALED() below picks the nearest
- * scaling factor the JPEG's DCT actually supports at or under the requested size, same
- * as libjpeg-turbo does for any other caller of this API -- eighths are just the
- * factors this library exposes as a stable, documented contract (see
- * ph_context_set_decode_scale()), not a hard restriction of the underlying decoder. */
-static tjscalingfactor ph_jpeg_scaling_factor(ph_decode_scale_t decode_scale) {
+/* libjpeg reports errors by calling error_exit(), which must not return; the default one
+ * calls exit(). This one records the message and jumps back into ph_decode_jpeg_mem(). */
+typedef struct {
+    struct jpeg_error_mgr pub;
+    jmp_buf escape;
+    char message[JMSG_LENGTH_MAX];
+    int out_of_memory;
+} ph_jpeg_error_t;
+
+static void ph_jpeg_error_exit(j_common_ptr cinfo) {
+    ph_jpeg_error_t *err = (ph_jpeg_error_t *)cinfo->err;
+    err->pub.format_message(cinfo, err->message);
+    /* By code, not by the wording of the message: libjpeg's memory manager reports every
+     * failed allocation as JERR_OUT_OF_MEMORY. */
+    err->out_of_memory = (err->pub.msg_code == JERR_OUT_OF_MEMORY);
+    longjmp(err->escape, 1);
+}
+
+/* msg_level < 0 is a warning: libjpeg recovered from damaged data and would carry on,
+ * handing back an image with made-up content. A warning is a failure here, as it is for
+ * TurboJPEG, and the first one ends the decode -- nothing after it is worth decoding.
+ * Trace messages (msg_level >= 0) are ignored; nothing is ever printed to stderr. */
+static void ph_jpeg_emit_message(j_common_ptr cinfo, int msg_level) {
+    if (msg_level < 0)
+        ph_jpeg_error_exit(cinfo);
+}
+
+static void ph_jpeg_output_message(j_common_ptr cinfo) { (void)cinfo; }
+
+/* decode_scale -> libjpeg's scale_num/scale_denom. libjpeg then picks the output size
+ * itself (jpeg_calc_output_dimensions(): ceil(dimension * num / denom)), which is the same
+ * rounding TurboJPEG's TJSCALED() applied, so a scaled decode keeps its dimensions. */
+static unsigned int ph_jpeg_scale_denom(ph_decode_scale_t decode_scale) {
     switch (decode_scale) {
         case PH_DECODE_SCALE_HALF:
-            return (tjscalingfactor){1, 2};
+            return 2;
         case PH_DECODE_SCALE_QUARTER:
-            return (tjscalingfactor){1, 4};
+            return 4;
         case PH_DECODE_SCALE_EIGHTH:
-            return (tjscalingfactor){1, 8};
+            return 8;
         case PH_DECODE_SCALE_FULL:
         case PH_DECODE_SCALE_FORCE_INT32_: /* width spacer; the setter never stores it */
         default:
-            return (tjscalingfactor){1, 1};
+            return 1;
     }
 }
 
-unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, size_t size, int *width, int *height,
-                                 int *channels, int req_comp, uint64_t max_pixels,
-                                 ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
-                                 size_t err_msg_cap) {
+unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int *width, int *height,
+                                  int *channels, int req_comp, uint64_t max_pixels,
+                                  ph_decode_scale_t decode_scale, ph_error_t *out_err,
+                                  char *err_msg, size_t err_msg_cap) {
     if (!buffer || size == 0)
         return NULL;
-
-    /* TurboJPEG takes the compressed size as `unsigned long` (tjDecompressHeader3(),
-     * tjDecompress2()), which is narrower than size_t on LLP64 -- Windows x64. Refusing
-     * an oversized buffer here, by name, is the difference between an honest error and
-     * handing the decoder a silently truncated bitstream that happens to parse. The
-     * guard is compiled out on every target where the two types have the same range
-     * (all LP64 and ILP32 ones), so it never degenerates into an always-false
-     * comparison. */
-#if ULONG_MAX < SIZE_MAX
-    if (size > ULONG_MAX) {
+    /* jpeg_mem_src() takes the size as unsigned long, 32 bits on Windows x64. The loader
+     * refuses anything over PH_MAX_ENCODED_SIZE (INT_MAX) before a backend sees it, so the
+     * cast below cannot truncate. */
+    if (size > PH_MAX_ENCODED_SIZE) {
         if (out_err)
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
-        ph_set_err_msg(err_msg, err_msg_cap,
-                       "JPEG buffer is larger than the JPEG decoder can address");
-        return NULL;
-    }
-#endif
-
-    tjhandle handle = tjInitDecompress();
-    if (!handle) {
-        /* tjInitDecompress()'s only failure mode is its own internal allocation
-         * failing; leaving *out_err untouched here used to fall through to
-         * ph_decode_buffer()'s PH_SUCCESS-turned-PH_ERR_CORRUPT_DATA fallback
-         * (src/loader.c), misreporting an OOM as corrupt image data. */
-        if (out_err)
-            *out_err = PH_ERR_ALLOCATION_FAILED;
-        ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
+        ph_set_err_msg(err_msg, err_msg_cap, "Encoded image is larger than 2 GiB - 1 byte");
         return NULL;
     }
 
-    int w, h, subsamp, colorspace;
-    if (tjDecompressHeader3(handle, buffer, (unsigned long)size, &w, &h, &subsamp, &colorspace) <
-        0) {
-        const char *tj_err = tjGetErrorStr2(handle);
+    struct jpeg_decompress_struct cinfo;
+    ph_jpeg_error_t jerr;
+    memset(&cinfo, 0, sizeof(cinfo));
+    memset(&jerr, 0, sizeof(jerr));
+
+    /* Written between setjmp() and a possible longjmp(), read after it: volatile, or the
+     * values seen on the error path are indeterminate. */
+    unsigned char *volatile output = NULL;
+    JSAMPROW *volatile rows = NULL;
+
+    cinfo.err = jpeg_std_error(&jerr.pub);
+    jerr.pub.error_exit = ph_jpeg_error_exit;
+    jerr.pub.emit_message = ph_jpeg_emit_message;
+    jerr.pub.output_message = ph_jpeg_output_message;
+    if (setjmp(jerr.escape)) {
+        jpeg_destroy_decompress(&cinfo);
+        free(output);
+        free(rows);
         if (out_err)
-            *out_err =
-                ph_tj_message_is_oom(tj_err) ? PH_ERR_ALLOCATION_FAILED : PH_ERR_CORRUPT_DATA;
-        ph_set_err_msg(err_msg, err_msg_cap, tj_err);
-        tjDestroy(handle);
+            *out_err = jerr.out_of_memory ? PH_ERR_ALLOCATION_FAILED : PH_ERR_CORRUPT_DATA;
+        ph_set_err_msg(err_msg, err_msg_cap, jerr.message);
+        return NULL;
+    }
+
+    jpeg_create_decompress(&cinfo);
+    jpeg_mem_src(&cinfo, buffer, (unsigned long)size);
+    if (jpeg_read_header(&cinfo, TRUE) != JPEG_HEADER_OK) {
+        /* A tables-only stream: valid JPEG syntax, no image in it. */
+        jpeg_destroy_decompress(&cinfo);
+        if (out_err)
+            *out_err = PH_ERR_CORRUPT_DATA;
+        ph_set_err_msg(err_msg, err_msg_cap, "JPEG stream contains no image");
         return NULL;
     }
 
@@ -116,71 +132,74 @@ unsigned char *ph_decode_jpeg_tj(const unsigned char *buffer, size_t size, int *
      * dimensions, not the requested decode size: it exists to reject decompression
      * bombs, which a scale request does not make safe -- the header can still claim an
      * enormous image regardless of what the caller asked to receive. */
-    if (ph_exceeds_pixel_limit((uint64_t)w, (uint64_t)h, max_pixels)) {
+    if (ph_exceeds_pixel_limit((uint64_t)cinfo.image_width, (uint64_t)cinfo.image_height,
+                               max_pixels)) {
+        jpeg_destroy_decompress(&cinfo);
         if (out_err)
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
         ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
-        tjDestroy(handle);
         return NULL;
     }
 
-    tjscalingfactor sf = ph_jpeg_scaling_factor(decode_scale);
-    w = TJSCALED(w, sf);
-    h = TJSCALED(h, sf);
+    const int out_channels = (req_comp == 1) ? 1 : 3;
+    cinfo.out_color_space = (req_comp == 1) ? JCS_GRAYSCALE : JCS_RGB;
+    cinfo.dct_method = JDCT_IFAST;
+    cinfo.do_fancy_upsampling = TRUE;
+    cinfo.scale_num = 1;
+    cinfo.scale_denom = ph_jpeg_scale_denom(decode_scale);
 
-    int pixelFormat = (req_comp == 1) ? TJPF_GRAY : TJPF_RGB;
-    int out_channels = (req_comp == 1) ? 1 : 3;
+    jpeg_start_decompress(&cinfo);
+    if (cinfo.output_components != out_channels) {
+        /* Should not happen for the two colour spaces requested above; checked because
+         * the buffer below is sized by out_channels, not by what libjpeg writes. */
+        jpeg_destroy_decompress(&cinfo);
+        if (out_err)
+            *out_err = PH_ERR_CORRUPT_DATA;
+        ph_set_err_msg(err_msg, err_msg_cap, "Unexpected JPEG output component count");
+        return NULL;
+    }
 
-    size_t pitch_size;
-    if (!ph_safe_image_alloc_size((uint64_t)w, (uint64_t)out_channels, 1, &pitch_size) ||
-        pitch_size > INT_MAX) {
+    const JDIMENSION w = cinfo.output_width, h = cinfo.output_height;
+    size_t stride, total;
+    if (w > INT_MAX || h > INT_MAX ||
+        !ph_safe_image_alloc_size((uint64_t)w, (uint64_t)out_channels, 1, &stride) ||
+        !ph_safe_image_alloc_size((uint64_t)stride, (uint64_t)h, 1, &total)) {
+        jpeg_destroy_decompress(&cinfo);
         if (out_err)
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
         ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
-        tjDestroy(handle);
-        return NULL;
-    }
-    int pitch = (int)pitch_size;
-
-    size_t alloc_size;
-    if (!ph_safe_image_alloc_size((uint64_t)pitch, (uint64_t)h, 1, &alloc_size)) {
-        if (out_err)
-            *out_err = PH_ERR_IMAGE_TOO_LARGE;
-        ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
-        tjDestroy(handle);
         return NULL;
     }
 
-    unsigned char *output = (unsigned char *)malloc(alloc_size);
-    if (!output) {
+    output = (unsigned char *)malloc(total);
+    rows = (JSAMPROW *)malloc(sizeof(JSAMPROW) * (size_t)h);
+    if (!output || !rows) {
+        jpeg_destroy_decompress(&cinfo);
+        free(output);
+        free(rows);
         if (out_err)
             *out_err = PH_ERR_ALLOCATION_FAILED;
         ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
-        tjDestroy(handle);
         return NULL;
     }
+    for (JDIMENSION y = 0; y < h; y++)
+        rows[y] = output + (size_t)y * stride;
 
-    int flags = TJFLAG_FASTDCT | TJFLAG_NOREALLOC;
-    if (tjDecompress2(handle, buffer, (unsigned long)size, output, w, pitch, h, pixelFormat,
-                      flags) < 0) {
-        const char *tj_err = tjGetErrorStr2(handle);
-        if (out_err)
-            *out_err =
-                ph_tj_message_is_oom(tj_err) ? PH_ERR_ALLOCATION_FAILED : PH_ERR_CORRUPT_DATA;
-        ph_set_err_msg(err_msg, err_msg_cap, tj_err);
-        free(output);
-        tjDestroy(handle);
-        return NULL;
-    }
+    /* Every row pointer at once, as TurboJPEG passed them: libjpeg writes straight into
+     * the output instead of staging rows in a buffer of its own. */
+    while (cinfo.output_scanline < h)
+        jpeg_read_scanlines(&cinfo, rows + cinfo.output_scanline, h - cinfo.output_scanline);
+    jpeg_finish_decompress(&cinfo);
+    jpeg_destroy_decompress(&cinfo);
+    free(rows);
 
-    *width = w;
-    *height = h;
+    *width = (int)w;
+    *height = (int)h;
     *channels = out_channels;
-    tjDestroy(handle);
     return output;
 }
 
 #else
-// No TurboJPEG — stb_image will handle JPEG
+// No native JPEG decoder -- stb_image will handle JPEG
 PH_API int ph_can_use_jpeg(void) { return 0; }
 #endif // PH_USE_TURBOJPEG

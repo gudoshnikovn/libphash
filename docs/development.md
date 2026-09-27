@@ -114,7 +114,7 @@ does: coverage is a measurement pass, not a correctness gate, so a `ctest` failu
 prints a warning and the script continues rather than aborting (a failed test still
 executed its lines). If a decoder submodule isn't built locally, that backend's
 native path simply can't be measured on
-that machine; `find_library(TURBOJPEG_LIB ...)` falls back to stb_image silently in
+that machine; `find_library(PHASH_LIBJPEG_LIB ...)` falls back to stb_image silently in
 that case, same as any other CMake build here, so check the summary's per-file
 breakdown (`lcov --list docs/coverage/cmake/native.info`) rather than assuming the
 option being `ON` means the backend was actually linked.

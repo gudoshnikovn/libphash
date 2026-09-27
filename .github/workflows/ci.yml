@@ -106,10 +106,10 @@ jobs:
     # libjpeg-turbo doesn't like add_subdirectory (see CMakeLists.txt), so its
     # submodule is built separately; the main configure below then finds the
     # resulting static lib in vendor/libjpeg-turbo/build.
-    - name: Build vendored TurboJPEG
+    - name: Build vendored libjpeg-turbo
       run: |
         cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
-        cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
+        cmake --build vendor/libjpeg-turbo/build --target jpeg-static -j
 
     - name: Configure CMake (full vendored build)
       run: cmake -B build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release ${{ matrix.extra_cmake_args }}
@@ -136,10 +136,10 @@ jobs:
       with:
         apt-packages: cmake nasm lcov
 
-    - name: Build vendored TurboJPEG
+    - name: Build vendored libjpeg-turbo
       run: |
         cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
-        cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
+        cmake --build vendor/libjpeg-turbo/build --target jpeg-static -j
 
     - name: Run coverage-cmake
       run: ./scripts/coverage_cmake.sh
@@ -349,7 +349,7 @@ jobs:
     - name: Build head
       run: |
         cmake -S pr/vendor/libjpeg-turbo -B pr/vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
-        cmake --build pr/vendor/libjpeg-turbo/build --target turbojpeg-static -j
+        cmake --build pr/vendor/libjpeg-turbo/build --target jpeg-static -j
         cmake -S pr -B pr/build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
         cmake --build pr/build --config Release -j
 
@@ -357,7 +357,7 @@ jobs:
       if: steps.base.outputs.sha != ''
       run: |
         cmake -S base/vendor/libjpeg-turbo -B base/vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
-        cmake --build base/vendor/libjpeg-turbo/build --target turbojpeg-static -j
+        cmake --build base/vendor/libjpeg-turbo/build --target jpeg-static -j
         cmake -S base -B base/build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
         cmake --build base/build --config Release -j
 
@@ -410,10 +410,10 @@ jobs:
       with:
         apt-packages: cmake clang nasm
 
-    - name: Build vendored TurboJPEG
+    - name: Build vendored libjpeg-turbo
       run: |
         cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DCMAKE_C_COMPILER=clang
-        cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
+        cmake --build vendor/libjpeg-turbo/build --target jpeg-static -j
 
     - name: Configure CMake (ASan/UBSan)
       run: |
@@ -436,10 +436,10 @@ jobs:
   # zlib-ng initialises its CPU dispatch table lazily and unsynchronised, which raced on
   # the first parallel PNG decodes until the loader started warming it once
   # (test_cold_parallel_decode is the test that sees it -- the other thread tests decode
-  # a sequential reference first and warm it by accident). TurboJPEG stays off: its
-  # archive is built out of band without the sanitizer flags, and it carries its own copy
-  # of zlib and spng that libpng/spng can bind to instead of the vendored ones, which
-  # would hide exactly the zlib-ng path this job is here to watch.
+  # a sequential reference first and warm it by accident). The full-native leg adds the
+  # JPEG decoder: libjpeg-turbo's libjpeg archive (jpeg-static). It is built out of band
+  # by the configure step without the sanitizer flags, so TSan sees libphash's side of
+  # the JPEG path but not libjpeg-turbo's internals.
   tsan:
     runs-on: ubuntu-latest
     strategy:
@@ -456,6 +456,11 @@ jobs:
             cmake_args: >-
               -DPHASH_USE_TURBOJPEG=OFF -DPHASH_USE_LIBPNG=ON -DPHASH_USE_WEBP=ON
               -DPHASH_USE_ZLIB_NG=ON -DPHASH_STRICT_DEPS=ON
+          - name: full-native
+            submodules: 'true'
+            cmake_args: >-
+              -DPHASH_USE_TURBOJPEG=ON -DPHASH_USE_LIBPNG=ON -DPHASH_USE_WEBP=ON
+              -DPHASH_USE_ZLIB_NG=ON -DPHASH_STRICT_DEPS=ON
           - name: spng-zlibng
             submodules: 'true'
             cmake_args: >-
@@ -471,7 +476,7 @@ jobs:
     - uses: ./.github/actions/setup-build
       with:
         submodules: ${{ matrix.submodules }}
-        apt-packages: cmake clang
+        apt-packages: cmake clang nasm
 
     - name: Configure CMake (TSan)
       run: >
@@ -539,10 +544,10 @@ jobs:
       with:
         apt-packages: cmake clang nasm
 
-    - name: Build vendored TurboJPEG
+    - name: Build vendored libjpeg-turbo
       run: |
         cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DCMAKE_C_COMPILER=clang
-        cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
+        cmake --build vendor/libjpeg-turbo/build --target jpeg-static -j
 
     - name: Configure CMake (fuzzers)
       run: cmake -B build -DPHASH_BUILD_FUZZERS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Debug
@@ -593,13 +598,13 @@ jobs:
     # (pulled in via add_subdirectory(), which inherits this project's own -fPIC
     # from CMakeLists.txt), TurboJPEG is built as a fully separate CMake
     # invocation that never sees that flag -- without it, linking libphash.so
-    # against libturbojpeg.a fails on Linux with "recompile with -fPIC". Found
+    # against libjpeg.a fails on Linux with "recompile with -fPIC". Found
     # during a release-workflow validation run (same TurboJPEG-then-shared-link
     # shape as here).
-    - name: Build vendored TurboJPEG
+    - name: Build vendored libjpeg-turbo
       run: |
         cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-        cmake --build vendor/libjpeg-turbo/build --target turbojpeg-static -j
+        cmake --build vendor/libjpeg-turbo/build --target jpeg-static -j
 
     # cmake --install into a throwaway prefix + build a mini find_package(phash)
     # consumer against it (task 4). Exercises both the static and shared build.

@@ -169,7 +169,7 @@ target_link_libraries(my_app PRIVATE phash::phash)
 ```
 
 Both forms pull in whatever the installed build was actually configured with
-(`-lturbojpeg -lpng16 -lwebp -lz`, or nothing extra for a minimal/stb_image-only
+(`-lphash_jpeg -lpng16 -lwebp -lz`, or nothing extra for a minimal/stb_image-only
 build) — you don't need to track that list by hand. See `MIGRATION.md` if you're
 moving a 1.x integration that linked by hand onto either of these.
 

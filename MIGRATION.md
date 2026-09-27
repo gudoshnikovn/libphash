@@ -328,7 +328,7 @@ at configure time instead of silently linking an incompatible major.
 $ cc my_app.c $(pkg-config --cflags --libs libphash) -o my_app
 ```
 
-Both forms pull in whatever backend libraries (`-lturbojpeg`, `-lpng16`, `-lwebp`,
+Both forms pull in whatever backend libraries (`-lphash_jpeg`, `-lpng16`, `-lwebp`,
 `-lz`, ...) the installed build was actually configured with — you no longer need to
 track that list by hand for a static link.
 
