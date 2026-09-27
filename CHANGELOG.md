@@ -479,6 +479,17 @@ walkthrough.
   buffer larger than the range libjpeg-turbo's own API accepts is reported as
   `PH_ERR_IMAGE_TOO_LARGE` rather than silently truncated.
 
+- **`ph_histogram_intersection()` did not score a histogram against itself as exactly
+  `1.0`.** The score was summed in floating point, and for roughly a third of histograms
+  that sum landed one ulp short — `0.99999999999999989` instead of `1.0` — with which
+  histograms were affected depending on the platform and the compiler flags. The CMake
+  build on x86_64 additionally compiled this code with `-ffast-math`, so the same pair
+  of digests could compare differently there than on arm64 or in the Makefile build.
+  The score is now computed exactly: identical or proportionally scaled histograms score
+  exactly `1.0`, swapping the arguments gives a bit-identical result, and the value is
+  the same on every platform. Other scores change by at most a few units in the last
+  place, toward the correctly rounded value. ColorHash digests themselves are unchanged.
+
 - **`libphash.h` could not be included by GCC in C23 mode.** Every exported function was
   declared with the C23 `[[nodiscard]]` attribute placed after the visibility attribute,
   a position C23 does not allow. Clang tolerates it; GCC 14 and newer reject it with one
