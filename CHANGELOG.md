@@ -511,6 +511,13 @@ walkthrough.
 
 ### Fixed
 
+- **The bundled zlib-ng was not used for PNG in a full build, and static links carried a
+  second zlib and spng.** The vendored libjpeg-turbo 3.x builds its own zlib and spng into
+  its TurboJPEG archive; linked first, those copies won on macOS and the PNG decoders used
+  them instead of zlib-ng. The JPEG backend now uses libjpeg-turbo's libjpeg API, which has
+  neither. JPEG pixels and hashes are unchanged. Link flags: the installed JPEG archive is
+  now `-lphash_jpeg` (was `-lturbojpeg`); `pkg-config`/`find_package(phash)` pick it up
+  automatically.
 - **`threads = 0` ignored container and affinity CPU limits.** The batch API started one
   worker per CPU of the machine, so a container limited to 2 of 6 CPUs ran 6 workers —
   three times the memory for no throughput. It now counts the CPUs the process may use:
