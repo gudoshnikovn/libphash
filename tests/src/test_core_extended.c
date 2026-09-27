@@ -28,17 +28,18 @@ void test_scratchpad_management(void) {
     // 2. Reuse WITHIN capacity
     uint8_t *p2 = ph_get_scratchpad(ctx, 200);
     ASSERT_PTR_NOT_NULL(p2);
-    if (p2 != p1 + 100) {
+    // The next block starts at the first aligned offset past the previous one.
+    if (p2 != p1 + ph_arena_align_up(100)) {
         fprintf(stderr, "[FAIL] Scratchpad did not increment offset correctly\n");
         exit(1);
     }
 
     // 3. Growth triggering reallocation
-    // Current offset is 300. Max capacity is at least 1024.
+    // Current offset is 128 + 200. Max capacity is at least 1024.
     // Let's request something huge.
     uint8_t *p3 = ph_get_scratchpad(ctx, 2000);
     ASSERT_PTR_NOT_NULL(p3);
-    if (ctx->arena.capacity < 2300) {
+    if (ctx->arena.capacity < ph_arena_align_up(128 + 200) + 2000) {
         fprintf(stderr, "[FAIL] Capacity did not grow: %zu\n", ctx->arena.capacity);
         exit(1);
     }

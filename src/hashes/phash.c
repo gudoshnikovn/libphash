@@ -159,9 +159,12 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
      */
     bool use_cache = (dct_size == 32);
 
-    size_t sz1 = (size_t)dct_size * dct_size;                             // dct_input
-    size_t sz2 = use_cache ? 0 : (sz1 * sizeof(float));                   // dct_mat (if not cached)
-    size_t sz3 = (size_t)reduction_size * reduction_size * sizeof(float); // dct_out
+    /* One block, three buffers. The byte buffer comes first and its size is rounded up so
+     * that the float buffers behind it stay aligned: dct_size^2 is odd for an odd
+     * dct_size. */
+    size_t sz1 = ph_arena_align_up((size_t)dct_size * dct_size);                // dct_input
+    size_t sz2 = use_cache ? 0 : ((size_t)dct_size * dct_size * sizeof(float)); // dct_mat
+    size_t sz3 = (size_t)reduction_size * reduction_size * sizeof(float);       // dct_out
 
     size_t saved_offset = ctx->arena.offset;
     uint8_t *scratch = ph_get_scratchpad(ctx, sz1 + sz2 + sz3);

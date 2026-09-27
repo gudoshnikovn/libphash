@@ -199,8 +199,9 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
 
     /* One arena request for everything. Two would not do: ph_get_scratchpad() may grow
      * the arena, which reallocates its backing buffer and invalidates any pointer already
-     * handed out from it -- `norm` in particular. The block-sum scratch comes first so
-     * that its int64_t array is aligned whatever the image size. */
+     * handed out from it -- `norm` in particular. The block-sum scratch comes first: the
+     * arena aligns only the start of the block, so the int64_t array must sit there and
+     * the byte buffer, which needs no alignment, goes last. */
     const int kernel_half = (int)(4.0f * powf(ctx->config.mhash_alpha, ctx->config.mhash_level));
     size_t work_bytes = ph_mh_block_sums_scratch(n, kernel_half);
     size_t saved_offset = ctx->arena.offset;

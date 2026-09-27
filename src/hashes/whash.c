@@ -187,7 +187,8 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
     if (!full_gray)
         return PH_ERR_ALLOCATION_FAILED;
 
-    size_t sz_scaled = (size_t)image_scale * image_scale;
+    /* Rounded up so the float buffers behind the byte one stay aligned. */
+    size_t sz_scaled = ph_arena_align_up((size_t)image_scale * image_scale);
     size_t sz_d = (size_t)image_scale * image_scale * sizeof(float);
     size_t sz_temps = (size_t)image_scale * 2 * sizeof(float);
 

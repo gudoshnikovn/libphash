@@ -222,7 +222,55 @@ void test_phash_dirty_arena_determinism() {
     PASS("test_phash_dirty_arena_determinism");
 }
 
+/* Every scratchpad block must be aligned for any scalar type, whatever the sizes of the
+ * blocks handed out before it. The arena used to advance by the raw request size, so an
+ * odd-sized block left the next one misaligned. */
+void test_scratchpad_blocks_are_aligned() {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+
+    static const size_t sizes[] = {1, 3, 9, 17, 25, 1000, 1, 7};
+    size_t mark = ctx->arena.offset;
+    for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
+        uint8_t *block = ph_get_scratchpad(ctx, sizes[i]);
+        ASSERT_PTR_NOT_NULL(block);
+        ASSERT_INT_EQ(0, (int)((uintptr_t)block % PH_ARENA_ALIGNMENT));
+    }
+    ctx->arena.offset = mark;
+
+    ph_free(ctx);
+    PASS("test_scratchpad_blocks_are_aligned");
+}
+
+/* pHash over the whole accepted parameter range. Odd dct_size used to put the float
+ * buffers behind a dct_size^2-byte one at an odd address -- undefined behaviour that
+ * only UBSan (make debug) reports, so this is the case that must stay under it. */
+void test_phash_every_dct_size() {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
+
+    for (int dct = PH_DCT_MIN_REDUCTION_SIZE; dct <= PH_DCT_MAX_SIZE; dct++) {
+        int max_red = dct < PH_DCT_MAX_REDUCTION_SIZE ? dct : PH_DCT_MAX_REDUCTION_SIZE;
+        for (int red = PH_DCT_MIN_REDUCTION_SIZE; red <= max_red; red++) {
+            uint64_t first = 0, again = 0;
+            ASSERT_OK(ph_context_set_phash_params(ctx, dct, red));
+            ASSERT_OK(ph_compute_phash(ctx, &first));
+            ASSERT_OK(ph_compute_phash(ctx, &again));
+            ASSERT_UINT64_EQ(first, again);
+            /* Only reduction_size^2 bits can ever be set. */
+            if (red < 8)
+                ASSERT_UINT64_EQ(0, first >> (red * red));
+        }
+    }
+
+    ph_free(ctx);
+    PASS("test_phash_every_dct_size");
+}
+
 int main() {
+    test_scratchpad_blocks_are_aligned();
+    test_phash_every_dct_size();
     test_dct2_partial_unit();
     test_median_bitpack_unit();
     test_phash_e2e();

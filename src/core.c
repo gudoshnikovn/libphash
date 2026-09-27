@@ -471,7 +471,13 @@ uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size) {
         ctx->arena.capacity = 0;
     }
 
-    size_t required = ctx->arena.offset + size;
+    /* Every block starts on a PH_ARENA_ALIGNMENT boundary: the offset left by the previous
+     * block is rounded up first. The backing buffer itself is allocated with that
+     * alignment, so the block is aligned in absolute terms too. */
+    size_t start = ph_arena_align_up(ctx->arena.offset);
+    if (start < ctx->arena.offset || size > SIZE_MAX - start)
+        return NULL;
+    size_t required = start + size;
 
     if (ctx->arena.capacity < required) {
         // Grow by more than required to avoid frequent reallocs
@@ -479,14 +485,16 @@ uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size) {
         if (new_size < 1024)
             new_size = 1024;
 
-        // Ensure new_size is a multiple of 32 for posix_memalign
-        new_size = (new_size + 31) & ~(size_t)31;
+        // Ensure new_size is a multiple of the alignment for posix_memalign
+        if (new_size > SIZE_MAX - (PH_ARENA_ALIGNMENT - 1))
+            return NULL;
+        new_size = ph_arena_align_up(new_size);
 
         uint8_t *new_ptr = NULL;
 #if defined(_WIN32)
-        new_ptr = (uint8_t *)_aligned_malloc(new_size, 32);
+        new_ptr = (uint8_t *)_aligned_malloc(new_size, PH_ARENA_ALIGNMENT);
 #else
-        if (posix_memalign((void **)&new_ptr, 32, new_size) != 0) {
+        if (posix_memalign((void **)&new_ptr, PH_ARENA_ALIGNMENT, new_size) != 0) {
             new_ptr = NULL;
         }
 #endif
@@ -506,8 +514,8 @@ uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size) {
         ctx->arena.capacity = new_size;
     }
 
-    uint8_t *ptr = ctx->arena.buffer + ctx->arena.offset;
-    ctx->arena.offset += size;
+    uint8_t *ptr = ctx->arena.buffer + start;
+    ctx->arena.offset = required;
 
     return ptr;
 }

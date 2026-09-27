@@ -653,8 +653,21 @@ void ph_digest_shape(const struct ph_context_config *config, ph_algorithm_t algo
 /* Zeroes *out and sets its size and kind from ph_digest_shape(). */
 void ph_digest_begin(ph_digest_t *out, const ph_context_t *ctx, ph_algorithm_t algo);
 
+/* Alignment of the arena's backing buffer and of every block ph_get_scratchpad() hands
+ * out. 32 covers every scalar type (max_align_t is 16 on the supported targets) and a
+ * 256-bit vector. */
+#define PH_ARENA_ALIGNMENT 32
+
+/* Rounds n up to a multiple of PH_ARENA_ALIGNMENT. For carving one scratchpad block into
+ * several typed buffers: the arena aligns the start of a block, the offsets inside it are
+ * the caller's. Callers pass sizes far below SIZE_MAX, so the rounding cannot wrap. */
+static inline size_t ph_arena_align_up(size_t n) {
+    return (n + (PH_ARENA_ALIGNMENT - 1)) & ~(size_t)(PH_ARENA_ALIGNMENT - 1);
+}
+
 /* Ensures the context's scratchpad is at least 'size' bytes.
- * Returns NULL on failure, pointer to buffer on success. */
+ * Returns NULL on failure, pointer to buffer on success. The pointer is aligned to
+ * PH_ARENA_ALIGNMENT. */
 uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size);
 
 #endif /* INTERNAL_H */
