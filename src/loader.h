@@ -78,11 +78,6 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
                                   char *err_msg, size_t err_msg_cap);
 #endif
 
-// Runtime capability checks (always available)
-int ph_can_use_libjpeg(void);
-int ph_can_use_libpng(void);
-int ph_can_use_webp(void);
-
 // Image Backend Interface for unified decoding
 typedef struct {
     int (*can_read)(const uint8_t *magic, size_t len);
