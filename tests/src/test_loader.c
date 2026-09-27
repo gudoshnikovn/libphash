@@ -37,7 +37,7 @@ void test_png_loading() {
     ASSERT_INT_EQ(100, w);
     ASSERT_INT_EQ(100, h);
 
-    printf("PNG Loader stats: w=%d, h=%d, ch=%d, png_active=%d\n", w, h, ch, ph_can_use_libpng());
+    printf("PNG Loader stats: w=%d, h=%d, ch=%d, png_active=%d\n", w, h, ch, ph_can_use_png());
 
     ph_free(ctx);
     printf("test_png_loading: PASSED\n");
@@ -706,7 +706,7 @@ static void check_png_backend_parity(const char *path) {
     ASSERT_INT_EQ(rh, gh);
     ASSERT_INT_EQ(1, gc);
 
-    if (ph_can_use_libpng()) {
+    if (ph_can_use_png()) {
         // Both native backends must reproduce the library's own conversion
         // byte for byte. (stb_image, the fallback backend, converts with its
         // own coefficients, so this exactness is only required of libpng/spng.)
@@ -735,7 +735,7 @@ static void check_png_backend_parity(const char *path) {
 // a hash taken from the decoder's grayscale output equals the hash taken from the
 // RGB decode, so switching PNG backends cannot move a stored hash.
 static void check_png_gray_hash_parity(const char *path) {
-    if (!ph_can_use_libpng())
+    if (!ph_can_use_png())
         return; // stb_image uses different conversion coefficients; see above.
 
     ph_context_t *rgb_ctx = NULL;

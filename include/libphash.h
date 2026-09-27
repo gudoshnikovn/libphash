@@ -1190,22 +1190,53 @@ PH_NODISCARD PH_API ph_error_t ph_digest_from_hex(const char *text, ph_digest_t 
 PH_NODISCARD PH_API ph_error_t ph_hash_to_hex(uint64_t hash, char *out, size_t out_size);
 
 /**
- * @brief Checks if libjpeg-turbo is available and loaded.
- * @return 1 if available, 0 otherwise.
+ * @brief Whether this build decodes JPEG with libjpeg-turbo, decided when the library
+ * was compiled.
+ * @return 1 if it does, 0 if JPEG goes through the bundled stb_image fallback.
  */
 PH_API int ph_can_use_libjpeg(void);
 
 /**
- * @brief Checks if libpng is available and loaded.
- * @return 1 if available, 0 otherwise.
+ * @brief Whether this build has a native PNG decoder, decided when the library was
+ * compiled.
+ *
+ * Native means either of the two alternative PNG backends, libpng or spng; which one is
+ * named by ph_get_build_info(). Renamed in 2.0.0 from ph_can_use_libpng(), which answered
+ * 1 for spng too, where libpng is not linked at all.
+ * @return 1 if PNG is decoded natively, 0 if it goes through the stb_image fallback.
  */
-PH_API int ph_can_use_libpng(void);
+PH_API int ph_can_use_png(void);
 
 /**
- * @brief Checks if libwebp is available and loaded.
- * @return 1 if available, 0 otherwise.
+ * @brief Whether this build decodes WebP with libwebp, decided when the library was
+ * compiled.
+ * @return 1 if it does, 0 if WebP is not supported at all (loading one returns
+ * @c PH_ERR_DECODER_UNAVAILABLE; stb_image has no WebP decoder).
  */
 PH_API int ph_can_use_webp(void);
+
+/**
+ * @brief Describes how this library binary was built, as one line of text for logs and
+ * bug reports.
+ *
+ * Space-separated `key=value` pairs, for example:
+ * `version=2.0.0 jpeg=turbojpeg png=spng webp=libwebp zlib=zlib-ng threads=on simd=neon mock=off`
+ *
+ * - `jpeg`: `turbojpeg` or `stb`; `png`: `libpng`, `spng` or `stb`; `webp`: `libwebp` or
+ *   `none`; `zlib`: `zlib-ng`, `zlib` or `none` (stb_image inflates PNG itself);
+ * - `threads`: `on` if the batch functions can use worker threads, `off` if they always
+ *   run sequentially;
+ * - `simd`: the widest instruction set the library was compiled for -- `avx2`, `sse4.2`,
+ *   `neon` or `none`;
+ * - `mock`: `on` only in a test build that registers the mock decoder
+ *   (`PHASH_ENABLE_MOCK_BACKEND`); a shipped library says `off`.
+ *
+ * Keys keep their meaning; later versions may add keys at the end and add values to a
+ * key's list. Meant to be logged, not parsed for decisions -- to branch on a decoder,
+ * use ph_can_use_libjpeg(), ph_can_use_png() and ph_can_use_webp().
+ * @return A static NUL-terminated string. Never NULL; the caller must not free it.
+ */
+PH_API const char *ph_get_build_info(void);
 
 #ifdef __cplusplus
 }

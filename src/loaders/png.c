@@ -24,7 +24,7 @@ int ph_can_read_png(const uint8_t *magic, size_t len) {
 
 #include <png.h>
 
-PH_API int ph_can_use_libpng(void) { return 1; }
+PH_API int ph_can_use_png(void) { return 1; }
 
 // Custom memory read callback for png_set_read_fn
 typedef struct {
@@ -329,7 +329,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
 /* --- PNG Decoder (spng) --- */
 #include "spng.h"
 
-PH_API int ph_can_use_libpng(void) { return 1; }
+PH_API int ph_can_use_png(void) { return 1; }
 
 /* Unlike libpng's setjmp/longjmp model, every spng call returns its own status
  * code directly -- SPNG_EMEM is spng's own distinct "an internal allocation
@@ -477,5 +477,5 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
 
 #else
 // No PNG decoder — stb_image will handle PNG
-PH_API int ph_can_use_libpng(void) { return 0; }
+PH_API int ph_can_use_png(void) { return 0; }
 #endif // PH_USE_LIBPNG / PH_USE_SPNG
