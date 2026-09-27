@@ -479,6 +479,15 @@ walkthrough.
   buffer larger than the range libjpeg-turbo's own API accepts is reported as
   `PH_ERR_IMAGE_TOO_LARGE` rather than silently truncated.
 
+- **The CMake build ignored `CMAKE_BUILD_TYPE` for the optimisation level.** `-O3`
+  (`/O2` on MSVC) was forced on top of every build type, so a `Debug` build was
+  optimised and `RelWithDebInfo`/`MinSizeRel` were silently turned into `-O3`. Each build
+  type now gets its own level (`Debug` unoptimised, `Release` `-O3`, `RelWithDebInfo`
+  `-O2`, `MinSizeRel` `-Os`), and a standalone configure that names no build type
+  defaults to `Release`. When libphash is added with `add_subdirectory()`, the parent's
+  build type applies and no default is imposed. The project's warning flags are no
+  longer applied to the vendored decoders.
+
 - **`ph_histogram_intersection()` did not score a histogram against itself as exactly
   `1.0`.** The score was summed in floating point, and for roughly a third of histograms
   that sum landed one ulp short — `0.99999999999999989` instead of `1.0` — with which
