@@ -511,6 +511,11 @@ walkthrough.
 
 ### Fixed
 
+- **A load could succeed with the EXIF orientation silently not applied.** When the buffer
+  for rotating an oriented photo could not be allocated, `ph_load_from_file()`/
+  `ph_load_from_memory()` returned `PH_SUCCESS` with the image left in sensor orientation,
+  and every hash described a picture the caller never asked for. The load now fails with
+  `PH_ERR_ALLOCATION_FAILED` and no image is loaded.
 - **pHash with an odd `dct_size` read and wrote misaligned `float`s.** Every odd value from
   3 to 31 — all accepted by `ph_context_set_phash_params()` — placed the DCT buffers at an
   odd address: undefined behaviour, reported by UBSan and a crash on strict-alignment
