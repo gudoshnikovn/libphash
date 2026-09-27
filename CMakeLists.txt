@@ -32,6 +32,18 @@ else()
     set(PHASH_IS_TOP_LEVEL OFF)
 endif()
 
+# The optimisation level belongs to CMAKE_BUILD_TYPE, so a standalone configure that
+# names none must not silently produce an unoptimised library. Release when nothing
+# was asked for; never under a multi-config generator (the type is picked at build
+# time there) and never inside a parent project, whose choice this is. Until this
+# line existed, the default came from two unrelated places: an -O3 hard-coded over
+# every build type, and libwebp/zlib-ng writing Release into the cache as a side
+# effect of add_subdirectory() -- which the minimal (stb-only) build never reaches.
+if(PHASH_IS_TOP_LEVEL AND NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING
+        "Build type: Debug, Release, RelWithDebInfo or MinSizeRel" FORCE)
+endif()
+
 # BUILD_SHARED_LIBS and BUILD_TESTING are global CMake variables, not options of the
 # vendored subprojects -- but those subprojects have to see them OFF while they
 # configure. Forcing them into the cache and walking away silently reconfigured any
@@ -219,9 +231,35 @@ if(MSVC)
     # any platform, and glibc hides it too once CMAKE_C_EXTENSIONS OFF turns
     # __STRICT_ANSI__ on, so the constant is now defined by src/internal.h and
     # tests/src/test_macros.h and no longer depends on the libc at all.
-    add_compile_options(/W3 /O2 /experimental:c11atomics)
+    add_compile_options(/experimental:c11atomics)
+
+    # /utf-8: the sources carry non-ASCII text (em dashes in comments), which MSVC
+    # otherwise decodes in the machine's ANSI code page and reports as C4819.
+    set(PHASH_OWN_COMPILE_OPTIONS /W3 /utf-8)
 else()
-    add_compile_options(-Wall -Wextra -O3 -fPIC)
+    # -fPIC stays directory-wide: the vendored decoders are linked into the same
+    # library and need it as much as our own objects do.
+    add_compile_options(-fPIC)
+
+    set(PHASH_OWN_COMPILE_OPTIONS -Wall -Wextra)
+
+    # Warnings the library's own sources are clean under, on both GCC and Clang. They
+    # cost nothing today and catch regressions from here on. Applied to `phash` only:
+    # tests and the fuzzer keep the -Wall -Wextra baseline (the test sources were
+    # never written to this set -- e.g. `void test_x()` trips -Wstrict-prototypes).
+    # Each flag is probed, since GCC rejects an unknown -W option outright.
+    set(PHASH_LIBRARY_WARNING_CANDIDATES
+        -Wshadow -Wmissing-prototypes -Wstrict-prototypes -Wold-style-definition
+        -Wmissing-variable-declarations -Wundef -Wwrite-strings -Wswitch-enum
+        -Wvla -Wformat=2)
+    set(PHASH_LIBRARY_WARNINGS "")
+    foreach(flag ${PHASH_LIBRARY_WARNING_CANDIDATES})
+        string(MAKE_C_IDENTIFIER "PHASH_HAS${flag}" flag_var)
+        check_c_compiler_flag("${flag}" ${flag_var})
+        if(${flag_var})
+            list(APPEND PHASH_LIBRARY_WARNINGS "${flag}")
+        endif()
+    endforeach()
     
     if(PHASH_OPTIMIZE_NATIVE)
         add_compile_options(-march=native)
@@ -325,10 +363,15 @@ if(NOT WIN32)
     target_link_libraries(phash PRIVATE m)
 endif()
 
+# Warnings are a property of this project's code, not of the directory: set with
+# add_compile_options() they also reached every vendored decoder added below, which
+# made -Werror impossible (it would fail on their code, not ours).
+target_compile_options(phash PRIVATE ${PHASH_OWN_COMPILE_OPTIONS} ${PHASH_LIBRARY_WARNINGS})
+
 if(PHASH_COVERAGE)
     # -O0: matches Makefile's `coverage` (PHASH_COVERAGE=1 there too, same intent,
     # unrelated implementation) -- line/branch counts are only trustworthy without
-    # the reordering/inlining -O3 above already applied to `phash`.
+    # the reordering/inlining an optimising build type (Release: -O3) applies.
     #
     # -fprofile-update=atomic: this project's tests run gcov-instrumented code from
     # multiple threads (test_batch_stress, test_thread_safety), and a static inline
@@ -809,6 +852,7 @@ if(PHASH_BUILD_FUZZERS)
     target_link_options(phash PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS})
 
     add_executable(fuzz_load tests/fuzz/fuzz_load.c)
+    target_compile_options(fuzz_load PRIVATE ${PHASH_OWN_COMPILE_OPTIONS})
     target_link_libraries(fuzz_load PRIVATE phash)
     target_compile_options(fuzz_load PRIVATE -fsanitize=fuzzer,address,undefined -g -O1)
     target_link_options(fuzz_load PRIVATE -fsanitize=fuzzer,address,undefined)
@@ -822,6 +866,7 @@ if(PHASH_BUILD_TESTS)
         get_filename_component(test_name ${test_src} NAME_WE)
         add_executable(${test_name} ${test_src})
         target_link_libraries(${test_name} PRIVATE phash)
+        target_compile_options(${test_name} PRIVATE ${PHASH_OWN_COMPILE_OPTIONS})
         target_include_directories(${test_name} PRIVATE 
             ${CMAKE_CURRENT_SOURCE_DIR}/src
             ${CMAKE_CURRENT_SOURCE_DIR}/tests/src
