@@ -58,6 +58,7 @@ static tjscalingfactor ph_jpeg_scaling_factor(ph_decode_scale_t decode_scale) {
         case PH_DECODE_SCALE_EIGHTH:
             return (tjscalingfactor){1, 8};
         case PH_DECODE_SCALE_FULL:
+        case PH_DECODE_SCALE_FORCE_INT32_: /* width spacer; the setter never stores it */
         default:
             return (tjscalingfactor){1, 1};
     }

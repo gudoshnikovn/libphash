@@ -84,6 +84,8 @@ static int ph_error_kind(ph_error_t err) {
         case PH_ERR_IO:
         case PH_ERR_REQUIRES_COLOR:
             return 1;
+        case PH_ERR_FORCE_INT32_: /* width spacer, not a code: deliberately not in the table */
+            return -1;
     }
     return -1; /* not an enumerator */
 }

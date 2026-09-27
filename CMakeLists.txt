@@ -912,6 +912,19 @@ if(PHASH_BUILD_TESTS)
         add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
     endforeach()
 
+    # test_abi.c built again under -fshort-enums, which shrinks any public enum that lost
+    # its width spacer. Header-only by design, so it is not linked against phash. MSVC has
+    # no such flag (nor clang-cl, which MSVC also covers), and its enums are always int-sized.
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND NOT MSVC)
+        add_executable(test_abi_short_enums ${CMAKE_CURRENT_SOURCE_DIR}/tests/src/test_abi.c)
+        target_include_directories(test_abi_short_enums PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/src
+        )
+        target_compile_options(test_abi_short_enums PRIVATE ${PHASH_OWN_COMPILE_OPTIONS} -fshort-enums)
+        add_test(NAME test_abi_short_enums COMMAND $<TARGET_FILE:test_abi_short_enums>)
+    endif()
+
     # Add benchmark as a smoke test (verifies loading and hashing works)
     add_test(NAME benchmark_smoke COMMAND $<TARGET_FILE:test_benchmark> hash ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/photo.jpeg 10)
 endif()

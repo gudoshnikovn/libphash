@@ -91,6 +91,7 @@ PH_API const char *ph_get_error_string(ph_error_t err) {
             return "File could not be opened or read";
         case PH_ERR_REQUIRES_COLOR:
             return "Algorithm requires a color image, but the loaded image is grayscale";
+        case PH_ERR_FORCE_INT32_: /* width spacer, not an error code */
         default:
             return "Unknown error";
     }

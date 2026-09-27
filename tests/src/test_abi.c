@@ -10,6 +10,22 @@
  * consumer reading garbage. Until the 2.0.0 tag a deliberate change updates the
  * expected values here; after it, a change here is a new major version. */
 
+/* This file is also built a second time with -fshort-enums (test_abi_short_enums in the
+ * Makefile and in CMake), which is the flag that shrinks an enum without a spacer. It
+ * must therefore stay header-only: it calls no library function, because that second
+ * binary is deliberately not ABI-compatible with the library it would link against. */
+
+/* Every public enum is 4 bytes wide whatever -fshort-enums says: that width is the type
+ * of every ph_error_t return value and of the batch structs' `status` field. */
+static void test_public_enums_are_32_bit(void) {
+    ASSERT_INT_EQ(4, (int)sizeof(ph_error_t));
+    ASSERT_INT_EQ(4, (int)sizeof(ph_digest_kind_t));
+    ASSERT_INT_EQ(4, (int)sizeof(ph_hash_flags_t));
+    ASSERT_INT_EQ(4, (int)sizeof(ph_whash_mode_t));
+    ASSERT_INT_EQ(4, (int)sizeof(ph_decode_scale_t));
+    PASS("test_public_enums_are_32_bit");
+}
+
 /* The hash arrays in the batch structs are sized by their own capacity, not by
  * PH_HASH_FLAGS_COUNT, so adding a uint64_t algorithm inside 2.x does not move `status`
  * or change the struct size. */
@@ -60,6 +76,7 @@ static void test_batch_struct_layout(void) {
 }
 
 int main(void) {
+    test_public_enums_are_32_bit();
     test_batch_hash_capacity_is_decoupled_from_flag_count();
     test_batch_struct_layout();
     printf("test_abi: PASSED\n");

@@ -118,6 +118,19 @@ header, because they affect binary compatibility for anyone linking a prebuilt
   renumbered or reused, even after the code it named is removed (see the retired `-2`
   in the header for the pattern to follow, and `tests/src/test_error_diagnostics.c` for
   the test that pins every code to a description and fails if one goes missing).
+- **Public enums stay 32 bits wide.** Every public enum ends in a `*_FORCE_INT32_`
+  enumerator that is not a real value; it keeps the enum int-sized under
+  `-fshort-enums` (the default ABI on ARM EABI), where the compiler would otherwise
+  pick the smallest type that fits. A new public enum gets one too, and new
+  enumerators go before it. `tests/src/test_abi.c` checks the width, and is built a
+  second time with `-fshort-enums` to prove the spacer works.
+- **What the ABI covers.** The shared library's soname carries only the major version
+  (`libphash.so.2`), so everything a compiled consumer depends on must stay put for
+  the whole major: exported function signatures, the size and field offsets of every
+  public struct, the width and values of every public enum, and array capacities that
+  shape a struct (`PH_DIGEST_MAX_BYTES`, `PH_BATCH_HASHES_CAPACITY`).
+  `tests/src/test_abi.c` pins the struct layouts; a change that makes it fail is a
+  major version bump. The ABI is frozen by the 2.0.0 tag.
 - **This project follows semantic versioning** for `include/libphash.h`: a
   source-or-binary-incompatible change (a removed/renamed public symbol, a changed
   function signature, a struct layout change, a default that changes existing hash

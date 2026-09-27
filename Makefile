@@ -137,7 +137,7 @@ OBJS = $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
 # Tests
 TEST_SRCS = $(wildcard $(TEST_DIR)/test_*.c)
-TEST_BINS = $(TEST_SRCS:$(TEST_DIR)/%.c=%)
+TEST_BINS = $(TEST_SRCS:$(TEST_DIR)/%.c=%) test_abi_short_enums
 
 # Default target
 all: $(LIB_NAME) $(TEST_BINS)
@@ -178,6 +178,11 @@ $(OBJ_DIR)/image/stb_resize_impl.o: $(SRC_DIR)/image/stb_resize_impl.c
 	$(CC) $(CFLAGS) $(STB_NOSAN_CFLAGS) -c $< -o $@
 
 # Test compilation
+# test_abi.c built again under -fshort-enums, which shrinks any public enum that lost its
+# width spacer. Header-only by design, so it is not linked against the library.
+test_abi_short_enums: $(TEST_DIR)/test_abi.c
+	$(CC) $(CFLAGS) -fshort-enums $< -o $@ $(LDFLAGS)
+
 test_%: $(TEST_DIR)/test_%.c $(LIB_NAME)
 	$(CC) $(CFLAGS) $< $(LIB_NAME) -o $@ $(LDFLAGS)
 

@@ -10,6 +10,12 @@
  *
  * Designed for easy FFI integration (Python, Rust, Node.js).
  * All functions are thread-safe provided they operate on different contexts.
+ *
+ * ABI: the shared library's soname carries only the major version, so from the 2.0.0
+ * tag on, everything a compiled consumer depends on stays fixed for the whole 2.x
+ * series -- function signatures, the size and field offsets of every public struct,
+ * and the width and values of every public enum. New functions, enumerators and error
+ * codes may be added in a minor release; nothing existing is moved or reused.
  */
 
 // --- Platform & Export Macros ---
@@ -71,10 +77,23 @@ extern "C" {
  * so it now costs 136 bytes wherever one lives. */
 #define PH_DIGEST_MAX_BYTES 128
 
+// --- Enum width ---
+
+/* Every public enum ends in a *_FORCE_INT32_ enumerator. It is not a value any function
+ * accepts or returns: it exists only to make the enum's range need a full 32-bit int, so
+ * that the enum is 4 bytes wide under every compiler and flag. Without it, -fshort-enums
+ * -- the default ABI on ARM EABI targets -- shrinks an enum to the smallest type that
+ * holds its values, and a library and a consumer built with different settings disagree
+ * on the width of every ph_error_t return value and of the `status` field in the batch
+ * structs. Nothing diagnoses that mismatch; the caller just reads garbage. The width of
+ * a public enum is part of the ABI. */
+#define PH_ENUM_FORCE_INT32_VALUE 0x7FFFFFFF
+
 // --- Error Codes ---
 
 /* ABI rule: every value here is spelled out explicitly, and new codes are only
- * ever appended at the end of the list with the next free negative value.
+ * ever appended at the end of the list (before PH_ERR_FORCE_INT32_, which is not a
+ * code) with the next free negative value.
  * Renumbering or reusing a value silently changes the meaning of an error in
  * already-compiled consumers and in FFI bindings that hardcode the number, so
  * a removed code's value stays retired rather than being handed to a new one. */
@@ -117,6 +136,7 @@ typedef enum {
                                      ///< ph_compute_color_moments_hash()) was asked to run on an
                                      ///< image that carries fewer than 3 channels -- see
                                      ///< ph_context_set_load_grayscale().
+    PH_ERR_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE ///< Not an error code -- see "Enum width".
 } ph_error_t;
 
 /**
@@ -132,6 +152,7 @@ PH_API const char *ph_get_error_string(ph_error_t err);
 typedef enum {
     PH_WHASH_FAST = 0, ///< High-speed 8x8 median approximation (default).
     PH_WHASH_FULL = 1, ///< Academically accurate full 2D DWT matching ImageHash.
+    PH_WHASH_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE ///< Not a mode -- see "Enum width".
 } ph_whash_mode_t;
 
 /**
@@ -142,6 +163,7 @@ typedef enum {
     PH_DECODE_SCALE_HALF = 1,    ///< Decode at 1/2 linear resolution (1/4 the pixels).
     PH_DECODE_SCALE_QUARTER = 2, ///< Decode at 1/4 linear resolution (1/16 the pixels).
     PH_DECODE_SCALE_EIGHTH = 3,  ///< Decode at 1/8 linear resolution (1/64 the pixels).
+    PH_DECODE_SCALE_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE ///< Not a scale -- see "Enum width".
 } ph_decode_scale_t;
 
 // --- Types ---
@@ -198,7 +220,8 @@ typedef enum {
     PH_DIGEST_KIND_COEFFICIENTS = 2, ///< Quantised transform coefficients. Radial.
     PH_DIGEST_KIND_VECTOR = 3,       ///< Real-valued features in an unsigned byte each.
     PH_DIGEST_KIND_HISTOGRAM = 4,    ///< Bin counts. Histogram intersection. ColorHash.
-    PH_DIGEST_KIND_VECTOR16 = 5      ///< Real-valued features, signed 16-bit. ColorMoments.
+    PH_DIGEST_KIND_VECTOR16 = 5,     ///< Real-valued features, signed 16-bit. ColorMoments.
+    PH_DIGEST_KIND_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE ///< Not a kind -- see "Enum width".
 } ph_digest_kind_t;
 
 /**
@@ -745,6 +768,7 @@ typedef enum {
      * histogram. Call ph_compute_mhash() and ph_compute_color_hash() directly. As with
      * the error codes, a retired bit is not handed to a new flag -- an old caller's
      * `1 << 4` would otherwise silently mean something else. */
+    PH_HASH_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE ///< Not a flag -- see "Enum width".
 } ph_hash_flags_t;
 
 /** Number of distinct bits defined in ph_hash_flags_t. Sizes ph_compute_multi's out[]. */
