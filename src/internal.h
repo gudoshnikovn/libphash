@@ -583,14 +583,45 @@ static inline int ph_exceeds_pixel_limit(uint64_t w, uint64_t h, uint64_t max_pi
     return pixels > max_pixels;
 }
 
+/* printf-style format checking for internal helpers; nothing on compilers without it. */
+#if defined(__GNUC__) || defined(__clang__)
+#define PH_PRINTF_FORMAT(fmt_idx, arg_idx) __attribute__((format(printf, fmt_idx, arg_idx)))
+#else
+#define PH_PRINTF_FORMAT(fmt_idx, arg_idx)
+#endif
+
+/* Where to cut `len` bytes of a string that was truncated to fit, so that the cut does
+ * not split a UTF-8 sequence: if the last sequence started within the kept bytes is
+ * incomplete, it is dropped whole. Bytes that were never valid UTF-8 are left as they
+ * are -- a message in a legacy locale is not ours to repair; the rule is only that our
+ * own truncation must not create invalid UTF-8. */
+static inline size_t ph_utf8_cut(const char *s, size_t len) {
+    size_t lead = len;
+    int back = 0;
+    while (lead > 0 && back < 4 && ((unsigned char)s[lead - 1] & 0xC0) == 0x80) {
+        lead--;
+        back++;
+    }
+    if (lead == 0)
+        return len;
+    unsigned char c = (unsigned char)s[lead - 1];
+    size_t need = (c >= 0xF0 && c <= 0xF7) ? 4 : (c >= 0xE0) ? 3 : (c >= 0xC0) ? 2 : 1;
+    if (c < 0xC0 || c > 0xF7)
+        return len; /* ASCII, or not a lead byte at all: nothing of ours to trim */
+    return (size_t)back + 1 < need ? lead - 1 : len;
+}
+
 /* Truncating copy into a fixed-size diagnostic buffer (err_msg may be NULL/zero-size,
- * meaning the caller isn't collecting a message). Never allocates. */
+ * meaning the caller isn't collecting a message). A truncation never splits a UTF-8
+ * character (ph_utf8_cut()). Never allocates. */
 static inline void ph_set_err_msg(char *err_msg, size_t err_msg_cap, const char *msg) {
     if (!err_msg || err_msg_cap == 0 || !msg)
         return;
     size_t i = 0;
     for (; i + 1 < err_msg_cap && msg[i] != '\0'; i++)
         err_msg[i] = msg[i];
+    if (msg[i] != '\0')
+        i = ph_utf8_cut(err_msg, i);
     err_msg[i] = '\0';
 }
 

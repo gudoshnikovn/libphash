@@ -10,6 +10,7 @@
 #include "phash_version.h"
 #include <errno.h>
 #include <math.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -545,15 +546,36 @@ static int ph_scan_orientation(const uint8_t *data, size_t len) {
  * branch takes an errno, the success branch takes a descriptor, and only the
  * convenience wrapper does an open()/close() of its own. */
 
+/* printf into a fixed-size diagnostic buffer, with ph_set_err_msg()'s guarantee that a
+ * truncation never splits a UTF-8 character. The file messages quote a caller's path, and
+ * a path in Cyrillic or CJK reaches the buffer's end in about 75 characters. */
+static void ph_format_err_msg(char *err_buf, size_t err_len, const char *fmt, ...)
+    PH_PRINTF_FORMAT(3, 4);
+
+static void ph_format_err_msg(char *err_buf, size_t err_len, const char *fmt, ...) {
+    if (!err_buf || err_len == 0)
+        return;
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vsnprintf(err_buf, err_len, fmt, ap);
+    va_end(ap);
+    if (n < 0) {
+        err_buf[0] = '\0';
+        return;
+    }
+    if ((size_t)n >= err_len) {
+        size_t kept = err_len - 1;
+        err_buf[ph_utf8_cut(err_buf, kept)] = '\0';
+    }
+}
+
 /* Turns a failed open into PH_ERR_IO with a diagnostic message. `open_errno` must
  * be errno captured immediately after the failing open -- both POSIX and the
  * Windows CRT set it (ENOENT for a missing path or a dangling symlink, EACCES for
  * an unreadable one, and on Windows also for a directory). */
 static ph_error_t ph_report_file_open_failure(const char *filepath, int open_errno, char *err_buf,
                                               size_t err_len) {
-    char msg[PH_LAST_ERROR_MAX];
-    snprintf(msg, sizeof(msg), "Cannot open '%s': %s", filepath, strerror(open_errno));
-    ph_set_err_msg(err_buf, err_len, msg);
+    ph_format_err_msg(err_buf, err_len, "Cannot open '%s': %s", filepath, strerror(open_errno));
     return PH_ERR_IO;
 }
 
@@ -566,20 +588,16 @@ static ph_error_t ph_report_file_open_failure(const char *filepath, int open_err
 static ph_error_t ph_check_open_file(int fd, const char *filepath, long long *out_size,
                                      char *err_buf, size_t err_len) {
     ph_file_stat_t st;
-    char msg[PH_LAST_ERROR_MAX];
     if (PH_FILE_FSTAT(fd, &st) != 0) {
-        snprintf(msg, sizeof(msg), "Cannot stat '%s': %s", filepath, strerror(errno));
-        ph_set_err_msg(err_buf, err_len, msg);
+        ph_format_err_msg(err_buf, err_len, "Cannot stat '%s': %s", filepath, strerror(errno));
         return PH_ERR_IO;
     }
     if (!S_ISREG(st.st_mode)) {
-        snprintf(msg, sizeof(msg), "Cannot read '%s': not a regular file", filepath);
-        ph_set_err_msg(err_buf, err_len, msg);
+        ph_format_err_msg(err_buf, err_len, "Cannot read '%s': not a regular file", filepath);
         return PH_ERR_IO;
     }
     if (st.st_size <= 0) {
-        snprintf(msg, sizeof(msg), "Cannot read '%s': file is empty", filepath);
-        ph_set_err_msg(err_buf, err_len, msg);
+        ph_format_err_msg(err_buf, err_len, "Cannot read '%s': file is empty", filepath);
         return PH_ERR_IO;
     }
     if (out_size)
@@ -621,12 +639,10 @@ static void ph_release_file_bytes(ph_file_bytes_t *fb) {
  * to say whether they form an image. */
 static ph_error_t ph_read_open_file(int fd, const char *filepath, size_t size, ph_file_bytes_t *out,
                                     char *err_buf, size_t err_len) {
-    char msg[PH_LAST_ERROR_MAX];
     uint8_t *buf = (uint8_t *)malloc(size);
     if (!buf) {
-        snprintf(msg, sizeof(msg), "Cannot read '%s': out of memory for %llu bytes", filepath,
-                 (unsigned long long)size);
-        ph_set_err_msg(err_buf, err_len, msg);
+        ph_format_err_msg(err_buf, err_len, "Cannot read '%s': out of memory for %llu bytes",
+                          filepath, (unsigned long long)size);
         return PH_ERR_ALLOCATION_FAILED;
     }
 
@@ -641,8 +657,7 @@ static ph_error_t ph_read_open_file(int fd, const char *filepath, size_t size, p
         if (n < 0) {
             if (errno == EINTR)
                 continue;
-            snprintf(msg, sizeof(msg), "Cannot read '%s': %s", filepath, strerror(errno));
-            ph_set_err_msg(err_buf, err_len, msg);
+            ph_format_err_msg(err_buf, err_len, "Cannot read '%s': %s", filepath, strerror(errno));
             free(buf);
             return PH_ERR_IO;
         }
@@ -652,8 +667,7 @@ static ph_error_t ph_read_open_file(int fd, const char *filepath, size_t size, p
     }
 
     if (got == 0) {
-        snprintf(msg, sizeof(msg), "Cannot read '%s': file is empty", filepath);
-        ph_set_err_msg(err_buf, err_len, msg);
+        ph_format_err_msg(err_buf, err_len, "Cannot read '%s': file is empty", filepath);
         free(buf);
         return PH_ERR_IO;
     }
@@ -698,10 +712,8 @@ static ph_error_t ph_open_file_bytes(const char *filepath, ph_file_bytes_t *out,
     /* Only reachable where size_t is narrower than off_t (a 32-bit build looking
      * at a >4 GB file). Neither mapping nor reading it can work. */
     if ((unsigned long long)size > (unsigned long long)SIZE_MAX) {
-        char msg[PH_LAST_ERROR_MAX];
-        snprintf(msg, sizeof(msg), "Cannot read '%s': file is too large to load into memory",
-                 filepath);
-        ph_set_err_msg(err_buf, err_len, msg);
+        ph_format_err_msg(err_buf, err_len,
+                          "Cannot read '%s': file is too large to load into memory", filepath);
         PH_FILE_CLOSE(fd);
         return PH_ERR_IO;
     }

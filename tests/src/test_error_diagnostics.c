@@ -664,9 +664,56 @@ static void test_input_to_error_code_table(ph_context_t *ctx) {
     row_cancelled(ctx);
 }
 
+/* 0 if s is well-formed UTF-8 (shortest forms and surrogates are not policed here: the
+ * question is only whether a sequence was cut short). */
+static int utf8_truncated_sequence(const char *s) {
+    const unsigned char *p = (const unsigned char *)s;
+    while (*p) {
+        int need = *p < 0x80 ? 0 : (*p & 0xE0) == 0xC0 ? 1 : (*p & 0xF0) == 0xE0 ? 2 : 3;
+        p++;
+        for (int k = 0; k < need; k++, p++)
+            if ((*p & 0xC0) != 0x80)
+                return 1;
+    }
+    return 0;
+}
+
+/* A diagnostic that quotes a caller's path is cut to PH_LAST_ERROR_MAX - 1 bytes. The cut
+ * used to fall wherever it fell, so a path of about 75 Cyrillic characters produced a
+ * message ending in a lone lead byte -- a UnicodeDecodeError in any binding that decodes
+ * the message as UTF-8, in place of "file not found". Every length around the buffer
+ * size, for two-, three- and four-byte characters. */
+static void test_long_path_message_stays_utf8(ph_context_t *ctx) {
+    static const char *const chars[] = {"\xD1\x84", "\xE4\xB8\xAD", "\xF0\x9F\x98\x80"};
+    char path[1024];
+    for (size_t c = 0; c < sizeof(chars) / sizeof(chars[0]); c++) {
+        size_t w = strlen(chars[c]);
+        for (size_t reps = 30; reps < 90; reps++) {
+            size_t off = 0;
+            memcpy(path + off, "/nonexistent/", 13);
+            off += 13;
+            for (size_t r = 0; r < reps && off + w < sizeof(path) - 1; r++, off += w)
+                memcpy(path + off, chars[c], w);
+            path[off] = '\0';
+            ASSERT_INT_EQ(PH_ERR_IO, ph_load_from_file(ctx, path));
+            const char *msg = ph_get_last_error_message(ctx);
+            if (msg[0] == '\0' || utf8_truncated_sequence(msg)) {
+                fprintf(stderr,
+                        "[FAIL] %zu x %zu-byte character path: message of %zu bytes ends in a "
+                        "cut UTF-8 sequence\n",
+                        reps, w, strlen(msg));
+                exit(1);
+            }
+        }
+    }
+    printf("  long non-ASCII path -> message stays valid UTF-8\n");
+}
+
 int main(void) {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
+
+    test_long_path_message_stays_utf8(ctx);
 
     printf("test_error_diagnostics:\n");
     printf(" ph_get_error_string() covers every code:\n");
