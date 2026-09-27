@@ -496,6 +496,10 @@ walkthrough.
 
 ### Fixed
 
+- **`ph_context_get_dimensions()` reported an image that was no longer loaded.** A failed
+  `ph_load_from_file()`/`ph_load_from_memory()` drops the previous image, but its width,
+  height and channel count stayed behind; they are now reset to 0 with it. It and
+  `ph_is_loaded()` now take a `const ph_context_t *`.
 - **The library did not compile on Linux/glibc.** Fixing the C standard also turned off
   the compiler's language extensions, which makes it define `__STRICT_ANSI__`; glibc
   hides every declaration that is not ISO C behind that macro, so `M_PI`,
