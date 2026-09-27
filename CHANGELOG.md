@@ -350,6 +350,14 @@ walkthrough.
   Each item's `hashes[]` holds `PH_BATCH_HASHES_CAPACITY` (8) slots rather than one
   per currently defined algorithm, so new `uint64_t` algorithms can be added inside
   2.x without changing the structs' size or layout.
+- **`ph_hash_files_ex()`/`ph_hash_buffers_ex()`** take a `ph_batch_options_t`
+  (initialise it with `ph_batch_options_init()`): a template context whose whole
+  configuration, `max_pixels` included, applies to every item; a `should_continue`
+  callback that stops the batch, returning the new **`PH_ERR_CANCELLED`** and storing it
+  in every item not started; and an `on_progress` callback. The plain
+  `ph_hash_files()`/`ph_hash_buffers()` keep running on the default configuration, and
+  their documentation now says so, along with how peak memory grows with the thread
+  count.
 - **`ph_compute_multi()`** computes several `uint64_t` algorithms in one call,
   selected by a `ph_hash_flags_t` bitmask, sharing the grayscale conversion across
   them. Results are bit-for-bit identical to the individual `ph_compute_*` calls.
