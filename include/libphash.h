@@ -37,6 +37,12 @@
 #endif
 #endif
 
+// PH_NODISCARD must be the first thing in a declaration, ahead of PH_API:
+// under C23 it is a standard attribute ([[nodiscard]]), and C23 only allows an
+// attribute-specifier-sequence to open a declaration, before any GNU
+// __attribute__ or type specifier. GCC enforces this and rejects
+// `PH_API PH_NODISCARD T f()` outright; clang accepts it, so the wrong order
+// goes unnoticed until a GCC consumer compiles in C23 (GCC 15's default).
 #ifndef PH_NODISCARD
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
 #define PH_NODISCARD [[nodiscard]]
@@ -244,7 +250,7 @@ PH_API int ph_version_number(void);
  * @brief Allocates a new context with default settings (Gamma 1.0, identity).
  * @param[out] out_ctx Pointer to the created context.
  */
-PH_API PH_NODISCARD ph_error_t ph_create(ph_context_t **out_ctx);
+PH_NODISCARD PH_API ph_error_t ph_create(ph_context_t **out_ctx);
 
 /**
  * @brief Frees the context and all associated image memory.
@@ -676,7 +682,7 @@ PH_API int ph_is_loaded(ph_context_t *ctx);
  *         non-empty regular file; otherwise the same decoding errors as
  *         @c ph_load_from_memory().
  */
-PH_API PH_NODISCARD ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath);
+PH_NODISCARD PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath);
 
 /**
  * @brief Loads an image from a memory buffer.
@@ -696,7 +702,7 @@ PH_API PH_NODISCARD ph_error_t ph_load_from_file(ph_context_t *ctx, const char *
  * @param buffer Pointer to the raw file data (e.g., JPEG bytes).
  * @param length Size of the buffer.
  */
-PH_API PH_NODISCARD ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer,
+PH_NODISCARD PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer,
                                                    size_t length);
 
 /**
@@ -714,15 +720,15 @@ PH_API PH_NODISCARD ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint
  * @param stride Number of bytes between the start of consecutive rows. Pass 0 for
  *               tightly packed rows (stride = width * channels).
  */
-PH_API PH_NODISCARD ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels,
+PH_NODISCARD PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels,
                                                    int width, int height, int channels, int stride);
 
 // --- uint64_t Hash Algorithms ---
 
-PH_API PH_NODISCARD ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash);
-PH_API PH_NODISCARD ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out_hash);
-PH_API PH_NODISCARD ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash);
-PH_API PH_NODISCARD ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash);
+PH_NODISCARD PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash);
+PH_NODISCARD PH_API ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out_hash);
+PH_NODISCARD PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash);
+PH_NODISCARD PH_API ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash);
 
 /**
  * @brief Flags selecting which uint64_t hash algorithms to compute in a single
@@ -774,7 +780,7 @@ typedef enum {
  *                 the dHash and `out[1]` the mHash). Must have room for at least as many
  *                 elements as bits set in `flags` (at most `PH_HASH_FLAGS_COUNT`).
  */
-PH_API PH_NODISCARD ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flags, uint64_t out[]);
+PH_NODISCARD PH_API ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flags, uint64_t out[]);
 
 // --- Batch Hashing ---
 
@@ -860,7 +866,7 @@ typedef struct {
  *         PH_ERR_INVALID_ARGUMENT for a malformed call, or PH_ERR_ALLOCATION_FAILED if no
  *         item could be worked on at all. See the return contract above.
  */
-PH_API PH_NODISCARD ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, uint32_t flags,
+PH_NODISCARD PH_API ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, uint32_t flags,
                                              int threads);
 
 /**
@@ -874,7 +880,7 @@ PH_API PH_NODISCARD ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, u
  * note from `ph_hash_files()` applies here unchanged: on Windows the auto-detected count is
  * limited to the current processor group's 64 logical processors.
  */
-PH_API PH_NODISCARD ph_error_t ph_hash_buffers(ph_batch_buffer_item_t *items, size_t n,
+PH_NODISCARD PH_API ph_error_t ph_hash_buffers(ph_batch_buffer_item_t *items, size_t n,
                                                uint32_t flags, int threads);
 
 // --- Digest Hash Algorithms ---
@@ -882,7 +888,7 @@ PH_API PH_NODISCARD ph_error_t ph_hash_buffers(ph_batch_buffer_item_t *items, si
 /**
  * @brief Computes Block Mean Hash (BMH). Returns a 256-bit (32-byte) digest.
  */
-PH_API PH_NODISCARD ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest);
+PH_NODISCARD PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest);
 
 /**
  * @brief Computes Color Moments Hash. Returns a digest representing color distribution.
@@ -892,7 +898,7 @@ PH_API PH_NODISCARD ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *ou
  * enabled, or handed to ph_load_from_pixels() with @c channels = 1 — this returns
  * @c PH_ERR_REQUIRES_COLOR and leaves @p out_digest untouched.
  */
-PH_API PH_NODISCARD ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
+PH_NODISCARD PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
                                                              ph_digest_t *out_digest);
 
 /**
@@ -921,7 +927,7 @@ PH_API PH_NODISCARD ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
  *       shuffling of its pixels hash identically. Use it alongside a structural hash, not
  *       instead of one.
  */
-PH_API PH_NODISCARD ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_digest);
+PH_NODISCARD PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_digest);
 
 /**
  * @brief Computes the Marr-Hildreth hash. Returns a 72-byte (576-bit) digest.
@@ -946,7 +952,7 @@ PH_API PH_NODISCARD ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_diges
  * @note It is by far the most expensive hash here — a 17x17 correlation over a 512x512
  *       image — which is a property of the algorithm, not of this implementation.
  */
-PH_API PH_NODISCARD ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest);
+PH_NODISCARD PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest);
 
 /**
  * @brief Computes the Radial variance hash. Returns a 40-byte digest.
@@ -968,7 +974,7 @@ PH_API PH_NODISCARD ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *
  *       projection, and the default projection count is 180 rather than 40. Values from
  *       earlier releases do not carry over.
  */
-PH_API PH_NODISCARD ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_digest);
+PH_NODISCARD PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_digest);
 
 // --- Comparison Functions ---
 
@@ -1054,7 +1060,7 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
  *       is a legitimate correlation — a perfect anti-correlation — so the sentinel would
  *       be ambiguous exactly where the caller needs it not to be.
  */
-PH_API PH_NODISCARD ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *b,
+PH_NODISCARD PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *b,
                                                     double *out_pcc);
 
 /**
@@ -1079,7 +1085,7 @@ PH_API PH_NODISCARD ph_error_t ph_radial_similarity(const ph_digest_t *a, const 
  *         empty digest, two digests of different sizes, or a digest tagged as something
  *         other than a histogram.
  */
-PH_API PH_NODISCARD ph_error_t ph_histogram_intersection(const ph_digest_t *a, const ph_digest_t *b,
+PH_NODISCARD PH_API ph_error_t ph_histogram_intersection(const ph_digest_t *a, const ph_digest_t *b,
                                                          double *out_similarity);
 
 /**
@@ -1091,7 +1097,7 @@ PH_API PH_NODISCARD ph_error_t ph_histogram_intersection(const ph_digest_t *a, c
  * @return PH_SUCCESS, or PH_ERR_INVALID_ARGUMENT if arguments are invalid or
  * 'out_size' is too small.
  */
-PH_API PH_NODISCARD ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out, size_t out_size);
+PH_NODISCARD PH_API ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out, size_t out_size);
 
 /**
  * @brief Decodes a hex string produced by ph_digest_to_hex() back into a digest.
@@ -1100,7 +1106,7 @@ PH_API PH_NODISCARD ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out,
  * @param out Output digest.
  * @return PH_SUCCESS, or PH_ERR_INVALID_ARGUMENT if 'hex' is malformed or too long.
  */
-PH_API PH_NODISCARD ph_error_t ph_digest_from_hex(const char *hex, ph_digest_t *out);
+PH_NODISCARD PH_API ph_error_t ph_digest_from_hex(const char *hex, ph_digest_t *out);
 
 /**
  * @brief Encodes a 64-bit hash as a fixed 16-character lowercase hex string
@@ -1111,7 +1117,7 @@ PH_API PH_NODISCARD ph_error_t ph_digest_from_hex(const char *hex, ph_digest_t *
  * @return PH_SUCCESS, or PH_ERR_INVALID_ARGUMENT if arguments are invalid or
  * 'out_size' is too small.
  */
-PH_API PH_NODISCARD ph_error_t ph_hash_to_hex(uint64_t hash, char *out, size_t out_size);
+PH_NODISCARD PH_API ph_error_t ph_hash_to_hex(uint64_t hash, char *out, size_t out_size);
 
 /**
  * @brief Checks if libjpeg-turbo is available and loaded.
