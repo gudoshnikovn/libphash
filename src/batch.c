@@ -24,8 +24,11 @@ static int ph_flags_are_valid(uint32_t flags) {
     return flags != 0 && (flags & ~(uint32_t)PH_HASH_FLAGS_ALL) == 0;
 }
 
-static void clear_hashes(uint64_t hashes[PH_HASH_FLAGS_COUNT]) {
-    for (int i = 0; i < PH_HASH_FLAGS_COUNT; i++) {
+_Static_assert(PH_HASH_FLAGS_COUNT <= PH_BATCH_HASHES_CAPACITY,
+               "a batch item must have a slot for every uint64_t algorithm");
+
+static void clear_hashes(uint64_t hashes[PH_BATCH_HASHES_CAPACITY]) {
+    for (int i = 0; i < PH_BATCH_HASHES_CAPACITY; i++) {
         hashes[i] = 0;
     }
 }

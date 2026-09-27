@@ -784,6 +784,17 @@ PH_NODISCARD PH_API ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flag
 
 // --- Batch Hashing ---
 
+/** Number of hash slots in each batch item's `hashes[]` array.
+ *
+ * Deliberately separate from @c PH_HASH_FLAGS_COUNT, which only says how many algorithms
+ * are defined today. The array size is part of the batch structs' layout, and so of the
+ * ABI; tying it to the flag count would mean a new uint64_t algorithm moves `status` and
+ * changes the struct size. The spare slots are that headroom: up to four new uint64_t
+ * algorithms can be added without an ABI break. On a per-item success the first
+ * popcount(flags) slots are written and the rest are left untouched; on a per-item
+ * failure every slot is zeroed. */
+#define PH_BATCH_HASHES_CAPACITY 8
+
 /**
  * @brief One entry in a `ph_hash_files()` batch: a file path in, hashes and status out.
  */
@@ -792,7 +803,7 @@ typedef struct {
     /** [out] One uint64_t per flag set in the `flags` passed to `ph_hash_files()`, packed
      *  in ascending bit order -- same layout as `ph_compute_multi()`'s `out[]`. Valid only
      *  if `status == PH_SUCCESS`. */
-    uint64_t hashes[PH_HASH_FLAGS_COUNT];
+    uint64_t hashes[PH_BATCH_HASHES_CAPACITY];
     ph_error_t status; ///< [out] Per-item result. A failure here does not abort the batch.
 } ph_batch_item_t;
 
@@ -806,7 +817,7 @@ typedef struct {
     /** [out] One uint64_t per flag set in the `flags` passed to `ph_hash_buffers()`, packed
      *  in ascending bit order -- same layout as `ph_compute_multi()`'s `out[]`. Valid only
      *  if `status == PH_SUCCESS`. */
-    uint64_t hashes[PH_HASH_FLAGS_COUNT];
+    uint64_t hashes[PH_BATCH_HASHES_CAPACITY];
     ph_error_t status; ///< [out] Per-item result. A failure here does not abort the batch.
 } ph_batch_buffer_item_t;
 
