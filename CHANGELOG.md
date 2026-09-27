@@ -374,6 +374,13 @@ walkthrough.
 - **`libphash.h` includes `phash_version.h`**, so `PH_VERSION_NUMBER` and the other
   version macros are available to anyone who includes the public header. The two files
   are installed side by side; code that copies the header by hand needs both.
+- **Algorithms as values.** `ph_algorithm_t` names every algorithm (contiguous from 0 to
+  `PH_ALGORITHM_COUNT - 1`; for the four `uint64_t` ones the `ph_hash_flags_t` bit is
+  `1 << value`). `ph_compute_digest()` computes any of them into a `ph_digest_t` — the
+  `uint64_t` algorithms as 8-byte `bits` digests — so one code path can store and compare
+  every algorithm. `ph_digest_info()` reports a digest's size and kind without an image,
+  from the same code that sets them on every computed digest. `ph_algorithm_name()`/
+  `ph_algorithm_from_name()` convert to and from stable names such as `"radial"`.
 - **`ph_hash_from_hex()`** decodes the 16-digit text `ph_hash_to_hex()` writes, and
   **`ph_context_get_gray_weights()`** reads back the grayscale weights a context uses —
   the normalized values, which differ from what was passed to the setter.
