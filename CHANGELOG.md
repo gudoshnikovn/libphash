@@ -511,6 +511,11 @@ walkthrough.
 
 ### Fixed
 
+- **An encoded buffer over 2 GiB was decoded from a truncated length.** In a build where
+  the format went to `stb_image`, the length was cut to an `int`: a valid image in a
+  2 GiB + 4 KiB buffer was reported as not an image, and past 4 GiB the length wrapped
+  and the start of the buffer was decoded as if it were the whole file. Encoded input
+  over `INT_MAX` bytes now fails with `PH_ERR_IMAGE_TOO_LARGE` in every build.
 - **An oversized image was reported as corrupt in the minimal build.** A header that
   `stb_image` refuses for its size (a 20000×20000 PNG, for one) came back as
   `PH_ERR_CORRUPT_DATA`; the native decoders answer the same header with
