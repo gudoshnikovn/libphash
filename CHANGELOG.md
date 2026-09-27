@@ -275,6 +275,10 @@ walkthrough.
   *Restore the old behaviour:* not possible by path — read the stream into memory
   yourself and call `ph_load_from_memory()`, which is the supported way to hash
   something that is not a file on disk.
+- **`ph_can_use_libpng()` is renamed `ph_can_use_png()`.** It answered `1` in a build
+  using spng, where libpng is not linked at all; the new name says what it answers —
+  whether a native PNG decoder, libpng or spng, is compiled in.
+  *Restore the old behaviour:* rename the call; the return value is unchanged.
 - **Public enums are 32 bits wide under `-fshort-enums`.** Each public enum now ends in a
   `*_FORCE_INT32_` enumerator that is not a real value. Under `-fshort-enums` — the
   default ABI on ARM EABI — the enums used to shrink to one byte, so a library and a
@@ -357,6 +361,10 @@ walkthrough.
   is `<kind>:<hex>` (e.g. `coefficients:1f80…`), and decoding restores the kind, so
   digests read back from storage still refuse the wrong comparison metric.
   `PH_DIGEST_HEX_BUFFER_SIZE` is a buffer size that fits any digest.
+- **`ph_get_build_info()`** returns one line describing how the library was built —
+  version, JPEG/PNG/WebP backends, zlib, whether the batch functions can use threads,
+  the SIMD target, and whether the test-only mock decoder is compiled in — for logs and
+  bug reports.
 - **`ph_get_last_error_message()`** returns a short diagnostic string about the most
   recent failure on a context (e.g. the decoder-reported reason a load failed).
 - **`ph_version_number()`** returns the version as one comparable integer, for FFI
