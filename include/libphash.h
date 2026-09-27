@@ -772,6 +772,9 @@ PH_NODISCARD PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *
  *       container's top level for a multi-frame file; reaching an individual frame
  *       needs libwebp's demux API, which this backend does not use. A static WebP
  *       (no @c ANIM chunk) is unaffected.
+ * @note The encoded data may be at most @c INT_MAX bytes (2 GiB - 1); a longer
+ *       @p length fails with @c PH_ERR_IMAGE_TOO_LARGE before any byte is read, in every
+ *       build. @c ph_load_from_file() applies the same limit to the file size.
  * @note A truncated JPEG, PNG or WebP fails with @c PH_ERR_CORRUPT_DATA in every
  *       build: the file must reach its own end (the JPEG end-of-image marker, the PNG
  *       @c IEND chunk, the size its WebP RIFF header states). Bytes after that end are

@@ -1,5 +1,6 @@
 #include "libphash.h"
 #include "test_macros.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -150,7 +151,52 @@ void test_extreme_aspect_ratio_rejected() {
     printf("test_extreme_aspect_ratio_rejected: PASSED\n");
 }
 
+/* An encoded buffer longer than INT_MAX bytes. stb_image takes the length as an int, and
+ * the library used to cast it straight through: at 2 GiB + 4 KiB a valid PNG became an
+ * "unrecognized format", at 4 GiB + 4 KiB the length wrapped to 4 KiB and the prefix was
+ * decoded as if it were the whole file. The buffers come from calloc(), so the untouched
+ * tail costs address space, not memory; where even that is refused (a sanitizer's
+ * allocator limit, a 32-bit build) the case is skipped. */
+static void check_long_buffer(const unsigned char *png, size_t png_len, size_t total,
+                              ph_error_t want) {
+    unsigned char *buf = (unsigned char *)calloc(total, 1);
+    if (!buf) {
+        printf("  %zu-byte buffer: SKIPPED (calloc refused)\n", total);
+        return;
+    }
+    memcpy(buf, png, png_len);
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ph_error_t err = ph_load_from_memory(ctx, buf, total);
+    if (err != want) {
+        fprintf(stderr, "[FAIL] %zu-byte buffer holding a %zu-byte PNG: expected %d, got %d\n",
+                total, png_len, (int)want, (int)err);
+        exit(1);
+    }
+    ph_free(ctx);
+    free(buf);
+}
+
+void test_encoded_length_limit() {
+    FILE *f = fopen(TEST_DATA_DIR "/photo.png", "rb");
+    ASSERT_PTR_NOT_NULL(f);
+    unsigned char png[4096];
+    size_t png_len = fread(png, 1, sizeof(png), f);
+    fclose(f);
+    ASSERT(png_len > 0 && png_len < sizeof(png));
+
+    const size_t int_max = (size_t)2147483647;
+    check_long_buffer(png, png_len, int_max - 16, PH_SUCCESS); /* data after IEND is fine */
+    check_long_buffer(png, png_len, int_max + 4096, PH_ERR_IMAGE_TOO_LARGE);
+#if SIZE_MAX > 0xFFFFFFFFu
+    check_long_buffer(png, png_len, ((size_t)1 << 32) + 4096, PH_ERR_IMAGE_TOO_LARGE);
+    check_long_buffer(png, png_len, (size_t)5 << 30, PH_ERR_IMAGE_TOO_LARGE);
+#endif
+    printf("test_encoded_length_limit: PASSED\n");
+}
+
 int main() {
+    test_encoded_length_limit();
     test_default_limit_rejects_bomb_from_file();
     test_default_limit_rejects_bomb_from_memory();
     test_default_limit_allows_normal_image();

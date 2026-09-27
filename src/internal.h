@@ -533,6 +533,13 @@ static inline int ph_safe_image_alloc_size(uint64_t w, uint64_t h, uint64_t chan
  * SIMD paths included -- not done, since nothing currently needs images this large. */
 #define PH_MAX_SUPPORTED_PIXELS ((uint64_t)INT_MAX)
 
+/* Largest encoded (still compressed) input ph_decode_buffer() accepts, in bytes. stb_image
+ * takes the length as an int, so a longer buffer reached it truncated: negative lengths
+ * made a valid image "unrecognized", and a length past 4 GiB wrapped to a small positive
+ * one and decoded the prefix as if it were the file. One limit for every build keeps the
+ * answer independent of which decoder a format goes to. */
+#define PH_MAX_ENCODED_SIZE ((size_t)INT_MAX)
+
 /* Upper bound on a single image dimension, applied by every decode path.
  *
  * max_pixels bounds the *area*, which on its own permits an absurd aspect ratio: a

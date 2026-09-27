@@ -334,6 +334,13 @@ uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int 
     if (!buffer || length == 0)
         return NULL;
 
+    if (length > PH_MAX_ENCODED_SIZE) {
+        if (out_err)
+            *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        ph_set_err_msg(err_msg, err_msg_cap, "Encoded image is larger than 2 GiB - 1 byte");
+        return NULL;
+    }
+
     /* PNG is judged here rather than in a backend, so that the per-dimension cap holds
      * in a stb_image-only build too and every configuration answers the same input with
      * the same code. Every other format reaches the cap through its backend, which gets
