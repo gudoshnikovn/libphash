@@ -772,6 +772,11 @@ PH_NODISCARD PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *
  *       container's top level for a multi-frame file; reaching an individual frame
  *       needs libwebp's demux API, which this backend does not use. A static WebP
  *       (no @c ANIM chunk) is unaffected.
+ * @note A truncated JPEG, PNG or WebP fails with @c PH_ERR_CORRUPT_DATA in every
+ *       build: the file must reach its own end (the JPEG end-of-image marker, the PNG
+ *       @c IEND chunk, the size its WebP RIFF header states). Bytes after that end are
+ *       ignored. Without this check the @c stb_image decoder of a minimal build would
+ *       hash the part of a half-downloaded file it managed to read.
  *
  * @param ctx The context.
  * @param buffer Pointer to the raw file data (e.g., JPEG bytes).

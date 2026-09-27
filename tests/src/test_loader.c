@@ -794,7 +794,80 @@ void test_png_decode_error_is_reported() {
     printf("test_png_decode_error_is_reported: PASSED\n");
 }
 
+/* A truncated file gets the same answer in every build. stb_image (the only JPEG/PNG
+ * decoder of a minimal build) used to decode whatever it could read of a half-downloaded
+ * file and report success -- a pHash 30 bits away from the real one at 5 % of the bytes
+ * -- while the native decoders called the same bytes corrupt. */
+static void check_truncations(const char *path, int format_available) {
+    size_t size = 0;
+    unsigned char *full = read_whole_file(path, &size);
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+
+    static const int percent[] = {99, 90, 75, 50, 25, 10, 5};
+    for (size_t i = 0; i < sizeof(percent) / sizeof(percent[0]); i++) {
+        size_t cut = size * (size_t)percent[i] / 100;
+        ph_error_t err = ph_load_from_memory(ctx, full, cut);
+        ph_error_t want = format_available ? PH_ERR_CORRUPT_DATA : PH_ERR_DECODER_UNAVAILABLE;
+        if (err != want) {
+            fprintf(stderr, "[FAIL] %s cut to %d%% (%zu of %zu bytes): expected %d, got %d\n", path,
+                    percent[i], cut, size, (int)want, (int)err);
+            exit(1);
+        }
+        ASSERT_INT_EQ(0, ph_is_loaded(ctx));
+    }
+
+    /* Bytes after the container's end are not truncation: the image loads and hashes as
+     * the intact file does. */
+    if (format_available) {
+        uint64_t intact = 0, padded = 0;
+        ASSERT_OK(ph_load_from_memory(ctx, full, size));
+        ASSERT_OK(ph_compute_ahash(ctx, &intact));
+        unsigned char *longer = (unsigned char *)malloc(size + 64);
+        ASSERT_PTR_NOT_NULL(longer);
+        memcpy(longer, full, size);
+        memset(longer + size, 0xA5, 64);
+        ASSERT_OK(ph_load_from_memory(ctx, longer, size + 64));
+        ASSERT_OK(ph_compute_ahash(ctx, &padded));
+        ASSERT_UINT64_EQ(intact, padded);
+        free(longer);
+    }
+
+    ph_free(ctx);
+    free(full);
+}
+
+void test_truncated_input_rejected_in_every_build() {
+    check_truncations(TEST_DATA_DIR "/photo.jpeg", 1);
+    check_truncations(TEST_DATA_DIR "/photo.png", 1);
+    check_truncations(TEST_DATA_DIR "/photo_complex.png", 1);
+    check_truncations(TEST_DATA_DIR "/photo.webp", ph_can_use_webp());
+
+    /* An EXIF thumbnail carries its own end-of-image marker. It must not stand in for the
+     * main image's: splice one into a JPEG and cut the main image short. */
+    size_t size = 0;
+    unsigned char *full = read_whole_file(TEST_DATA_DIR "/photo.jpeg", &size);
+    static const unsigned char app1_with_eoi[] = {0xFF, 0xE1, 0x00, 0x0C, 'E',  'x',  'i',
+                                                  'f',  0x00, 0x00, 0xFF, 0xD8, 0xFF, 0xD9};
+    size_t spliced_len = size + sizeof(app1_with_eoi);
+    unsigned char *spliced = (unsigned char *)malloc(spliced_len);
+    ASSERT_PTR_NOT_NULL(spliced);
+    memcpy(spliced, full, 2);
+    memcpy(spliced + 2, app1_with_eoi, sizeof(app1_with_eoi));
+    memcpy(spliced + 2 + sizeof(app1_with_eoi), full + 2, size - 2);
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_load_from_memory(ctx, spliced, spliced_len));
+    ASSERT_INT_EQ(PH_ERR_CORRUPT_DATA, ph_load_from_memory(ctx, spliced, spliced_len / 2));
+    ph_free(ctx);
+    free(spliced);
+    free(full);
+
+    printf("test_truncated_input_rejected_in_every_build: PASSED\n");
+}
+
 int main() {
+    test_truncated_input_rejected_in_every_build();
     test_jpeg_loading();
     test_png_loading();
     test_webp_loading_or_unavailable();

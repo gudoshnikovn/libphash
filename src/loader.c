@@ -203,6 +203,100 @@ static const ph_image_backend_t backends[] = {
 #endif
     {ph_can_read_stb, ph_decode_stb_mem},   {NULL, NULL}};
 
+/* --- Container completeness -------------------------------------------------
+ *
+ * stb_image decodes whatever part of a truncated JPEG or PNG it could read, fills the
+ * rest, and reports success; the native decoders reject the same bytes as corrupt. So a
+ * half-downloaded file got an error in one build and a plausible hash of half a picture
+ * in another. These checks give every build the same answer: after a successful decode,
+ * the container must reach its own end -- EOI for JPEG, IEND for PNG, the RIFF size for
+ * WebP. Bytes after that end are allowed (camera trailers, appended data); a missing end
+ * is PH_ERR_CORRUPT_DATA. They run after the decoder, not before, so a decoder's own and
+ * more specific verdict (too large, out of memory, its own corruption message) wins. */
+
+/* Walks the JPEG marker structure: segments are skipped by their length (so an EOI inside
+ * an embedded EXIF thumbnail does not count), entropy-coded data after SOS is scanned for
+ * the next real marker (FF followed by anything but a stuffed 00 or a restart marker). */
+static int ph_jpeg_reaches_eoi(const uint8_t *p, size_t n) {
+    if (n < 2 || p[0] != 0xFF || p[1] != 0xD8)
+        return 0;
+    size_t pos = 2;
+    for (;;) {
+        while (pos < n && p[pos] != 0xFF) /* tolerate stray bytes between segments */
+            pos++;
+        while (pos < n && p[pos] == 0xFF) /* fill bytes */
+            pos++;
+        if (pos >= n)
+            return 0;
+        uint8_t m = p[pos++];
+        if (m == 0xD9)
+            return 1;
+        if (m == 0x01 || (m >= 0xD0 && m <= 0xD7) || m == 0x00)
+            continue; /* standalone markers carry no length */
+        if (n - pos < 2)
+            return 0;
+        size_t seglen = ((size_t)p[pos] << 8) | p[pos + 1];
+        if (seglen < 2 || seglen > n - pos)
+            return 0;
+        pos += seglen;
+        if (m != 0xDA)
+            continue;
+        /* Entropy-coded data up to the next marker. */
+        for (;;) {
+            if (pos >= n)
+                return 0;
+            if (p[pos] != 0xFF) {
+                pos++;
+                continue;
+            }
+            if (pos + 1 >= n)
+                return 0;
+            uint8_t next = p[pos + 1];
+            if (next == 0x00 || (next >= 0xD0 && next <= 0xD7)) {
+                pos += 2;
+                continue;
+            }
+            break; /* a marker: back to the segment loop */
+        }
+    }
+}
+
+/* Walks the PNG chunks from the signature: every chunk must fit, and IEND must come. */
+static int ph_png_reaches_iend(const uint8_t *p, size_t n) {
+    size_t pos = 8;
+    while (n - pos >= 12) {
+        size_t len = ((size_t)p[pos] << 24) | ((size_t)p[pos + 1] << 16) |
+                     ((size_t)p[pos + 2] << 8) | p[pos + 3];
+        if (len > 0x7FFFFFFFu || len > n - pos - 12)
+            return 0;
+        if (memcmp(p + pos + 4, "IEND", 4) == 0)
+            return 1;
+        pos += 12 + len;
+    }
+    return 0;
+}
+
+/* The RIFF header states the file size; a truncated file is shorter than it says. */
+static int ph_webp_riff_complete(const uint8_t *p, size_t n) {
+    if (n < 12)
+        return 0;
+    uint32_t riff =
+        (uint32_t)p[4] | ((uint32_t)p[5] << 8) | ((uint32_t)p[6] << 16) | ((uint32_t)p[7] << 24);
+    return (uint64_t)riff + 8 <= (uint64_t)n;
+}
+
+/* NULL when the container is complete (or not one of the three formats), otherwise the
+ * diagnostic for a truncated one. */
+static const char *ph_container_truncation(const uint8_t *p, size_t n) {
+    if (n >= 2 && p[0] == 0xFF && p[1] == 0xD8)
+        return ph_jpeg_reaches_eoi(p, n) ? NULL : "JPEG is truncated: no end-of-image marker";
+    if (ph_magic_is_png(p, n))
+        return ph_png_reaches_iend(p, n) ? NULL : "PNG is truncated: no IEND chunk";
+    if (ph_magic_is_webp(p, n))
+        return ph_webp_riff_complete(p, n) ? NULL : "WebP is truncated: shorter than its RIFF size";
+    return NULL;
+}
+
 uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int *height,
                           int *channels, int req_comp, uint64_t max_pixels,
                           ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
@@ -229,8 +323,16 @@ uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int 
             uint8_t *data =
                 backends[i].decode(buffer, length, width, height, channels, req_comp, max_pixels,
                                    decode_scale, &err, err_msg, err_msg_cap);
-            if (data)
-                return data;
+            if (data) {
+                const char *truncated = ph_container_truncation(buffer, length);
+                if (!truncated)
+                    return data;
+                ph_free_image(data);
+                if (out_err)
+                    *out_err = PH_ERR_CORRUPT_DATA;
+                ph_set_err_msg(err_msg, err_msg_cap, truncated);
+                return NULL;
+            }
             // The magic bytes matched this backend, so a decode failure here is a
             // definitive answer (too large / corrupt): don't let a later backend or
             // the stb_image fallback re-attempt the same data.
