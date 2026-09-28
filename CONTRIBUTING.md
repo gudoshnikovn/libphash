@@ -45,6 +45,9 @@ make debug && make test    # -fsanitize=address,undefined rebuild, then rerun th
 version, because a different major formats the same code differently. Install the
 pinned version with `pip install clang-format==23.1.1`.
 
+The tree was reformatted in one commit; to see who wrote a line rather than who
+reindented it, run `git config blame.ignoreRevsFile .git-blame-ignore-revs` once.
+
 If your change touches `CMakeLists.txt`, a native decoder backend
 (`src/loaders/*.c`), or the batch thread pool (`src/batch.c`), also run the CMake
 Release build and `ctest`:

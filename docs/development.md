@@ -220,6 +220,10 @@ the code follows is held by the gate rather than by habit.
   one-line diff), `return x;` without parentheses, LF line endings, a newline at the end.
 - **Left alone on purpose**: string literals are never split (a message stays greppable),
   and macro bodies are formatted like the rest of the code.
+- **Blame across reformatting**: commits that only reformat are listed in
+  `.git-blame-ignore-revs`; run `git config blame.ignoreRevsFile .git-blame-ignore-revs`
+  once, and `git blame` shows the commit that wrote a line rather than the one that
+  reindented it.
 - **Version**: clang-format **23**, pinned (`pip install clang-format==23.1.1`).
   Different major versions format the same code differently, so `make format` refuses
   to run with any other major. The pin is raised only in a commit of its own, together
