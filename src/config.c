@@ -63,8 +63,8 @@ PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, i
         return PH_ERR_INVALID_ARGUMENT;
 
     /* A negative weight is not a "dark" channel, it is a channel that subtracts
-     * luminance -- the >> 7 grayscale path assumes non-negative weights summing to 128
-     * and would produce out-of-range intermediate values. Rejected rather than
+     * luminance -- the grayscale shift assumes non-negative weights summing to
+     * PH_GRAY_WEIGHT_SCALE and would produce out-of-range intermediate values. Rejected rather than
      * interpreted. The sum is accumulated in long long because three int weights can
      * overflow int even when each of them is individually valid. */
     if (r < 0 || g < 0 || b < 0)
@@ -76,10 +76,9 @@ PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, i
     if (sum <= 0 || sum > PH_GRAY_WEIGHT_MAX_SUM)
         return PH_ERR_INVALID_ARGUMENT;
 
-    // Normalize to sum 128 for the >> 7 shift
-    ctx->config.gray_r = (int)(((long long)r * 128) / sum);
-    ctx->config.gray_g = (int)(((long long)g * 128) / sum);
-    ctx->config.gray_b = 128 - ctx->config.gray_r - ctx->config.gray_g;
+    ctx->config.gray_r = (int)(((long long)r * PH_GRAY_WEIGHT_SCALE) / sum);
+    ctx->config.gray_g = (int)(((long long)g * PH_GRAY_WEIGHT_SCALE) / sum);
+    ctx->config.gray_b = PH_GRAY_WEIGHT_SCALE - ctx->config.gray_r - ctx->config.gray_g;
 
     /* The cached conversion was made with the old weights. */
     ph_drop_gray_cache(ctx);

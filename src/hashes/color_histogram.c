@@ -46,19 +46,18 @@
 #include <string.h>
 
 int ph_color_histogram_bin(int r, int g, int b) {
-    /* Opponent axes. The ranges are exact: rg in [-255, 255], by in [-510, 510] and
-     * wb in [0, 765], so each axis is mapped from its own full span. */
+    /* Opponent axes, each mapped from its own full span (see PH_COLOR_RG_VALUES). */
     int rg = r - g;
     int by = 2 * b - r - g;
     int wb = r + g + b;
 
-    int a = (rg + 255) * PH_COLOR_BINS_RG / 511;
+    int a = (rg + PH_COLOR_RG_OFFSET) * PH_COLOR_BINS_RG / PH_COLOR_RG_VALUES;
     if (a >= PH_COLOR_BINS_RG)
         a = PH_COLOR_BINS_RG - 1;
-    int c = (by + 510) * PH_COLOR_BINS_BY / 1021;
+    int c = (by + PH_COLOR_BY_OFFSET) * PH_COLOR_BINS_BY / PH_COLOR_BY_VALUES;
     if (c >= PH_COLOR_BINS_BY)
         c = PH_COLOR_BINS_BY - 1;
-    int w = wb * PH_COLOR_BINS_WB / 766;
+    int w = wb * PH_COLOR_BINS_WB / PH_COLOR_WB_VALUES;
     if (w >= PH_COLOR_BINS_WB)
         w = PH_COLOR_BINS_WB - 1;
 

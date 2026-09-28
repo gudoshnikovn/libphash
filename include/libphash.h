@@ -1,5 +1,5 @@
-#ifndef LIBPHASH_H
-#define LIBPHASH_H
+#ifndef PH_LIBPHASH_H
+#define PH_LIBPHASH_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -1461,4 +1461,4 @@ PH_API const char *ph_get_build_info(void);
 }
 #endif
 
-#endif // LIBPHASH_H
+#endif // PH_LIBPHASH_H

@@ -86,6 +86,17 @@ ph_error_t ph_apply_exif_orientation(uint8_t **data, int *width, int *height, in
 #define PH_GRAY_G 75
 #define PH_GRAY_B 15
 
+/* Grayscale weights are integers over PH_GRAY_WEIGHT_SCALE, and the conversion divides by
+ * it with a right shift: every pixel is (r*wr + g*wg + b*wb) >> PH_GRAY_WEIGHT_SHIFT.
+ * ph_context_set_gray_weights() normalises a caller's weights to this scale. */
+#define PH_GRAY_WEIGHT_SHIFT 7
+#define PH_GRAY_WEIGHT_SCALE (1 << PH_GRAY_WEIGHT_SHIFT)
+
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+_Static_assert(PH_GRAY_R + PH_GRAY_G + PH_GRAY_B == PH_GRAY_WEIGHT_SCALE,
+               "the default grayscale weights must sum to the weight scale");
+#endif
+
 /* Aligned on pHash's own default (ph_compare_images(), aetilius/pHash), which is
  * an identity transform: pow(v, 1.0) == v. Gamma raises pixels to `gamma` directly
  * (pHash's convention, not `1.0/gamma`) and normalises the buffer by its own maximum

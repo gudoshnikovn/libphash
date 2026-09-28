@@ -293,7 +293,7 @@ _Static_assert(PH_COLOR_MOMENTS_DIGEST_BYTES <= PH_DIGEST_MAX_BYTES,
                "the colour moments must fit a digest");
 /* 255 is the largest magnitude a moment of an 8-bit channel can reach; if the scale ever
  * grows past the point where that still encodes, the encoding starts clamping silently. */
-_Static_assert(255 * PH_COLOR_MOMENT_SCALE <= 32767,
+_Static_assert(255 * PH_COLOR_MOMENT_SCALE <= INT16_MAX,
                "the fixed-point scale must keep every attainable moment inside int16");
 #endif
 
@@ -306,6 +306,16 @@ _Static_assert(255 * PH_COLOR_MOMENT_SCALE <= 32767,
 #define PH_COLOR_BINS_BY 6
 #define PH_COLOR_BINS_WB 3
 #define PH_COLOR_BINS (PH_COLOR_BINS_RG * PH_COLOR_BINS_BY * PH_COLOR_BINS_WB)
+
+/* The opponent axes' exact ranges for 8-bit channels: rg = r - g in [-255, 255],
+ * by = 2b - r - g in [-510, 510], wb = r + g + b in [0, 765]. Each axis is shifted to
+ * start at 0 and divided into bins over its count of distinct values, so the whole span
+ * is used and nothing falls outside it. */
+#define PH_COLOR_RG_OFFSET 255
+#define PH_COLOR_RG_VALUES (2 * 255 + 1)
+#define PH_COLOR_BY_OFFSET 510
+#define PH_COLOR_BY_VALUES (2 * 510 + 1)
+#define PH_COLOR_WB_VALUES (3 * 255 + 1)
 
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
 _Static_assert(PH_COLOR_BINS <= PH_DIGEST_MAX_BYTES,

@@ -47,7 +47,7 @@ static void grayscale_scalar_range(const uint8_t *s, uint8_t *d, size_t count, i
         uint32_t r = s[0];
         uint32_t g = s[1];
         uint32_t b = s[2];
-        *d++ = (uint8_t)((r * r_w + g * g_w + b * b_w) >> 7);
+        *d++ = (uint8_t)((r * r_w + g * g_w + b * b_w) >> PH_GRAY_WEIGHT_SHIFT);
         s += channels;
     }
 }
@@ -101,7 +101,7 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
             uint16x8_t gray = vmull_u8(rgb.val[0], r_weight);
             gray = vmlal_u8(gray, rgb.val[1], g_weight);
             gray = vmlal_u8(gray, rgb.val[2], b_weight);
-            uint8x8_t res = vshrn_n_u16(gray, 7);
+            uint8x8_t res = vshrn_n_u16(gray, PH_GRAY_WEIGHT_SHIFT);
             vst1_u8(d, res);
             s += 3 * 8;
             d += 8;
@@ -116,7 +116,7 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
             uint16x8_t gray = vmull_u8(rgba.val[0], r_weight);
             gray = vmlal_u8(gray, rgba.val[1], g_weight);
             gray = vmlal_u8(gray, rgba.val[2], b_weight);
-            uint8x8_t res = vshrn_n_u16(gray, 7);
+            uint8x8_t res = vshrn_n_u16(gray, PH_GRAY_WEIGHT_SHIFT);
             vst1_u8(d, res);
             s += 4 * 8;
             d += 8;

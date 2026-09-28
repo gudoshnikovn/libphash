@@ -31,6 +31,7 @@
 #include "context.h"
 #include "hashes/hashes.h"
 #include <math.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -67,10 +68,10 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
         const double moments[PH_COLOR_MOMENTS] = {m.mean, m.std_dev, m.skew};
         for (int k = 0; k < PH_COLOR_MOMENTS; k++) {
             double scaled = round(moments[k] * (double)PH_COLOR_MOMENT_SCALE);
-            if (scaled > 32767.0)
-                scaled = 32767.0;
-            else if (scaled < -32768.0)
-                scaled = -32768.0;
+            if (scaled > INT16_MAX)
+                scaled = INT16_MAX;
+            else if (scaled < INT16_MIN)
+                scaled = INT16_MIN;
 
             uint16_t bits = (uint16_t)(int16_t)scaled;
             size_t at = ((size_t)c * PH_COLOR_MOMENTS + (size_t)k) * PH_COLOR_MOMENT_BYTES;

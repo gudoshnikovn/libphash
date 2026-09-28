@@ -4,6 +4,11 @@
 # of a vendored decoder. A PH_API function missing from the export table fails too --
 # a consumer would get an unresolved symbol.
 #
+# When it builds the library itself, it also checks the naming rule of
+# docs/development.md on the object files: every function or variable of ours with
+# external linkage -- hidden or not -- is named ph_*. The stb_image/stb_image_resize2
+# instantiations (stbi_*, stbir_*) are vendored code and exempt.
+#
 #   scripts/check_exported_symbols.sh                    # builds a shared libphash first
 #   scripts/check_exported_symbols.sh -DPHASH_USE_WEBP=OFF   # ... with extra CMake options
 #   scripts/check_exported_symbols.sh --lib path/to/libphash.so
@@ -52,6 +57,16 @@ extra=$(comm -13 <(echo "$expected") <(echo "$actual"))
 missing=$(comm -23 <(echo "$expected") <(echo "$actual"))
 
 status=0
+if [ -n "${WORK_DIR:-}" ]; then
+    unprefixed=$(find "$WORK_DIR/CMakeFiles/phash.dir" -name '*.o' -print0 \
+        | xargs -0 nm -g --defined-only 2>/dev/null | awk 'NF == 3 {print $3}' \
+        | sed 's/^_//' | grep -v -E '^(ph_|stbi|stbir)' | sort -u || true)
+    if [ -n "$unprefixed" ]; then
+        echo "check_exported_symbols: external symbol(s) without the ph_ prefix:" >&2
+        echo "$unprefixed" | sed 's/^/  ! /' >&2
+        status=1
+    fi
+fi
 if [ -n "$extra" ]; then
     echo "check_exported_symbols: $(echo "$extra" | wc -l | tr -d ' ') symbol(s) exported but not declared in include/libphash.h:" >&2
     echo "$extra" | sed 's/^/  + /' >&2

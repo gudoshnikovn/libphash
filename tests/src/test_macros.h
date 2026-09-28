@@ -1,5 +1,5 @@
-#ifndef TEST_MACROS_H
-#define TEST_MACROS_H
+#ifndef PH_TEST_MACROS_H
+#define PH_TEST_MACROS_H
 
 #include <math.h>
 #include <stdint.h>
@@ -136,4 +136,4 @@ static __inline int ph_test_popcount(unsigned int x) {
 
 #define PASS(name) printf("[PASS] %s\n", (name))
 
-#endif /* TEST_MACROS_H */
+#endif /* PH_TEST_MACROS_H */

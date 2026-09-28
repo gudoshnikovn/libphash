@@ -214,10 +214,29 @@ We use `clang-format` with a custom style (based on LLVM with minor tweaks).
 
 ## Naming Conventions
 
-- **Public APIs**: Prefix with `ph_` (e.g., `ph_compute_ahash`).
-- **Internal Helper Functions**: Standard C naming, not exposed in `libphash.h`.
-- **Types**: Suffix with `_t` (e.g., `ph_context_t`).
-- **Files**: Lowercase with underscores (e.g., `color_moments.c`).
+- **External linkage ⇒ `ph_`.** Every function and variable of ours that is not `static`
+  is named `ph_*`, public or internal: the library shares one C namespace with whatever
+  links it. `scripts/check_exported_symbols.sh` fails on any other name (the vendored
+  `stbi_*`/`stbir_*` instantiations excepted).
+- **`static` ⇒ prefix optional.** A `static` function is invisible outside its file;
+  both `ph_*` and unprefixed names are in use, and neither is renamed to match the other.
+- **Types**: `ph_*_t` (e.g., `ph_context_t`).
+- **Macros and constants**: `PH_*`, upper case with underscores (e.g., `PH_DIGEST_MAX_BYTES`).
+- **Include guards**: `PH_<PATH>_H` for the file's path from `include/`, `src/` or
+  `tests/src/` (e.g., `PH_HASHES_HASHES_H` for `src/hashes/hashes.h`).
+- **Files**: lower case with underscores (e.g., `color_moments.c`).
+
+## Headers and includes
+
+- `include/libphash.h` is the whole public API. Everything under `src/` is internal and
+  split by subsystem: `context.h`, `arena.h`, `safety.h`, `digest.h`, `fileio.h`,
+  `batch.h`, `loader.h`, `image/image.h`, `hashes/hashes.h`, `loaders/backends.h`.
+- A file includes the headers whose names it uses, spelled by their path from `src/`
+  (`#include "image/image.h"`), never through a sibling's includes and never with `../`.
+- The vendored single-file stb headers are the one exception: they are included by their
+  path relative to the including file (`#include "../vendor/stb_image.h"`), so that
+  `vendor/` is not an include directory and no other vendored header can be picked up
+  by a bare name.
 
 ## CI matrix (`.github/workflows/ci.yml`)
 
