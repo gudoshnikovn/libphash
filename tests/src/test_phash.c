@@ -2,6 +2,7 @@
 #include "hashes/hashes.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -26,16 +27,18 @@ void test_dct2_partial_unit() {
     // Case 2: Symmetry check (transposed input)
     // For a simplistic symmetry check, we'll use a non-uniform input
     memset(input, 0, sizeof(input));
-    for (int i = 0; i < 32; i++)
+    for (int i = 0; i < 32; i++) {
         input[i * 32] = 255; // First column is bright
+    }
 
     ASSERT_OK(ph_dct2_partial(dct_mat, input, 32, 8, out));
 
     // Transpose input (first row becomes bright)
     uint8_t input_t[32 * 32];
     memset(input_t, 0, sizeof(input_t));
-    for (int j = 0; j < 32; j++)
+    for (int j = 0; j < 32; j++) {
         input_t[j] = 255;
+    }
 
     float out_t[8 * 8];
     ASSERT_OK(ph_dct2_partial(dct_mat, input_t, 32, 8, out_t));
@@ -46,15 +49,17 @@ void test_dct2_partial_unit() {
 
     // Case 3: out-of-range sizes must be reported, and `out` must be left
     // untouched instead of being silently skipped.
-    for (int i = 0; i < 64; i++)
+    for (int i = 0; i < 64; i++) {
         out[i] = -12345.0f;
+    }
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_dct2_partial(dct_mat, input, 33, 8, out));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_dct2_partial(dct_mat, input, 32, 9, out));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_dct2_partial(dct_mat, input, 4, 8, out));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_dct2_partial(dct_mat, input, 0, 8, out));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_dct2_partial(NULL, input, 32, 8, out));
-    for (int i = 0; i < 64; i++)
+    for (int i = 0; i < 64; i++) {
         ASSERT_FLOAT_EQ(-12345.0f, out[i], 0.0);
+    }
 
     PASS("test_dct2_partial_unit");
 }
@@ -64,17 +69,19 @@ void test_median_bitpack_unit() {
     // sorted: 1.0, 2.0, 3.0, 4.0. n=4 (even). median = (sorted[1]+sorted[2])/2 = (2.0+3.0)/2 = 2.5
     // values > 2.5: 3.0 (index 1) and 4.0 (index 3). hash = (1<<1)|(1<<3) = 0xa
     uint64_t hash = ph_median_bitpack(values, 4);
-    ASSERT_UINT64_EQ(0x0a, hash);
+    ASSERT_UINT64_EQ(0x0A, hash);
 
     float values64[64];
-    for (int i = 0; i < 64; i++)
+    for (int i = 0; i < 64; i++) {
         values64[i] = (float)i;
+    }
     // n=64 (even). median = (sorted[31]+sorted[32])/2 = (31.0+32.0)/2 = 31.5
     // values > 31.5 are indices 32..63 (32 values).
     hash = ph_median_bitpack(values64, 64);
     uint64_t expected = 0;
-    for (int i = 32; i < 64; i++)
+    for (int i = 32; i < 64; i++) {
         expected |= (1ULL << i);
+    }
     ASSERT_UINT64_EQ(expected, hash);
 
     PASS("test_median_bitpack_unit");
@@ -149,7 +156,7 @@ void test_phash_params_setter_bounds() {
  * in the arena. */
 void test_phash_out_of_range_config_rejected() {
     ph_context_t *ctx = NULL;
-    uint64_t hash = 0xdeadbeefcafebabeULL;
+    uint64_t hash = 0xDEADBEEFCAFEBABEULL;
     uint64_t whash = 0;
 
     ASSERT_OK(ph_create(&ctx));
@@ -161,18 +168,18 @@ void test_phash_out_of_range_config_rejected() {
     ctx->config.phash_dct_size = 33;
     ctx->config.phash_reduction_size = 8;
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_compute_phash(ctx, &hash));
-    ASSERT_UINT64_EQ(0xdeadbeefcafebabeULL, hash); /* digest untouched */
+    ASSERT_UINT64_EQ(0xDEADBEEFCAFEBABEULL, hash); /* digest untouched */
 
     ctx->config.phash_dct_size = 32;
     ctx->config.phash_reduction_size = 9;
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_compute_phash(ctx, &hash));
-    ASSERT_UINT64_EQ(0xdeadbeefcafebabeULL, hash);
+    ASSERT_UINT64_EQ(0xDEADBEEFCAFEBABEULL, hash);
 
     /* reduction_size > dct_size is invalid as well */
     ctx->config.phash_dct_size = 4;
     ctx->config.phash_reduction_size = 8;
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_compute_phash(ctx, &hash));
-    ASSERT_UINT64_EQ(0xdeadbeefcafebabeULL, hash);
+    ASSERT_UINT64_EQ(0xDEADBEEFCAFEBABEULL, hash);
 
     ph_free(ctx);
     PASS("test_phash_out_of_range_config_rejected");
@@ -258,8 +265,9 @@ void test_phash_every_dct_size() {
             ASSERT_OK(ph_compute_phash(ctx, &again));
             ASSERT_UINT64_EQ(first, again);
             /* Only reduction_size^2 bits can ever be set. */
-            if (red < 8)
+            if (red < 8) {
                 ASSERT_UINT64_EQ(0, first >> (red * red));
+            }
         }
     }
 

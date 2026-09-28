@@ -30,13 +30,16 @@ static inline size_t ph_size(int v) {
  * Returns 0 (and leaves *out untouched) if the product would overflow size_t;
  * returns 1 and sets *out to the byte count otherwise. */
 static inline int ph_safe_image_alloc_size(uint64_t w, uint64_t h, uint64_t channels, size_t *out) {
-    if (w == 0 || h == 0 || channels == 0)
+    if (w == 0 || h == 0 || channels == 0) {
         return 0;
-    if (w > (uint64_t)SIZE_MAX / h)
+    }
+    if (w > (uint64_t)SIZE_MAX / h) {
         return 0;
+    }
     uint64_t wh = w * h;
-    if (wh > (uint64_t)SIZE_MAX / channels)
+    if (wh > (uint64_t)SIZE_MAX / channels) {
         return 0;
+    }
     *out = (size_t)(wh * channels);
     return 1;
 }
@@ -95,18 +98,20 @@ static inline int ph_exceeds_dimension_limit(uint64_t w, uint64_t h) {
  * call this with values wider than 32 bits without adding an overflow check first. */
 static inline int ph_exceeds_pixel_limit(uint64_t w, uint64_t h, uint64_t max_pixels) {
     uint64_t pixels = w * h;
-    if (pixels > PH_MAX_SUPPORTED_PIXELS)
+    if (pixels > PH_MAX_SUPPORTED_PIXELS) {
         return 1;
-    if (max_pixels == 0)
+    }
+    if (max_pixels == 0) {
         return 0;
+    }
     return pixels > max_pixels;
 }
 
 /* printf-style format checking for internal helpers; nothing on compilers without it. */
 #if defined(__GNUC__) || defined(__clang__)
-#define PH_PRINTF_FORMAT(fmt_idx, arg_idx) __attribute__((format(printf, fmt_idx, arg_idx)))
+#    define PH_PRINTF_FORMAT(fmt_idx, arg_idx) __attribute__((format(printf, fmt_idx, arg_idx)))
 #else
-#define PH_PRINTF_FORMAT(fmt_idx, arg_idx)
+#    define PH_PRINTF_FORMAT(fmt_idx, arg_idx)
 #endif
 
 /* Where to cut `len` bytes of a string that was truncated to fit, so that the cut does
@@ -121,12 +126,14 @@ static inline size_t ph_utf8_cut(const char *s, size_t len) {
         lead--;
         back++;
     }
-    if (lead == 0)
+    if (lead == 0) {
         return len;
+    }
     unsigned char c = (unsigned char)s[lead - 1];
     size_t need = (c >= 0xF0 && c <= 0xF7) ? 4 : (c >= 0xE0) ? 3 : (c >= 0xC0) ? 2 : 1;
-    if (c < 0xC0 || c > 0xF7)
+    if (c < 0xC0 || c > 0xF7) {
         return len; /* ASCII, or not a lead byte at all: nothing of ours to trim */
+    }
     return (size_t)back + 1 < need ? lead - 1 : len;
 }
 
@@ -134,13 +141,16 @@ static inline size_t ph_utf8_cut(const char *s, size_t len) {
  * meaning the caller isn't collecting a message). A truncation never splits a UTF-8
  * character (ph_utf8_cut()). Never allocates. */
 static inline void ph_set_err_msg(char *err_msg, size_t err_msg_cap, const char *msg) {
-    if (!err_msg || err_msg_cap == 0 || !msg)
+    if (!err_msg || err_msg_cap == 0 || !msg) {
         return;
+    }
     size_t i = 0;
-    for (; i + 1 < err_msg_cap && msg[i] != '\0'; i++)
+    for (; i + 1 < err_msg_cap && msg[i] != '\0'; i++) {
         err_msg[i] = msg[i];
-    if (msg[i] != '\0')
+    }
+    if (msg[i] != '\0') {
         i = ph_utf8_cut(err_msg, i);
+    }
     err_msg[i] = '\0';
 }
 

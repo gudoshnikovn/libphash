@@ -13,30 +13,31 @@
  * on Windows, which is what makes an open fail with EACCES there. */
 
 #include "test_macros.h"
+
 #include <libphash.h>
 #include <stdio.h>
 #include <string.h>
 
 #ifdef _WIN32
-#include <direct.h>
-#include <fcntl.h>
-#include <io.h>
-#include <share.h>
-#include <sys/stat.h>
-#define ph_test_mkdir(p) _mkdir(p)
-#define ph_test_rmdir(p) _rmdir(p)
-#define ph_test_unlink(p) _unlink(p)
+#    include <direct.h>
+#    include <fcntl.h>
+#    include <io.h>
+#    include <share.h>
+#    include <sys/stat.h>
+#    define ph_test_mkdir(p)  _mkdir(p)
+#    define ph_test_rmdir(p)  _rmdir(p)
+#    define ph_test_unlink(p) _unlink(p)
 #else
-#include <sys/stat.h>
-#include <unistd.h>
-#define ph_test_mkdir(p) mkdir((p), 0755)
-#define ph_test_rmdir(p) rmdir(p)
-#define ph_test_unlink(p) unlink(p)
+#    include <sys/stat.h>
+#    include <unistd.h>
+#    define ph_test_mkdir(p)  mkdir((p), 0755)
+#    define ph_test_rmdir(p)  rmdir(p)
+#    define ph_test_unlink(p) unlink(p)
 #endif
 
-#define TMP_DIR "ph_io_probe_dir"
-#define TMP_EMPTY "ph_io_probe_empty.png"
-#define TMP_LOCKED "ph_io_probe_locked.png"
+#define TMP_DIR     "ph_io_probe_dir"
+#define TMP_EMPTY   "ph_io_probe_empty.png"
+#define TMP_LOCKED  "ph_io_probe_locked.png"
 #define TMP_MISSING "ph_io_probe_missing.png"
 
 /* Every entry in the table must yield PH_ERR_IO *and* a diagnostic message: the

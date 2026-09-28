@@ -22,20 +22,21 @@
  */
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #ifdef PH_ENABLE_THREADS
-#include <stdatomic.h>
-#if defined(_WIN32)
-#include <windows.h>
-#else
-#include <pthread.h>
-#endif
+#    include <stdatomic.h>
+#    if defined(_WIN32)
+#        include <windows.h>
+#    else
+#        include <pthread.h>
+#    endif
 
-#define NUM_THREADS 8
-#define ITERATIONS_PER_THREAD 5
+#    define NUM_THREADS           8
+#    define ITERATIONS_PER_THREAD 5
 
 static const char *FIXTURES[] = {
     TEST_DATA_DIR "/photo.jpeg",
@@ -44,9 +45,9 @@ static const char *FIXTURES[] = {
     TEST_DATA_DIR "/photo.png",
     TEST_DATA_DIR "/photo_complex.png",
 };
-#define NUM_FIXTURES (sizeof(FIXTURES) / sizeof(FIXTURES[0]))
+#    define NUM_FIXTURES (sizeof(FIXTURES) / sizeof(FIXTURES[0]))
 
-#define ALL_FLAGS_MASK (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH)
+#    define ALL_FLAGS_MASK (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH)
 
 typedef struct {
     uint64_t hashes[PH_HASH_FLAGS_COUNT];
@@ -68,8 +69,9 @@ static void compute_all(ph_context_t *ctx, const char *path, fixture_result_t *o
 static void compute_reference(void) {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
-    for (size_t i = 0; i < NUM_FIXTURES; i++)
+    for (size_t i = 0; i < NUM_FIXTURES; i++) {
         compute_all(ctx, FIXTURES[i], &g_reference[i]);
+    }
     ph_free(ctx);
 }
 
@@ -135,17 +137,17 @@ static void worker_body(worker_arg_t *arg) {
     ph_free(ctx);
 }
 
-#if defined(_WIN32)
+#    if defined(_WIN32)
 static DWORD WINAPI worker_win(LPVOID p) {
     worker_body((worker_arg_t *)p);
     return 0;
 }
-#else
+#    else
 static void *worker_pthread(void *p) {
     worker_body((worker_arg_t *)p);
     return NULL;
 }
-#endif
+#    endif
 
 static void run_once(void) {
     atomic_store(&g_ready, 0);
@@ -157,7 +159,7 @@ static void run_once(void) {
         args[i].failed = 0;
     }
 
-#if defined(_WIN32)
+#    if defined(_WIN32)
     HANDLE handles[NUM_THREADS];
     for (int i = 0; i < NUM_THREADS; i++) {
         handles[i] = CreateThread(NULL, 0, worker_win, &args[i], 0, NULL);
@@ -167,16 +169,19 @@ static void run_once(void) {
      * (wait_at_barrier() itself blocks each thread until g_ready reaches NUM_THREADS). */
     atomic_store(&g_go, 1);
     WaitForMultipleObjects(NUM_THREADS, handles, TRUE, INFINITE);
-    for (int i = 0; i < NUM_THREADS; i++)
+    for (int i = 0; i < NUM_THREADS; i++) {
         CloseHandle(handles[i]);
-#else
+    }
+#    else
     pthread_t threads[NUM_THREADS];
-    for (int i = 0; i < NUM_THREADS; i++)
+    for (int i = 0; i < NUM_THREADS; i++) {
         ASSERT_INT_EQ(0, pthread_create(&threads[i], NULL, worker_pthread, &args[i]));
+    }
     atomic_store(&g_go, 1);
-    for (int i = 0; i < NUM_THREADS; i++)
+    for (int i = 0; i < NUM_THREADS; i++) {
         pthread_join(threads[i], NULL);
-#endif
+    }
+#    endif
 
     for (int i = 0; i < NUM_THREADS; i++) {
         if (args[i].failed) {
@@ -191,8 +196,9 @@ static void run_once(void) {
  * and TSan (see .github/workflows/ci.yml, tsan job) is watching every one of them. */
 static void test_many_contexts_many_threads(void) {
     compute_reference();
-    for (int rep = 0; rep < 3; rep++)
+    for (int rep = 0; rep < 3; rep++) {
         run_once();
+    }
     PASS("test_many_contexts_many_threads");
 }
 

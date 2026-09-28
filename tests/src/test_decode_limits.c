@@ -1,5 +1,6 @@
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,7 +10,7 @@
  * (1e10 pixel) image with no real pixel data behind it — a classic decompression
  * bomb. Loading it must fail fast with PH_ERR_IMAGE_TOO_LARGE, never attempt the
  * multi-gigabyte allocation implied by the header. */
-#define BOMB_PATH TEST_DATA_DIR "/decode_bomb.png"
+#define BOMB_PATH   TEST_DATA_DIR "/decode_bomb.png"
 #define NORMAL_PATH TEST_DATA_DIR "/photo.jpeg" /* 400x400 = 160000 pixels */
 
 void test_default_limit_rejects_bomb_from_file() {

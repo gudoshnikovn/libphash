@@ -8,6 +8,7 @@
  * same error code on both. */
 
 #include "test_macros.h"
+
 #include <libphash.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -111,16 +112,18 @@ static load_result_t describe(ph_context_t *ctx, ph_error_t err) {
     load_result_t r;
     memset(&r, 0, sizeof(r));
     r.err = err;
-    if (err != PH_SUCCESS)
+    if (err != PH_SUCCESS) {
         return r;
+    }
     ph_context_get_dimensions(ctx, &r.width, &r.height, &r.channels);
     ASSERT_OK(ph_compute_ahash(ctx, &r.ahash));
     ASSERT_OK(ph_compute_dhash(ctx, &r.dhash));
     ASSERT_OK(ph_compute_phash(ctx, &r.phash));
     ASSERT_OK(ph_compute_mhash(ctx, &r.mhash));
     /* A digest, so it is compared by bytes below rather than by the CHECK macro. */
-    if (r.channels >= 3)
+    if (r.channels >= 3) {
         ASSERT_OK(ph_compute_color_hash(ctx, &r.color));
+    }
     return r;
 }
 
@@ -133,22 +136,22 @@ static load_result_t load_via_memory(ph_context_t *ctx, const uint8_t *buf, size
 }
 
 static void expect_same(const load_result_t *a, const load_result_t *b, const char *what) {
-#define CHECK(field, fmt)                                                                          \
-    if (a->field != b->field) {                                                                    \
-        fprintf(stderr,                                                                            \
-                "[FAIL] %s: file and memory disagree on " #field " (" fmt " vs " fmt ")\n", what,  \
-                a->field, b->field);                                                               \
-        exit(1);                                                                                   \
+#define CHECK(field, fmt)                                                                         \
+    if (a->field != b->field) {                                                                   \
+        fprintf(stderr,                                                                           \
+                "[FAIL] %s: file and memory disagree on " #field " (" fmt " vs " fmt ")\n", what, \
+                a->field, b->field);                                                              \
+        exit(1);                                                                                  \
     }
     /* uint64_t is `unsigned long` on LP64 (Linux/macOS x86_64/arm64) but `unsigned long
      * long` on LLP64 (Windows) -- %llu only matches the latter, so casting to
      * `unsigned long long` here (always at least 64 bits, exactly what %llu expects)
      * is the portable fix, not swapping the format string per platform. */
-#define CHECK_U64(field)                                                                           \
-    if (a->field != b->field) {                                                                    \
-        fprintf(stderr, "[FAIL] %s: file and memory disagree on " #field " (%llu vs %llu)\n",      \
-                what, (unsigned long long)a->field, (unsigned long long)b->field);                 \
-        exit(1);                                                                                   \
+#define CHECK_U64(field)                                                                      \
+    if (a->field != b->field) {                                                               \
+        fprintf(stderr, "[FAIL] %s: file and memory disagree on " #field " (%llu vs %llu)\n", \
+                what, (unsigned long long)a->field, (unsigned long long)b->field);            \
+        exit(1);                                                                              \
     }
     CHECK(err, "%d")
     CHECK(width, "%d")
@@ -282,8 +285,9 @@ int main(void) {
     check_parity(TEST_DATA_DIR "/photo.jpeg", "photo.jpeg");
     check_parity(TEST_DATA_DIR "/photo.png", "photo.png");
     check_parity(TEST_DATA_DIR "/photo_complex.png", "photo_complex.png");
-    if (ph_can_use_webp())
+    if (ph_can_use_webp()) {
         check_parity(TEST_DATA_DIR "/photo.webp", "photo.webp");
+    }
     test_exif_orientation_parity();
     test_failure_parity();
     PASS("test_load_path_parity");

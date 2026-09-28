@@ -10,6 +10,7 @@
 #include "libphash.h"
 #include "safety.h"
 #include "test_macros.h"
+
 #include <stdint.h>
 #include <string.h>
 
@@ -57,8 +58,9 @@ static void test_grayscale_1ch_passthrough(void) {
     uint8_t src[] = {0, 50, 100, 200, 255};
     uint8_t dst[5];
     ph_to_grayscale(NULL, src, 5, 1, 1, dst);
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < 5; i++) {
         ASSERT_UINT8_EQ(src[i], dst[i]);
+    }
     PASS("test_grayscale_1ch_passthrough");
 }
 

@@ -6,18 +6,19 @@
  * see the container case, run this binary with `docker run --cpuset-cpus=0,1` or
  * `--cpus=2`, or under `taskset -c 0,1`, and set PH_EXPECT_CPUS=2. */
 #if defined(__linux__) && !defined(_GNU_SOURCE)
-#define _GNU_SOURCE
+#    define _GNU_SOURCE
 #endif
 #include "batch.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #if defined(__linux__)
-#include <sched.h>
+#    include <sched.h>
 #endif
 #if !defined(_WIN32)
-#include <unistd.h>
+#    include <unistd.h>
 #endif
 
 static void test_quota_parser(void) {
@@ -39,17 +40,20 @@ static void test_detection_is_bounded(void) {
     ASSERT(n >= 1);
 #if !defined(_WIN32)
     long online = sysconf(_SC_NPROCESSORS_ONLN);
-    if (online > 0)
+    if (online > 0) {
         ASSERT(n <= online);
+    }
 #endif
 #if defined(__linux__)
     cpu_set_t set;
-    if (sched_getaffinity(0, sizeof(set), &set) == 0)
+    if (sched_getaffinity(0, sizeof(set), &set) == 0) {
         ASSERT(n <= CPU_COUNT(&set));
+    }
 #endif
     const char *expect = getenv("PH_EXPECT_CPUS");
-    if (expect && *expect)
+    if (expect && *expect) {
         ASSERT_INT_EQ(atoi(expect), n);
+    }
     printf("[PASS] test_detection_is_bounded (%d available)\n", n);
 }
 

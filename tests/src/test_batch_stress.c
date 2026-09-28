@@ -18,6 +18,7 @@
 
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,7 +35,7 @@
 #define STRESS_FLAGS (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH)
 /* ph_compute_multi() writes only one slot per set flag, densely from index 0; the tail of
  * hashes[] is left untouched, so only the first STRESS_NSET slots are comparable. */
-#define STRESS_NSET 4
+#define STRESS_NSET  4
 
 /* Mixed inputs on purpose: three decodable images of different formats/sizes, a
  * corrupted file and a NULL path. Per-item error statuses must come out of the
@@ -175,8 +176,9 @@ static void test_stress_more_threads_than_items(void) {
 
         for (size_t t = 0; t < THREAD_COUNTS_N; t++) {
             const int threads = g_thread_counts[t];
-            if (threads != 0 && (size_t)threads <= n)
+            if (threads != 0 && (size_t)threads <= n) {
                 continue; /* covered by the big run */
+            }
             ph_batch_item_t *items = alloc_items(n);
             ASSERT_OK(ph_hash_files(items, n, STRESS_FLAGS, threads));
             check_all_processed(items, n, threads);
@@ -344,18 +346,21 @@ static void test_stress_cancel_midway(void) {
         ASSERT_INT_EQ(PH_ERR_CANCELLED, ph_hash_files_ex(items, STRESS_N, STRESS_FLAGS, &options));
 
         size_t started = 0;
-        while (started < STRESS_N && items[started].status != PH_ERR_CANCELLED)
+        while (started < STRESS_N && items[started].status != PH_ERR_CANCELLED) {
             started++;
+        }
         ASSERT(started > 0 && started < STRESS_N);
         compare_or_die(items, reference, started, thread_counts[t], "cancelled prefix");
         for (size_t i = started; i < STRESS_N; i++) {
             ASSERT_INT_EQ(PH_ERR_CANCELLED, items[i].status);
-            for (int k = 0; k < PH_BATCH_HASHES_CAPACITY; k++)
+            for (int k = 0; k < PH_BATCH_HASHES_CAPACITY; k++) {
                 ASSERT(items[i].hashes[k] == 0);
+            }
         }
         ASSERT_INT_EQ((int)started, (int)atomic_load(&st->progress_calls));
-        for (size_t d = 1; d <= started; d++)
+        for (size_t d = 1; d <= started; d++) {
             ASSERT_INT_EQ(1, (int)atomic_load(&st->seen[d]));
+        }
 
         free(items);
         free(st);

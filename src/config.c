@@ -2,6 +2,7 @@
 #include "hashes/hashes.h"
 #include "image/image.h"
 #include "safety.h"
+
 #include <math.h>
 #include <string.h>
 
@@ -19,8 +20,9 @@
  * large number of warnings that carry no information. Callers passing runtime values are
  * expected to check the return; callers passing literals are not forced to. */
 PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma) {
-    if (!ctx)
+    if (!ctx) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     /* isfinite() has to come first: every comparison against NaN is false, so
      * `gamma <= PH_GAMMA_EPSILON` alone would accept NAN (and INFINITY, which is above
@@ -28,8 +30,9 @@ PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma) {
      * is applied per image, normalised by the buffer's own maximum; see ph_apply_gamma()
      * in src/image/color.c). The upper bound keeps it inside a range symmetric about
      * 1.0; see PH_GAMMA_MAX. */
-    if (!isfinite((double)gamma) || gamma <= PH_GAMMA_EPSILON || gamma > PH_GAMMA_MAX)
+    if (!isfinite((double)gamma) || gamma <= PH_GAMMA_EPSILON || gamma > PH_GAMMA_MAX) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     ctx->config.gamma = gamma;
     return PH_SUCCESS;
@@ -37,21 +40,26 @@ PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma) {
 
 PH_API void ph_context_get_dimensions(const ph_context_t *ctx, int *width, int *height,
                                       int *channels) {
-    if (!ctx)
+    if (!ctx) {
         return;
-    if (width)
+    }
+    if (width) {
         *width = ctx->image.width;
-    if (height)
+    }
+    if (height) {
         *height = ctx->image.height;
-    if (channels)
+    }
+    if (channels) {
         *channels = ctx->image.channels;
+    }
 }
 
 PH_API int ph_is_loaded(const ph_context_t *ctx) { return (ctx && ctx->image.raw_rgb) ? 1 : 0; }
 
 PH_API ph_error_t ph_context_get_gray_weights(const ph_context_t *ctx, int *r, int *g, int *b) {
-    if (!ctx || !r || !g || !b)
+    if (!ctx || !r || !g || !b) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     *r = ctx->config.gray_r;
     *g = ctx->config.gray_g;
     *b = ctx->config.gray_b;
@@ -59,22 +67,25 @@ PH_API ph_error_t ph_context_get_gray_weights(const ph_context_t *ctx, int *r, i
 }
 
 PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, int b) {
-    if (!ctx)
+    if (!ctx) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     /* A negative weight is not a "dark" channel, it is a channel that subtracts
      * luminance -- the grayscale shift assumes non-negative weights summing to
      * PH_GRAY_WEIGHT_SCALE and would produce out-of-range intermediate values. Rejected rather than
      * interpreted. The sum is accumulated in long long because three int weights can
      * overflow int even when each of them is individually valid. */
-    if (r < 0 || g < 0 || b < 0)
+    if (r < 0 || g < 0 || b < 0) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     long long sum = (long long)r + (long long)g + (long long)b;
     /* sum == 0 is an error, not a silent reset to the BT.601 defaults: "0, 0, 0" must not
      * install a configuration the caller never asked for. */
-    if (sum <= 0 || sum > PH_GRAY_WEIGHT_MAX_SUM)
+    if (sum <= 0 || sum > PH_GRAY_WEIGHT_MAX_SUM) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     ctx->config.gray_r = (int)(((long long)r * PH_GRAY_WEIGHT_SCALE) / sum);
     ctx->config.gray_g = (int)(((long long)g * PH_GRAY_WEIGHT_SCALE) / sum);
@@ -95,8 +106,9 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
      * coefficients and yields the fixed digest 0 for every image. */
     if (!ctx || dct_size <= 0 || dct_size > PH_DCT_MAX_SIZE ||
         reduction_size < PH_DCT_MIN_REDUCTION_SIZE || reduction_size > PH_DCT_MAX_REDUCTION_SIZE ||
-        reduction_size > dct_size)
+        reduction_size > dct_size) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     ctx->config.phash_dct_size = dct_size;
     ctx->config.phash_reduction_size = reduction_size;
     return PH_SUCCESS;
@@ -119,8 +131,9 @@ PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projection
     if (!ctx || projections < PH_RADIAL_MIN_PROJECTIONS ||
         projections > PH_RADIAL_MAX_PROJECTIONS || samples < PH_RADIAL_MIN_SAMPLES ||
         samples > PH_RADIAL_MAX_SAMPLES || !isfinite((double)sigma) || !(sigma > 0.0f) ||
-        sigma > PH_RADIAL_MAX_SIGMA)
+        sigma > PH_RADIAL_MAX_SIGMA) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     ctx->config.radial_projections = projections;
     ctx->config.radial_samples = samples;
     ctx->config.radial_sigma = sigma;
@@ -136,12 +149,14 @@ PH_API ph_error_t ph_context_set_mhash_params(ph_context_t *ctx, float alpha, fl
      * the correlation stops being worth its cost long before it stops being meaningful.
      * Rejected values leave the configuration untouched, as everywhere else. */
     if (!ctx || !(alpha > 1.0f) || !(level >= 0.0f) || !isfinite(alpha) || !isfinite(level) ||
-        size < PH_MH_MIN_IMAGE_SIZE || size > PH_MH_MAX_IMAGE_SIZE)
+        size < PH_MH_MIN_IMAGE_SIZE || size > PH_MH_MAX_IMAGE_SIZE) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     double sigma = 4.0 * pow((double)alpha, (double)level);
-    if (!(sigma >= 1.0) || 2.0 * sigma + 1.0 > (double)PH_MH_MAX_KERNEL_SIDE)
+    if (!(sigma >= 1.0) || 2.0 * sigma + 1.0 > (double)PH_MH_MAX_KERNEL_SIDE) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     ctx->config.mhash_alpha = alpha;
     ctx->config.mhash_level = level;
@@ -153,15 +168,17 @@ PH_API ph_error_t ph_context_set_block_params(ph_context_t *ctx, int block_size)
     /* block_size^2 bits have to fit into a ph_digest_t; see PH_BLOCK_MAX_SIZE. Lower bound
      * is PH_BLOCK_MIN_SIZE, not 1: a single block's mean equals itself, the median-of-one
      * always compares >= true, and the digest is the fixed 0x01 for every image. */
-    if (!ctx || block_size < PH_BLOCK_MIN_SIZE || block_size > PH_BLOCK_MAX_SIZE)
+    if (!ctx || block_size < PH_BLOCK_MIN_SIZE || block_size > PH_BLOCK_MAX_SIZE) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     ctx->config.block_size = block_size;
     return PH_SUCCESS;
 }
 
 PH_API ph_error_t ph_context_set_load_grayscale(ph_context_t *ctx, int enable) {
-    if (!ctx)
+    if (!ctx) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     /* A boolean flag: any int is a valid argument, normalized to 0/1. There is nothing to
      * reject, so this never fails for a non-NULL context. */
     ctx->config.load_grayscale = enable ? 1 : 0;
@@ -169,35 +186,40 @@ PH_API ph_error_t ph_context_set_load_grayscale(ph_context_t *ctx, int enable) {
 }
 
 PH_API ph_error_t ph_context_set_auto_orient(ph_context_t *ctx, int enable) {
-    if (!ctx)
+    if (!ctx) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     ctx->config.auto_orient = enable ? 1 : 0;
     return PH_SUCCESS;
 }
 
 PH_API ph_error_t ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t mode) {
-    if (!ctx)
+    if (!ctx) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     /* An enum argument is not a guarantee: in C any int value can be passed through an
      * enum parameter, and FFI callers routinely do. Only the declared enumerators are
      * accepted -- ph_compute_whash() dispatches on this field, so an unknown value would
      * silently pick whichever branch the comparison happened to take. */
-    if (mode != PH_WHASH_FAST && mode != PH_WHASH_FULL)
+    if (mode != PH_WHASH_FAST && mode != PH_WHASH_FULL) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     ctx->config.whash_mode = mode;
     return PH_SUCCESS;
 }
 
 PH_API ph_error_t ph_context_set_whash_remove_max_haar_ll(ph_context_t *ctx, int enable) {
-    if (!ctx)
+    if (!ctx) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     ctx->config.whash_remove_max_haar_ll = enable ? 1 : 0;
     return PH_SUCCESS;
 }
 
 PH_API ph_error_t ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixels) {
-    if (!ctx)
+    if (!ctx) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     /* Every uint64_t is a valid request, 0 included ("no limit of my own"). No upper
      * bound is enforced here on purpose: the implementation ceiling
      * PH_MAX_SUPPORTED_PIXELS is applied where the limit is used, by
@@ -209,13 +231,15 @@ PH_API ph_error_t ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixe
 }
 
 PH_API ph_error_t ph_context_set_decode_scale(ph_context_t *ctx, ph_decode_scale_t scale) {
-    if (!ctx)
+    if (!ctx) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     /* Same rule as ph_context_set_whash_mode(): an enum parameter is not a guarantee in
      * C, and this value is dispatched on directly by the JPEG backend. */
     if (scale != PH_DECODE_SCALE_FULL && scale != PH_DECODE_SCALE_HALF &&
-        scale != PH_DECODE_SCALE_QUARTER && scale != PH_DECODE_SCALE_EIGHTH)
+        scale != PH_DECODE_SCALE_QUARTER && scale != PH_DECODE_SCALE_EIGHTH) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     ctx->config.decode_scale = scale;
     return PH_SUCCESS;
 }

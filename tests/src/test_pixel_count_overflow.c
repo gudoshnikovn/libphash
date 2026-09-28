@@ -10,6 +10,7 @@
 #include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <limits.h>
 #include <math.h>
 #include <stdlib.h>
@@ -26,28 +27,30 @@
  *    print a line that scrolls past in CI. That is the whole point of this file.
  * A non-sanitizer build ignores all of this. */
 #if defined(__has_feature)
-#if __has_feature(address_sanitizer)
-#define PH_TEST_ASAN 1
-#endif
-#if __has_feature(undefined_behavior_sanitizer)
-#define PH_TEST_UBSAN 1
-#endif
+#    if __has_feature(address_sanitizer)
+#        define PH_TEST_ASAN 1
+#    endif
+#    if __has_feature(undefined_behavior_sanitizer)
+#        define PH_TEST_UBSAN 1
+#    endif
 #endif
 #if defined(__SANITIZE_ADDRESS__)
-#define PH_TEST_ASAN 1
+#    define PH_TEST_ASAN 1
 #endif
 #if defined(__SANITIZE_UNDEFINED__)
-#define PH_TEST_UBSAN 1
+#    define PH_TEST_UBSAN 1
 #endif
 
 #if defined(PH_TEST_ASAN)
 const char *__asan_default_options(void);
+
 const char *__asan_default_options(void) {
     return "allocator_may_return_null=1:max_allocation_size_mb=512";
 }
 #endif
 #if defined(PH_TEST_UBSAN)
 const char *__ubsan_default_options(void);
+
 const char *__ubsan_default_options(void) { return "halt_on_error=1:print_stacktrace=1"; }
 #endif
 
@@ -58,8 +61,9 @@ static ph_context_t *make_ctx_with_tiny_image(int w, int h, int channels) {
     size_t n = (size_t)w * (size_t)h * (size_t)channels;
     uint8_t *px = malloc(n);
     ASSERT_PTR_NOT_NULL(px);
-    for (size_t i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++) {
         px[i] = (uint8_t)(i * 7 + 3);
+    }
     ASSERT_OK(ph_load_from_pixels(ctx, px, w, h, channels, 0));
     free(px);
     return ctx;
@@ -329,7 +333,7 @@ void test_implementation_ceiling_applies_uniformly(void) {
 
     /* (d) and the ceiling does not get in the way of ordinary images */
     uint8_t px[4 * 4];
-    memset(px, 0x7f, sizeof(px));
+    memset(px, 0x7F, sizeof(px));
     ph_context_set_max_pixels(ctx, 0);
     ASSERT_OK(ph_load_from_pixels(ctx, px, 4, 4, 1, 0));
     ASSERT_INT_EQ(1, ph_is_loaded(ctx));
@@ -375,8 +379,9 @@ void test_ceiling_is_on_area_not_dimension(void) {
  * (`i <= n - 8`) wrap for images with fewer than 8 pixels. */
 void test_tiny_images_grayscale(void) {
     for (int channels = 1; channels <= 4; channels++) {
-        if (channels == 2)
+        if (channels == 2) {
             continue;
+        }
         for (int n = 1; n <= 9; n++) {
             ph_context_t *ctx = make_ctx_with_tiny_image(n, 1, channels);
             uint8_t *gray = ph_get_gray(ctx);

@@ -27,6 +27,7 @@
 #include "hashes/hashes.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,7 +49,10 @@ static const geometry_t GEOMS[] = {
 };
 static const int N_GEOMS = (int)(sizeof(GEOMS) / sizeof(GEOMS[0]));
 
-enum { MAX_SIDE = 16, MAX_PIXELS = MAX_SIDE * MAX_SIDE };
+enum {
+    MAX_SIDE = 16,
+    MAX_PIXELS = MAX_SIDE * MAX_SIDE,
+};
 
 typedef enum {
     FILL_BLACK,   /* the minimum of the range */
@@ -56,13 +60,13 @@ typedef enum {
     FILL_MID,     /* a solid colour that is neither */
     FILL_CHECKER, /* maximum contrast: only 0 and 255, alternating */
     FILL_SPLIT,   /* two tones, equal areas, one edge */
-    FILL_COUNT
+    FILL_COUNT,
 } fill_t;
 
 static const char *FILL_NAMES[] = {"black", "white", "mid", "checker", "split"};
 
 static void fill_image(uint8_t *px, int w, int h, int channels, fill_t fill) {
-    for (int y = 0; y < h; y++)
+    for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
             int v;
             switch (fill) {
@@ -82,9 +86,11 @@ static void fill_image(uint8_t *px, int w, int h, int channels, fill_t fill) {
                     v = (x < w / 2) ? 0 : 255;
                     break;
             }
-            for (int c = 0; c < channels; c++)
+            for (int c = 0; c < channels; c++) {
                 px[((size_t)y * w + x) * channels + c] = (uint8_t)v;
+            }
         }
+    }
 }
 
 /* Every result one image produces, so that two runs can be compared as a whole. */
@@ -137,14 +143,16 @@ static void check_digest_shape(const ph_digest_t *d, int expect_size, ph_digest_
                 expect_size, (int)kind);
         exit(1);
     }
-    for (int i = d->size; i < PH_DIGEST_MAX_BYTES; i++)
+    for (int i = d->size; i < PH_DIGEST_MAX_BYTES; i++) {
         if (d->data[i] != 0) {
             fprintf(stderr, "[FAIL] %s: byte %d past the digest is 0x%02x, not zero\n", what, i,
                     d->data[i]);
             exit(1);
         }
-    for (size_t i = 0; i < sizeof(d->reserved); i++)
+    }
+    for (size_t i = 0; i < sizeof(d->reserved); i++) {
         ASSERT_INT_EQ(0, d->reserved[i]);
+    }
 }
 
 static int popcount64(uint64_t v) {
@@ -158,10 +166,13 @@ static int popcount64(uint64_t v) {
 
 static int popcount_digest(const ph_digest_t *d) {
     int n = 0;
-    for (int i = 0; i < d->size; i++)
-        for (int b = 0; b < 8; b++)
-            if (d->data[i] & (1u << b))
+    for (int i = 0; i < d->size; i++) {
+        for (int b = 0; b < 8; b++) {
+            if (d->data[i] & (1u << b)) {
                 n++;
+            }
+        }
+    }
     return n;
 }
 
@@ -180,8 +191,9 @@ void test_every_algorithm_is_defined_on_degenerate_geometry(void) {
     for (int g = 0; g < N_GEOMS; g++) {
         for (int f = 0; f < FILL_COUNT; f++) {
             for (int channels = 1; channels <= 4; channels++) {
-                if (channels == 2)
+                if (channels == 2) {
                     continue; /* not a layout the library accepts */
+                }
                 fill_image(px, GEOMS[g].w, GEOMS[g].h, channels, (fill_t)f);
 
                 results_t first, second;
@@ -252,21 +264,25 @@ void test_uniform_images_have_documented_digests(void) {
             ASSERT_UINT64_EQ(0ULL, r.dhash);
             ASSERT_UINT64_EQ(0ULL, r.whash_fast);
             ASSERT_UINT64_EQ(0ULL, r.whash_full);
-            for (int i = 0; i < r.mhash.size; i++)
+            for (int i = 0; i < r.mhash.size; i++) {
                 ASSERT_UINT8_EQ(0x00, r.mhash.data[i]);
-            for (int i = 0; i < r.radial.size; i++)
+            }
+            for (int i = 0; i < r.radial.size; i++) {
                 ASSERT_UINT8_EQ(0x00, r.radial.data[i]);
-            for (int i = 0; i < r.bmh.size; i++)
+            }
+            for (int i = 0; i < r.bmh.size; i++) {
                 ASSERT_UINT8_EQ(0xFF, r.bmh.data[i]);
+            }
 
             /* Exactly one bin, and it is the bin the quantisation says this grey is in. */
             int filled = 0, where = -1;
-            for (int i = 0; i < r.color.size; i++)
+            for (int i = 0; i < r.color.size; i++) {
                 if (r.color.data[i] != 0) {
                     filled++;
                     where = i;
                     ASSERT_UINT8_EQ(255, r.color.data[i]);
                 }
+            }
             ASSERT_INT_EQ(1, filled);
             ASSERT_INT_EQ(ph_color_histogram_bin(v, v, v), where);
 
@@ -323,7 +339,10 @@ void test_uniform_images_have_documented_digests(void) {
  * WHEN THAT DECISION IS MADE: this test should become an assertion that all flat images
  * hash alike -- most likely to zero, matching every other algorithm here. */
 void test_phash_of_a_uniform_image_is_rounding_noise(void) {
-    enum { SIDE = 32 };
+    enum {
+        SIDE = 32,
+    };
+
     uint8_t px[SIDE * SIDE * 3];
     uint64_t hashes[256];
 
@@ -343,9 +362,11 @@ void test_phash_of_a_uniform_image_is_rounding_noise(void) {
      * images. If a future change makes these agree, the defect has been fixed and this
      * test has to be rewritten -- see the note above; it must not simply be deleted. */
     int changes = 0;
-    for (int v = 1; v < 256; v++)
-        if (hashes[v] != hashes[v - 1])
+    for (int v = 1; v < 256; v++) {
+        if (hashes[v] != hashes[v - 1]) {
             changes++;
+        }
+    }
     if (changes < 200) {
         fprintf(stderr,
                 "[NOTE] pHash over flat greys now changes only %d times in 255 steps -- if it "
@@ -374,13 +395,17 @@ void test_phash_of_a_uniform_image_is_rounding_noise(void) {
  * The setters reject each of them with PH_ERR_INVALID_ARGUMENT; 2 is the smallest value
  * for which each algorithm depends on content. */
 void test_parameter_values_that_collapse_the_hash_to_a_constant(void) {
-    enum { SIDE = 32 };
+    enum {
+        SIDE = 32,
+    };
+
     uint8_t a[SIDE * SIDE], b[SIDE * SIDE];
-    for (int y = 0; y < SIDE; y++)
+    for (int y = 0; y < SIDE; y++) {
         for (int x = 0; x < SIDE; x++) {
             a[y * SIDE + x] = (uint8_t)((x * 37 + y * 91) % 256);
             b[y * SIDE + x] = (uint8_t)((x * x + y * 13) % 256);
         }
+    }
 
     /* pHash: reduction_size == 1 is rejected; reduction_size == 2 (the minimum) gives
      * content-dependent hashes. */
@@ -391,11 +416,11 @@ void test_parameter_values_that_collapse_the_hash_to_a_constant(void) {
         ASSERT_OK(ph_context_set_phash_params(ctx, PH_DCT_SIZE, 2));
 
         ASSERT_OK(ph_load_from_pixels(ctx, a, SIDE, SIDE, 1, 0));
-        uint64_t ha = 0xdeadbeefULL;
+        uint64_t ha = 0xDEADBEEFULL;
         ASSERT_OK(ph_compute_phash(ctx, &ha));
 
         ASSERT_OK(ph_load_from_pixels(ctx, b, SIDE, SIDE, 1, 0));
-        uint64_t hb = 0xdeadbeefULL;
+        uint64_t hb = 0xDEADBEEFULL;
         ASSERT_OK(ph_compute_phash(ctx, &hb));
 
         ASSERT(ha != hb);
@@ -464,7 +489,11 @@ void test_parameter_values_that_collapse_the_hash_to_a_constant(void) {
  * cannot -- reading the wrong stride, forgetting the alpha skip, taking the grayscale
  * fast path for the wrong channel count. */
 void test_channel_layout_does_not_change_a_grey_hash(void) {
-    enum { W = 37, H = 23 };
+    enum {
+        W = 37,
+        H = 23,
+    };
+
     uint8_t gray[W * H], rgb[W * H * 3], rgba[W * H * 4];
 
     for (int i = 0; i < W * H; i++) {
@@ -520,11 +549,16 @@ void test_channel_layout_does_not_change_a_grey_hash(void) {
  * Getting any of these wrong by one is the classic off-by-one in a threshold or in a bit
  * index, and on a photograph it would be invisible. */
 void test_maximum_contrast_thresholds(void) {
-    enum { SIDE = 64 };
+    enum {
+        SIDE = 64,
+    };
+
     static uint8_t px[SIDE * SIDE];
-    for (int y = 0; y < SIDE; y++)
-        for (int x = 0; x < SIDE; x++)
+    for (int y = 0; y < SIDE; y++) {
+        for (int x = 0; x < SIDE; x++) {
             px[y * SIDE + x] = (uint8_t)(x < SIDE / 2 ? 0 : 255);
+        }
+    }
 
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
@@ -553,20 +587,26 @@ void test_maximum_contrast_thresholds(void) {
  * fixable: there is genuinely nothing in a one-pixel-wide picture for either descriptor
  * to describe. Stated here so it reads as a known limit rather than as a surprise. */
 void test_one_pixel_wide_images_collide_with_a_blank_image(void) {
-    enum { N = 32 };
+    enum {
+        N = 32,
+    };
+
     uint8_t col[N], row[N];
-    for (int i = 0; i < N; i++)
+    for (int i = 0; i < N; i++) {
         col[i] = row[i] = (uint8_t)((i * 71) % 256);
+    }
 
     results_t vertical, horizontal;
     compute_all(col, 1, N, 1, &vertical);   /* 1 x N */
     compute_all(row, N, 1, 1, &horizontal); /* N x 1 */
 
     ASSERT_UINT64_EQ(0ULL, vertical.dhash);
-    for (int i = 0; i < vertical.radial.size; i++)
+    for (int i = 0; i < vertical.radial.size; i++) {
         ASSERT_UINT8_EQ(0x00, vertical.radial.data[i]);
-    for (int i = 0; i < horizontal.radial.size; i++)
+    }
+    for (int i = 0; i < horizontal.radial.size; i++) {
         ASSERT_UINT8_EQ(0x00, horizontal.radial.data[i]);
+    }
 
     /* A row of varying pixels is not blank, though, and the algorithms that can see along
      * it must say so -- otherwise this test would be passing for the wrong reason. */
@@ -587,13 +627,20 @@ void test_one_pixel_wide_images_collide_with_a_blank_image(void) {
  * because its blur runs at full resolution, so the two images genuinely differ before it
  * ever samples them. */
 void test_a_replicated_image_hashes_like_the_original(void) {
-    enum { W = 6, H = 5 };
+    enum {
+        W = 6,
+        H = 5,
+    };
+
     uint8_t small[W * H], big[W * 2 * H * 2];
-    for (int i = 0; i < W * H; i++)
+    for (int i = 0; i < W * H; i++) {
         small[i] = (uint8_t)((i * 53) % 256);
-    for (int y = 0; y < H * 2; y++)
-        for (int x = 0; x < W * 2; x++)
+    }
+    for (int y = 0; y < H * 2; y++) {
+        for (int x = 0; x < W * 2; x++) {
             big[y * (W * 2) + x] = small[(y / 2) * W + (x / 2)];
+        }
+    }
 
     results_t s, b;
     compute_all(small, W, H, 1, &s);
@@ -625,8 +672,13 @@ void test_saturated_colours_are_binned_apart(void) {
         {"red", 255, 0, 0},      {"green", 0, 255, 0},  {"blue", 0, 0, 255},
         {"yellow", 255, 255, 0}, {"cyan", 0, 255, 255}, {"magenta", 255, 0, 255},
     };
+
     const int n = (int)(sizeof(colours) / sizeof(colours[0]));
-    enum { SIDE = 8 };
+
+    enum {
+        SIDE = 8,
+    };
+
     uint8_t px[SIDE * SIDE * 3];
     ph_digest_t hist[6];
     int bins[6];
@@ -642,11 +694,12 @@ void test_saturated_colours_are_binned_apart(void) {
         hist[i] = r.color;
 
         bins[i] = -1;
-        for (int k = 0; k < r.color.size; k++)
+        for (int k = 0; k < r.color.size; k++) {
             if (r.color.data[k] != 0) {
                 ASSERT_INT_EQ(-1, bins[i]); /* a flat colour occupies exactly one bin */
                 bins[i] = k;
             }
+        }
         ASSERT_INT_EQ(ph_color_histogram_bin(colours[i].r, colours[i].g, colours[i].b), bins[i]);
 
         /* Flat in grey, whatever the colour. aHash's tie-break is `>=`, so a flat
@@ -654,11 +707,12 @@ void test_saturated_colours_are_binned_apart(void) {
         ASSERT_UINT64_EQ(0xFFFFFFFFFFFFFFFFULL, r.ahash);
         ASSERT_UINT64_EQ(0ULL, r.dhash);
         ASSERT_UINT64_EQ(0ULL, r.whash_fast);
-        for (int k = 0; k < r.radial.size; k++)
+        for (int k = 0; k < r.radial.size; k++) {
             ASSERT_UINT8_EQ(0x00, r.radial.data[k]);
+        }
     }
 
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
             if (bins[i] == bins[j]) {
                 fprintf(stderr, "[FAIL] %s and %s share colour bin %d\n", colours[i].name,
@@ -669,6 +723,7 @@ void test_saturated_colours_are_binned_apart(void) {
             ASSERT_OK(ph_histogram_intersection(&hist[i], &hist[j], &v));
             ASSERT_FLOAT_EQ(0.0, v, 1e-12);
         }
+    }
 
     PASS("test_saturated_colours_are_binned_apart");
 }

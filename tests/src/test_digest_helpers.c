@@ -1,10 +1,11 @@
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <string.h>
 
 void test_hash_to_hex() {
     char hex[32];
-    ASSERT_OK(ph_hash_to_hex(0x0123456789abcdefULL, hex, sizeof(hex)));
+    ASSERT_OK(ph_hash_to_hex(0x0123456789ABCDEFULL, hex, sizeof(hex)));
     ASSERT_STR_EQ("0123456789abcdef", hex);
 
     // Buffer too small.
@@ -19,9 +20,9 @@ void test_hash_to_hex() {
 void test_hash_from_hex() {
     uint64_t h = 0;
     ASSERT_OK(ph_hash_from_hex("0123456789abcdef", &h));
-    ASSERT(h == 0x0123456789abcdefULL);
+    ASSERT(h == 0x0123456789ABCDEFULL);
     ASSERT_OK(ph_hash_from_hex("DEADBEEFcafeF00D", &h));
-    ASSERT(h == 0xdeadbeefcafef00dULL);
+    ASSERT(h == 0xDEADBEEFCAFEF00DULL);
     ASSERT_OK(ph_hash_from_hex("0000000000000000", &h));
     ASSERT(h == 0);
 
@@ -63,8 +64,9 @@ void test_digest_hex_roundtrip() {
     ph_digest_t d;
     memset(&d, 0, sizeof(d));
     d.size = 8;
-    for (int i = 0; i < d.size; i++)
+    for (int i = 0; i < d.size; i++) {
         d.data[i] = (uint8_t)(i * 17 + 3);
+    }
 
     char hex[PH_DIGEST_HEX_BUFFER_SIZE];
     ASSERT_OK(ph_digest_to_hex(&d, hex, sizeof(hex)));
@@ -81,8 +83,9 @@ void test_digest_hex_roundtrip() {
     ph_digest_t big;
     memset(&big, 0, sizeof(big));
     big.size = PH_DIGEST_MAX_BYTES;
-    for (int i = 0; i < big.size; i++)
+    for (int i = 0; i < big.size; i++) {
         big.data[i] = (uint8_t)(255 - i);
+    }
 
     big.kind = PH_DIGEST_KIND_COEFFICIENTS; /* the longest kind name */
     char big_hex[PH_DIGEST_HEX_BUFFER_SIZE];
@@ -282,8 +285,9 @@ void test_digest_hex_roundtrip_random_and_uppercase() {
         for (size_t i = 0; i < sizeof(upper); i++) {
             char c = lower[i];
             upper[i] = (&lower[i] >= digits && c >= 'a' && c <= 'f') ? (char)(c - 'a' + 'A') : c;
-            if (c == 0)
+            if (c == 0) {
                 break;
+            }
         }
         ph_digest_t from_upper = {0};
         ASSERT_OK(ph_digest_from_hex(upper, &from_upper));
@@ -391,8 +395,9 @@ static void test_hex_output_buffer_bounds() {
     ph_digest_t d;
     memset(&d, 0, sizeof(d));
     d.size = 5;
-    for (int i = 0; i < d.size; i++)
+    for (int i = 0; i < d.size; i++) {
         d.data[i] = (uint8_t)(0x10 * i + i);
+    }
 
     /* "bits:" + d.size * 2 + 1 must succeed; one byte less must be refused. */
     d.kind = PH_DIGEST_KIND_BITS;
@@ -429,7 +434,7 @@ static void test_hex_output_buffer_bounds() {
     /* ph_hash_to_hex is fixed-width: 17 is the exact requirement, 16 is not enough. */
     char h[18];
     h[17] = '#';
-    ASSERT_OK(ph_hash_to_hex(0xdeadbeefcafef00dULL, h, 17));
+    ASSERT_OK(ph_hash_to_hex(0xDEADBEEFCAFEF00DULL, h, 17));
     ASSERT_STR_EQ("deadbeefcafef00d", h);
     ASSERT_INT_EQ('#', h[17]);
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_to_hex(0, h, 16));
@@ -466,18 +471,21 @@ static void test_digest_from_hex_clears_the_whole_struct() {
     ASSERT_INT_EQ(5, d.size);
     ASSERT_UINT8_EQ(0x00, d.data[0]);
     ASSERT_UINT8_EQ(0x44, d.data[4]);
-    for (int i = d.size; i < PH_DIGEST_MAX_BYTES; i++)
+    for (int i = d.size; i < PH_DIGEST_MAX_BYTES; i++) {
         ASSERT_UINT8_EQ(0, d.data[i]);
+    }
     ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_VECTOR, d.kind);
-    for (size_t i = 0; i < sizeof(d.reserved); i++)
+    for (size_t i = 0; i < sizeof(d.reserved); i++) {
         ASSERT_UINT8_EQ(0, d.reserved[i]);
+    }
 
     /* Decoding a shorter string over a longer digest must shrink it, tail and all. */
     ASSERT_OK(ph_digest_from_hex("bits:ff", &d));
     ASSERT_INT_EQ(1, d.size);
     ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_BITS, d.kind);
-    for (int i = 1; i < PH_DIGEST_MAX_BYTES; i++)
+    for (int i = 1; i < PH_DIGEST_MAX_BYTES; i++) {
         ASSERT_UINT8_EQ(0, d.data[i]);
+    }
 
     /* A rejected string must leave the digest exactly as it was: a half-decoded digest
      * reported through an error code is the one thing worse than either outcome. */

@@ -33,6 +33,7 @@
 #include "hashes/hashes.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -55,8 +56,8 @@
  * across the corpus, same generator, only IMG_W varied -- 144: 0.984, 160: 0.965, 176:
  * 0.928, 192: 0.867 (fails the 0.90 floor), 200: 0.849 (fails). 160 keeps a real margin
  * (0.965) without changing that threshold. */
-#define IMG_W 160
-#define IMG_H 160
+#define IMG_W    160
+#define IMG_H    160
 #define NUM_BASE 24
 
 /* The reference resolution for make_base() feature sizes: checkerboard cells, stripe
@@ -73,7 +74,9 @@ typedef struct {
 
 /* Deterministic PRNG. Not a good one; it only has to be the same everywhere. */
 static uint32_t rng_state;
+
 static void rng_seed(uint32_t s) { rng_state = s ? s : 1u; }
+
 static uint32_t rng_next(void) {
     rng_state ^= rng_state << 13;
     rng_state ^= rng_state >> 17;
@@ -96,8 +99,9 @@ static void image_free(image_t *im) {
 }
 
 static void put(image_t *im, int x, int y, int r, int g, int b) {
-    if (x < 0 || y < 0 || x >= im->w || y >= im->h)
+    if (x < 0 || y < 0 || x >= im->w || y >= im->h) {
         return;
+    }
     size_t o = ((size_t)y * im->w + x) * 3;
     im->px[o] = (uint8_t)(r < 0 ? 0 : r > 255 ? 255 : r);
     im->px[o + 1] = (uint8_t)(g < 0 ? 0 : g > 255 ? 255 : g);
@@ -138,8 +142,9 @@ static image_t make_base(int index) {
                 }
                 case 1: { /* checkerboard, varying cell size and colour pair */
                     int cell = (int)((4 << variant) * (IMG_W / BASE_RES) + 0.5);
-                    if (cell < 1)
+                    if (cell < 1) {
                         cell = 1;
+                    }
                     int on = ((x / cell) + (y / cell)) & 1;
                     r = on ? 235 : 30;
                     g = on ? 40 : 200;
@@ -158,8 +163,9 @@ static image_t make_base(int index) {
                 }
                 case 3: { /* vertical stripes, varying width and colour */
                     int w = (int)((3 + variant * 4) * (IMG_W / BASE_RES) + 0.5);
-                    if (w < 1)
+                    if (w < 1) {
                         w = 1;
+                    }
                     int on = (x / w) & 1;
                     r = on ? 200 : 40;
                     g = on ? 60 : 180;
@@ -225,18 +231,22 @@ static image_t xf_identity(const image_t *s) {
 
 static image_t xf_scale(const image_t *s, double f) {
     int w = (int)(s->w * f), h = (int)(s->h * f);
-    if (w < 8)
+    if (w < 8) {
         w = 8;
-    if (h < 8)
+    }
+    if (h < 8) {
         h = 8;
+    }
     image_t o = image_new(w, h);
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
             int sx = (int)((x + 0.5) / f), sy = (int)((y + 0.5) / f);
-            if (sx >= s->w)
+            if (sx >= s->w) {
                 sx = s->w - 1;
-            if (sy >= s->h)
+            }
+            if (sy >= s->h) {
                 sy = s->h - 1;
+            }
             size_t si = ((size_t)sy * s->w + sx) * 3;
             put(&o, x, y, s->px[si], s->px[si + 1], s->px[si + 2]);
         }
@@ -245,17 +255,19 @@ static image_t xf_scale(const image_t *s, double f) {
 }
 
 static image_t xf_scale_down(const image_t *s) { return xf_scale(s, 0.5); }
+
 static image_t xf_scale_up(const image_t *s) { return xf_scale(s, 1.75); }
 
 static image_t xf_crop(const image_t *s) { /* 4% off every edge */
     int mx = s->w * 4 / 100, my = s->h * 4 / 100;
     int w = s->w - 2 * mx, h = s->h - 2 * my;
     image_t o = image_new(w, h);
-    for (int y = 0; y < h; y++)
+    for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
             size_t si = ((size_t)(y + my) * s->w + (x + mx)) * 3;
             put(&o, x, y, s->px[si], s->px[si + 1], s->px[si + 2]);
         }
+    }
     return o;
 }
 
@@ -271,29 +283,35 @@ static image_t xf_brighter(const image_t *s) {
 static image_t xf_gamma(const image_t *s) { /* gamma 1.4, a non-linear tone change */
     image_t o = xf_identity(s);
     uint8_t lut[256];
-    for (int i = 0; i < 256; i++)
+    for (int i = 0; i < 256; i++) {
         lut[i] = (uint8_t)(pow(i / 255.0, 1.0 / 1.4) * 255.0 + 0.5);
-    for (size_t i = 0; i < (size_t)s->w * s->h * 3; i++)
+    }
+    for (size_t i = 0; i < (size_t)s->w * s->h * 3; i++) {
         o.px[i] = lut[o.px[i]];
+    }
     return o;
 }
 
 static image_t xf_blur(const image_t *s) { /* 3x3 box blur */
     image_t o = image_new(s->w, s->h);
-    for (int y = 0; y < s->h; y++)
-        for (int x = 0; x < s->w; x++)
+    for (int y = 0; y < s->h; y++) {
+        for (int x = 0; x < s->w; x++) {
             for (int c = 0; c < 3; c++) {
                 int sum = 0, n = 0;
-                for (int dy = -1; dy <= 1; dy++)
+                for (int dy = -1; dy <= 1; dy++) {
                     for (int dx = -1; dx <= 1; dx++) {
                         int xx = x + dx, yy = y + dy;
-                        if (xx < 0 || yy < 0 || xx >= s->w || yy >= s->h)
+                        if (xx < 0 || yy < 0 || xx >= s->w || yy >= s->h) {
                             continue;
+                        }
                         sum += s->px[((size_t)yy * s->w + xx) * 3 + c];
                         n++;
                     }
+                }
                 o.px[((size_t)y * o.w + x) * 3 + c] = (uint8_t)(sum / n);
             }
+        }
+    }
     return o;
 }
 
@@ -330,7 +348,7 @@ typedef enum {
     A_BMH,
     A_COLOR,
     A_RADIAL,
-    A_COUNT
+    A_COUNT,
 } algo_t;
 
 static const char *ALGO_NAMES[A_COUNT] = {"aHash", "dHash", "pHash",     "wHash",
@@ -399,19 +417,25 @@ static void stats_init(stats_t *s) {
     s->max = -1e300;
     s->n = 0;
 }
+
 static void stats_add(stats_t *s, double v) {
     s->sum += v;
     s->sum_sq += v * v;
-    if (v < s->min)
+    if (v < s->min) {
         s->min = v;
-    if (v > s->max)
+    }
+    if (v > s->max) {
         s->max = v;
+    }
     s->n++;
 }
+
 static double stats_mean(const stats_t *s) { return s->n ? s->sum / s->n : 0.0; }
+
 static double stats_sd(const stats_t *s) {
-    if (s->n < 2)
+    if (s->n < 2) {
         return 0.0;
+    }
     double m = stats_mean(s);
     double var = s->sum_sq / s->n - m * m;
     return var > 0.0 ? sqrt(var) : 0.0;
@@ -423,8 +447,9 @@ static double stats_sd(const stats_t *s) {
 static double separability(const stats_t *intra, const stats_t *inter) {
     double si = stats_sd(intra), se = stats_sd(inter);
     double pooled = sqrt((si * si + se * se) / 2.0);
-    if (pooled < 1e-9)
+    if (pooled < 1e-9) {
         return (stats_mean(inter) > stats_mean(intra)) ? 1e9 : 0.0;
+    }
     return (stats_mean(inter) - stats_mean(intra)) / pooled;
 }
 
@@ -497,8 +522,9 @@ static void test_robustness_discrimination_separability(void) {
     for (int a = 0; a < A_COUNT; a++) {
         stats_init(&intra[a]);
         stats_init(&inter[a]);
-        for (int t = 0; t < NUM_TRANSFORMS; t++)
+        for (int t = 0; t < NUM_TRANSFORMS; t++) {
             stats_init(&per_xf[a][t]);
+        }
     }
 
     /* Robustness: every base against every benign transformation of itself. */
@@ -517,10 +543,13 @@ static void test_robustness_discrimination_separability(void) {
     }
 
     /* Discrimination: every base against every other base. */
-    for (int i = 0; i < NUM_BASE; i++)
-        for (int j = i + 1; j < NUM_BASE; j++)
-            for (int a = 0; a < A_COUNT; a++)
+    for (int i = 0; i < NUM_BASE; i++) {
+        for (int j = i + 1; j < NUM_BASE; j++) {
+            for (int a = 0; a < A_COUNT; a++) {
                 stats_add(&inter[a], distance((algo_t)a, base_hash[i], base_hash[j]));
+            }
+        }
+    }
 
     printf("\n  %-10s %19s %19s %8s\n", "algorithm", "same image (intra)", "different (inter)",
            "sep.");
@@ -531,13 +560,15 @@ static void test_robustness_discrimination_separability(void) {
                stats_sd(&inter[a]), inter[a].min, separability(&intra[a], &inter[a]));
     }
     printf("\n  mean intra-distance by transformation\n  %-12s", "");
-    for (int a = 0; a < A_COUNT; a++)
+    for (int a = 0; a < A_COUNT; a++) {
         printf("%10s", ALGO_NAMES[a]);
+    }
     printf("\n");
     for (int t = 0; t < NUM_TRANSFORMS; t++) {
         printf("  %-12s", TRANSFORM_NAMES[t]);
-        for (int a = 0; a < A_COUNT; a++)
+        for (int a = 0; a < A_COUNT; a++) {
             printf("%10.3f", stats_mean(&per_xf[a][t]));
+        }
         printf("\n");
     }
     printf("\n");
@@ -570,8 +601,9 @@ static void test_robustness_discrimination_separability(void) {
         }
     }
 
-    for (int i = 0; i < NUM_BASE; i++)
+    for (int i = 0; i < NUM_BASE; i++) {
         image_free(&base[i]);
+    }
 
     printf("test_robustness_discrimination_separability: PASSED\n");
 }
@@ -582,11 +614,12 @@ static void test_robustness_discrimination_separability(void) {
 
 static image_t rotate_90(const image_t *s) {
     image_t o = image_new(s->h, s->w);
-    for (int y = 0; y < s->h; y++)
+    for (int y = 0; y < s->h; y++) {
         for (int x = 0; x < s->w; x++) {
             size_t si = ((size_t)y * s->w + x) * 3;
             put(&o, s->h - 1 - y, x, s->px[si], s->px[si + 1], s->px[si + 2]);
         }
+    }
     return o;
 }
 
@@ -638,8 +671,9 @@ static double best_cyclic_correlation(const double *a, const double *b, int n, i
     double best = -2.0;
     for (int d = 0; d < n; d++) {
         double num = 0.0;
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < n; i++) {
             num += (a[i] - ma) * (b[(n + i - d) % n] - mb);
+        }
         double r = num / sqrt(va * vb);
         if (r > best) {
             best = r;
@@ -657,13 +691,14 @@ static image_t rotate_by(const image_t *s, double deg) {
     memset(o.px, 0, (size_t)s->w * s->h * 3);
     double a = deg * M_PI / 180.0, ca = cos(a), sa = sin(a);
     double cx = (s->w - 1) / 2.0, cy = (s->h - 1) / 2.0;
-    for (int y = 0; y < s->h; y++)
+    for (int y = 0; y < s->h; y++) {
         for (int x = 0; x < s->w; x++) {
             double dx = x - cx, dy = y - cy;
             double sx = cx + dx * ca + dy * sa;
             double sy = cy - dx * sa + dy * ca;
-            if (sx < 0 || sy < 0 || sx >= s->w - 1 || sy >= s->h - 1)
+            if (sx < 0 || sy < 0 || sx >= s->w - 1 || sy >= s->h - 1) {
                 continue;
+            }
             int x0 = (int)sx, y0 = (int)sy;
             double fx = sx - x0, fy = sy - y0;
             for (int c = 0; c < 3; c++) {
@@ -674,6 +709,7 @@ static image_t rotate_by(const image_t *s, double deg) {
                 o.px[((size_t)y * o.w + x) * 3 + c] = (uint8_t)(p + 0.5);
             }
         }
+    }
     return o;
 }
 
@@ -709,12 +745,13 @@ static void test_radial_rotation_profile(void) {
      * scores clearly above this. */
     stats_t unrel;
     stats_init(&unrel);
-    for (int i = 0; i < NUM_BASE; i++)
+    for (int i = 0; i < NUM_BASE; i++) {
         for (int j = i + 1; j < NUM_BASE; j++) {
             double p = 0.0;
             ASSERT_OK(ph_radial_similarity(&ref[i], &ref[j], &p));
             stats_add(&unrel, p);
         }
+    }
 
     printf("\n  radial: peak cross-correlation against rotation (%d images)\n", NUM_BASE);
     printf("    unrelated images: mean %.3f, max %.3f\n", stats_mean(&unrel), unrel.max);
@@ -732,8 +769,9 @@ static void test_radial_rotation_profile(void) {
             double p = 0.0;
             ASSERT_OK(ph_radial_similarity(&ref[i], &d, &p));
             stats_add(&st, p);
-            if (p >= PH_RADIAL_PCC_THRESHOLD)
+            if (p >= PH_RADIAL_PCC_THRESHOLD) {
                 matched++;
+            }
             image_free(&r);
         }
         mean_at[a] = stats_mean(&st);
@@ -741,8 +779,9 @@ static void test_radial_rotation_profile(void) {
                NUM_BASE);
     }
 
-    for (int i = 0; i < NUM_BASE; i++)
+    for (int i = 0; i < NUM_BASE; i++) {
         image_free(&base[i]);
+    }
 
     /* A half turn is the identity on the projections -- the line at alpha and at
      * alpha+180 is the same line -- so it must match on every image, whatever the
@@ -789,11 +828,12 @@ static void test_radial_rotation_profile(void) {
  * a cyclic shift does not destroy -- has to come through this test. */
 static void test_radial_rotation_survives_the_projections_not_the_transform(void) {
     image_t im = image_new(128, 128);
-    for (int y = 0; y < 128; y++)
+    for (int y = 0; y < 128; y++) {
         for (int x = 0; x < 128; x++) {
             int on = ((x / 6) & 1); /* vertical stripes -- maximally direction-dependent */
             put(&im, x, y, on ? 240 : 15, on ? 240 : 15, on ? 240 : 15);
         }
+    }
     image_t r90 = rotate_90(&im);
     image_t r180 = rotate_90(&r90);
     image_t r270 = rotate_90(&r180);

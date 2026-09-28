@@ -41,6 +41,7 @@
 #include "context.h"
 #include "digest.h"
 #include "hashes/hashes.h"
+
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,32 +53,39 @@ int ph_color_histogram_bin(int r, int g, int b) {
     int wb = r + g + b;
 
     int a = (rg + PH_COLOR_RG_OFFSET) * PH_COLOR_BINS_RG / PH_COLOR_RG_VALUES;
-    if (a >= PH_COLOR_BINS_RG)
+    if (a >= PH_COLOR_BINS_RG) {
         a = PH_COLOR_BINS_RG - 1;
+    }
     int c = (by + PH_COLOR_BY_OFFSET) * PH_COLOR_BINS_BY / PH_COLOR_BY_VALUES;
-    if (c >= PH_COLOR_BINS_BY)
+    if (c >= PH_COLOR_BINS_BY) {
         c = PH_COLOR_BINS_BY - 1;
+    }
     int w = wb * PH_COLOR_BINS_WB / PH_COLOR_WB_VALUES;
-    if (w >= PH_COLOR_BINS_WB)
+    if (w >= PH_COLOR_BINS_WB) {
         w = PH_COLOR_BINS_WB - 1;
+    }
 
     return (a * PH_COLOR_BINS_BY + c) * PH_COLOR_BINS_WB + w;
 }
 
 PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_digest) {
-    if (!ctx || !out_digest)
+    if (!ctx || !out_digest) {
         return PH_ERR_INVALID_ARGUMENT;
-    if (!ctx->image.is_loaded)
+    }
+    if (!ctx->image.is_loaded) {
         return PH_ERR_EMPTY_IMAGE;
+    }
 
-    if (ctx->image.width <= 0 || ctx->image.height <= 0 || !ctx->image.raw_rgb)
+    if (ctx->image.width <= 0 || ctx->image.height <= 0 || !ctx->image.raw_rgb) {
         return PH_ERR_EMPTY_IMAGE;
+    }
 
     /* A grayscale image carries no colour to bin. Replicating the single channel
      * into r/g/b would put every pixel on the grey axis and still report PH_SUCCESS, so
      * refuse instead of returning a hash that means nothing. */
-    if (ctx->image.channels < 3)
+    if (ctx->image.channels < 3) {
         return PH_ERR_REQUIRES_COLOR;
+    }
 
     ph_digest_begin(out_digest, ctx, PH_ALGO_COLOR_HASH);
 
@@ -99,12 +107,15 @@ PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_dige
      * maximum the whole byte range is used. The comparison renormalises each digest by its
      * own sum, so nothing downstream depends on which scale was chosen here. */
     uint64_t max_count = 0;
-    for (int i = 0; i < PH_COLOR_BINS; i++)
-        if (counts[i] > max_count)
+    for (int i = 0; i < PH_COLOR_BINS; i++) {
+        if (counts[i] > max_count) {
             max_count = counts[i];
+        }
+    }
 
-    if (max_count == 0)
+    if (max_count == 0) {
         return PH_SUCCESS; /* no pixels; an all-zero histogram is the honest answer */
+    }
 
     for (int i = 0; i < PH_COLOR_BINS; i++) {
         /* +max_count/2 rounds to nearest without leaving integer arithmetic. */
@@ -116,8 +127,9 @@ PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_dige
 
 PH_API ph_error_t ph_histogram_intersection(const ph_digest_t *a, const ph_digest_t *b,
                                             double *out_similarity) {
-    if (!out_similarity || !ph_digests_comparable_as(a, b, PH_DIGEST_KIND_HISTOGRAM))
+    if (!out_similarity || !ph_digests_comparable_as(a, b, PH_DIGEST_KIND_HISTOGRAM)) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     /* Swain and Ballard normalise by the reference histogram, which makes the score
      * asymmetric -- H(t,r) and H(r,t) differ whenever the two hold different pixel counts.

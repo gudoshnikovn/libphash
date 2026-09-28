@@ -6,6 +6,7 @@
  * classified here, as PH_ERR_IO with a diagnostic message, before any decoder sees it. */
 
 #include "libphash.h"
+
 #include <stddef.h>
 #include <stdint.h>
 

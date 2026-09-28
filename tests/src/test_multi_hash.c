@@ -1,6 +1,7 @@
 #include "context.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -37,8 +38,9 @@ static uint64_t reference_hash(ph_context_t *ctx, uint32_t flag) {
  * directly. */
 static void test_multi_matches_individual_calls(const char *filepath) {
     for (uint32_t flags = 1; flags <= ALL_FLAGS_MASK; flags++) {
-        if (flags & ~(uint32_t)ALL_FLAGS_MASK)
+        if (flags & ~(uint32_t)ALL_FLAGS_MASK) {
             continue;
+        }
 
         ph_context_t *ctx_multi = NULL;
         ph_context_t *ctx_ref = NULL;
@@ -52,8 +54,9 @@ static void test_multi_matches_individual_calls(const char *filepath) {
 
         int idx = 0;
         for (uint32_t bit = 1; bit <= PH_HASH_WHASH; bit <<= 1) {
-            if (!(flags & bit))
+            if (!(flags & bit)) {
                 continue;
+            }
             uint64_t expected = reference_hash(ctx_ref, bit);
             if (multi_out[idx] != expected) {
                 fprintf(stderr,
@@ -112,15 +115,17 @@ static void test_multi_writes_exactly_one_slot_per_flag(void) {
     ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
 
     for (uint32_t flags = 1; flags <= ALL_FLAGS_MASK; flags++) {
-        if (flags & ~(uint32_t)ALL_FLAGS_MASK)
+        if (flags & ~(uint32_t)ALL_FLAGS_MASK) {
             continue;
+        }
         int nset = PH_TEST_POPCOUNT(flags);
 
         /* One slot of slack past the array the caller would legitimately size, so an
          * off-by-one write lands somewhere observable rather than in the caller's stack. */
         uint64_t out[PH_HASH_FLAGS_COUNT + 1];
-        for (size_t i = 0; i < sizeof(out) / sizeof(out[0]); i++)
+        for (size_t i = 0; i < sizeof(out) / sizeof(out[0]); i++) {
             out[i] = SENTINEL;
+        }
 
         ASSERT_OK(ph_compute_multi(ctx, flags, out));
 
@@ -170,8 +175,9 @@ static void test_multi_propagates_algorithm_failure(void) {
     ASSERT_UINT64_EQ(SENTINEL, out[0]);
 
     /* pHash third of four: aHash and dHash ran and are valid, wHash never ran. */
-    for (int i = 0; i < PH_HASH_FLAGS_COUNT; i++)
+    for (int i = 0; i < PH_HASH_FLAGS_COUNT; i++) {
         out[i] = SENTINEL;
+    }
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_compute_multi(ctx, ALL_FLAGS_MASK, out));
 
     uint64_t expect_a = reference_hash(ref, PH_HASH_AHASH);
@@ -183,8 +189,9 @@ static void test_multi_propagates_algorithm_failure(void) {
 
     /* A combination that skips the broken algorithm still succeeds: the failure is
      * pHash's, not the context's. */
-    for (int i = 0; i < PH_HASH_FLAGS_COUNT; i++)
+    for (int i = 0; i < PH_HASH_FLAGS_COUNT; i++) {
         out[i] = SENTINEL;
+    }
     ASSERT_OK(ph_compute_multi(ctx, PH_HASH_AHASH | PH_HASH_WHASH, out));
     ASSERT_UINT64_EQ(expect_a, out[0]);
     ASSERT_UINT64_EQ(reference_hash(ref, PH_HASH_WHASH), out[1]);

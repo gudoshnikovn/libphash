@@ -3,6 +3,7 @@
 #include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -59,8 +60,9 @@ void test_equalize_histogram_unit() {
     uint8_t flat[8];
     memset(flat, 77, sizeof(flat));
     ph_equalize_histogram(flat, 8, 256);
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 8; i++) {
         ASSERT_INT_EQ(flat[0], flat[i]);
+    }
 
     PASS("test_equalize_histogram_unit");
 }
@@ -72,8 +74,9 @@ void test_gaussian_blur_sigma_unit() {
     float scratch[16 * 16];
     memset(src, 123, sizeof(src));
     ph_gaussian_blur_sigma(src, w, h, 1.0f, scratch, dst);
-    for (int i = 0; i < w * h; i++)
+    for (int i = 0; i < w * h; i++) {
         ASSERT_INT_EQ(123, dst[i]);
+    }
 
     /* An impulse spreads, and its peak drops. */
     memset(src, 0, sizeof(src));
@@ -98,10 +101,12 @@ void test_gaussian_blur_sigma_unit() {
 static void reference_blur_sigma(const uint8_t *src, int w, int h, float sigma, float *scratch,
                                  uint8_t *dst) {
     int radius = (int)ceilf(3.0f * sigma);
-    if (radius < 1)
+    if (radius < 1) {
         radius = 1;
-    if (radius > 64)
+    }
+    if (radius > 64) {
         radius = 64;
+    }
     float kernel[129];
     float sum = 0.0f;
     for (int i = -radius; i <= radius; i++) {
@@ -109,8 +114,9 @@ static void reference_blur_sigma(const uint8_t *src, int w, int h, float sigma, 
         kernel[i + radius] = v;
         sum += v;
     }
-    for (int i = 0; i <= 2 * radius; i++)
+    for (int i = 0; i <= 2 * radius; i++) {
         kernel[i] /= sum;
+    }
     for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
             float acc = 0.0f;
@@ -212,16 +218,20 @@ static void test_mh_block_sums_match_the_direct_definition() {
                     double acc = 0.0;
                     for (int ky = 0; ky < side; ky++) {
                         int sy = y + ky - half;
-                        if (sy < 0)
+                        if (sy < 0) {
                             sy = 0;
-                        if (sy >= n)
+                        }
+                        if (sy >= n) {
                             sy = n - 1;
+                        }
                         for (int kx = 0; kx < side; kx++) {
                             int sx = x + kx - half;
-                            if (sx < 0)
+                            if (sx < 0) {
                                 sx = 0;
-                            if (sx >= n)
+                            }
+                            if (sx >= n) {
                                 sx = n - 1;
+                            }
                             acc += (double)kernel[ky * side + kx] * (double)img[sy * n + sx];
                         }
                     }
@@ -305,8 +315,9 @@ void test_mhash_on_a_flat_image() {
     ph_digest_t d;
     ASSERT_OK(ph_compute_mhash(ctx, &d));
     ASSERT_INT_EQ(PH_MH_BYTES, d.size);
-    for (int i = 0; i < d.size; i++)
+    for (int i = 0; i < d.size; i++) {
         ASSERT_INT_EQ(0, d.data[i]);
+    }
 
     ph_free(ctx);
     free(px);
@@ -337,6 +348,7 @@ void test_mhash_params_setter() {
         {2.0f, 4.0f, 256},  /* kernel side 2*64+1 = 129, past the buffer */
         {0.0f / 1.0f, 1.0f, 256},
     };
+
     for (size_t i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
         ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
                       ph_context_set_mhash_params(ctx, bad[i].a, bad[i].l, bad[i].n));
@@ -350,8 +362,9 @@ void test_mhash_params_setter() {
      * the hash does react to the setting, or the knob would be doing nothing. */
     uint8_t *px = (uint8_t *)malloc(200 * 200 * 3);
     ASSERT_PTR_NOT_NULL(px);
-    for (int i = 0; i < 200 * 200 * 3; i++)
+    for (int i = 0; i < 200 * 200 * 3; i++) {
         px[i] = (uint8_t)((i * 7 + (i / 137) * 31) & 0xFF);
+    }
     ASSERT_OK(ph_load_from_pixels(ctx, px, 200, 200, 3, 0));
 
     ph_digest_t small, large;

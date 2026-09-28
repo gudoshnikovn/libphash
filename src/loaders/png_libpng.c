@@ -5,6 +5,7 @@
 #include "loader.h"
 #include "loaders/backends.h"
 #include "safety.h"
+
 #include <png.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -66,8 +67,9 @@ static void png_error_fn(png_structp png_ptr, png_const_charp msg) {
      * which would overwrite a specific answer with a useless one. */
     if (ectx && (!ectx->out_err || *ectx->out_err == PH_SUCCESS)) {
         ph_set_err_msg(ectx->err_msg, ectx->err_msg_cap, msg);
-        if (ectx->out_err && ph_png_message_is_oom(msg))
+        if (ectx->out_err && ph_png_message_is_oom(msg)) {
             *ectx->out_err = PH_ERR_ALLOCATION_FAILED;
+        }
     }
     longjmp(png_jmpbuf(png_ptr), 1);
 }
@@ -95,21 +97,24 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     /* PNG has no format-level scaled decode; decode_scale is a JPEG-only optimization
      * (see ph_context_set_decode_scale()), silently ignored here as documented. */
     (void)decode_scale;
-    if (!buffer || size < 8)
+    if (!buffer || size < 8) {
         return NULL;
+    }
 
     /* Checked before the buffer reaches libpng/spng so both backends agree on the
      * verdict and the error code, and so an absurd dimension is refused before any
      * row buffer is sized. */
     if (!ph_png_dimensions_within_limit(buffer, size)) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "PNG dimension exceeds the supported maximum");
         return NULL;
     }
 
-    if (png_sig_cmp(buffer, 0, 8) != 0)
+    if (png_sig_cmp(buffer, 0, 8) != 0) {
         return NULL;
+    }
 
     /* From the setjmp() below on, the diagnostic buffer is reached through ectx rather
      * than through the err_msg parameter: ectx lives in memory (libpng holds its
@@ -125,8 +130,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
          * png_ptr doesn't exist. Leaving *out_err untouched here would fall through
          * to ph_decode_buffer()'s PH_SUCCESS-turned-PH_ERR_CORRUPT_DATA fallback
          * (src/loader.c) and misreport an OOM as corrupt image data. */
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_ALLOCATION_FAILED;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
         return NULL;
     }
@@ -168,8 +174,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
         png_infop jumped_info = info_for_cleanup;
         free(row_ptrs_for_cleanup);
         free(data_for_cleanup);
-        if (out_err && *out_err == PH_SUCCESS)
+        if (out_err && *out_err == PH_SUCCESS) {
             *out_err = PH_ERR_CORRUPT_DATA;
+        }
         png_destroy_read_struct(&png_ptr, jumped_info ? &jumped_info : NULL, NULL);
         return NULL;
     }
@@ -180,8 +187,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
          * deliberately non-erroring allocator variant, specifically so this call
          * "always returns ok" instead of going through png_error()/longjmp() --
          * an OOM here returns NULL directly, bypassing png_error_fn entirely. */
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_ALLOCATION_FAILED;
+        }
         ph_set_err_msg(ectx.err_msg, ectx.err_msg_cap, "Memory allocation failed");
         png_destroy_read_struct(&png_ptr, NULL, NULL);
         return NULL;
@@ -212,8 +220,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     png_get_IHDR(png_ptr, info_ptr, &w, &h, &bit_depth, &color_type, NULL, NULL, NULL);
 
     if (ph_exceeds_pixel_limit(w, h, max_pixels)) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        }
         ph_set_err_msg(ectx.err_msg, ectx.err_msg_cap,
                        "Image exceeds the configured maximum pixel count");
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
@@ -221,14 +230,18 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     }
 
     // Transform to 8-bit
-    if (color_type == PNG_COLOR_TYPE_PALETTE)
+    if (color_type == PNG_COLOR_TYPE_PALETTE) {
         png_set_palette_to_rgb(png_ptr);
-    if (color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8)
+    }
+    if (color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8) {
         png_set_expand_gray_1_2_4_to_8(png_ptr);
-    if (bit_depth == 16)
+    }
+    if (bit_depth == 16) {
         png_set_strip_16(png_ptr);
-    if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS))
+    }
+    if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS)) {
         png_set_tRNS_to_alpha(png_ptr);
+    }
 
     if (req_comp == 1) {
         // Force grayscale using same weights as ph_to_grayscale (Rec. 601)
@@ -243,10 +256,12 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
         }
     } else {
         // Force RGB (strip alpha)
-        if (color_type == PNG_COLOR_TYPE_GRAY || color_type == PNG_COLOR_TYPE_GRAY_ALPHA)
+        if (color_type == PNG_COLOR_TYPE_GRAY || color_type == PNG_COLOR_TYPE_GRAY_ALPHA) {
             png_set_gray_to_rgb(png_ptr);
-        if (color_type & PNG_COLOR_MASK_ALPHA)
+        }
+        if (color_type & PNG_COLOR_MASK_ALPHA) {
             png_set_strip_alpha(png_ptr);
+        }
     }
 
     png_read_update_info(png_ptr, info_ptr);
@@ -256,8 +271,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
 
     size_t alloc_size;
     if (!ph_safe_image_alloc_size(rowbytes, h, 1, &alloc_size)) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        }
         ph_set_err_msg(ectx.err_msg, ectx.err_msg_cap,
                        "Image exceeds the configured maximum pixel count");
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
@@ -266,8 +282,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
 
     unsigned char *data = (unsigned char *)malloc(alloc_size);
     if (!data) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_ALLOCATION_FAILED;
+        }
         ph_set_err_msg(ectx.err_msg, ectx.err_msg_cap, "Memory allocation failed");
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return NULL;
@@ -279,8 +296,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
      * that png_read_image() then writes past. Refuse instead. */
     size_t row_ptrs_size;
     if (!ph_safe_image_alloc_size(sizeof(png_bytep), h, 1, &row_ptrs_size)) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        }
         ph_set_err_msg(ectx.err_msg, ectx.err_msg_cap,
                        "Image exceeds the configured maximum pixel count");
         free(data);
@@ -290,8 +308,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
 
     png_bytep *row_ptrs = (png_bytep *)malloc(row_ptrs_size);
     if (!row_ptrs) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_ALLOCATION_FAILED;
+        }
         ph_set_err_msg(ectx.err_msg, ectx.err_msg_cap, "Memory allocation failed");
         free(data);
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
@@ -299,8 +318,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     }
     row_ptrs_for_cleanup = row_ptrs;
 
-    for (png_uint_32 i = 0; i < h; i++)
+    for (png_uint_32 i = 0; i < h; i++) {
         row_ptrs[i] = data + i * rowbytes;
+    }
 
     png_read_image(png_ptr, row_ptrs);
     free(row_ptrs);

@@ -2,6 +2,7 @@
 #define PH_LOADER_H
 
 #include "libphash.h"
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -24,8 +25,8 @@
 // core.c's EXIF-orientation dispatch (src/image/orient.c) to tell a WebP buffer
 // apart from a JPEG one before picking which metadata scanner to run.
 static inline int ph_magic_is_webp(const uint8_t *magic, size_t len) {
-    return (len >= 12 && magic[0] == 'R' && magic[1] == 'I' && magic[2] == 'F' && magic[3] == 'F' &&
-            magic[8] == 'W' && magic[9] == 'E' && magic[10] == 'B' && magic[11] == 'P');
+    return len >= 12 && magic[0] == 'R' && magic[1] == 'I' && magic[2] == 'F' && magic[3] == 'F' &&
+           magic[8] == 'W' && magic[9] == 'E' && magic[10] == 'B' && magic[11] == 'P';
 }
 
 // max_pixels: 0 = unlimited, otherwise the max allowed width*height; the decoder must

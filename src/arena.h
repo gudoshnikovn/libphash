@@ -6,6 +6,7 @@
  * ph_arena_t belong to src/arena.c; everything else goes through the functions below. */
 
 #include "libphash.h"
+
 #include <stddef.h>
 #include <stdint.h>
 

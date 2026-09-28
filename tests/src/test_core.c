@@ -4,8 +4,9 @@
 void test_lifecycle() {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
-    if (!ctx)
+    if (!ctx) {
         exit(1);
+    }
     ph_free(ctx);
     printf("test_lifecycle: PASSED\n");
 }

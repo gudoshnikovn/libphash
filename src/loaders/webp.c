@@ -1,16 +1,17 @@
 #include "loader.h"
 #include "loaders/backends.h"
 #include "safety.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 
 #ifdef PH_USE_WEBP
 
-#include <webp/decode.h>
+#    include <webp/decode.h>
 
 int ph_can_read_webp(const uint8_t *magic, size_t len) {
-    return (len >= 12 && magic[0] == 'R' && magic[1] == 'I' && magic[2] == 'F' && magic[3] == 'F' &&
-            magic[8] == 'W' && magic[9] == 'E' && magic[10] == 'B' && magic[11] == 'P');
+    return len >= 12 && magic[0] == 'R' && magic[1] == 'I' && magic[2] == 'F' && magic[3] == 'F' &&
+           magic[8] == 'W' && magic[9] == 'E' && magic[10] == 'B' && magic[11] == 'P';
 }
 
 unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int *width, int *height,
@@ -22,21 +23,24 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
      * so decode_scale is a JPEG-only optimization (see ph_context_set_decode_scale()),
      * silently ignored here rather than paying a resize for nothing. */
     (void)decode_scale;
-    if (!buffer || size < 12)
+    if (!buffer || size < 12) {
         return NULL;
+    }
 
     int w, h;
     if (!WebPGetInfo(buffer, size, &w, &h)) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_CORRUPT_DATA;
+        }
         ph_set_err_msg(err_msg, err_msg_cap,
                        "WebP header could not be parsed (corrupt or truncated bitstream)");
         return NULL;
     }
 
     if (ph_exceeds_pixel_limit((uint64_t)w, (uint64_t)h, max_pixels)) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         return NULL;
     }
@@ -47,8 +51,9 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
 
     size_t out_size;
     if (!ph_safe_image_alloc_size((uint64_t)w, (uint64_t)h, (uint64_t)out_channels, &out_size)) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         return NULL;
     }
@@ -57,8 +62,9 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
 
     unsigned char *output = (unsigned char *)malloc(out_size);
     if (!output) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_ALLOCATION_FAILED;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
         return NULL;
     }
@@ -71,8 +77,9 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
      * classified precisely instead of guessing from an error string. */
     WebPDecoderConfig config;
     if (!WebPInitDecoderConfig(&config)) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_DECODER_UNAVAILABLE;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "WebP decoder ABI version mismatch");
         free(output);
         return NULL;
@@ -85,9 +92,10 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
 
     VP8StatusCode status = WebPDecode(buffer, size, &config);
     if (status != VP8_STATUS_OK) {
-        if (out_err)
+        if (out_err) {
             *out_err = (status == VP8_STATUS_OUT_OF_MEMORY) ? PH_ERR_ALLOCATION_FAILED
                                                             : PH_ERR_CORRUPT_DATA;
+        }
         ph_set_err_msg(err_msg, err_msg_cap,
                        (status == VP8_STATUS_OUT_OF_MEMORY)
                            ? "Memory allocation failed"

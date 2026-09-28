@@ -1,6 +1,7 @@
 #include "loader.h"
 #include "loaders/backends.h"
 #include "safety.h"
+
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,16 +18,15 @@
  * scaling for decode_scale, and any libjpeg warning (a truncated stream, stray bytes
  * before a marker) treated as a failure. These settings fix the decoded pixels, so
  * changing any of them changes hash values. */
-#include <setjmp.h>
-#include <string.h>
+#    include <setjmp.h>
+#    include <string.h>
 
 /* jpeglib.h first: it pulls in jconfig.h, whose JPEG_LIB_VERSION jerror.h tests. */
-#include "jpeglib.h"
-
-#include "jerror.h"
+#    include "jerror.h"
+#    include "jpeglib.h"
 
 int ph_can_read_jpeg(const uint8_t *magic, size_t len) {
-    return (len >= 2 && magic[0] == 0xFF && magic[1] == 0xD8);
+    return len >= 2 && magic[0] == 0xFF && magic[1] == 0xD8;
 }
 
 /* libjpeg reports errors by calling error_exit(), which must not return; the default one
@@ -52,8 +52,9 @@ static void ph_jpeg_error_exit(j_common_ptr cinfo) {
  * one ends the decode -- nothing after it is worth decoding.
  * Trace messages (msg_level >= 0) are ignored; nothing is ever printed to stderr. */
 static void ph_jpeg_emit_message(j_common_ptr cinfo, int msg_level) {
-    if (msg_level < 0)
+    if (msg_level < 0) {
         ph_jpeg_error_exit(cinfo);
+    }
 }
 
 static void ph_jpeg_output_message(j_common_ptr cinfo) { (void)cinfo; }
@@ -80,14 +81,16 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
                                   int *channels, int req_comp, uint64_t max_pixels,
                                   ph_decode_scale_t decode_scale, ph_error_t *out_err,
                                   char *err_msg, size_t err_msg_cap) {
-    if (!buffer || size == 0)
+    if (!buffer || size == 0) {
         return NULL;
+    }
     /* jpeg_mem_src() takes the size as unsigned long, 32 bits on Windows x64. The loader
      * refuses anything over PH_MAX_ENCODED_SIZE (INT_MAX) before a backend sees it, so the
      * cast below cannot truncate. */
     if (size > PH_MAX_ENCODED_SIZE) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "Encoded image is larger than 2 GiB - 1 byte");
         return NULL;
     }
@@ -110,8 +113,9 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
         jpeg_destroy_decompress(&cinfo);
         free(output);
         free(rows);
-        if (out_err)
+        if (out_err) {
             *out_err = jerr.out_of_memory ? PH_ERR_ALLOCATION_FAILED : PH_ERR_CORRUPT_DATA;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, jerr.message);
         return NULL;
     }
@@ -121,8 +125,9 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
     if (jpeg_read_header(&cinfo, TRUE) != JPEG_HEADER_OK) {
         /* A tables-only stream: valid JPEG syntax, no image in it. */
         jpeg_destroy_decompress(&cinfo);
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_CORRUPT_DATA;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "JPEG stream contains no image");
         return NULL;
     }
@@ -134,8 +139,9 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
     if (ph_exceeds_pixel_limit((uint64_t)cinfo.image_width, (uint64_t)cinfo.image_height,
                                max_pixels)) {
         jpeg_destroy_decompress(&cinfo);
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         return NULL;
     }
@@ -152,8 +158,9 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
         /* Should not happen for the two colour spaces requested above; checked because
          * the buffer below is sized by out_channels, not by what libjpeg writes. */
         jpeg_destroy_decompress(&cinfo);
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_CORRUPT_DATA;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "Unexpected JPEG output component count");
         return NULL;
     }
@@ -164,8 +171,9 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
         !ph_safe_image_alloc_size((uint64_t)w, (uint64_t)out_channels, 1, &stride) ||
         !ph_safe_image_alloc_size((uint64_t)stride, (uint64_t)h, 1, &total)) {
         jpeg_destroy_decompress(&cinfo);
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         return NULL;
     }
@@ -176,18 +184,21 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
         jpeg_destroy_decompress(&cinfo);
         free(output);
         free(rows);
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_ALLOCATION_FAILED;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
         return NULL;
     }
-    for (JDIMENSION y = 0; y < h; y++)
+    for (JDIMENSION y = 0; y < h; y++) {
         rows[y] = output + (size_t)y * stride;
+    }
 
     /* Every row pointer at once: libjpeg writes straight into the output instead of
      * staging rows in a buffer of its own. */
-    while (cinfo.output_scanline < h)
+    while (cinfo.output_scanline < h) {
         jpeg_read_scanlines(&cinfo, rows + cinfo.output_scanline, h - cinfo.output_scanline);
+    }
     jpeg_finish_decompress(&cinfo);
     jpeg_destroy_decompress(&cinfo);
     free(rows);

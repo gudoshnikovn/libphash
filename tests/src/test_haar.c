@@ -13,6 +13,7 @@
 #include "hashes/hashes.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
@@ -29,8 +30,9 @@ static void haar_1d(float *data, int n, float *temp) {
         temp[i] = (data[2 * i] + data[2 * i + 1]) * inv_haar;
         temp[i + h] = (data[2 * i] - data[2 * i + 1]) * inv_haar;
     }
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++) {
         data[i] = temp[i];
+    }
 }
 
 /* Inverse Haar (one level) */
@@ -41,8 +43,9 @@ static void haar_1d_inv(float *data, int n, float *temp) {
         temp[2 * i] = (data[i] + data[i + h]) * inv_haar;
         temp[2 * i + 1] = (data[i] - data[i + h]) * inv_haar;
     }
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++) {
         data[i] = temp[i];
+    }
 }
 
 /* =========================================================
@@ -98,16 +101,18 @@ static void test_haar_roundtrip_n4(void) {
     haar_1d_inv(data, 2, temp);
     haar_1d_inv(data, 4, temp);
 
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++) {
         ASSERT_FLOAT_EQ(original[i], data[i], 0.01f);
+    }
     PASS("test_haar_roundtrip_n4");
 }
 
 static void test_haar_roundtrip_n16(void) {
     /* Roundtrip for a 16-element signal with 4-level cascade */
     float original[16];
-    for (int i = 0; i < 16; i++)
+    for (int i = 0; i < 16; i++) {
         original[i] = (float)(i * 17 % 256);
+    }
 
     float data[16];
     float temp[16];
@@ -125,8 +130,9 @@ static void test_haar_roundtrip_n16(void) {
     haar_1d_inv(data, 8, temp);
     haar_1d_inv(data, 16, temp);
 
-    for (int i = 0; i < 16; i++)
+    for (int i = 0; i < 16; i++) {
         ASSERT_FLOAT_EQ(original[i], data[i], 0.1f);
+    }
     PASS("test_haar_roundtrip_n16");
 }
 
@@ -137,14 +143,16 @@ static void test_haar_energy_preserved(void) {
     float temp[4];
 
     double energy_before = 0.0;
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++) {
         energy_before += (double)data[i] * data[i];
+    }
 
     haar_1d(data, 4, temp);
 
     double energy_after = 0.0;
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++) {
         energy_after += (double)data[i] * data[i];
+    }
 
     ASSERT_FLOAT_EQ(energy_before, energy_after, 0.1);
     PASS("test_haar_energy_preserved");

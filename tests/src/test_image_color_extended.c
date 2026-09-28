@@ -1,6 +1,7 @@
 #include "hashes/hashes.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -19,8 +20,9 @@ void test_color_moments_edges(void) {
     m = ph_compute_moments(data, 3, 4, 0);
 
     // Mean Red: (255+0+0)/3 = 85
-    if (m.mean < 84.0 || m.mean > 86.0)
+    if (m.mean < 84.0 || m.mean > 86.0) {
         exit(1);
+    }
 
     PASS("test_color_moments_edges");
 }

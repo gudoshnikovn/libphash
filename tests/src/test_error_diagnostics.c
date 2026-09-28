@@ -26,33 +26,34 @@
 
 #include "alloc_shim.h"
 #include "test_macros.h"
+
 #include <libphash.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #ifdef _WIN32
-#include <direct.h>
-#include <fcntl.h>
-#include <io.h>
-#include <share.h>
-#include <sys/stat.h>
-#define ph_test_mkdir(p) _mkdir(p)
-#define ph_test_rmdir(p) _rmdir(p)
-#define ph_test_unlink(p) _unlink(p)
+#    include <direct.h>
+#    include <fcntl.h>
+#    include <io.h>
+#    include <share.h>
+#    include <sys/stat.h>
+#    define ph_test_mkdir(p)  _mkdir(p)
+#    define ph_test_rmdir(p)  _rmdir(p)
+#    define ph_test_unlink(p) _unlink(p)
 #else
-#include <sys/stat.h>
-#include <unistd.h>
-#define ph_test_mkdir(p) mkdir((p), 0755)
-#define ph_test_rmdir(p) rmdir(p)
-#define ph_test_unlink(p) unlink(p)
+#    include <sys/stat.h>
+#    include <unistd.h>
+#    define ph_test_mkdir(p)  mkdir((p), 0755)
+#    define ph_test_rmdir(p)  rmdir(p)
+#    define ph_test_unlink(p) unlink(p)
 #endif
 
 /* Own prefix on every fixture this test creates, so it cannot collide with the
  * temporaries of another test running from the same working directory. */
-#define TMP_DIR "ph_errdiag_dir"
-#define TMP_EMPTY "ph_errdiag_empty.png"
-#define TMP_LOCKED "ph_errdiag_locked.png"
+#define TMP_DIR     "ph_errdiag_dir"
+#define TMP_EMPTY   "ph_errdiag_empty.png"
+#define TMP_LOCKED  "ph_errdiag_locked.png"
 #define TMP_MISSING "ph_errdiag_missing.png"
 
 /* ------------------------------------------------------------------ part 1 */
@@ -62,8 +63,8 @@
  * only mechanism in C that can force the table below to be updated. The return
  * value is not otherwise interesting -- it exists so the switch has to be total. */
 #if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic error "-Wswitch"
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic error "-Wswitch"
 #endif
 static int ph_error_kind(ph_error_t err) {
     switch (err) {
@@ -86,7 +87,7 @@ static int ph_error_kind(ph_error_t err) {
     return -1; /* not an enumerator */
 }
 #if defined(__GNUC__) || defined(__clang__)
-#pragma GCC diagnostic pop
+#    pragma GCC diagnostic pop
 #endif
 
 typedef struct {
@@ -174,8 +175,9 @@ static void test_error_string_covers_every_code(void) {
 
 static int is_assigned_code(int value) {
     for (size_t i = 0; i < NUM_ERROR_CODES; i++) {
-        if ((int)all_error_codes[i].code == value)
+        if ((int)all_error_codes[i].code == value) {
             return 1;
+        }
     }
     return 0;
 }
@@ -193,8 +195,9 @@ static void test_unassigned_values_are_unknown(void) {
     for (int value = 8; value >= -64; value--) {
         const char *s = ph_get_error_string((ph_error_t)value);
         assert_message_is_clean("ph_get_error_string(out-of-range)", s);
-        if (is_assigned_code(value))
+        if (is_assigned_code(value)) {
             continue;
+        }
         if (strcmp(s, UNKNOWN_ERROR_STRING) != 0) {
             fprintf(stderr,
                     "[FAIL] %d is not in the table of known codes, but describes itself as '%s'."
@@ -241,8 +244,9 @@ static void expect(ph_context_t *ctx, const char *what, ph_error_t observed, ph_
     }
     const char *msg = ph_get_last_error_message(ctx);
     ASSERT_PTR_NOT_NULL(msg);
-    if (msg_rule == MSG_REQUIRED)
+    if (msg_rule == MSG_REQUIRED) {
         assert_message_is_clean(what, msg);
+    }
     printf("  %-28s -> %-26s '%s'\n", what, ph_get_error_string(observed), msg);
 }
 
@@ -264,8 +268,9 @@ static unsigned char *read_file(const char *path, size_t *out_len) {
 static void write_bytes(const char *path, const void *data, size_t len) {
     FILE *f = fopen(path, "wb");
     ASSERT_PTR_NOT_NULL(f);
-    if (len > 0)
+    if (len > 0) {
         ASSERT(fwrite(data, 1, len, f) == len);
+    }
     fclose(f);
 }
 
@@ -347,6 +352,7 @@ static void expect_every_hash_is_empty(ph_context_t *ctx, const char *state) {
     uint64_t hash = 0;
     uint64_t multi[PH_HASH_FLAGS_COUNT] = {0};
     ph_digest_t digest;
+
     const struct {
         const char *name;
         ph_error_t observed;
@@ -362,6 +368,7 @@ static void expect_every_hash_is_empty(ph_context_t *ctx, const char *state) {
         {"color hash", ph_compute_color_hash(ctx, &digest)},
         {"color moments", ph_compute_color_moments_hash(ctx, &digest)},
     };
+
     for (size_t i = 0; i < sizeof(calls) / sizeof(*calls); i++) {
         char what[64];
         snprintf(what, sizeof(what), "%s, %s", calls[i].name, state);
@@ -647,9 +654,11 @@ static int utf8_truncated_sequence(const char *s) {
     while (*p) {
         int need = *p < 0x80 ? 0 : (*p & 0xE0) == 0xC0 ? 1 : (*p & 0xF0) == 0xE0 ? 2 : 3;
         p++;
-        for (int k = 0; k < need; k++, p++)
-            if ((*p & 0xC0) != 0x80)
+        for (int k = 0; k < need; k++, p++) {
+            if ((*p & 0xC0) != 0x80) {
                 return 1;
+            }
+        }
     }
     return 0;
 }
@@ -668,8 +677,9 @@ static void test_long_path_message_stays_utf8(ph_context_t *ctx) {
             size_t off = 0;
             memcpy(path + off, "/nonexistent/", 13);
             off += 13;
-            for (size_t r = 0; r < reps && off + w < sizeof(path) - 1; r++, off += w)
+            for (size_t r = 0; r < reps && off + w < sizeof(path) - 1; r++, off += w) {
                 memcpy(path + off, chars[c], w);
+            }
             path[off] = '\0';
             ASSERT_INT_EQ(PH_ERR_IO, ph_load_from_file(ctx, path));
             const char *msg = ph_get_last_error_message(ctx);

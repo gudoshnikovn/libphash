@@ -1,12 +1,14 @@
 #ifndef _DEFAULT_SOURCE
-#define _DEFAULT_SOURCE
+#    define _DEFAULT_SOURCE
 #endif
 #ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 200809L
+#    define _POSIX_C_SOURCE 200809L
 #endif
 
 #include "fileio.h"
+
 #include "safety.h"
+
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -14,15 +16,15 @@
 #include <string.h>
 
 #ifdef _WIN32
-#include <fcntl.h>
-#include <io.h>
-#include <sys/stat.h>
-#include <sys/types.h>
+#    include <fcntl.h>
+#    include <io.h>
+#    include <sys/stat.h>
+#    include <sys/types.h>
 #else
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#    include <fcntl.h>
+#    include <sys/mman.h>
+#    include <sys/stat.h>
+#    include <unistd.h>
 #endif
 
 /* One spelling of "open a file read-only, stat the descriptor and read from it"
@@ -33,19 +35,19 @@
  * built from. */
 #ifdef _WIN32
 typedef struct __stat64 ph_file_stat_t;
-#define PH_FILE_OPEN_RDONLY(path) _open((path), _O_RDONLY | _O_BINARY)
-#define PH_FILE_FSTAT(fd, st) _fstat64((fd), (st))
-#define PH_FILE_READ(fd, buf, n) _read((fd), (buf), (unsigned int)(n))
-#define PH_FILE_CLOSE(fd) _close(fd)
-#ifndef S_ISREG
-#define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
-#endif
+#    define PH_FILE_OPEN_RDONLY(path) _open((path), _O_RDONLY | _O_BINARY)
+#    define PH_FILE_FSTAT(fd, st)     _fstat64((fd), (st))
+#    define PH_FILE_READ(fd, buf, n)  _read((fd), (buf), (unsigned int)(n))
+#    define PH_FILE_CLOSE(fd)         _close(fd)
+#    ifndef S_ISREG
+#        define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
+#    endif
 #else
 typedef struct stat ph_file_stat_t;
-#define PH_FILE_OPEN_RDONLY(path) open((path), O_RDONLY)
-#define PH_FILE_FSTAT(fd, st) fstat((fd), (st))
-#define PH_FILE_READ(fd, buf, n) read((fd), (buf), (n))
-#define PH_FILE_CLOSE(fd) close(fd)
+#    define PH_FILE_OPEN_RDONLY(path) open((path), O_RDONLY)
+#    define PH_FILE_FSTAT(fd, st)     fstat((fd), (st))
+#    define PH_FILE_READ(fd, buf, n)  read((fd), (buf), (n))
+#    define PH_FILE_CLOSE(fd)         close(fd)
 #endif
 
 /* Whether the file can be mapped instead of copied. Mapping is what makes a load
@@ -56,7 +58,7 @@ typedef struct stat ph_file_stat_t;
  * macros: <sys/mman.h> must stay out of Windows builds whatever decoders are
  * enabled. */
 #if !defined(_WIN32) && defined(_POSIX_MAPPED_FILES)
-#define PH_HAVE_MMAP 1
+#    define PH_HAVE_MMAP 1
 #endif
 
 /* --- Classifying a path that cannot serve as an image source -------------------
@@ -74,8 +76,9 @@ static void ph_format_err_msg(char *err_buf, size_t err_len, const char *fmt, ..
     PH_PRINTF_FORMAT(3, 4);
 
 static void ph_format_err_msg(char *err_buf, size_t err_len, const char *fmt, ...) {
-    if (!err_buf || err_len == 0)
+    if (!err_buf || err_len == 0) {
         return;
+    }
     va_list ap;
     va_start(ap, fmt);
     int n = vsnprintf(err_buf, err_len, fmt, ap);
@@ -121,14 +124,16 @@ static ph_error_t ph_check_open_file(int fd, const char *filepath, long long *ou
         ph_format_err_msg(err_buf, err_len, "Cannot read '%s': file is empty", filepath);
         return PH_ERR_IO;
     }
-    if (out_size)
+    if (out_size) {
         *out_size = (long long)st.st_size;
+    }
     return PH_SUCCESS;
 }
 
 void ph_release_file_bytes(ph_file_bytes_t *fb) {
-    if (!fb->data)
+    if (!fb->data) {
         return;
+    }
 #ifdef PH_HAVE_MMAP
     if (fb->mapped) {
         munmap((void *)(uintptr_t)fb->data, fb->length);
@@ -161,18 +166,21 @@ static ph_error_t ph_read_open_file(int fd, const char *filepath, size_t size, p
         size_t want = size - got;
         /* One chunk stays well inside the signed return type of read()/_read()
          * on every platform, including a 32-bit one. */
-        if (want > (size_t)16 * 1024 * 1024)
+        if (want > (size_t)16 * 1024 * 1024) {
             want = (size_t)16 * 1024 * 1024;
+        }
         long long n = (long long)PH_FILE_READ(fd, buf + got, want);
         if (n < 0) {
-            if (errno == EINTR)
+            if (errno == EINTR) {
                 continue;
+            }
             ph_format_err_msg(err_buf, err_len, "Cannot read '%s': %s", filepath, strerror(errno));
             free(buf);
             return PH_ERR_IO;
         }
-        if (n == 0)
+        if (n == 0) {
             break; /* EOF earlier than fstat() promised */
+        }
         got += (size_t)n;
     }
 
@@ -207,8 +215,9 @@ ph_error_t ph_open_file_bytes(const char *filepath, ph_file_bytes_t *out, char *
     out->mapped = 0;
 
     int fd = PH_FILE_OPEN_RDONLY(filepath);
-    if (fd < 0)
+    if (fd < 0) {
         return ph_report_file_open_failure(filepath, errno, err_buf, err_len);
+    }
 
     long long size = 0;
     ph_error_t err = ph_check_open_file(fd, filepath, &size, err_buf, err_len);
@@ -229,9 +238,9 @@ ph_error_t ph_open_file_bytes(const char *filepath, ph_file_bytes_t *out, char *
 #ifdef PH_HAVE_MMAP
     void *mapped = mmap(NULL, (size_t)size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (mapped != MAP_FAILED) {
-#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
+#    if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
         posix_madvise(mapped, (size_t)size, POSIX_MADV_SEQUENTIAL);
-#endif
+#    endif
         /* The mapping keeps the file alive on its own; the descriptor is not
          * needed past this point. */
         PH_FILE_CLOSE(fd);

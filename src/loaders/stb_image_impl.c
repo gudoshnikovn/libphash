@@ -24,24 +24,25 @@
  * stb_image chooses the qualifier unconditionally (it does not honour a definition made
  * before the include), so this checks its choice instead of making one. */
 #if defined(STBI_NO_THREAD_LOCALS)
-#error "libphash decodes from several threads; stb_image's failure reason must stay thread-local"
+#    error \
+        "libphash decodes from several threads; stb_image's failure reason must stay thread-local"
 #endif
 
 /* stb's own code, not ours: the stricter warnings the library is built with
  * (CMakeLists.txt, PHASH_LIBRARY_WARNING_CANDIDATES) are silenced for this file, which
  * holds nothing else. */
 #if defined(__GNUC__)
-#pragma GCC diagnostic ignored "-Wcast-qual"
-#pragma GCC diagnostic ignored "-Wfloat-equal"
-#pragma GCC diagnostic ignored "-Wcast-align"
-#pragma GCC diagnostic ignored "-Wdouble-promotion"
-#pragma GCC diagnostic ignored "-Wconversion"
-#pragma GCC diagnostic ignored "-Wsign-conversion"
+#    pragma GCC diagnostic ignored "-Wcast-qual"
+#    pragma GCC diagnostic ignored "-Wfloat-equal"
+#    pragma GCC diagnostic ignored "-Wcast-align"
+#    pragma GCC diagnostic ignored "-Wdouble-promotion"
+#    pragma GCC diagnostic ignored "-Wconversion"
+#    pragma GCC diagnostic ignored "-Wsign-conversion"
 #endif
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "../../vendor/stb_image.h"
 
 #ifndef STBI_THREAD_LOCAL
-#error "stb_image left its failure reason non-thread-local; ph_batch_* would race on it"
+#    error "stb_image left its failure reason non-thread-local; ph_batch_* would race on it"
 #endif

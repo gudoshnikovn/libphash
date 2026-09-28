@@ -5,6 +5,7 @@
  * comparison functions. */
 
 #include "libphash.h"
+
 #include <stdint.h>
 
 /* Structural validity of a caller-supplied ph_digest_t.

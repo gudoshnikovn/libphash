@@ -1,4 +1,5 @@
 #include "digest.h"
+
 #include <math.h>
 #include <stddef.h> // For size_t
 #include <stdint.h>
@@ -6,11 +7,11 @@
 
 // Include intrinsics based on detected architecture
 #if defined(__AVX2__)
-#include <immintrin.h>
+#    include <immintrin.h>
 #elif defined(__ARM_NEON) || defined(__ARM_NEON__)
-#include <arm_neon.h>
+#    include <arm_neon.h>
 #elif defined(__SSE4_2__)
-#include <nmmintrin.h>
+#    include <nmmintrin.h>
 #endif
 
 PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2) {
@@ -54,14 +55,16 @@ static int hamming_scalar_tail(const ph_digest_t *a, const ph_digest_t *b, size_
 }
 
 int ph_hamming_distance_digest_scalar(const ph_digest_t *a, const ph_digest_t *b) {
-    if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_BITS))
+    if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_BITS)) {
         return -1;
+    }
     return hamming_scalar_tail(a, b, 0, 0);
 }
 
 PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b) {
-    if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_BITS))
+    if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_BITS)) {
         return -1;
+    }
 
     size_t len = a->size;
     int total = 0;
@@ -88,13 +91,13 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
         uint64_t v2 = _mm256_extract_epi64(vxor, 2);
         uint64_t v3 = _mm256_extract_epi64(vxor, 3);
 
-#if defined(__GNUC__) || defined(__clang__)
+#    if defined(__GNUC__) || defined(__clang__)
         total += __builtin_popcountll(v0) + __builtin_popcountll(v1) + __builtin_popcountll(v2) +
                  __builtin_popcountll(v3);
-#else
+#    else
         total += (int)(_mm_popcnt_u64(v0) + _mm_popcnt_u64(v1) + _mm_popcnt_u64(v2) +
                        _mm_popcnt_u64(v3));
-#endif
+#    endif
     }
     i *= 32; // Advance byte index
 #endif
@@ -111,11 +114,11 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
 
     for (size_t w = i / 8; w < len8; w++) {
         uint64_t x = a64[w] ^ b64[w];
-#if defined(__GNUC__) || defined(__clang__)
+#    if defined(__GNUC__) || defined(__clang__)
         total += __builtin_popcountll(x);
-#else
+#    else
         total += (int)_mm_popcnt_u64(x);
-#endif
+#    endif
     }
     i = len8 * 8; // Advance byte index
 #endif
@@ -156,11 +159,13 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b) {
     if (ph_digest_kind_is(a, PH_DIGEST_KIND_VECTOR16) ||
         ph_digest_kind_is(b, PH_DIGEST_KIND_VECTOR16)) {
-        if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_VECTOR16))
+        if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_VECTOR16)) {
             return -1.0;
+        }
         /* Half a feature is not a feature: an odd length is a malformed digest. */
-        if (a->size % 2 != 0)
+        if (a->size % 2 != 0) {
             return -1.0;
+        }
 
         double sum = 0;
         for (int i = 0; i + 1 < a->size; i += 2) {
@@ -172,8 +177,9 @@ PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b) {
         return sqrt(sum);
     }
 
-    if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_VECTOR))
+    if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_VECTOR)) {
         return -1.0;
+    }
 
     double sum = 0;
     for (int i = 0; i < a->size; i++) {
@@ -189,12 +195,14 @@ PH_API double ph_similarity(uint64_t a, uint64_t b) {
 }
 
 PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b) {
-    if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_BITS))
+    if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_BITS)) {
         return -1.0;
+    }
 
     int dist = ph_hamming_distance_digest(a, b);
-    if (dist < 0)
+    if (dist < 0) {
         return -1.0;
+    }
 
     double total_bits = (double)a->size * 8.0;
     return 1.0 - ((double)dist / total_bits);
@@ -222,8 +230,9 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b) {
  */
 PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *b,
                                        double *out_pcc) {
-    if (!out_pcc || !ph_digests_comparable_as(a, b, PH_DIGEST_KIND_COEFFICIENTS))
+    if (!out_pcc || !ph_digests_comparable_as(a, b, PH_DIGEST_KIND_COEFFICIENTS)) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     const int n = a->size;
     double sum_a = 0.0, sum_b = 0.0;
@@ -260,16 +269,19 @@ PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *
             num += ((double)a->data[i] - mean_a) * ((double)b->data[j] - mean_b);
         }
         double r = num / denom;
-        if (r > peak)
+        if (r > peak) {
             peak = r;
+        }
     }
 
     /* Rounding can carry a perfect correlation a hair past 1.0; the contract says [-1, 1]
      * and callers compare it against a threshold, so keep it there. */
-    if (peak > 1.0)
+    if (peak > 1.0) {
         peak = 1.0;
-    if (peak < -1.0)
+    }
+    if (peak < -1.0) {
         peak = -1.0;
+    }
     *out_pcc = peak;
     return PH_SUCCESS;
 }
@@ -293,14 +305,16 @@ _Static_assert(sizeof("coefficients:") - 1 + PH_DIGEST_MAX_BYTES * 2 + 1 ==
 PH_API ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out, size_t out_size) {
     /* size == 0 is accepted here and renders as a bare prefix: ph_digest_from_hex() of
      * that produces such a digest, so rejecting it would break the round trip. */
-    if (!ph_digest_is_valid(d) || !out || d->kind >= PH_DIGEST_KIND_COUNT)
+    if (!ph_digest_is_valid(d) || !out || d->kind >= PH_DIGEST_KIND_COUNT) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     const char *name = PH_DIGEST_KIND_NAMES[d->kind];
     size_t name_len = strlen(name);
     size_t needed = name_len + 1 + (size_t)d->size * 2 + 1;
-    if (out_size < needed)
+    if (out_size < needed) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     memcpy(out, name, name_len);
     out[name_len] = ':';
@@ -314,35 +328,43 @@ PH_API ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out, size_t out_s
 }
 
 static int ph_hex_nibble(char c) {
-    if (c >= '0' && c <= '9')
+    if (c >= '0' && c <= '9') {
         return c - '0';
-    if (c >= 'a' && c <= 'f')
+    }
+    if (c >= 'a' && c <= 'f') {
         return c - 'a' + 10;
-    if (c >= 'A' && c <= 'F')
+    }
+    if (c >= 'A' && c <= 'F') {
         return c - 'A' + 10;
+    }
     return -1;
 }
 
 PH_API ph_error_t ph_digest_from_hex(const char *text, ph_digest_t *out) {
-    if (!text || !out)
+    if (!text || !out) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     const char *colon = strchr(text, ':');
-    if (!colon)
+    if (!colon) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     size_t name_len = (size_t)(colon - text);
     size_t kind = 0;
     while (kind < PH_DIGEST_KIND_COUNT &&
            !(strlen(PH_DIGEST_KIND_NAMES[kind]) == name_len &&
-             memcmp(PH_DIGEST_KIND_NAMES[kind], text, name_len) == 0))
+             memcmp(PH_DIGEST_KIND_NAMES[kind], text, name_len) == 0)) {
         kind++;
-    if (kind == PH_DIGEST_KIND_COUNT)
+    }
+    if (kind == PH_DIGEST_KIND_COUNT) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     const char *hex = colon + 1;
     size_t len = strlen(hex);
-    if (len % 2 != 0 || len / 2 > PH_DIGEST_MAX_BYTES)
+    if (len % 2 != 0 || len / 2 > PH_DIGEST_MAX_BYTES) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     /* Decode into a local first: a malformed string must leave `out` untouched. */
     ph_digest_t decoded;
@@ -350,8 +372,9 @@ PH_API ph_error_t ph_digest_from_hex(const char *text, ph_digest_t *out) {
     for (size_t i = 0; i < n_bytes; i++) {
         int hi = ph_hex_nibble(hex[i * 2]);
         int lo = ph_hex_nibble(hex[i * 2 + 1]);
-        if (hi < 0 || lo < 0)
+        if (hi < 0 || lo < 0) {
             return PH_ERR_INVALID_ARGUMENT;
+        }
         decoded.data[i] = (uint8_t)((hi << 4) | lo);
     }
     memset(decoded.data + n_bytes, 0, PH_DIGEST_MAX_BYTES - n_bytes);
@@ -363,8 +386,9 @@ PH_API ph_error_t ph_digest_from_hex(const char *text, ph_digest_t *out) {
 }
 
 PH_API ph_error_t ph_hash_to_hex(uint64_t hash, char *out, size_t out_size) {
-    if (!out || out_size < 17)
+    if (!out || out_size < 17) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     for (int i = 0; i < 8; i++) {
         uint8_t byte = (uint8_t)(hash >> ((7 - i) * 8));
@@ -376,17 +400,20 @@ PH_API ph_error_t ph_hash_to_hex(uint64_t hash, char *out, size_t out_size) {
 }
 
 PH_API ph_error_t ph_hash_from_hex(const char *hex, uint64_t *out) {
-    if (!hex || !out)
+    if (!hex || !out) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     uint64_t value = 0;
     for (int i = 0; i < 16; i++) {
         int nibble = ph_hex_nibble(hex[i]); /* also stops at a NUL before the 16th digit */
-        if (nibble < 0)
+        if (nibble < 0) {
             return PH_ERR_INVALID_ARGUMENT;
+        }
         value = (value << 4) | (uint64_t)nibble;
     }
-    if (hex[16] != '\0')
+    if (hex[16] != '\0') {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     *out = value;
     return PH_SUCCESS;
 }

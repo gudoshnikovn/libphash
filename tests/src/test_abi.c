@@ -1,5 +1,6 @@
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stddef.h>
 #include <stdio.h>
 

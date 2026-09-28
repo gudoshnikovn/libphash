@@ -7,6 +7,7 @@
 #include "context.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -75,8 +76,9 @@ static void test_error_paths(void) {
     run_all(ctx, "flat image");
 
     uint8_t gray[64 * 64];
-    for (int i = 0; i < 64 * 64; i++)
+    for (int i = 0; i < 64 * 64; i++) {
         gray[i] = (uint8_t)(i * 7);
+    }
     ASSERT_OK(ph_load_from_pixels(ctx, gray, 64, 64, 1, 64));
     run_all(ctx, "one channel");
 
@@ -110,8 +112,9 @@ static void test_allocation_failure_paths(void) {
     long seen = ph_shim_count();
     ph_shim_disarm();
     ph_shim_reset();
-    if (perr == PH_SUCCESS)
+    if (perr == PH_SUCCESS) {
         ph_free(probe);
+    }
     if (seen <= 0) {
         printf("[SKIP] test_allocation_failure_paths: the shim does not reach the library\n");
         return;

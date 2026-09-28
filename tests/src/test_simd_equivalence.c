@@ -32,6 +32,7 @@
 #include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -56,13 +57,15 @@ static uint32_t rng_next(void) {
 static uint8_t rng_byte(void) { return (uint8_t)rng_next(); }
 
 static void fill_random(uint8_t *buf, size_t n) {
-    for (size_t i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++) {
         buf[i] = rng_byte();
+    }
 }
 
 static void fill_gradient(uint8_t *buf, size_t n) {
-    for (size_t i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++) {
         buf[i] = (uint8_t)(i % 256);
+    }
 }
 
 /* =========================================================
@@ -114,6 +117,7 @@ static void test_grayscale_equivalence(void) {
         {7, 7},   {8, 8},  {9, 9},  {15, 15}, {16, 16}, {17, 17}, {32, 32},
         {33, 31}, {64, 1}, {1, 64}, {100, 3}, {3, 100},
     };
+
     size_t n_shapes = sizeof(shapes) / sizeof(shapes[0]);
 
     for (int channels = 3; channels <= 4; channels++) {
@@ -154,8 +158,9 @@ static int dct2_close_enough(const float *a, const float *b, int n) {
     for (int i = 0; i < n; i++) {
         float diff = fabsf(a[i] - b[i]);
         float scale = fmaxf(1.0f, fmaxf(fabsf(a[i]), fabsf(b[i])));
-        if (diff > 1e-3f * scale)
+        if (diff > 1e-3f * scale) {
             return 0;
+        }
     }
     return 1;
 }
@@ -186,11 +191,11 @@ static void test_dct2_partial_equivalence(void) {
      * there, so they trivially agree. */
     static const int reduction_sizes[] = {1, 4, 8};
     for (size_t r = 0; r < sizeof(reduction_sizes) / sizeof(reduction_sizes[0]); r++) {
-        rng_seed(0x9abc0000u + (uint32_t)reduction_sizes[r]);
+        rng_seed(0x9ABC0000u + (uint32_t)reduction_sizes[r]);
         run_dct2_case(32, reduction_sizes[r], fill_random);
         run_dct2_case(32, reduction_sizes[r], fill_gradient);
     }
-    rng_seed(0xdef1u);
+    rng_seed(0xDEF1u);
     run_dct2_case(8, 4, fill_random);
 
     /* Flat (zero-variance) input: every AC coefficient should come out at/near zero on
@@ -245,14 +250,16 @@ static void run_hamming_case(uint8_t size) {
 
 static void test_hamming_distance_equivalence(void) {
     static const int sizes[] = {0, 1, 2, 7, 8, 9, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127, 128};
-    for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++)
+    for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
         run_hamming_case((uint8_t)sizes[i]);
+    }
 
     /* Identical digests, and fully-flipped digests, at a representative size. */
     ph_digest_t a = make_bits_digest(64, fill_gradient);
     ph_digest_t b = a;
-    for (int i = 0; i < 64; i++)
+    for (int i = 0; i < 64; i++) {
         b.data[i] = (uint8_t)~b.data[i];
+    }
     ASSERT_INT_EQ(ph_hamming_distance_digest(&a, &b), ph_hamming_distance_digest_scalar(&a, &b));
     ASSERT_INT_EQ(512, ph_hamming_distance_digest(&a, &b)); /* 64 bytes fully flipped */
 

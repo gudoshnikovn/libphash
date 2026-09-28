@@ -42,6 +42,7 @@
 #include "hashes/hashes.h"
 #include "image/image.h"
 #include "safety.h"
+
 #include <math.h>
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -49,8 +50,9 @@
 
 static void compute_dct_coefficients(float *matrix, int n) {
     float c = (float)sqrt(1.0 / (double)n);
-    for (int j = 0; j < n; j++)
+    for (int j = 0; j < n; j++) {
         matrix[j] = c;
+    }
 
     c = (float)sqrt(2.0 / (double)n);
     for (int i = 1; i < n; i++) {
@@ -66,8 +68,9 @@ static atomic_flag s_dct_32_lock = ATOMIC_FLAG_INIT;
 static atomic_bool s_dct_32_init = false;
 
 static void ph_init_dct_matrix(void) {
-    if (atomic_load(&s_dct_32_init))
+    if (atomic_load(&s_dct_32_init)) {
         return;
+    }
 
     // Simple spinlock
     while (atomic_flag_test_and_set(&s_dct_32_lock)) {
@@ -88,7 +91,7 @@ const float *ph_get_dct_matrix_32(void) {
 
 // --- NEON Helpers ---
 #if defined(__ARM_NEON)
-#include <arm_neon.h>
+#    include <arm_neon.h>
 
 // Dot product of float[N] and uint8[N]
 static float dot_product_f32_u8_neon(const float *f, const uint8_t *u, int n) {
@@ -136,10 +139,12 @@ static float dot_product_f32_u8_neon(const float *f, const uint8_t *u, int n) {
 #endif
 
 PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
-    if (!ctx || !out_hash)
+    if (!ctx || !out_hash) {
         return PH_ERR_INVALID_ARGUMENT;
-    if (!ctx->image.is_loaded)
+    }
+    if (!ctx->image.is_loaded) {
         return PH_ERR_EMPTY_IMAGE;
+    }
 
     int dct_size = ctx->config.phash_dct_size;
     int reduction_size = ctx->config.phash_reduction_size;
@@ -150,12 +155,14 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
      * must fit into 64 bits (reduction_size^2 <= 64) and ph_dct2_partial()
      * has a fixed 32*8 scratch buffer. */
     if (dct_size <= 0 || dct_size > PH_DCT_MAX_SIZE || reduction_size <= 0 ||
-        reduction_size > PH_DCT_MAX_REDUCTION_SIZE || reduction_size > dct_size)
+        reduction_size > PH_DCT_MAX_REDUCTION_SIZE || reduction_size > dct_size) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     uint8_t *gray_full = ph_get_gray(ctx);
-    if (!gray_full)
+    if (!gray_full) {
         return PH_ERR_ALLOCATION_FAILED;
+    }
 
     /* Allocate all needed buffers.
      * Optimization: If dct_size=32, we use static cached matrix.
@@ -172,8 +179,9 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
 
     ph_arena_mark_t arena_mark = ph_arena_mark(ctx);
     uint8_t *scratch = ph_get_scratchpad(ctx, sz1 + sz2 + sz3);
-    if (!scratch)
+    if (!scratch) {
         return PH_ERR_ALLOCATION_FAILED;
+    }
 
     uint8_t *dct_input = scratch;
     float *dct_mat;
@@ -217,13 +225,15 @@ static ph_error_t dct2_partial_impl(const float *dct_mat, const uint8_t *input, 
     // Temporary matrix for first pass: dct_size rows, reduction_size columns
     float temp[PH_DCT_MAX_SIZE * PH_DCT_MAX_REDUCTION_SIZE];
 
-    if (!dct_mat || !input || !out)
+    if (!dct_mat || !input || !out) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     /* Hard bounds: `temp` is a fixed-size stack buffer and the caller expects
      * every element of `out` to be written. Never return without writing it. */
     if (dct_size <= 0 || dct_size > PH_DCT_MAX_SIZE || reduction_size <= 0 ||
-        reduction_size > PH_DCT_MAX_REDUCTION_SIZE || reduction_size > dct_size)
+        reduction_size > PH_DCT_MAX_REDUCTION_SIZE || reduction_size > dct_size) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     /* First pass: DCT of each row, but only compute first reduction_size columns */
     for (int i = 0; i < dct_size; i++) {
@@ -236,13 +246,15 @@ static ph_error_t dct2_partial_impl(const float *dct_mat, const uint8_t *input, 
             if (!force_scalar && dct_size == 32) {
                 sum = dot_product_f32_u8_neon(coeffs, in, 32);
             } else {
-                for (int k = 0; k < dct_size; k++)
+                for (int k = 0; k < dct_size; k++) {
                     sum += coeffs[k] * in[k];
+                }
             }
 #else
             (void)force_scalar;
-            for (int k = 0; k < dct_size; k++)
+            for (int k = 0; k < dct_size; k++) {
                 sum += coeffs[k] * in[k];
+            }
 #endif
             temp[i * reduction_size + j] = sum;
         }

@@ -3,6 +3,7 @@
 #include "libphash.h"
 #include "loader.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,8 +34,9 @@ void test_color_1ch_passthrough(void) {
     uint8_t src[4] = {10, 20, 30, 40};
     uint8_t dst[4] = {0};
     ph_to_grayscale(ctx, src, 2, 2, 1, dst);
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++) {
         ASSERT_UINT8_EQ(src[i], dst[i]);
+    }
 
     ctx->image.width = 2;
     ctx->image.height = 2;
@@ -43,8 +45,9 @@ void test_color_1ch_passthrough(void) {
     ctx->image.is_loaded = 1;
 
     uint8_t *gray = ph_get_gray(ctx);
-    if (gray != src)
+    if (gray != src) {
         exit(1);
+    }
 
     ctx->image.raw_rgb = NULL;
     ph_free(ctx);
@@ -80,8 +83,9 @@ void test_get_gray_alloc(void) {
     uint8_t *gray = ph_get_gray(ctx);
     ASSERT_PTR_NOT_NULL(gray);
     ASSERT_PTR_NOT_NULL(ctx->image.gray_cache);
-    if (gray != ctx->image.gray_cache)
+    if (gray != ctx->image.gray_cache) {
         exit(1);
+    }
 
     ph_free(ctx);
     PASS("test_get_gray_alloc");
@@ -108,12 +112,17 @@ void test_loader_exhaustion(void) {
     int w, h, ch;
 
     // Identification loop exhaustion
-    if (ph_decode_buffer(junk, 16, &w, &h, &ch, 0, 0, PH_DECODE_SCALE_FULL, NULL, NULL, 0) != NULL)
+    if (ph_decode_buffer(junk, 16, &w, &h, &ch, 0, 0, PH_DECODE_SCALE_FULL, NULL, NULL, 0) !=
+        NULL) {
         exit(1);
-    if (ph_decode_buffer(NULL, 10, &w, &h, &ch, 0, 0, PH_DECODE_SCALE_FULL, NULL, NULL, 0) != NULL)
+    }
+    if (ph_decode_buffer(NULL, 10, &w, &h, &ch, 0, 0, PH_DECODE_SCALE_FULL, NULL, NULL, 0) !=
+        NULL) {
         exit(1);
-    if (ph_decode_buffer(junk, 0, &w, &h, &ch, 0, 0, PH_DECODE_SCALE_FULL, NULL, NULL, 0) != NULL)
+    }
+    if (ph_decode_buffer(junk, 0, &w, &h, &ch, 0, 0, PH_DECODE_SCALE_FULL, NULL, NULL, 0) != NULL) {
         exit(1);
+    }
 
     ph_free_image(NULL);
     PASS("test_loader_exhaustion");
@@ -135,8 +144,9 @@ void test_loader_corrupted_backend(void) {
     ASSERT_PTR_NULL(res);
     ASSERT_INT_EQ(PH_ERR_UNSUPPORTED_FORMAT, mock_err);
 #endif
-    if (res)
+    if (res) {
         free(res);
+    }
 
     // 2. Junk data (loop exhaustion)
     uint8_t junk[4] = {0, 0, 0, 0};

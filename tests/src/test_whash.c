@@ -2,6 +2,7 @@
 #include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -61,7 +62,10 @@ void test_whash_e2e() {
 /* Step one of the proof: zeroing the single coarsest LL coefficient and reconstructing
  * subtracts the image mean from every sample, and nothing else. */
 void test_remove_max_haar_ll_subtracts_the_mean() {
-    enum { N = 16 };
+    enum {
+        N = 16,
+    };
+
     float orig[N * N], d[N * N], temp_a[N], temp_b[N];
 
     unsigned seed = 7;
@@ -72,28 +76,35 @@ void test_remove_max_haar_ll_subtracts_the_mean() {
     memcpy(d, orig, sizeof(d));
 
     /* Full cascade down to a 1x1 LL, then back up -- with no zeroing this must round-trip. */
-    for (int size = N; size > 1; size /= 2)
+    for (int size = N; size > 1; size /= 2) {
         ph_haar_2d_level(d, size, N, temp_a, temp_b);
-    for (int size = 2; size <= N; size *= 2)
+    }
+    for (int size = 2; size <= N; size *= 2) {
         ph_haar_2d_level_inverse(d, size, N, temp_a, temp_b);
-    for (int i = 0; i < N * N; i++)
+    }
+    for (int i = 0; i < N * N; i++) {
         ASSERT_FLOAT_EQ(orig[i], d[i], 1e-5);
+    }
 
     /* Now the same cascade with the coarsest coefficient zeroed. */
     memcpy(d, orig, sizeof(d));
-    for (int size = N; size > 1; size /= 2)
+    for (int size = N; size > 1; size /= 2) {
         ph_haar_2d_level(d, size, N, temp_a, temp_b);
+    }
     d[0] = 0.0f;
-    for (int size = 2; size <= N; size *= 2)
+    for (int size = 2; size <= N; size *= 2) {
         ph_haar_2d_level_inverse(d, size, N, temp_a, temp_b);
+    }
 
     double mean = 0.0;
-    for (int i = 0; i < N * N; i++)
+    for (int i = 0; i < N * N; i++) {
         mean += orig[i];
+    }
     mean /= (double)(N * N);
 
-    for (int i = 0; i < N * N; i++)
+    for (int i = 0; i < N * N; i++) {
         ASSERT_FLOAT_EQ(orig[i] - (float)mean, d[i], 1e-5);
+    }
 
     PASS("test_remove_max_haar_ll_subtracts_the_mean");
 }
@@ -130,12 +141,15 @@ void test_remove_max_haar_ll_leaves_the_hash_alone() {
  * The hash must stay all-zero rather than turn into a readout of float noise, the way
  * pHash does on a constant image (see test_dct2_of_constant_image). */
 void test_remove_max_haar_ll_on_a_solid_fill() {
-    enum { W = 64 };
+    enum {
+        W = 64,
+    };
+
     uint8_t pixels[W * W * 3];
     memset(pixels, 137, sizeof(pixels));
 
     for (int enable = 0; enable < 2; enable++) {
-        uint64_t hash = 0xdeadbeefdeadbeefULL;
+        uint64_t hash = 0xDEADBEEFDEADBEEFULL;
         ph_context_t *ctx = NULL;
         ASSERT_OK(ph_create(&ctx));
         ASSERT_OK(ph_context_set_whash_remove_max_haar_ll(ctx, enable));
@@ -169,8 +183,9 @@ void test_haar_1d_matches_its_definition() {
     const double root2 = 1.4142135623730951;
     ASSERT_FLOAT_EQ(root2, step[0], 1e-5);
     ASSERT_FLOAT_EQ(root2, step[1], 1e-5);
-    for (int i = 2; i < 8; i++)
+    for (int i = 2; i < 8; i++) {
         ASSERT_FLOAT_EQ(0.0, step[i], 1e-5);
+    }
 
     /* Energy preservation, at every size the cascade actually uses. */
     for (int n = 2; n <= 64; n *= 2) {
@@ -184,8 +199,9 @@ void test_haar_1d_matches_its_definition() {
         }
         ph_haar_1d_float(data, n, scratch);
         double after = 0.0;
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < n; i++) {
             after += (double)data[i] * data[i];
+        }
         ASSERT_FLOAT_EQ(before, after, 1e-5);
     }
 
@@ -218,11 +234,13 @@ static uint64_t whash_full_from_block_means(const uint8_t *px, int w, int h,
                                             uint64_t *out_decided) {
     int min_dim = w < h ? w : h;
     int log2_min = 0;
-    while ((1 << (log2_min + 1)) <= min_dim)
+    while ((1 << (log2_min + 1)) <= min_dim) {
         log2_min++;
+    }
     int scale = 1 << log2_min;
-    if (scale < PH_CORE_HASH_SIZE)
+    if (scale < PH_CORE_HASH_SIZE) {
         scale = PH_CORE_HASH_SIZE;
+    }
 
     uint8_t *scaled = (uint8_t *)malloc((size_t)scale * scale);
     ASSERT_PTR_NOT_NULL(scaled);
@@ -230,14 +248,17 @@ static uint64_t whash_full_from_block_means(const uint8_t *px, int w, int h,
 
     const int block = scale / PH_CORE_HASH_SIZE;
     double ll[64];
-    for (int i = 0; i < PH_CORE_HASH_SIZE; i++)
+    for (int i = 0; i < PH_CORE_HASH_SIZE; i++) {
         for (int j = 0; j < PH_CORE_HASH_SIZE; j++) {
             double sum = 0.0;
-            for (int y = 0; y < block; y++)
-                for (int x = 0; x < block; x++)
+            for (int y = 0; y < block; y++) {
+                for (int x = 0; x < block; x++) {
                     sum += scaled[(size_t)(i * block + y) * scale + (j * block + x)];
+                }
+            }
             ll[i * PH_CORE_HASH_SIZE + j] = sum / (double)(block * block);
         }
+    }
     free(scaled);
 
     double sorted[64];
@@ -255,12 +276,14 @@ static uint64_t whash_full_from_block_means(const uint8_t *px, int w, int h,
 
     uint64_t hash = 0, decided = 0;
     for (int i = 0; i < 64; i++) {
-        if (ll[i] > median)
+        if (ll[i] > median) {
             hash |= 1ULL << i;
+        }
         /* A coefficient a long way from the median cannot be flipped by the cascade's
          * rounding; one sitting on it can. Only the former are compared. */
-        if (fabs(ll[i] - median) > 1e-6)
+        if (fabs(ll[i] - median) > 1e-6) {
             decided |= 1ULL << i;
+        }
     }
     *out_decided = decided;
     return hash;
@@ -272,9 +295,11 @@ void test_whash_full_ll_band_is_the_block_mean() {
         const int side = sides[s];
         uint8_t *px = (uint8_t *)malloc((size_t)side * side);
         ASSERT_PTR_NOT_NULL(px);
-        for (int y = 0; y < side; y++)
-            for (int x = 0; x < side; x++)
+        for (int y = 0; y < side; y++) {
+            for (int x = 0; x < side; x++) {
                 px[(size_t)y * side + x] = (uint8_t)((x * 37 + y * 91 + x * y) % 256);
+            }
+        }
 
         ph_context_t *ctx = NULL;
         ASSERT_OK(ph_create(&ctx));

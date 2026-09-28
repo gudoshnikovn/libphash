@@ -13,23 +13,27 @@ PH_API ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flags, uint64_t o
     ph_error_t err;
 
     if (flags & PH_HASH_AHASH) {
-        if ((err = ph_compute_ahash(ctx, &out[idx])) != PH_SUCCESS)
+        if ((err = ph_compute_ahash(ctx, &out[idx])) != PH_SUCCESS) {
             return err;
+        }
         idx++;
     }
     if (flags & PH_HASH_DHASH) {
-        if ((err = ph_compute_dhash(ctx, &out[idx])) != PH_SUCCESS)
+        if ((err = ph_compute_dhash(ctx, &out[idx])) != PH_SUCCESS) {
             return err;
+        }
         idx++;
     }
     if (flags & PH_HASH_PHASH) {
-        if ((err = ph_compute_phash(ctx, &out[idx])) != PH_SUCCESS)
+        if ((err = ph_compute_phash(ctx, &out[idx])) != PH_SUCCESS) {
             return err;
+        }
         idx++;
     }
     if (flags & PH_HASH_WHASH) {
-        if ((err = ph_compute_whash(ctx, &out[idx])) != PH_SUCCESS)
+        if ((err = ph_compute_whash(ctx, &out[idx])) != PH_SUCCESS) {
             return err;
+        }
         idx++;
     }
 

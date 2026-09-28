@@ -30,6 +30,7 @@
  */
 #include "context.h"
 #include "hashes/hashes.h"
+
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -43,14 +44,16 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
         return PH_ERR_EMPTY_IMAGE;
     }
 
-    if (ctx->image.width <= 0 || ctx->image.height <= 0)
+    if (ctx->image.width <= 0 || ctx->image.height <= 0) {
         return PH_ERR_EMPTY_IMAGE;
+    }
 
     /* With fewer than 3 channels every moment would be computed from the same
      * byte, yielding three identical channels under a PH_SUCCESS. Refuse, and do it
      * before touching out_digest so a failed call leaves the caller's buffer alone. */
-    if (ctx->image.channels < 3)
+    if (ctx->image.channels < 3) {
         return PH_ERR_REQUIRES_COLOR;
+    }
 
     /* Nine signed 16-bit fixed-point moments: compare with ph_l2_distance(). */
     ph_digest_begin(out_digest, ctx, PH_ALGO_COLOR_MOMENTS);
@@ -68,10 +71,11 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
         const double moments[PH_COLOR_MOMENTS] = {m.mean, m.std_dev, m.skew};
         for (int k = 0; k < PH_COLOR_MOMENTS; k++) {
             double scaled = round(moments[k] * (double)PH_COLOR_MOMENT_SCALE);
-            if (scaled > INT16_MAX)
+            if (scaled > INT16_MAX) {
                 scaled = INT16_MAX;
-            else if (scaled < INT16_MIN)
+            } else if (scaled < INT16_MIN) {
                 scaled = INT16_MIN;
+            }
 
             uint16_t bits = (uint16_t)(int16_t)scaled;
             size_t at = ((size_t)c * PH_COLOR_MOMENTS + (size_t)k) * PH_COLOR_MOMENT_BYTES;
@@ -86,8 +90,9 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
 ph_channel_moments_t ph_compute_moments(const uint8_t *data, size_t num_pixels, int channels,
                                         int channel_index) {
     ph_channel_moments_t m = {0, 0, 0};
-    if (!data || num_pixels == 0 || channels <= 0)
+    if (!data || num_pixels == 0 || channels <= 0) {
         return m;
+    }
 
     /* `i * ch` in size_t: an int index would overflow well before num_pixels does. */
     size_t ch = (size_t)channels;

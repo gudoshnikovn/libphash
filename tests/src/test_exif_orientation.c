@@ -6,20 +6,21 @@
  * scripts/check_strict_iso.sh.
  * Darwin declares both regardless. Must precede every #include. */
 #if !defined(__APPLE__) && !defined(_WIN32)
-#define _POSIX_C_SOURCE 200809L
+#    define _POSIX_C_SOURCE 200809L
 #endif
 
 #include "alloc_shim.h"
 #include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #ifdef _MSC_VER
-#include <windows.h>
+#    include <windows.h>
 #endif
 
 /* --- Synthetic TIFF/EXIF buffer builders --------------------------------- */
@@ -156,8 +157,9 @@ static size_t append_webp_chunk(uint8_t *out, size_t off, const char *fourcc,
     off += 4;
     memcpy(out + off, payload, payload_len);
     off += payload_len;
-    if (payload_len & 1)
+    if (payload_len & 1) {
         out[off++] = 0; // pad to even size
+    }
     return off;
 }
 
@@ -651,6 +653,7 @@ void test_png_chunk_truncated_before_crc(void) {
  * formulas, so this is an independent check. */
 void test_apply_orientation_known_values(void) {
     static const uint8_t src[6] = {0, 1, 2, 3, 4, 5};
+
     struct {
         int orientation;
         int wd, hd;
@@ -718,8 +721,9 @@ void test_apply_orientation_noop_and_invalid(void) {
 void test_apply_orientation_roundtrip(void) {
     const int W = 5, H = 4;
     uint8_t original[20];
-    for (int i = 0; i < 20; i++)
+    for (int i = 0; i < 20; i++) {
         original[i] = (uint8_t)i;
+    }
 
     int inverse_of[9] = {0, 1, 2, 3, 4, 5, 8, 7, 6}; // index by orientation 1..8
 
@@ -799,6 +803,7 @@ void test_apply_orientation_matches_reference(void) {
         int w, h;
     } sizes[] = {{1, 1},   {1, 7},   {7, 1},   {3, 5},   {5, 3},    {31, 33},
                  {32, 32}, {33, 31}, {64, 64}, {65, 63}, {17, 129}, {129, 17}};
+
     // 5 is not a real image channel count, but it exercises the `default:`
     // branch of ph_orient_copy_px()'s switch (channels 1..4 each have a
     // spelled-out case; anything else falls through to a generic memcpy).
@@ -811,8 +816,9 @@ void test_apply_orientation_matches_reference(void) {
 
             uint8_t *original = (uint8_t *)malloc(n);
             ASSERT_PTR_NOT_NULL(original);
-            for (size_t i = 0; i < n; i++)
+            for (size_t i = 0; i < n; i++) {
                 original[i] = (uint8_t)(i * 31u + 7u); // Distinct-ish, catches index swaps.
+            }
 
             for (int o = 1; o <= 8; o++) {
                 int ref_w = 0, ref_h = 0;

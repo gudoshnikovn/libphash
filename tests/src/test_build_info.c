@@ -1,5 +1,6 @@
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -10,45 +11,45 @@
  * matters most: png=spng there, with no libpng linked at all. */
 
 #if defined(PH_USE_LIBPNG)
-#define EXPECT_PNG "libpng"
+#    define EXPECT_PNG "libpng"
 #elif defined(PH_USE_SPNG)
-#define EXPECT_PNG "spng"
+#    define EXPECT_PNG "spng"
 #else
-#define EXPECT_PNG "stb"
+#    define EXPECT_PNG "stb"
 #endif
 
 #if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
-#define EXPECT_NATIVE_PNG 1
+#    define EXPECT_NATIVE_PNG 1
 #else
-#define EXPECT_NATIVE_PNG 0
+#    define EXPECT_NATIVE_PNG 0
 #endif
 
 #if defined(PH_USE_LIBJPEG_TURBO)
-#define EXPECT_JPEG "libjpeg-turbo"
-#define EXPECT_NATIVE_JPEG 1
+#    define EXPECT_JPEG        "libjpeg-turbo"
+#    define EXPECT_NATIVE_JPEG 1
 #else
-#define EXPECT_JPEG "stb"
-#define EXPECT_NATIVE_JPEG 0
+#    define EXPECT_JPEG        "stb"
+#    define EXPECT_NATIVE_JPEG 0
 #endif
 
 #if defined(PH_USE_WEBP)
-#define EXPECT_WEBP "libwebp"
-#define EXPECT_NATIVE_WEBP 1
+#    define EXPECT_WEBP        "libwebp"
+#    define EXPECT_NATIVE_WEBP 1
 #else
-#define EXPECT_WEBP "none"
-#define EXPECT_NATIVE_WEBP 0
+#    define EXPECT_WEBP        "none"
+#    define EXPECT_NATIVE_WEBP 0
 #endif
 
 #if defined(PH_ENABLE_THREADS)
-#define EXPECT_THREADS "on"
+#    define EXPECT_THREADS "on"
 #else
-#define EXPECT_THREADS "off"
+#    define EXPECT_THREADS "off"
 #endif
 
 #if defined(PH_ENABLE_MOCK_BACKEND)
-#define EXPECT_MOCK "on"
+#    define EXPECT_MOCK "on"
 #else
-#define EXPECT_MOCK "off"
+#    define EXPECT_MOCK "off"
 #endif
 
 /* Finds `key=` as a whole token and copies its value into `out`. */
@@ -60,15 +61,17 @@ static int build_info_value(const char *info, const char *key, char *out, size_t
         size_t token_len = end ? (size_t)(end - p) : strlen(p);
         if (token_len > key_len && strncmp(p, key, key_len) == 0 && p[key_len] == '=') {
             size_t value_len = token_len - key_len - 1;
-            if (value_len + 1 > out_size)
+            if (value_len + 1 > out_size) {
                 return 0;
+            }
             memcpy(out, p + key_len + 1, value_len);
             out[value_len] = '\0';
             return 1;
         }
         p += token_len;
-        if (*p == ' ')
+        if (*p == ' ') {
             p++;
+        }
     }
     return 0;
 }

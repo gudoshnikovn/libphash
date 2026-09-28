@@ -10,24 +10,25 @@
  * Must precede every #include: feature test macros are read when the first system
  * header is parsed. */
 #if !defined(__APPLE__) && !defined(_WIN32)
-#define _POSIX_C_SOURCE 200809L
+#    define _POSIX_C_SOURCE 200809L
 #endif
 
 #include "libphash.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
 #ifdef __APPLE__
-#include <mach/mach_time.h>
+#    include <mach/mach_time.h>
 #endif
 
 /* MSVC has no <dirent.h>; this benchmark_directory() only ever needs each entry's
  * name, so a minimal opendir/readdir/closedir built on FindFirstFile/FindNextFile
  * covers it without pulling in a full POSIX dirent shim. */
 #ifdef _MSC_VER
-#include <windows.h>
+#    include <windows.h>
 
 typedef struct {
     HANDLE handle;
@@ -44,8 +45,9 @@ static DIR *opendir(const char *path) {
     snprintf(pattern, sizeof(pattern), "%s\\*", path);
 
     DIR *d = malloc(sizeof(DIR));
-    if (!d)
+    if (!d) {
         return NULL;
+    }
     d->handle = FindFirstFileA(pattern, &d->find_data);
     if (d->handle == INVALID_HANDLE_VALUE) {
         free(d);
@@ -58,8 +60,9 @@ static DIR *opendir(const char *path) {
 static struct dirent *readdir(DIR *d) {
     static struct dirent ent;
     if (!d->first_call) {
-        if (!FindNextFileA(d->handle, &d->find_data))
+        if (!FindNextFileA(d->handle, &d->find_data)) {
             return NULL;
+        }
     }
     d->first_call = 0;
     snprintf(ent.d_name, sizeof(ent.d_name), "%s", d->find_data.cFileName);
@@ -71,7 +74,7 @@ static void closedir(DIR *d) {
     free(d);
 }
 #else
-#include <dirent.h>
+#    include <dirent.h>
 #endif
 
 /* --- Global State --- */
@@ -81,14 +84,16 @@ int g_json_output = 0;
 double get_time_sec() {
 #ifdef __APPLE__
     static mach_timebase_info_data_t tb;
-    if (tb.denom == 0)
+    if (tb.denom == 0) {
         mach_timebase_info(&tb);
+    }
     return (double)mach_absolute_time() * tb.numer / tb.denom / 1e9;
 #elif defined(_MSC_VER)
     static LARGE_INTEGER freq;
     LARGE_INTEGER now;
-    if (freq.QuadPart == 0)
+    if (freq.QuadPart == 0) {
         QueryPerformanceFrequency(&freq);
+    }
     QueryPerformanceCounter(&now);
     return (double)now.QuadPart / (double)freq.QuadPart;
 #else
@@ -136,8 +141,9 @@ static void ph_bench_samples_free(ph_bench_samples *s) {
 }
 
 static void ph_bench_add(ph_bench_samples *s, double seconds) {
-    if (s->n < s->cap)
+    if (s->n < s->cap) {
         s->ms[s->n++] = seconds * 1000.0;
+    }
 }
 
 static int ph_bench_cmp(const void *a, const void *b) {
@@ -156,12 +162,14 @@ static ph_bench_stats ph_bench_summarize(ph_bench_samples *s) {
     double sum = 0.0;
     int i;
 
-    if (s->n <= 0)
+    if (s->n <= 0) {
         return st;
+    }
 
     qsort(s->ms, (size_t)s->n, sizeof(double), ph_bench_cmp);
-    for (i = 0; i < s->n; i++)
+    for (i = 0; i < s->n; i++) {
         sum += s->ms[i];
+    }
 
     st.iterations = s->n;
     st.min_ms = s->ms[0];
@@ -235,8 +243,9 @@ void benchmark_hashing(ph_context_t *ctx, int iterations) {
     for (int i = 0; uint64_algos[i].label; i++) {
         ph_bench_stats st;
 
-        for (int j = 0; j < warmup; j++)
+        for (int j = 0; j < warmup; j++) {
             uint64_algos[i].func(ctx, &hash);
+        }
 
         samples.n = 0;
         for (int j = 0; j < iterations; j++) {
@@ -249,7 +258,7 @@ void benchmark_hashing(ph_context_t *ctx, int iterations) {
         if (!g_json_output) {
             ph_bench_print_row(uint64_algos[i].label, &st, "");
         } else {
-            printf("%s{\"name\": \"%s\", ", (i == 0 ? "" : ", "), uint64_algos[i].label);
+            printf("%s{\"name\": \"%s\", ", i == 0 ? "" : ", ", uint64_algos[i].label);
             ph_bench_print_json_stats(&st);
             printf("}");
         }
@@ -288,8 +297,9 @@ void benchmark_hashing(ph_context_t *ctx, int iterations) {
         int mh_warmup;
         ph_bench_stats st;
 
-        if (mh_iters < 1)
+        if (mh_iters < 1) {
             mh_iters = 1;
+        }
         mh_warmup = PH_BENCH_WARMUP(mh_iters);
 
         for (int i = 0; i < mh_warmup; i++) {
@@ -322,8 +332,9 @@ void benchmark_hashing(ph_context_t *ctx, int iterations) {
         int radial_warmup;
         ph_bench_stats st;
 
-        if (radial_iters < 1)
+        if (radial_iters < 1) {
             radial_iters = 1;
+        }
         radial_warmup = PH_BENCH_WARMUP(radial_iters);
 
         for (int i = 0; i < radial_warmup; i++) {
@@ -357,8 +368,9 @@ void benchmark_hashing(ph_context_t *ctx, int iterations) {
 void benchmark_directory(const char *path, int grayscale) {
     DIR *dir = opendir(path);
     if (!dir) {
-        if (!g_json_output)
+        if (!g_json_output) {
             fprintf(stderr, "Error: Could not open directory: %s\n", path);
+        }
         return;
     }
 
@@ -385,13 +397,15 @@ void benchmark_directory(const char *path, int grayscale) {
             snprintf(full_path, sizeof(full_path), "%s/%s", path, ent->d_name);
             if (ph_load_from_file(ctx, full_path) == PH_SUCCESS) {
                 count++;
-                if (!g_json_output && count % 100 == 0)
+                if (!g_json_output && count % 100 == 0) {
                     printf(".");
+                }
             }
         }
     }
-    if (!g_json_output)
+    if (!g_json_output) {
         printf("\n");
+    }
 
     double end = get_time_sec();
     double total = end - start;
@@ -444,8 +458,9 @@ void benchmark_loading(const char *img, int iterations, int grayscale) {
             }
             ph_free(ctx);
         }
-        if (i >= warmup)
+        if (i >= warmup) {
             ph_bench_add(&samples, get_time_sec() - start);
+        }
     }
     st = ph_bench_summarize(&samples);
 
@@ -497,11 +512,13 @@ int main(int argc, char **argv) {
         iters = (arg_idx + 2 < argc) ? atoi(argv[arg_idx + 2]) : 100;
 
         ph_context_t *ctx;
-        if (ph_create(&ctx) != PH_SUCCESS)
+        if (ph_create(&ctx) != PH_SUCCESS) {
             return 1;
+        }
         if (ph_load_from_file(ctx, img) != PH_SUCCESS) {
-            if (!g_json_output)
+            if (!g_json_output) {
                 fprintf(stderr, "Failed to load %s\n", img);
+            }
             ph_free(ctx);
             return 1;
         }
@@ -511,20 +528,23 @@ int main(int argc, char **argv) {
     } else if (strcmp(cmd, "dir") == 0) {
         const char *path = (arg_idx + 1 < argc) ? argv[arg_idx + 1] : TEST_DATA_DIR;
         benchmark_directory(path, 1);
-        if (g_json_output)
+        if (g_json_output) {
             printf(", ");
+        }
         benchmark_directory(path, 0);
 
     } else if (strcmp(cmd, "full") == 0) {
         img = (arg_idx + 1 < argc) ? argv[arg_idx + 1] : TEST_DATA_DIR "/photo.jpeg";
         iters = (arg_idx + 2 < argc) ? atoi(argv[arg_idx + 2]) : 100;
 
-        if (!g_json_output)
+        if (!g_json_output) {
             printf("--- Full Pipeline Benchmark ---\n");
+        }
 
         ph_context_t *ctx;
-        if (ph_create(&ctx) != PH_SUCCESS)
+        if (ph_create(&ctx) != PH_SUCCESS) {
             return 1;
+        }
 
         int warmup = PH_BENCH_WARMUP(iters);
         ph_bench_samples samples;
@@ -544,8 +564,9 @@ int main(int argc, char **argv) {
                     /* ignore for benchmark */
                 }
             }
-            if (i >= warmup)
+            if (i >= warmup) {
                 ph_bench_add(&samples, get_time_sec() - start);
+            }
         }
         st = ph_bench_summarize(&samples);
 
@@ -566,8 +587,9 @@ int main(int argc, char **argv) {
         img = (arg_idx + 1 < argc) ? argv[arg_idx + 1] : TEST_DATA_DIR "/photo.jpeg";
         iters = (arg_idx + 2 < argc) ? atoi(argv[arg_idx + 2]) : 100;
         benchmark_loading(img, iters, 1);
-        if (g_json_output)
+        if (g_json_output) {
             printf(", ");
+        }
         benchmark_loading(img, iters, 0);
     } else if (strcmp(cmd, "smoke") == 0) {
         /* Standard CI smoke test. 200 iterations, not 50: at 50 the whole
@@ -578,11 +600,13 @@ int main(int argc, char **argv) {
         iters = 200;
 
         benchmark_loading(img, iters, 1);
-        if (g_json_output)
+        if (g_json_output) {
             printf(", ");
+        }
         benchmark_loading(img, iters, 0);
-        if (g_json_output)
+        if (g_json_output) {
             printf(", ");
+        }
 
         ph_context_t *ctx;
         if (ph_create(&ctx) == PH_SUCCESS && ph_load_from_file(ctx, img) == PH_SUCCESS) {
@@ -591,8 +615,9 @@ int main(int argc, char **argv) {
         }
     } else {
         print_usage(argv[0]);
-        if (g_json_output)
+        if (g_json_output) {
             printf("}");
+        }
         return 1;
     }
 

@@ -3,6 +3,7 @@
 #include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

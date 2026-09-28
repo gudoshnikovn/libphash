@@ -1,6 +1,7 @@
 #include "hashes/hashes.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -11,8 +12,9 @@ void test_moments_unit() {
 
     // Test 1: Uniform channel (all R=128)
     memset(data, 0, sizeof(data));
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++) {
         data[i * 3] = 128;
+    }
     m = ph_compute_moments(data, 4, 3, 0);
     ASSERT_FLOAT_EQ(128.0, m.mean, 0.001);
     ASSERT_FLOAT_EQ(0.0, m.std_dev, 0.001);
@@ -84,8 +86,9 @@ void test_color_moments_requires_color() {
     ASSERT_INT_EQ(PH_ERR_REQUIRES_COLOR, ph_compute_color_moments_hash(ctx, &digest));
 
     /* Not a single byte of the digest was written. */
-    for (size_t i = 0; i < sizeof(digest); i++)
+    for (size_t i = 0; i < sizeof(digest); i++) {
         ASSERT_UINT8_EQ(0xAB, ((const uint8_t *)&digest)[i]);
+    }
 
     ph_free(ctx);
     PASS("test_color_moments_requires_color");

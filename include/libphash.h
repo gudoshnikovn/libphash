@@ -26,27 +26,27 @@
 
 // --- Platform & Export Macros ---
 #ifndef PH_API
-#if defined(_WIN32) || defined(__CYGWIN__)
+#    if defined(_WIN32) || defined(__CYGWIN__)
 // PHASH_STATIC_DEFINE: set by CMake for a STATIC build (and for anything
 // linking that exported target) -- a static archive has no import library,
 // so neither dllexport (this isn't the DLL build) nor dllimport (there's no
 // DLL to import from) apply; PH_API must be a no-op. A build system other
 // than this project's own CMakeLists.txt that links libphash statically on
 // Windows must define PHASH_STATIC_DEFINE itself for the same reason.
-#ifdef PHASH_STATIC_DEFINE
-#define PH_API
-#elif defined(LIBPHASH_EXPORTS)
-#define PH_API __declspec(dllexport)
-#else
-#define PH_API __declspec(dllimport)
-#endif
-#else
-#if __GNUC__ >= 4
-#define PH_API __attribute__((visibility("default")))
-#else
-#define PH_API
-#endif
-#endif
+#        ifdef PHASH_STATIC_DEFINE
+#            define PH_API
+#        elif defined(LIBPHASH_EXPORTS)
+#            define PH_API __declspec(dllexport)
+#        else
+#            define PH_API __declspec(dllimport)
+#        endif
+#    else
+#        if __GNUC__ >= 4
+#            define PH_API __attribute__((visibility("default")))
+#        else
+#            define PH_API
+#        endif
+#    endif
 #endif
 
 // PH_NODISCARD must be the first thing in a declaration, ahead of PH_API:
@@ -56,15 +56,15 @@
 // `PH_API PH_NODISCARD T f()` outright; clang accepts it, so the wrong order
 // goes unnoticed until a GCC consumer compiles in C23 (GCC 15's default).
 #ifndef PH_NODISCARD
-#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
-#define PH_NODISCARD [[nodiscard]]
-#elif defined(__GNUC__) || defined(__clang__)
-#define PH_NODISCARD __attribute__((warn_unused_result))
-#elif defined(_MSC_VER) && _MSC_VER >= 1700
-#define PH_NODISCARD _Check_return_
-#else
-#define PH_NODISCARD
-#endif
+#    if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
+#        define PH_NODISCARD [[nodiscard]]
+#    elif defined(__GNUC__) || defined(__clang__)
+#        define PH_NODISCARD __attribute__((warn_unused_result))
+#    elif defined(_MSC_VER) && _MSC_VER >= 1700
+#        define PH_NODISCARD _Check_return_
+#    else
+#        define PH_NODISCARD
+#    endif
 #endif
 
 #ifdef __cplusplus
@@ -151,7 +151,7 @@ typedef enum {
                                      ///< started. Returned by ph_hash_files_ex() /
                                      ///< ph_hash_buffers_ex() and stored in the `status` of
                                      ///< every item they never reached.
-    PH_ERR_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE ///< Not an error code -- see "Enum width".
+    PH_ERR_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE, ///< Not an error code -- see "Enum width".
 } ph_error_t;
 
 /**
@@ -167,7 +167,7 @@ PH_API const char *ph_get_error_string(ph_error_t err);
 typedef enum {
     PH_WHASH_FAST = 0, ///< High-speed 8x8 median approximation (default).
     PH_WHASH_FULL = 1, ///< Academically accurate full 2D DWT matching ImageHash.
-    PH_WHASH_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE ///< Not a mode -- see "Enum width".
+    PH_WHASH_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE, ///< Not a mode -- see "Enum width".
 } ph_whash_mode_t;
 
 /**
@@ -178,7 +178,7 @@ typedef enum {
     PH_DECODE_SCALE_HALF = 1,    ///< Decode at 1/2 linear resolution (1/4 the pixels).
     PH_DECODE_SCALE_QUARTER = 2, ///< Decode at 1/4 linear resolution (1/16 the pixels).
     PH_DECODE_SCALE_EIGHTH = 3,  ///< Decode at 1/8 linear resolution (1/64 the pixels).
-    PH_DECODE_SCALE_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE ///< Not a scale -- see "Enum width".
+    PH_DECODE_SCALE_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE, ///< Not a scale -- see "Enum width".
 } ph_decode_scale_t;
 
 // --- Types ---
@@ -241,7 +241,7 @@ typedef enum {
                                      ///< ph_l2_distance().
     PH_DIGEST_KIND_HISTOGRAM = 4,    ///< Bin counts. Histogram intersection. ColorHash.
     PH_DIGEST_KIND_VECTOR16 = 5,     ///< Real-valued features, signed 16-bit. ColorMoments.
-    PH_DIGEST_KIND_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE ///< Not a kind -- see "Enum width".
+    PH_DIGEST_KIND_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE, ///< Not a kind -- see "Enum width".
 } ph_digest_kind_t;
 
 /**
@@ -798,7 +798,7 @@ typedef enum {
     /* Only the four uint64_t algorithms are flags. Every other algorithm returns a
      * digest and is computed with its own ph_compute_* function or ph_compute_digest().
      * Bits 4 and up are not valid flags. */
-    PH_HASH_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE ///< Not a flag -- see "Enum width".
+    PH_HASH_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE, ///< Not a flag -- see "Enum width".
 } ph_hash_flags_t;
 
 /** Number of distinct bits defined in ph_hash_flags_t. Sizes ph_compute_multi's out[]. */
@@ -1083,7 +1083,7 @@ typedef enum {
     PH_ALGO_RADIAL = 6,        ///< ph_compute_radial_hash(); "radial".
     PH_ALGO_COLOR_HASH = 7,    ///< ph_compute_color_hash(); "color_hash".
     PH_ALGO_COLOR_MOMENTS = 8, ///< ph_compute_color_moments_hash(); "color_moments".
-    PH_ALGO_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE ///< Not an algorithm -- see "Enum width".
+    PH_ALGO_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE, ///< Not an algorithm -- see "Enum width".
 } ph_algorithm_t;
 
 /** Number of ph_algorithm_t values: every algorithm is in [0, PH_ALGORITHM_COUNT). */

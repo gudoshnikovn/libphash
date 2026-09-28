@@ -1,6 +1,7 @@
 #include "hashes/hashes.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -89,8 +90,9 @@ void test_median_stability() {
     // accurately. Insertion sort's stability doesn't logically affect the outcome since
     // indistinguishable floats act the same.
     float values1[64];
-    for (int i = 0; i < 64; i++)
+    for (int i = 0; i < 64; i++) {
         values1[i] = 100.0f;
+    }
     values1[0] = 500.0f;
     values1[63] = 0.0f;
 
@@ -101,8 +103,9 @@ void test_median_stability() {
 
     // Case 2: Alternating binary pattern
     float values2[64];
-    for (int i = 0; i < 64; i++)
+    for (int i = 0; i < 64; i++) {
         values2[i] = (i % 2 == 0) ? 1.0f : 0.0f;
+    }
     // We have 32 '1.0's and 32 '0.0's. Sorted: 32 '0.0's then 32 '1.0's.
     // For even n: median = (sorted[31] + sorted[32]) / 2 = (0.0f + 1.0f) / 2 = 0.5f.
     // "values2[i] > 0.5f" is true for even indices (1.0f) -> bits 0,2,4,...,62 are set.
@@ -139,8 +142,8 @@ void test_colour_quantiser_singularities() {
 
     /* Every colour in the cube lands inside the histogram -- walked exhaustively, since
      * the quantiser is three integer divisions and the whole cube is cheap. */
-    for (int r = 0; r < 256; r++)
-        for (int g = 0; g < 256; g += 5)
+    for (int r = 0; r < 256; r++) {
+        for (int g = 0; g < 256; g += 5) {
             for (int b = 0; b < 256; b += 5) {
                 int bin = ph_color_histogram_bin(r, g, b);
                 if (bin < 0 || bin >= PH_COLOR_BINS) {
@@ -149,6 +152,8 @@ void test_colour_quantiser_singularities() {
                     exit(1);
                 }
             }
+        }
+    }
 
     PASS("test_colour_quantiser_singularities");
 }

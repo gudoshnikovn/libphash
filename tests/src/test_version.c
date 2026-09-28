@@ -1,6 +1,7 @@
 #include "libphash.h"
 #include "phash_version.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

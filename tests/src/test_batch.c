@@ -1,5 +1,6 @@
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,8 +34,9 @@ static void test_hash_files_matches_compute_multi() {
     int thread_counts[] = {1, 0, 4};
 
     for (uint32_t flags = 1; flags <= ALL_FLAGS_MASK; flags++) {
-        if (flags & ~(uint32_t)ALL_FLAGS_MASK)
+        if (flags & ~(uint32_t)ALL_FLAGS_MASK) {
             continue;
+        }
         int nset = PH_TEST_POPCOUNT(flags);
 
         for (size_t tc = 0; tc < sizeof(thread_counts) / sizeof(thread_counts[0]); tc++) {
@@ -242,7 +244,7 @@ static void test_hash_buffers_partial_failure() {
     ASSERT(png_size > 64);
 
     const uint8_t junk[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
-                            0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff};
+                            0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF};
     const uint32_t flags = PH_HASH_AHASH | PH_HASH_DHASH;
     int thread_counts[] = {1, 0, 4};
 
@@ -255,8 +257,9 @@ static void test_hash_buffers_partial_failure() {
             {.buffer = png, .length = 0},
             {.buffer = png, .length = png_size},
         };
-        for (size_t i = 0; i < 6; i++)
+        for (size_t i = 0; i < 6; i++) {
             items[i].status = STATUS_UNWRITTEN; /* must be overwritten by every item */
+        }
 
         /* The batch itself was worked on, so the return value is success whatever
          * happened to the individual images. */
@@ -297,8 +300,9 @@ static void test_batch_all_items_failing_is_not_a_hard_failure() {
         {.buffer = junk, .length = 0},
     };
     ASSERT_OK(ph_hash_buffers(bufs, 3, PH_HASH_AHASH, 0));
-    for (size_t i = 0; i < 3; i++)
+    for (size_t i = 0; i < 3; i++) {
         ASSERT(bufs[i].status != PH_SUCCESS);
+    }
 
     ph_batch_item_t files[2] = {
         {.path = TEST_DATA_DIR "/does_not_exist.jpeg"},
@@ -421,8 +425,9 @@ static void test_batch_ex_honours_the_template_max_pixels() {
             {.path = TEST_DATA_DIR "/photo_complex.png"},
         };
         ASSERT_OK(ph_hash_files_ex(items, 4, PH_HASH_AHASH, &options));
-        for (int i = 0; i < 4; i++)
+        for (int i = 0; i < 4; i++) {
             ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, items[i].status);
+        }
     }
     ph_free(config);
     PASS("test_batch_ex_honours_the_template_max_pixels");
@@ -512,8 +517,9 @@ static void test_batch_ex_sequential_callbacks() {
             ASSERT(items[i].hashes[0] == 0);
         }
         /* A failing item is still a finished item: it is reported, not cancelled. */
-        if (started >= 2)
+        if (started >= 2) {
             ASSERT(items[1].status != PH_SUCCESS);
+        }
     }
     PASS("test_batch_ex_sequential_callbacks");
 }

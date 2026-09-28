@@ -18,10 +18,11 @@
  * for it here instead of the project opening up a GNU dialect for everyone. Darwin
  * declares them regardless. Must precede every #include. */
 #if !defined(__APPLE__) && !defined(_WIN32)
-#define _POSIX_C_SOURCE 200809L
+#    define _POSIX_C_SOURCE 200809L
 #endif
 
 #include "test_macros.h"
+
 #include <libphash.h>
 #include <stdio.h>
 #include <string.h>
@@ -35,9 +36,9 @@ int main(void) {
 
 #else
 
-#include <fcntl.h>
-#include <stdarg.h>
-#include <unistd.h>
+#    include <fcntl.h>
+#    include <stdarg.h>
+#    include <unistd.h>
 
 /* Only opens of the file under test are counted, so an unrelated open anywhere
  * else in the process (the C library's own, the sanitizers') cannot affect the
@@ -46,8 +47,9 @@ static const char *g_watched_path = NULL;
 static int g_open_count = 0;
 
 static void note_open(const char *path) {
-    if (g_watched_path && path && strcmp(path, g_watched_path) == 0)
+    if (g_watched_path && path && strcmp(path, g_watched_path) == 0) {
         g_open_count++;
+    }
 }
 
 int open(const char *path, int flags, ...) {
@@ -68,21 +70,25 @@ FILE *fopen(const char *path, const char *mode) {
     note_open(path);
 
     int flags;
-    if (strchr(mode, 'w'))
+    if (strchr(mode, 'w')) {
         flags = O_WRONLY | O_CREAT | O_TRUNC;
-    else if (strchr(mode, 'a'))
+    } else if (strchr(mode, 'a')) {
         flags = O_WRONLY | O_CREAT | O_APPEND;
-    else
+    } else {
         flags = O_RDONLY;
-    if (strchr(mode, '+'))
+    }
+    if (strchr(mode, '+')) {
         flags = (flags & ~(O_RDONLY | O_WRONLY)) | O_RDWR;
+    }
 
     int fd = openat(AT_FDCWD, path, flags, 0666);
-    if (fd < 0)
+    if (fd < 0) {
         return NULL;
+    }
     FILE *f = fdopen(fd, mode);
-    if (!f)
+    if (!f) {
         close(fd);
+    }
     return f;
 }
 
@@ -152,11 +158,12 @@ int main(void) {
 
     /* A failing load must not open the file more than once either. */
     expect_one_open(ctx, TEST_DATA_DIR "/corrupted.jpg", PH_ERR_CORRUPT_DATA, "corrupt file");
-    if (!ph_can_use_webp())
+    if (!ph_can_use_webp()) {
         expect_one_open(ctx, TEST_DATA_DIR "/photo.webp", PH_ERR_DECODER_UNAVAILABLE,
                         "webp without a decoder");
-    else
+    } else {
         expect_one_open(ctx, TEST_DATA_DIR "/photo.webp", PH_SUCCESS, "webp");
+    }
 
     ph_context_set_max_pixels(ctx, 16);
     expect_one_open(ctx, TEST_DATA_DIR "/photo.jpeg", PH_ERR_IMAGE_TOO_LARGE, "over max_pixels");

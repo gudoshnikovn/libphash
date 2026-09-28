@@ -6,6 +6,7 @@
 
 #include "loader.h"
 #include "safety.h"
+
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h> // memcmp, for the PNG signature check
@@ -31,10 +32,12 @@ static inline int ph_magic_is_png(const uint8_t *magic, size_t len) {
  * short to judge -- the backend will report the truncation itself, with a better
  * message. */
 static inline int ph_png_dimensions_within_limit(const unsigned char *buffer, size_t size) {
-    if (size < 24)
+    if (size < 24) {
         return 1;
-    if (!(buffer[12] == 'I' && buffer[13] == 'H' && buffer[14] == 'D' && buffer[15] == 'R'))
+    }
+    if (!(buffer[12] == 'I' && buffer[13] == 'H' && buffer[14] == 'D' && buffer[15] == 'R')) {
         return 1; /* Not an IHDR where the spec requires one; let the backend say so. */
+    }
 
     uint32_t w = ((uint32_t)buffer[16] << 24) | ((uint32_t)buffer[17] << 16) |
                  ((uint32_t)buffer[18] << 8) | (uint32_t)buffer[19];

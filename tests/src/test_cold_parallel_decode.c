@@ -12,6 +12,7 @@
  * PNG decoder and zlib-ng to see it; everywhere else it checks the results agree. */
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -20,8 +21,9 @@
 int main(void) {
     ph_batch_item_t items[ITEMS];
     memset(items, 0, sizeof(items));
-    for (int i = 0; i < ITEMS; i++)
+    for (int i = 0; i < ITEMS; i++) {
         items[i].path = TEST_DATA_DIR "/photo.png";
+    }
 
     ASSERT_OK(ph_hash_files(items, ITEMS, PH_HASH_AHASH | PH_HASH_PHASH, 0));
 

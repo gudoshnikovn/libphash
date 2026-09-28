@@ -1,5 +1,6 @@
 #include "image/image.h"
 #include "safety.h"
+
 #include <math.h>
 #include <stdint.h>
 
@@ -26,18 +27,20 @@
  * vertical pass walks the image in column strips of PH_BLUR_STRIP floats, so the
  * 2*radius+1 rows one output row reads stay in cache for the next. */
 #define PH_BLUR_MAX_RADIUS 64
-#define PH_BLUR_STRIP 256
-#define PH_BLUR_LANES 32
+#define PH_BLUR_STRIP      256
+#define PH_BLUR_LANES      32
 
 static float blur_clamped_tap_sum(const uint8_t *row, int w, int x, const float *kernel,
                                   int radius) {
     float acc = 0.0f;
     for (int k = -radius; k <= radius; k++) {
         int sx = x + k;
-        if (sx < 0)
+        if (sx < 0) {
             sx = 0;
-        if (sx >= w)
+        }
+        if (sx >= w) {
             sx = w - 1;
+        }
         acc += kernel[k + radius] * (float)row[sx];
     }
     return acc;
@@ -54,16 +57,19 @@ static void blur_taps(const float *restrict src, size_t stride, const float *ker
         for (size_t t = 0; t < taps; t++) {
             const float kt = kernel[t];
             const float *restrict s = src + t * stride + i;
-            for (size_t j = 0; j < PH_BLUR_LANES; j++)
+            for (size_t j = 0; j < PH_BLUR_LANES; j++) {
                 acc[j] += kt * s[j];
+            }
         }
-        for (size_t j = 0; j < PH_BLUR_LANES; j++)
+        for (size_t j = 0; j < PH_BLUR_LANES; j++) {
             out[i + j] = acc[j];
+        }
     }
     for (; i < n; i++) {
         float acc = 0.0f;
-        for (size_t t = 0; t < taps; t++)
+        for (size_t t = 0; t < taps; t++) {
             acc += kernel[t] * src[t * stride + i];
+        }
         out[i] = acc;
     }
 }
@@ -74,10 +80,12 @@ static void blur_row_horizontal(const uint8_t *restrict row, int w, const float 
     int lo = radius < w ? radius : w;
     int hi = w - radius > lo ? w - radius : lo;
 
-    for (int x = 0; x < lo; x++)
+    for (int x = 0; x < lo; x++) {
         out[x] = blur_clamped_tap_sum(row, w, x, kernel, radius);
-    for (int x = hi; x < w; x++)
+    }
+    for (int x = hi; x < w; x++) {
         out[x] = blur_clamped_tap_sum(row, w, x, kernel, radius);
+    }
 
     /* The interior in strips: each strip's source span is widened to float once, rather
      * than converting every sample once per tap. */
@@ -85,8 +93,9 @@ static void blur_row_horizontal(const uint8_t *restrict row, int w, const float 
     for (int x0 = lo; x0 < hi; x0 += PH_BLUR_STRIP) {
         int n = hi - x0 < PH_BLUR_STRIP ? hi - x0 : PH_BLUR_STRIP;
         const uint8_t *s = row + x0 - radius;
-        for (int i = 0; i < n + 2 * radius; i++)
+        for (int i = 0; i < n + 2 * radius; i++) {
             in[i] = (float)s[i];
+        }
         /* Stride 1: tap t reads in[t + i]. */
         blur_taps(in, 1, kernel, ph_size(2 * radius + 1), ph_size(n), out + x0);
     }
@@ -94,14 +103,17 @@ static void blur_row_horizontal(const uint8_t *restrict row, int w, const float 
 
 void ph_gaussian_blur_sigma(const uint8_t *src, int w, int h, float sigma, float *scratch,
                             uint8_t *dst) {
-    if (!src || !dst || !scratch || w <= 0 || h <= 0 || !(sigma > 0.0f))
+    if (!src || !dst || !scratch || w <= 0 || h <= 0 || !(sigma > 0.0f)) {
         return;
+    }
 
     int radius = (int)ceilf(3.0f * sigma);
-    if (radius < 1)
+    if (radius < 1) {
         radius = 1;
-    if (radius > PH_BLUR_MAX_RADIUS)
+    }
+    if (radius > PH_BLUR_MAX_RADIUS) {
         radius = PH_BLUR_MAX_RADIUS;
+    }
 
     float kernel[2 * PH_BLUR_MAX_RADIUS + 1];
     float sum = 0.0f;
@@ -110,13 +122,15 @@ void ph_gaussian_blur_sigma(const uint8_t *src, int w, int h, float sigma, float
         kernel[i + radius] = v;
         sum += v;
     }
-    for (int i = 0; i <= 2 * radius; i++)
+    for (int i = 0; i <= 2 * radius; i++) {
         kernel[i] /= sum;
+    }
 
     const size_t width = ph_size(w);
-    for (int y = 0; y < h; y++)
+    for (int y = 0; y < h; y++) {
         blur_row_horizontal(src + ph_size(y) * width, w, kernel, radius,
                             scratch + ph_size(y) * width);
+    }
 
     /* Rows [radius, h - radius) read 2*radius+1 consecutive rows of `scratch` with no
      * clamping; the rows within `radius` of either edge gather their clamped rows into
@@ -132,16 +146,19 @@ void ph_gaussian_blur_sigma(const uint8_t *src, int w, int h, float sigma, float
             } else {
                 for (int k = -radius; k <= radius; k++) {
                     int sy = y + k;
-                    if (sy < 0)
+                    if (sy < 0) {
                         sy = 0;
-                    if (sy >= h)
+                    }
+                    if (sy >= h) {
                         sy = h - 1;
+                    }
                     rows[k + radius] = scratch + ph_size(sy) * width + x0;
                 }
                 for (int i = 0; i < n; i++) {
                     float a = 0.0f;
-                    for (int t = 0; t <= 2 * radius; t++)
+                    for (int t = 0; t <= 2 * radius; t++) {
                         a += kernel[t] * rows[t][i];
+                    }
                     acc[i] = a;
                 }
             }
@@ -161,12 +178,14 @@ void ph_gaussian_blur_sigma(const uint8_t *src, int w, int h, float sigma, float
  * equalises over 256 levels before filtering so that the response depends on the
  * distribution of tones rather than on the exposure. */
 void ph_equalize_histogram(uint8_t *data, size_t n, int levels) {
-    if (!data || n == 0 || levels < 2 || levels > 256)
+    if (!data || n == 0 || levels < 2 || levels > 256) {
         return;
+    }
 
     size_t histogram[256] = {0};
-    for (size_t i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++) {
         histogram[data[i]]++;
+    }
 
     /* The first non-empty bucket maps to 0, so a low-contrast image is stretched rather
      * than merely shifted. */
@@ -184,17 +203,21 @@ void ph_equalize_histogram(uint8_t *data, size_t n, int levels) {
     for (int v = 0; v < 256; v++) {
         cdf += histogram[v];
         double t = denom > 0.0 ? ((double)cdf - (double)cdf_min) / denom : 0.0;
-        if (t < 0.0)
+        if (t < 0.0) {
             t = 0.0;
+        }
         int mapped = (int)(t * (double)(levels - 1) + 0.5);
-        if (mapped < 0)
+        if (mapped < 0) {
             mapped = 0;
-        if (mapped > levels - 1)
+        }
+        if (mapped > levels - 1) {
             mapped = levels - 1;
+        }
         /* Spread the `levels` buckets back over the full byte range. */
         map[v] = (uint8_t)((mapped * 255) / (levels - 1));
     }
 
-    for (size_t i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++) {
         data[i] = map[data[i]];
+    }
 }

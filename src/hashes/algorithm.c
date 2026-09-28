@@ -7,6 +7,7 @@
 
 #include "context.h"
 #include "hashes/hashes.h"
+
 #include <string.h>
 
 /* The ph_hash_flags_t bit of a uint64_t algorithm is 1 << its ph_algorithm_t value; the
@@ -84,29 +85,34 @@ void ph_digest_begin(ph_digest_t *out, const ph_context_t *ctx, ph_algorithm_t a
 
 PH_API ph_error_t ph_digest_info(const ph_context_t *ctx, ph_algorithm_t algo, size_t *out_size,
                                  ph_digest_kind_t *out_kind) {
-    if (!ph_algorithm_is_valid(algo))
+    if (!ph_algorithm_is_valid(algo)) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     struct ph_context_config defaults;
     const struct ph_context_config *config = &defaults;
-    if (ctx)
+    if (ctx) {
         config = &ctx->config;
-    else
+    } else {
         ph_config_init_defaults(&defaults);
+    }
 
     uint8_t size = 0, kind = 0;
     ph_digest_shape(config, algo, &size, &kind);
-    if (out_size)
+    if (out_size) {
         *out_size = size;
-    if (out_kind)
+    }
+    if (out_kind) {
         *out_kind = (ph_digest_kind_t)kind;
+    }
     return PH_SUCCESS;
 }
 
 /* Computes a uint64_t algorithm and stores the hash as a digest: 8 bytes, most
  * significant first. */
 static ph_error_t ph_uint64_digest(ph_context_t *ctx, ph_algorithm_t algo, ph_digest_t *out) {
-    if (!out)
+    if (!out) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     uint64_t hash = 0;
     ph_error_t err;
     switch (algo) {
@@ -131,11 +137,13 @@ static ph_error_t ph_uint64_digest(ph_context_t *ctx, ph_algorithm_t algo, ph_di
         default:
             return PH_ERR_INVALID_ARGUMENT; /* not a uint64_t algorithm */
     }
-    if (err != PH_SUCCESS)
+    if (err != PH_SUCCESS) {
         return err;
+    }
     ph_digest_begin(out, ctx, algo);
-    for (int i = 0; i < PH_UINT64_DIGEST_BYTES; i++)
+    for (int i = 0; i < PH_UINT64_DIGEST_BYTES; i++) {
         out->data[i] = (uint8_t)(hash >> (8 * (PH_UINT64_DIGEST_BYTES - 1 - i)));
+    }
     return PH_SUCCESS;
 }
 
@@ -168,8 +176,9 @@ PH_API const char *ph_algorithm_name(ph_algorithm_t algo) {
 }
 
 PH_API ph_error_t ph_algorithm_from_name(const char *name, ph_algorithm_t *out_algo) {
-    if (!name || !out_algo)
+    if (!name || !out_algo) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     for (int i = 0; i < PH_ALGORITHM_COUNT; i++) {
         if (strcmp(name, PH_ALGORITHM_NAMES[i]) == 0) {
             *out_algo = (ph_algorithm_t)i;

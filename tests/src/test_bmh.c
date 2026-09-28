@@ -1,6 +1,7 @@
 #include "context.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,10 +64,12 @@ static void test_bmh_digest_width_follows_block_size() {
         /* Everything past `size`, including the padding, must be zero -- a caller that
          * hashes or serialises sizeof(ph_digest_t) bytes would otherwise pick up
          * whatever the struct happened to be sitting on. */
-        for (int b = d.size; b < PH_DIGEST_MAX_BYTES; b++)
+        for (int b = d.size; b < PH_DIGEST_MAX_BYTES; b++) {
             ASSERT_UINT8_EQ(0, d.data[b]);
-        for (size_t r = 0; r < sizeof(d.reserved); r++)
+        }
+        for (size_t r = 0; r < sizeof(d.reserved); r++) {
             ASSERT_UINT8_EQ(0, d.reserved[r]);
+        }
     }
 
     /* 32x32 = 1024 bits is exactly a full digest; that is why the bound is 32. */
@@ -180,8 +183,9 @@ static void test_bmh_bits_are_balanced() {
         ASSERT_OK(ph_compute_bmh(ctx, &d));
 
         int ones = 0;
-        for (int i = 0; i < d.size; i++)
+        for (int i = 0; i < d.size; i++) {
             ones += PH_TEST_POPCOUNT(d.data[i]);
+        }
 
         int total = d.size * 8;
         if (ones * 2 < total - total / 8 || ones * 2 > total + total / 8) {

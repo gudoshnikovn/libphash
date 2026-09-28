@@ -2,6 +2,7 @@
  * applies to its DCT block and wHash to its LL band. */
 
 #include "hashes/hashes.h"
+
 #include <stdint.h>
 
 uint64_t ph_median_bitpack(const float *values, int n) {
@@ -9,8 +10,9 @@ uint64_t ph_median_bitpack(const float *values, int n) {
 }
 
 uint64_t ph_median_bitpack_from(const float *values, int n, int median_from) {
-    if (n <= 0 || n > 64 || median_from < 0 || median_from >= n)
+    if (n <= 0 || n > 64 || median_from < 0 || median_from >= n) {
         return 0;
+    }
 
     /* Every value gets a bit; only values[median_from..n-1] get a say in the median. */
     int m = n - median_from;

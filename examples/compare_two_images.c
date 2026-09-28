@@ -37,8 +37,9 @@ int main(int argc, char **argv) {
     }
 
     uint64_t hash_a, hash_b;
-    if (hash_file(argv[1], &hash_a) != 0 || hash_file(argv[2], &hash_b) != 0)
+    if (hash_file(argv[1], &hash_a) != 0 || hash_file(argv[2], &hash_b) != 0) {
         return 1;
+    }
 
     int distance = ph_hamming_distance(hash_a, hash_b);
     double similarity = ph_similarity(hash_a, hash_b);

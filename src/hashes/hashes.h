@@ -8,6 +8,7 @@
 
 #include "context.h"
 #include "libphash.h"
+
 #include <limits.h>
 #include <math.h>
 #include <stddef.h>
@@ -23,7 +24,7 @@
  * libc it happens to be built against -- the guard keeps the libc's own definition
  * when there is one. */
 #ifndef M_PI
-#define M_PI 3.14159265358979323846
+#    define M_PI 3.14159265358979323846
 #endif
 
 /* The one place a digest's size and kind are decided (src/hashes/algorithm.c).
@@ -109,12 +110,12 @@ void ph_haar_2d_level_inverse(float *data, int size, int stride, float *temp_row
 
 const float *ph_get_dct_matrix_32(void);
 
-#define PH_HASH_FLAGS_ALL (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH)
-#define PH_DCT_SIZE 32
-#define PH_DCT_REDUCTION_SIZE 8     // We use the top-left 8x8 coefficients
-#define PH_CORE_HASH_SIZE 8         // Standard 8x8 grid for ahash/dhash/phash
-#define PH_BLOCK_SIZE 16            // 16x16 grid for BMH
-#define PH_HAAR_SCALE 1.41421356237 // sqrt(2) for Haar wavelet normalization
+#define PH_HASH_FLAGS_ALL     (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH)
+#define PH_DCT_SIZE           32
+#define PH_DCT_REDUCTION_SIZE 8             // We use the top-left 8x8 coefficients
+#define PH_CORE_HASH_SIZE     8             // Standard 8x8 grid for ahash/dhash/phash
+#define PH_BLOCK_SIZE         16            // 16x16 grid for BMH
+#define PH_HAAR_SCALE         1.41421356237 // sqrt(2) for Haar wavelet normalization
 /* Radial: 180 angles over [0, pi) -- the Radon transform is symmetric, so 180 covers the
  * whole circle -- reduced by a 1D DCT to 40 coefficients, which are the hash. Both
  * numbers come from the source (De Roover et al. via Zauner 3.1.3). */
@@ -128,31 +129,31 @@ const float *ph_get_dct_matrix_32(void);
  *   3x3 windows of that grid, stride 4, give 8 * 8 = 64 windows of 9 values
  *   64 * 9 = 576 bits = 72 bytes
  */
-#define PH_MH_ALPHA 2.0f
-#define PH_MH_LEVEL 1.0f
-#define PH_MH_BLUR_SIGMA 1.0f
+#define PH_MH_ALPHA           2.0f
+#define PH_MH_LEVEL           1.0f
+#define PH_MH_BLUR_SIGMA      1.0f
 #define PH_MH_EQUALIZE_LEVELS 256
-#define PH_MH_GRID 31
+#define PH_MH_GRID            31
 
 /* The size the image is normalised to before filtering, and the resulting block size.
  * pHash fixes this at 512, which makes the blocks 16 pixels; both are tunable here
  * because the ratio between the kernel's scale and the block grid is the one thing in
  * this algorithm that actually decides what it sees, and 512 is not the best value for
  * it. The default is measured, not inherited -- see docs/algorithm-provenance.md. */
-#define PH_MH_IMAGE_SIZE 512
-#define PH_MH_MIN_IMAGE_SIZE (PH_MH_GRID * 2)
-#define PH_MH_MAX_IMAGE_SIZE 4096
-#define PH_MH_BLOCK_PIXELS 16
-#define PH_MH_MAX_KERNEL_SIDE 65
-#define PH_MH_WINDOW 3
-#define PH_MH_WINDOW_STRIDE 4
+#define PH_MH_IMAGE_SIZE       512
+#define PH_MH_MIN_IMAGE_SIZE   (PH_MH_GRID * 2)
+#define PH_MH_MAX_IMAGE_SIZE   4096
+#define PH_MH_BLOCK_PIXELS     16
+#define PH_MH_MAX_KERNEL_SIDE  65
+#define PH_MH_WINDOW           3
+#define PH_MH_WINDOW_STRIDE    4
 #define PH_MH_WINDOWS_PER_AXIS 8
-#define PH_MH_BITS (PH_MH_WINDOWS_PER_AXIS * PH_MH_WINDOWS_PER_AXIS * PH_MH_WINDOW * PH_MH_WINDOW)
+#define PH_MH_BITS  (PH_MH_WINDOWS_PER_AXIS * PH_MH_WINDOWS_PER_AXIS * PH_MH_WINDOW * PH_MH_WINDOW)
 #define PH_MH_BYTES (PH_MH_BITS / 8)
 
 #define PH_RADIAL_PROJECTIONS 180
-#define PH_RADIAL_COEFFS 40
-#define PH_RADIAL_SAMPLES 128
+#define PH_RADIAL_COEFFS      40
+#define PH_RADIAL_SAMPLES     128
 
 /* Default Gaussian-blur sigma for Radial, aligned on pHash's own header default
  * (ph_compare_images(), aetilius/pHash), not on Zauner's Diplomarbeit, which reports "the
@@ -179,7 +180,7 @@ const float *ph_get_dct_matrix_32(void);
 /* Hard upper bounds for the pHash DCT: ph_dct2_partial() uses a fixed
  * 32*8 stack scratch buffer, and the resulting hash must fit into 64 bits
  * (reduction_size^2 <= 64). Anything above is rejected, never clamped. */
-#define PH_DCT_MAX_SIZE 32
+#define PH_DCT_MAX_SIZE           32
 #define PH_DCT_MAX_REDUCTION_SIZE 8
 
 /* Hard lower bound for reduction_size. The DC coefficient is
@@ -271,7 +272,7 @@ _Static_assert(PH_RADIAL_PROJECTIONS >= PH_RADIAL_MIN_PROJECTIONS &&
                "the default angle count must be inside the accepted range");
 #endif
 
-#define PH_COLOR_MOMENTS 3
+#define PH_COLOR_MOMENTS  3
 #define PH_COLOR_CHANNELS 3
 
 /* ColorMoments: each moment is a signed 16-bit fixed-point number, big-endian, in units
@@ -284,8 +285,8 @@ _Static_assert(PH_RADIAL_PROJECTIONS >= PH_RADIAL_MIN_PROJECTIONS &&
  * largest magnitude any moment can take, and 128 is the largest power of two with
  * 255 * scale <= INT16_MAX: the encoding covers the whole attainable range with nothing
  * to clamp, at a resolution of 1/128. */
-#define PH_COLOR_MOMENT_SCALE 128
-#define PH_COLOR_MOMENT_BYTES 2
+#define PH_COLOR_MOMENT_SCALE         128
+#define PH_COLOR_MOMENT_BYTES         2
 #define PH_COLOR_MOMENTS_DIGEST_BYTES (PH_COLOR_CHANNELS * PH_COLOR_MOMENTS * PH_COLOR_MOMENT_BYTES)
 
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
@@ -305,7 +306,7 @@ _Static_assert(255 * PH_COLOR_MOMENT_SCALE <= INT16_MAX,
 #define PH_COLOR_BINS_RG 6
 #define PH_COLOR_BINS_BY 6
 #define PH_COLOR_BINS_WB 3
-#define PH_COLOR_BINS (PH_COLOR_BINS_RG * PH_COLOR_BINS_BY * PH_COLOR_BINS_WB)
+#define PH_COLOR_BINS    (PH_COLOR_BINS_RG * PH_COLOR_BINS_BY * PH_COLOR_BINS_WB)
 
 /* The opponent axes' exact ranges for 8-bit channels: rg = r - g in [-255, 255],
  * by = 2b - r - g in [-510, 510], wb = r + g + b in [0, 765]. Each axis is shifted to

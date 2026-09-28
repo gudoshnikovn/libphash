@@ -1,4 +1,5 @@
 #include "libphash.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
@@ -6,8 +7,9 @@
  * run every hash algorithm over whatever gets decoded. */
 int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
     ph_context_t *ctx = NULL;
-    if (ph_create(&ctx) != PH_SUCCESS)
+    if (ph_create(&ctx) != PH_SUCCESS) {
         return 0;
+    }
 
     /* Without a cap this runs at the library default (256 MP), so a corpus
      * entry with a huge decoded-size header (a valid PNG/JPEG can claim gigapixel

@@ -39,6 +39,7 @@
 #include "hashes/hashes.h"
 #include "image/image.h"
 #include "safety.h"
+
 #include <stdlib.h>
 
 void ph_haar_1d_float(float *data, int n, float *temp) {
@@ -48,8 +49,9 @@ void ph_haar_1d_float(float *data, int n, float *temp) {
         temp[i] = (data[2 * i] + data[2 * i + 1]) * inv_haar;
         temp[i + h] = (data[2 * i] - data[2 * i + 1]) * inv_haar;
     }
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++) {
         data[i] = temp[i];
+    }
 }
 
 void ph_haar_2d_level(float *data, int size, int stride, float *temp_row, float *temp_col) {
@@ -83,8 +85,9 @@ void ph_haar_1d_inverse_float(float *data, int n, float *temp) {
         temp[2 * i] = (data[i] + data[i + h]) * inv_haar;
         temp[2 * i + 1] = (data[i] - data[i + h]) * inv_haar;
     }
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++) {
         data[i] = temp[i];
+    }
 }
 
 void ph_haar_2d_level_inverse(float *data, int size, int stride, float *temp_row, float *temp_col) {
@@ -134,34 +137,41 @@ static ph_error_t ph_compute_whash_fast(ph_context_t *ctx, uint64_t *out_hash) {
     uint8_t hash_input[256];         // image_scale * image_scale
 
     uint8_t *full_gray = ph_get_gray(ctx);
-    if (!full_gray)
+    if (!full_gray) {
         return PH_ERR_ALLOCATION_FAILED;
+    }
 
     if (!ph_resize_box(full_gray, ctx->image.width, ctx->image.height, hash_input, image_scale,
-                       image_scale))
+                       image_scale)) {
         return PH_ERR_ALLOCATION_FAILED;
+    }
 
     float d[256];
-    for (int i = 0; i < 256; i++)
+    for (int i = 0; i < 256; i++) {
         d[i] = (float)hash_input[i] / 255.0f;
+    }
 
     float temp_haar[16];
     float temp_haar_b[16];
-    if (ctx->config.whash_remove_max_haar_ll)
+    if (ctx->config.whash_remove_max_haar_ll) {
         ph_whash_remove_max_haar_ll(d, image_scale, image_scale, temp_haar, temp_haar_b);
+    }
 
     /* Horizontal passes */
-    for (int i = 0; i < image_scale; i++)
+    for (int i = 0; i < image_scale; i++) {
         ph_haar_1d_float(&d[i * image_scale], image_scale, temp_haar);
+    }
 
     /* Vertical passes */
     for (int j = 0; j < image_scale; j++) {
         float col[16];
-        for (int i = 0; i < image_scale; i++)
+        for (int i = 0; i < image_scale; i++) {
             col[i] = d[i * image_scale + j];
+        }
         ph_haar_1d_float(col, image_scale, temp_haar);
-        for (int i = 0; i < image_scale; i++)
+        for (int i = 0; i < image_scale; i++) {
             d[i * image_scale + j] = col[i];
+        }
     }
 
     /* Extract top-left 8x8 (LL band) */
@@ -179,16 +189,18 @@ static ph_error_t ph_compute_whash_fast(ph_context_t *ctx, uint64_t *out_hash) {
 static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
     int min_dim = ctx->image.width < ctx->image.height ? ctx->image.width : ctx->image.height;
     int log2_min = 0;
-    while ((1 << log2_min) <= min_dim)
+    while ((1 << log2_min) <= min_dim) {
         log2_min++;
+    }
     log2_min--;
 
     int nat_scale = 1 << log2_min;
     int image_scale = nat_scale > PH_CORE_HASH_SIZE ? nat_scale : PH_CORE_HASH_SIZE;
 
     uint8_t *full_gray = ph_get_gray(ctx);
-    if (!full_gray)
+    if (!full_gray) {
         return PH_ERR_ALLOCATION_FAILED;
+    }
 
     /* Rounded up so the float buffers behind the byte one stay aligned. */
     const size_t scale = ph_size(image_scale);
@@ -198,8 +210,9 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
 
     ph_arena_mark_t arena_mark = ph_arena_mark(ctx);
     uint8_t *scratch_mem = ph_get_scratchpad(ctx, sz_scaled + sz_d + sz_temps);
-    if (!scratch_mem)
+    if (!scratch_mem) {
         return PH_ERR_ALLOCATION_FAILED;
+    }
 
     uint8_t *scaled_img = scratch_mem;
     float *d = ph_arena_at(scratch_mem, sz_scaled);
@@ -218,8 +231,9 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
         }
     }
 
-    if (ctx->config.whash_remove_max_haar_ll)
+    if (ctx->config.whash_remove_max_haar_ll) {
         ph_whash_remove_max_haar_ll(d, image_scale, image_scale, temp_a, temp_b);
+    }
 
     int current_size = image_scale;
     // DWT cascade down to 8x8. We just call it on the top-left quadrant over and over.
@@ -242,10 +256,12 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
 }
 
 PH_API ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash) {
-    if (!ctx || !out_hash)
+    if (!ctx || !out_hash) {
         return PH_ERR_INVALID_ARGUMENT;
-    if (!ctx->image.is_loaded)
+    }
+    if (!ctx->image.is_loaded) {
         return PH_ERR_EMPTY_IMAGE;
+    }
 
     if (ctx->config.whash_mode == PH_WHASH_FULL) {
         return ph_compute_whash_full(ctx, out_hash);

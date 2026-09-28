@@ -2,6 +2,7 @@
 #include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <string.h>
 
 void test_context_reuse_clears_gray_data() {

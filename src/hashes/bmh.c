@@ -37,6 +37,7 @@
 #include "hashes/hashes.h"
 #include "image/image.h"
 #include "safety.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -49,8 +50,9 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     }
 
     int block_size = ctx->config.block_size;
-    if (block_size <= 0)
+    if (block_size <= 0) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     /* Casting to size_t before multiplying does not help where size_t is 32 bits: the
      * product wraps like a plain int product (block_size = 1<<30 wraps to 0 and INT_MAX
      * to 1), ph_get_scratchpad() below would hand back a tiny (or NULL) buffer, and
@@ -58,8 +60,9 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
      * write, not a clean allocation failure. ph_safe_image_alloc_size() does the check
      * width-independently (uint64_t arithmetic, checked against SIZE_MAX). */
     size_t total_pixels;
-    if (!ph_safe_image_alloc_size((uint64_t)block_size, (uint64_t)block_size, 1, &total_pixels))
+    if (!ph_safe_image_alloc_size((uint64_t)block_size, (uint64_t)block_size, 1, &total_pixels)) {
         return PH_ERR_ALLOCATION_FAILED;
+    }
 
     /* One bit per block. The size is capped at PH_DIGEST_MAX_BYTES inside
      * ph_digest_shape(): unreachable through the public API, because
@@ -72,13 +75,15 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     ph_digest_begin(out_digest, ctx, PH_ALGO_BMH);
 
     uint8_t *full_gray = ph_get_gray(ctx);
-    if (!full_gray)
+    if (!full_gray) {
         return PH_ERR_ALLOCATION_FAILED;
+    }
 
     ph_arena_mark_t arena_mark = ph_arena_mark(ctx);
     uint8_t *block_data = ph_get_scratchpad(ctx, total_pixels);
-    if (!block_data)
+    if (!block_data) {
         return PH_ERR_ALLOCATION_FAILED;
+    }
 
     if (!ph_resize_box(full_gray, ctx->image.width, ctx->image.height, block_data, block_size,
                        block_size)) {
@@ -98,8 +103,9 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
      * thing that can still tip the balance, and nothing can be done about that: they are
      * bytes, and ties are common on flat images. */
     size_t histogram[256] = {0};
-    for (size_t i = 0; i < total_pixels; i++)
+    for (size_t i = 0; i < total_pixels; i++) {
         histogram[block_data[i]]++;
+    }
 
     size_t median_rank = total_pixels / 2;
     size_t seen = 0;

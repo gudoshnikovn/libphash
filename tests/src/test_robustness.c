@@ -12,12 +12,13 @@
 // libjpeg-turbo directly; not worth it for what this test needs to prove.
 #include "libphash.h"
 #include "test_macros.h"
+
+#include "../../vendor/stb_image.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "../../vendor/stb_image.h"
 
 typedef struct {
     uint8_t *pixels; // interleaved RGB, 3 bytes/pixel
@@ -44,19 +45,23 @@ static rgb_image_t resize_nn(const rgb_image_t *src, double scale) {
     rgb_image_t out;
     out.w = (int)(src->w * scale);
     out.h = (int)(src->h * scale);
-    if (out.w < 1)
+    if (out.w < 1) {
         out.w = 1;
-    if (out.h < 1)
+    }
+    if (out.h < 1) {
         out.h = 1;
+    }
     out.pixels = malloc((size_t)out.w * out.h * 3);
     for (int y = 0; y < out.h; y++) {
         int sy = (int)((double)y * src->h / out.h);
-        if (sy >= src->h)
+        if (sy >= src->h) {
             sy = src->h - 1;
+        }
         for (int x = 0; x < out.w; x++) {
             int sx = (int)((double)x * src->w / out.w);
-            if (sx >= src->w)
+            if (sx >= src->w) {
                 sx = src->w - 1;
+            }
             memcpy(out.pixels + ((size_t)y * out.w + x) * 3,
                    src->pixels + ((size_t)sy * src->w + sx) * 3, 3);
         }
@@ -87,8 +92,9 @@ static rgb_image_t apply_gamma(const rgb_image_t *src, double gamma) {
         double v = pow(i / 255.0, 1.0 / gamma) * 255.0;
         lut[i] = (uint8_t)(v < 0 ? 0 : (v > 255 ? 255 : v));
     }
-    for (size_t i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++) {
         out.pixels[i] = lut[src->pixels[i]];
+    }
     return out;
 }
 
@@ -102,12 +108,14 @@ static rgb_image_t box_blur3(const rgb_image_t *src) {
             int count = 0;
             for (int dy = -1; dy <= 1; dy++) {
                 int ny = y + dy;
-                if (ny < 0 || ny >= src->h)
+                if (ny < 0 || ny >= src->h) {
                     continue;
+                }
                 for (int dx = -1; dx <= 1; dx++) {
                     int nx = x + dx;
-                    if (nx < 0 || nx >= src->w)
+                    if (nx < 0 || nx >= src->w) {
                         continue;
+                    }
                     const uint8_t *p = src->pixels + ((size_t)ny * src->w + nx) * 3;
                     sum[0] += p[0];
                     sum[1] += p[1];
@@ -134,8 +142,9 @@ static rgb_image_t add_watermark(const rgb_image_t *src) {
     for (int y = src->h - bh; y < src->h; y++) {
         for (int x = src->w - bw; x < src->w; x++) {
             uint8_t *p = out.pixels + ((size_t)y * src->w + x) * 3;
-            for (int c = 0; c < 3; c++)
+            for (int c = 0; c < 3; c++) {
                 p[c] = (uint8_t)(p[c] * 0.6 + 80 * 0.4);
+            }
         }
     }
     return out;

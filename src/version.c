@@ -10,47 +10,47 @@ PH_API int ph_version_number(void) { return PH_VERSION_NUMBER; }
  * PH_ENABLE_* macros are the same ones that select the code, so the line cannot claim
  * a backend that was not compiled in. */
 #if defined(PH_USE_LIBJPEG_TURBO)
-#define PH_BUILD_JPEG "libjpeg-turbo"
+#    define PH_BUILD_JPEG "libjpeg-turbo"
 #else
-#define PH_BUILD_JPEG "stb"
+#    define PH_BUILD_JPEG "stb"
 #endif
 #if defined(PH_USE_LIBPNG)
-#define PH_BUILD_PNG "libpng"
+#    define PH_BUILD_PNG "libpng"
 #elif defined(PH_USE_SPNG)
-#define PH_BUILD_PNG "spng"
+#    define PH_BUILD_PNG "spng"
 #else
-#define PH_BUILD_PNG "stb"
+#    define PH_BUILD_PNG "stb"
 #endif
 #if defined(PH_USE_WEBP)
-#define PH_BUILD_WEBP "libwebp"
+#    define PH_BUILD_WEBP "libwebp"
 #else
-#define PH_BUILD_WEBP "none"
+#    define PH_BUILD_WEBP "none"
 #endif
 #if defined(PH_USE_ZLIB_NG)
-#define PH_BUILD_ZLIB "zlib-ng"
+#    define PH_BUILD_ZLIB "zlib-ng"
 #elif defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
-#define PH_BUILD_ZLIB "zlib"
+#    define PH_BUILD_ZLIB "zlib"
 #else
-#define PH_BUILD_ZLIB "none"
+#    define PH_BUILD_ZLIB "none"
 #endif
 #if defined(PH_ENABLE_THREADS)
-#define PH_BUILD_THREADS "on"
+#    define PH_BUILD_THREADS "on"
 #else
-#define PH_BUILD_THREADS "off"
+#    define PH_BUILD_THREADS "off"
 #endif
 #if defined(__AVX2__)
-#define PH_BUILD_SIMD "avx2"
+#    define PH_BUILD_SIMD "avx2"
 #elif defined(__SSE4_2__)
-#define PH_BUILD_SIMD "sse4.2"
+#    define PH_BUILD_SIMD "sse4.2"
 #elif defined(__ARM_NEON) || defined(__ARM_NEON__)
-#define PH_BUILD_SIMD "neon"
+#    define PH_BUILD_SIMD "neon"
 #else
-#define PH_BUILD_SIMD "none"
+#    define PH_BUILD_SIMD "none"
 #endif
 #if defined(PH_ENABLE_MOCK_BACKEND)
-#define PH_BUILD_MOCK "on"
+#    define PH_BUILD_MOCK "on"
 #else
-#define PH_BUILD_MOCK "off"
+#    define PH_BUILD_MOCK "off"
 #endif
 
 /* The same macros select the backends, so neither these nor ph_get_build_info() can claim

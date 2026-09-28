@@ -1,5 +1,6 @@
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 
 void test_hash_algorithm(const char *name, ph_error_t (*hash_func)(ph_context_t *, uint64_t *)) {

@@ -4,6 +4,7 @@
 #include "image/image.h"
 #include "loader.h"
 #include "safety.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -38,19 +39,22 @@ PH_API const char *ph_get_error_string(ph_error_t err) {
 }
 
 PH_API const char *ph_get_last_error_message(const ph_context_t *ctx) {
-    if (!ctx)
+    if (!ctx) {
         return "";
+    }
     return ctx->last_error;
 }
 
 PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
-    if (!out_ctx)
+    if (!out_ctx) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     /* calloc: no image, an empty arena and an empty diagnostic message are all zero. */
     ph_context_t *ctx = (ph_context_t *)calloc(1, sizeof(ph_context_t));
-    if (!ctx)
+    if (!ctx) {
         return PH_ERR_ALLOCATION_FAILED;
+    }
 
     ph_config_init_defaults(&ctx->config);
 
@@ -70,12 +74,15 @@ PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
  * bytes based on magic, or reports "no transform needed" (1) for anything else. */
 static int ph_scan_orientation(const uint8_t *data, size_t len) {
     static const uint8_t png_sig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
-    if (len >= 2 && data[0] == 0xFF && data[1] == 0xD8)
+    if (len >= 2 && data[0] == 0xFF && data[1] == 0xD8) {
         return ph_exif_orientation_from_jpeg(data, len);
-    if (ph_magic_is_webp(data, len))
+    }
+    if (ph_magic_is_webp(data, len)) {
         return ph_exif_orientation_from_webp(data, len);
-    if (len >= 8 && memcmp(data, png_sig, 8) == 0)
+    }
+    if (len >= 8 && memcmp(data, png_sig, 8) == 0) {
         return ph_exif_orientation_from_png(data, len);
+    }
     return 1;
 }
 
@@ -92,8 +99,9 @@ static void ph_clear_last_error(ph_context_t *ctx) { ctx->last_error[0] = '\0'; 
  * first, so a failed load never leaves the previously loaded image visible. */
 static void ph_reset_loaded_image(ph_context_t *ctx) {
     ph_clear_last_error(ctx);
-    if (ctx->image.raw_rgb)
+    if (ctx->image.raw_rgb) {
         ph_free_image(ctx->image.raw_rgb);
+    }
     ctx->image.raw_rgb = NULL;
     ctx->image.is_loaded = 0;
     /* The dimensions go with the pixels: ph_context_get_dimensions() on an empty
@@ -105,8 +113,9 @@ static void ph_reset_loaded_image(ph_context_t *ctx) {
 }
 
 PH_API void ph_free(ph_context_t *ctx) {
-    if (!ctx)
+    if (!ctx) {
         return;
+    }
     ph_reset_loaded_image(ctx);
     ph_arena_free(&ctx->arena);
     free(ctx);
@@ -157,17 +166,20 @@ static ph_error_t ph_load_encoded_bytes(ph_context_t *ctx, const uint8_t *data, 
 }
 
 PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
-    if (!ctx)
+    if (!ctx) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     ph_clear_last_error(ctx);
-    if (!filepath)
+    if (!filepath) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     ph_reset_loaded_image(ctx);
 
     ph_file_bytes_t bytes;
     ph_error_t err = ph_open_file_bytes(filepath, &bytes, ctx->last_error, sizeof(ctx->last_error));
-    if (err != PH_SUCCESS)
+    if (err != PH_SUCCESS) {
         return err;
+    }
 
     err = ph_load_encoded_bytes(ctx, bytes.data, bytes.length);
     ph_release_file_bytes(&bytes);
@@ -175,54 +187,67 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
 }
 
 PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, size_t length) {
-    if (!ctx)
+    if (!ctx) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     ph_clear_last_error(ctx);
-    if (!buffer || length == 0)
+    if (!buffer || length == 0) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     ph_reset_loaded_image(ctx);
     return ph_load_encoded_bytes(ctx, buffer, length);
 }
 
 PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels, int width,
                                       int height, int channels, int stride) {
-    if (!ctx)
+    if (!ctx) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     /* Only the message: unlike the file and buffer paths, this one keeps the previously
      * loaded image when it fails, and the image is not discarded until the new buffer has
      * actually been allocated and filled below. */
     ph_clear_last_error(ctx);
-    if (!pixels)
+    if (!pixels) {
         return PH_ERR_INVALID_ARGUMENT;
-    if (width <= 0 || height <= 0)
+    }
+    if (width <= 0 || height <= 0) {
         return PH_ERR_INVALID_ARGUMENT;
-    if (channels != 1 && channels != 3 && channels != 4)
+    }
+    if (channels != 1 && channels != 3 && channels != 4) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     /* Decompression-bomb protection applies here too, with the same check and the same
      * error code as the file and buffer paths; max_pixels == 0 means "no caller limit". */
-    if (ph_exceeds_pixel_limit((uint64_t)width, (uint64_t)height, ctx->config.max_pixels))
+    if (ph_exceeds_pixel_limit((uint64_t)width, (uint64_t)height, ctx->config.max_pixels)) {
         return PH_ERR_IMAGE_TOO_LARGE;
+    }
 
     /* width, height and channels are positive from here on. A product that does not fit
      * size_t (a 32-bit build) is refused rather than wrapped. */
     size_t row_bytes, total_bytes;
     if (!ph_safe_image_alloc_size(ph_size(width), 1, ph_size(channels), &row_bytes) ||
-        !ph_safe_image_alloc_size(ph_size(width), ph_size(height), ph_size(channels), &total_bytes))
+        !ph_safe_image_alloc_size(ph_size(width), ph_size(height), ph_size(channels),
+                                  &total_bytes)) {
         return PH_ERR_INVALID_ARGUMENT;
-    if (stride < 0 || (stride != 0 && ph_size(stride) < row_bytes))
+    }
+    if (stride < 0 || (stride != 0 && ph_size(stride) < row_bytes)) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     size_t src_stride = (stride == 0) ? row_bytes : ph_size(stride);
 
     uint8_t *dst = malloc(total_bytes);
-    if (!dst)
+    if (!dst) {
         return PH_ERR_ALLOCATION_FAILED;
+    }
 
-    for (size_t y = 0, rows = ph_size(height); y < rows; y++)
+    for (size_t y = 0, rows = ph_size(height); y < rows; y++) {
         memcpy(dst + y * row_bytes, pixels + y * src_stride, row_bytes);
+    }
 
-    if (ctx->image.raw_rgb)
+    if (ctx->image.raw_rgb) {
         ph_free_image(ctx->image.raw_rgb);
+    }
     ctx->image.raw_rgb = NULL;
     ctx->image.is_loaded = 0;
     ph_drop_gray_cache(ctx);

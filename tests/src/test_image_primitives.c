@@ -12,6 +12,7 @@
 #include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
@@ -88,8 +89,9 @@ static void test_gray_passthrough_1ch(void) {
     uint8_t src[] = {42, 100, 200, 7};
     uint8_t out[4];
     ph_to_grayscale(ctx, src, 4, 1, 1, out);
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++) {
         ASSERT_UINT8_EQ(src[i], out[i]);
+    }
     ph_free(ctx);
     PASS("test_gray_passthrough_1ch");
 }
@@ -142,8 +144,9 @@ static void test_gamma_identity_lut(void) {
     uint8_t copy[5];
     memcpy(copy, data, 5);
     ph_apply_gamma(ctx, data, 5, 1);
-    for (int i = 0; i < 5; i++)
+    for (int i = 0; i < 5; i++) {
         ASSERT_UINT8_EQ(copy[i], data[i]);
+    }
     ph_free(ctx);
     PASS("test_gamma_identity_lut");
 }
@@ -177,8 +180,9 @@ static void test_gamma_uniform_image(void) {
     uint8_t data[16];
     memset(data, 100, 16);
     ph_apply_gamma(ctx, data, 4, 4);
-    for (int i = 0; i < 16; i++)
+    for (int i = 0; i < 16; i++) {
         ASSERT_UINT8_EQ(100, data[i]);
+    }
     ph_free(ctx);
     PASS("test_gamma_uniform_image");
 }
@@ -219,8 +223,9 @@ static void test_box_uniform(void) {
     memset(src, 200, 16);
     uint8_t dst[4];
     ph_resize_box(src, 4, 4, dst, 2, 2);
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++) {
         ASSERT_UINT8_EQ(200, dst[i]);
+    }
     PASS("test_box_uniform");
 }
 
@@ -248,8 +253,9 @@ static void test_box_identity(void) {
     uint8_t src[] = {10, 20, 30, 40};
     uint8_t dst[4];
     ph_resize_box(src, 2, 2, dst, 2, 2);
-    for (int i = 0; i < 4; i++)
+    for (int i = 0; i < 4; i++) {
         ASSERT_UINT8_EQ(src[i], dst[i]);
+    }
     PASS("test_box_identity");
 }
 

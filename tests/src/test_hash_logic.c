@@ -18,6 +18,7 @@
 
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -40,8 +41,9 @@ static uint8_t *make_pgm(int w, int h, const uint8_t *pixels, size_t *out_size) 
     size_t data_size = (size_t)w * h;
     size_t total = (size_t)hlen + data_size;
     uint8_t *buf = malloc(total);
-    if (!buf)
+    if (!buf) {
         return NULL;
+    }
     memcpy(buf, header, hlen);
     memcpy(buf + hlen, pixels, data_size);
     *out_size = total;
@@ -59,8 +61,9 @@ static uint8_t *make_ppm(int w, int h, const uint8_t *pixels, size_t *out_size) 
     size_t data_size = (size_t)w * h * 3;
     size_t total = (size_t)hlen + data_size;
     uint8_t *buf = malloc(total);
-    if (!buf)
+    if (!buf) {
         return NULL;
+    }
     memcpy(buf, header, hlen);
     memcpy(buf + hlen, pixels, data_size);
     *out_size = total;
@@ -71,8 +74,9 @@ static uint8_t *make_ppm(int w, int h, const uint8_t *pixels, size_t *out_size) 
 static ph_context_t *load_pgm(int w, int h, const uint8_t *pixels) {
     size_t sz;
     uint8_t *buf = make_pgm(w, h, pixels, &sz);
-    if (!buf)
+    if (!buf) {
         return NULL;
+    }
 
     ph_context_t *ctx = NULL;
     if (ph_create(&ctx) != PH_SUCCESS) {
@@ -92,11 +96,13 @@ static ph_context_t *load_pgm(int w, int h, const uint8_t *pixels) {
 /* Convenience: create a context with image loaded from a PPM pixel array.
  * Kept for future RGB-based tests; suppress unused-function warning. */
 static ph_context_t *load_ppm(int w, int h, const uint8_t *pixels) PH_TEST_UNUSED;
+
 static ph_context_t *load_ppm(int w, int h, const uint8_t *pixels) {
     size_t sz;
     uint8_t *buf = make_ppm(w, h, pixels, &sz);
-    if (!buf)
+    if (!buf) {
         return NULL;
+    }
 
     ph_context_t *ctx = NULL;
     if (ph_create(&ctx) != PH_SUCCESS) {
@@ -154,8 +160,9 @@ static void test_ahash_all_black(void) {
 static void test_ahash_deterministic(void) {
     /* Same image must produce the same hash on two different calls */
     uint8_t pixels[64];
-    for (int i = 0; i < 64; i++)
+    for (int i = 0; i < 64; i++) {
         pixels[i] = (uint8_t)(i * 4);
+    }
 
     ph_context_t *ctx1 = load_pgm(8, 8, pixels);
     ph_context_t *ctx2 = load_pgm(8, 8, pixels);
@@ -201,9 +208,11 @@ static void test_dhash_ascending_gradient(void) {
     /* Create a 9xN image with strictly ascending rows so box-resize keeps gradient */
     int w = 18, h = 8;
     uint8_t pixels[18 * 8];
-    for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++)
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
             pixels[y * w + x] = (uint8_t)((x * 14) & 0xFF);
+        }
+    }
 
     ph_context_t *ctx = load_pgm(w, h, pixels);
     ASSERT_PTR_NOT_NULL(ctx);
@@ -223,8 +232,9 @@ static void test_dhash_ascending_gradient(void) {
 
 static void test_dhash_deterministic(void) {
     uint8_t pixels[16 * 16];
-    for (int i = 0; i < 256; i++)
+    for (int i = 0; i < 256; i++) {
         pixels[i] = (uint8_t)i;
+    }
 
     ph_context_t *ctx1 = load_pgm(16, 16, pixels);
     ph_context_t *ctx2 = load_pgm(16, 16, pixels);
@@ -286,8 +296,9 @@ static void test_bmh_size_correct(void) {
 
 static void test_bmh_deterministic(void) {
     uint8_t pixels[32 * 32];
-    for (int i = 0; i < 1024; i++)
+    for (int i = 0; i < 1024; i++) {
         pixels[i] = (uint8_t)i;
+    }
 
     ph_context_t *ctx1 = load_pgm(32, 32, pixels);
     ph_context_t *ctx2 = load_pgm(32, 32, pixels);

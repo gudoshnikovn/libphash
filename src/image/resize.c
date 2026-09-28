@@ -1,4 +1,5 @@
 #include "image/image.h"
+
 #include <stdint.h>
 #include <string.h>
 
@@ -10,16 +11,18 @@
 #include "../../vendor/stb_image_resize2.h"
 
 int ph_resize_box(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh) {
-    if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0)
+    if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) {
         return 0;
+    }
     void *result = stbir_resize(src, sw, sh, 0, dst, dw, dh, 0, STBIR_1CHANNEL, STBIR_TYPE_UINT8,
                                 STBIR_EDGE_CLAMP, STBIR_FILTER_BOX);
     return result != NULL;
 }
 
 int ph_resize_mitchell(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh) {
-    if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0)
+    if (dw <= 0 || dh <= 0 || sw <= 0 || sh <= 0) {
         return 0;
+    }
 
     void *result = stbir_resize(src, sw, sh, 0, dst, dw, dh, 0, STBIR_1CHANNEL, STBIR_TYPE_UINT8,
                                 STBIR_EDGE_CLAMP, STBIR_FILTER_MITCHELL);

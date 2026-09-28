@@ -2,6 +2,7 @@
 #include "hashes/hashes.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <float.h>
 #include <math.h>
 #include <stdio.h>
@@ -80,8 +81,9 @@ void test_radial_similarity_contract() {
 
     /* Symmetric, unlike pHash's own ph_crosscorr() -- see the note in src/compare.c. */
     double back = -9.0;
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 8; i++) {
         b.data[i] = (uint8_t)(200 - 7 * i);
+    }
     ASSERT_OK(ph_radial_similarity(&a, &b, &pcc));
     ASSERT_OK(ph_radial_similarity(&b, &a, &back));
     ASSERT_FLOAT_EQ(pcc, back, 1e-9);
@@ -167,13 +169,14 @@ static image_t_rot rotate_about_centre(const uint8_t *src, int w, int h, double 
     ASSERT_PTR_NOT_NULL(o.px);
     double a = deg * M_PI / 180.0, ca = cos(a), sa = sin(a);
     double cx = (w - 1) / 2.0, cy = (h - 1) / 2.0;
-    for (int y = 0; y < h; y++)
+    for (int y = 0; y < h; y++) {
         for (int x = 0; x < w; x++) {
             double dx = x - cx, dy = y - cy;
             double sx = cx + dx * ca + dy * sa;
             double sy = cy - dx * sa + dy * ca;
-            if (sx < 0 || sy < 0 || sx >= w - 1 || sy >= h - 1)
+            if (sx < 0 || sy < 0 || sx >= w - 1 || sy >= h - 1) {
                 continue;
+            }
             int x0 = (int)sx, y0 = (int)sy;
             double fx = sx - x0, fy = sy - y0;
             for (int c = 0; c < 3; c++) {
@@ -184,6 +187,7 @@ static image_t_rot rotate_about_centre(const uint8_t *src, int w, int h, double 
                 o.px[((size_t)y * w + x) * 3 + c] = (uint8_t)(p + 0.5);
             }
         }
+    }
     return o;
 }
 
@@ -229,8 +233,9 @@ void test_radial_rotation_on_a_photograph() {
     ph_digest_t other;
     int have_other = radial_of_file(TEST_DATA_DIR "/photo_complex.png", &other);
     double unrelated = 0.0;
-    if (have_other)
+    if (have_other) {
         ASSERT_OK(ph_radial_similarity(&ref, &other, &unrelated));
+    }
 
     double p1 = pcc_at(px, w, h, &ref, 1.0);
     double p2 = pcc_at(px, w, h, &ref, 2.0);
@@ -280,19 +285,27 @@ void test_radial_rotation_on_a_photograph() {
  * asserted here so that the trade is on record and so that a future change to the radius
  * rule shows up as a failing test rather than as a silent change in behaviour. */
 void test_radial_ignores_everything_outside_the_central_disc() {
-    enum { W = 200, H = 30 };
+    enum {
+        W = 200,
+        H = 30,
+    };
+
     static uint8_t base[W * H], edited[W * H];
-    for (int y = 0; y < H; y++)
-        for (int x = 0; x < W; x++)
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
             base[y * W + x] = (uint8_t)((x * 37 + y * 91 + x * y) % 256);
+        }
+    }
     memcpy(edited, base, sizeof(base));
 
     /* The sampled disc is x in [100 - 15, 100 + 15]; the sigma-3.5 blur reaches
      * ceil(3 * 3.5) = 11 pixels further (to column 74). Everything left of column 60 is
      * outside both. */
-    for (int y = 0; y < H; y++)
-        for (int x = 0; x < 60; x++)
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < 60; x++) {
             edited[y * W + x] = (uint8_t)(255 - base[y * W + x]);
+        }
+    }
 
     ph_digest_t a, b;
     ph_context_t *ctx = NULL;
@@ -311,16 +324,20 @@ void test_radial_ignores_everything_outside_the_central_disc() {
     /* The image is not flat, so the digest must not be the flat-image answer -- otherwise
      * the equality above would be passing for the wrong reason. */
     int nonzero = 0;
-    for (int i = 0; i < a.size; i++)
-        if (a.data[i])
+    for (int i = 0; i < a.size; i++) {
+        if (a.data[i]) {
             nonzero++;
+        }
+    }
     ASSERT(nonzero > 30);
 
     /* The transposed strip is a different picture and must hash differently. */
     static uint8_t transposed[W * H];
-    for (int y = 0; y < H; y++)
-        for (int x = 0; x < W; x++)
+    for (int y = 0; y < H; y++) {
+        for (int x = 0; x < W; x++) {
             transposed[x * H + y] = base[y * W + x];
+        }
+    }
     ph_digest_t t;
     ASSERT_OK(ph_create(&ctx));
     ASSERT_OK(ph_load_from_pixels(ctx, transposed, H, W, 1, 0));
@@ -343,11 +360,16 @@ void test_radial_ignores_everything_outside_the_central_disc() {
  * while 180 against 4096 are still at 0.9908 -- so the ceiling is well past the point of
  * diminishing returns, which is what a ceiling should be. */
 void test_radial_projection_count_bounds() {
-    enum { SIDE = 64 };
+    enum {
+        SIDE = 64,
+    };
+
     static uint8_t px[SIDE * SIDE];
-    for (int y = 0; y < SIDE; y++)
-        for (int x = 0; x < SIDE; x++)
+    for (int y = 0; y < SIDE; y++) {
+        for (int x = 0; x < SIDE; x++) {
             px[y * SIDE + x] = (uint8_t)((x * 97 + y * 13 + (x * y) / 3) % 256);
+        }
+    }
 
     static const int counts[] = {PH_RADIAL_MIN_PROJECTIONS, PH_RADIAL_PROJECTIONS, 4096,
                                  PH_RADIAL_MAX_PROJECTIONS};

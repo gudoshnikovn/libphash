@@ -5,6 +5,7 @@
  * gamma, histogram equalisation and EXIF orientation. */
 
 #include "libphash.h"
+
 #include <limits.h>
 #include <stddef.h>
 #include <stdint.h>

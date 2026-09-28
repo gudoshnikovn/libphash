@@ -42,22 +42,23 @@
 // you can't.
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define GOLDEN_TOLERANCE_BITS 2
+#define GOLDEN_TOLERANCE_BITS                 2
 /* The default allowance for digests whose bytes are numbers rather than bits: two
  * levels of same-decoder, cross-arch rounding noise per byte, not two bits over the
  * whole digest. Algorithms that amplify that noise get their own wider constant
  * below instead of a change here. */
-#define GOLDEN_TOLERANCE_LEVELS 2
+#define GOLDEN_TOLERANCE_LEVELS               2
 /* Radial's per-image min/max rescaling (src/hashes/radial.c) turns a one-ULP
  * difference in a single DCT coefficient into a shift of the quantisation range for
  * all 40 -- the generic tolerance above is sized for noise that stays local to one
  * byte, not noise an upstream normalisation step can spread across the whole
  * digest. */
-#define GOLDEN_TOLERANCE_LEVELS_RADIAL 8
+#define GOLDEN_TOLERANCE_LEVELS_RADIAL        8
 /* ColorMoments (src/hashes/color_moments.c) quantises at a fixed 1/128-per-level
  * scale with no data-dependent rescaling, so the same cross-arch float noise moves a
  * smaller, bounded number of levels than Radial's -- wider than the generic default,
@@ -65,10 +66,12 @@
 #define GOLDEN_TOLERANCE_LEVELS_COLOR_MOMENTS 4
 
 static int golden_tolerance_levels(const char *algo) {
-    if (strcmp(algo, "Radial") == 0)
+    if (strcmp(algo, "Radial") == 0) {
         return GOLDEN_TOLERANCE_LEVELS_RADIAL;
-    if (strcmp(algo, "ColorMoments") == 0)
+    }
+    if (strcmp(algo, "ColorMoments") == 0) {
         return GOLDEN_TOLERANCE_LEVELS_COLOR_MOMENTS;
+    }
     return GOLDEN_TOLERANCE_LEVELS;
 }
 
@@ -76,23 +79,23 @@ static int golden_tolerance_levels(const char *algo) {
  * macros src/loader.c dispatches on -- never set by hand, so it cannot drift out of
  * sync with what the binary was actually built with. */
 #if defined(PH_USE_LIBJPEG_TURBO)
-#define PH_GOLDEN_JPEG_TAG "libjpegturbo"
+#    define PH_GOLDEN_JPEG_TAG "libjpegturbo"
 #else
-#define PH_GOLDEN_JPEG_TAG "stbjpeg"
+#    define PH_GOLDEN_JPEG_TAG "stbjpeg"
 #endif
 
 #if defined(PH_USE_LIBPNG)
-#define PH_GOLDEN_PNG_TAG "libpng"
+#    define PH_GOLDEN_PNG_TAG "libpng"
 #elif defined(PH_USE_SPNG)
-#define PH_GOLDEN_PNG_TAG "spng"
+#    define PH_GOLDEN_PNG_TAG "spng"
 #else
-#define PH_GOLDEN_PNG_TAG "stbpng"
+#    define PH_GOLDEN_PNG_TAG "stbpng"
 #endif
 
 #if defined(PH_USE_WEBP)
-#define PH_GOLDEN_WEBP_TAG "webp"
+#    define PH_GOLDEN_WEBP_TAG "webp"
 #else
-#define PH_GOLDEN_WEBP_TAG "nowebp"
+#    define PH_GOLDEN_WEBP_TAG "nowebp"
 #endif
 
 #define PH_GOLDEN_BACKEND_SET PH_GOLDEN_JPEG_TAG "-" PH_GOLDEN_PNG_TAG "-" PH_GOLDEN_WEBP_TAG
@@ -127,9 +130,9 @@ static int golden_tolerance_levels(const char *algo) {
  * changes its default) fails loudly with a missing-file #error instead of silently
  * comparing against numbers from a compiler that was never shown to agree. */
 #if defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
-#define PH_GOLDEN_ARCH_TAG "arm64"
+#    define PH_GOLDEN_ARCH_TAG "arm64"
 #elif defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64)
-#define PH_GOLDEN_ARCH_TAG "x86_64"
+#    define PH_GOLDEN_ARCH_TAG "x86_64"
 /* 32-bit x86 (-m32, no explicit -mfpmath=sse) defaults to x87 FPU intermediates for
  * float math instead of x86-64's SSE2 doubles, which is a second, orthogonal source of the
  * same class of drift arm64-vs-x86_64 FMA contraction causes above. It surfaces starkest on
@@ -141,21 +144,21 @@ static int golden_tolerance_levels(const char *algo) {
  * as 0 -- not a bug, the exact "degenerate input such as a solid colour" case that note
  * already documents, reached here through x87 precision rather than a NEON/scalar split. */
 #elif defined(__i386__) || defined(_M_IX86)
-#define PH_GOLDEN_ARCH_TAG "i686"
+#    define PH_GOLDEN_ARCH_TAG "i686"
 #else
-#error                                                                                             \
-    "No golden_hashes.<backend-set>.<arch>-<compiler>.txt exists for this architecture yet -- add PH_GOLDEN_ARCH_TAG for it, run this test with --update to generate the file, and commit it."
+#    error \
+        "No golden_hashes.<backend-set>.<arch>-<compiler>.txt exists for this architecture yet -- add PH_GOLDEN_ARCH_TAG for it, run this test with --update to generate the file, and commit it."
 #endif
 
 #if defined(__clang__)
-#define PH_GOLDEN_COMPILER_TAG "clang"
+#    define PH_GOLDEN_COMPILER_TAG "clang"
 #elif defined(_MSC_VER)
-#define PH_GOLDEN_COMPILER_TAG "msvc"
+#    define PH_GOLDEN_COMPILER_TAG "msvc"
 #elif defined(__GNUC__)
-#define PH_GOLDEN_COMPILER_TAG "gcc"
+#    define PH_GOLDEN_COMPILER_TAG "gcc"
 #else
-#error                                                                                             \
-    "No golden_hashes.<backend-set>.<arch>-<compiler>.txt exists for this compiler yet -- add PH_GOLDEN_COMPILER_TAG for it, run this test with --update to generate the file, and commit it."
+#    error \
+        "No golden_hashes.<backend-set>.<arch>-<compiler>.txt exists for this compiler yet -- add PH_GOLDEN_COMPILER_TAG for it, run this test with --update to generate the file, and commit it."
 #endif
 
 static const char *FIXTURES[] = {
@@ -206,7 +209,7 @@ static const char *golden_path(void) {
 _Static_assert(PH_GOLDEN_HEX_DIGITS == PH_DIGEST_MAX_BYTES * 2,
                "PH_GOLDEN_HEX_DIGITS must track PH_DIGEST_MAX_BYTES");
 #define PH_GOLDEN_STR2(x) #x
-#define PH_GOLDEN_STR(x) PH_GOLDEN_STR2(x)
+#define PH_GOLDEN_STR(x)  PH_GOLDEN_STR2(x)
 
 static void load_golden(void) {
     FILE *f = fopen(golden_path(), "r");
@@ -225,8 +228,9 @@ static void load_golden(void) {
 
 static const char *find_golden(const char *filename, const char *algo) {
     for (int i = 0; i < g_golden_count; i++) {
-        if (strcmp(g_golden[i].filename, filename) == 0 && strcmp(g_golden[i].algo, algo) == 0)
+        if (strcmp(g_golden[i].filename, filename) == 0 && strcmp(g_golden[i].algo, algo) == 0) {
             return g_golden[i].hex;
+        }
     }
     return NULL;
 }
@@ -315,10 +319,12 @@ static void check_digest(const char *filename, const char *algo, const ph_digest
     int worst = 0;
     for (int i = 0; i < value->size; i++) {
         int diff = (int)expected.data[i] - (int)value->data[i];
-        if (diff < 0)
+        if (diff < 0) {
             diff = -diff;
-        if (diff > worst)
+        }
+        if (diff > worst) {
             worst = diff;
+        }
     }
     int tolerance = golden_tolerance_levels(algo);
     if (worst > tolerance) {
@@ -353,13 +359,15 @@ static void process_fixture(const char *filename, FILE *update_out) {
     uint64_t hashes[PH_HASH_FLAGS_COUNT];
     uint32_t flags = PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH;
     ASSERT_OK(ph_compute_multi(ctx, flags, hashes));
-    for (int i = 0; i < PH_HASH_FLAGS_COUNT; i++)
+    for (int i = 0; i < PH_HASH_FLAGS_COUNT; i++) {
         check_uint64(filename, UINT64_ALGO_NAMES[i], hashes[i], update_out);
+    }
 
     for (size_t i = 0; i < NUM_DIGEST_ALGOS; i++) {
         ph_digest_t digest;
-        if (DIGEST_FNS[i](ctx, &digest) == PH_SUCCESS)
+        if (DIGEST_FNS[i](ctx, &digest) == PH_SUCCESS) {
             check_digest(filename, DIGEST_ALGO_NAMES[i], &digest, update_out);
+        }
     }
 
     ph_free(ctx);
@@ -377,8 +385,9 @@ int main(int argc, char **argv) {
             return 1;
         }
         printf("test_golden_hashes: regenerating %s\n", golden_path());
-        for (size_t i = 0; i < NUM_FIXTURES; i++)
+        for (size_t i = 0; i < NUM_FIXTURES; i++) {
             process_fixture(FIXTURES[i], out);
+        }
         fclose(out);
         printf("test_golden_hashes: golden file updated\n");
         return 0;
@@ -386,8 +395,9 @@ int main(int argc, char **argv) {
 
     load_golden();
     printf("test_golden_hashes (backend set: %s):\n", PH_GOLDEN_BACKEND_SET);
-    for (size_t i = 0; i < NUM_FIXTURES; i++)
+    for (size_t i = 0; i < NUM_FIXTURES; i++) {
         process_fixture(FIXTURES[i], NULL);
+    }
 
     if (g_mismatches > 0) {
         fprintf(stderr, "test_golden_hashes: FAILED (%d mismatch(es) out of %d checked)\n",

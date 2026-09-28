@@ -2,6 +2,7 @@
 #include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -141,8 +142,9 @@ void test_load_from_pixels_single_channel() {
     int w = 5, h = 5, ch = 1;
     uint8_t *buf = malloc((size_t)w * h);
     ASSERT_PTR_NOT_NULL(buf);
-    for (int i = 0; i < w * h; i++)
+    for (int i = 0; i < w * h; i++) {
         buf[i] = (uint8_t)(i * 7);
+    }
 
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
@@ -282,8 +284,9 @@ void test_load_from_pixels_stride_degenerate_shapes() {
         size_t exact = (size_t)(h - 1) * (size_t)stride + row;
         uint8_t *buf = malloc(exact);
         ASSERT_PTR_NOT_NULL(buf);
-        for (size_t i = 0; i < exact; i++)
+        for (size_t i = 0; i < exact; i++) {
             buf[i] = (uint8_t)(i * 13 + 7);
+        }
 
         ph_context_t *ctx = NULL;
         ASSERT_OK(ph_create(&ctx));
@@ -319,8 +322,9 @@ void test_load_from_pixels_ignores_load_grayscale() {
     size_t n = (size_t)w * h * ch;
     uint8_t *buf = malloc(n);
     ASSERT_PTR_NOT_NULL(buf);
-    for (size_t i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++) {
         buf[i] = (uint8_t)((i * 29 + i / 3) & 0xFF);
+    }
 
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));

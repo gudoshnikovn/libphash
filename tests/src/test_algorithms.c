@@ -10,6 +10,7 @@
 
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <stdio.h>
 #include <string.h>
 
@@ -59,8 +60,9 @@ static void reconcile(ph_context_t *ctx, ph_algorithm_t algo, const char *what) 
                 via_dispatch.kind);
         exit(1);
     }
-    for (size_t i = size; i < PH_DIGEST_MAX_BYTES; i++)
+    for (size_t i = size; i < PH_DIGEST_MAX_BYTES; i++) {
         ASSERT_UINT8_EQ(0, via_dispatch.data[i]);
+    }
 
     ph_digest_t direct;
     memset(&direct, 0xCD, sizeof(direct));
@@ -69,8 +71,9 @@ static void reconcile(ph_context_t *ctx, ph_algorithm_t algo, const char *what) 
     if (is_uint64_algorithm(algo)) {
         ASSERT_INT_EQ(8, (int)size);
         ASSERT_INT_EQ(PH_DIGEST_KIND_BITS, (int)kind);
-        for (int i = 0; i < 8; i++)
+        for (int i = 0; i < 8; i++) {
             ASSERT_UINT8_EQ((uint8_t)(hash >> (56 - 8 * i)), via_dispatch.data[i]);
+        }
         /* The same bytes as the text ph_hash_to_hex() writes for it. */
         char from_hash[17], text[PH_DIGEST_HEX_BUFFER_SIZE];
         ASSERT_OK(ph_hash_to_hex(hash, from_hash, sizeof(from_hash)));
@@ -86,15 +89,17 @@ static void test_info_matches_every_computed_digest(void) {
     ASSERT_OK(ph_create(&ctx));
     ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
 
-    for (int a = 0; a < PH_ALGORITHM_COUNT; a++)
+    for (int a = 0; a < PH_ALGORITHM_COUNT; a++) {
         reconcile(ctx, (ph_algorithm_t)a, "defaults");
+    }
 
     /* BMH is the one algorithm whose size follows the configuration: every block size the
      * setter accepts, including the ones whose bit count is not a multiple of 8. */
     int bmh_sizes = 0;
     for (int bs = 1; bs <= 40; bs++) {
-        if (ph_context_set_block_params(ctx, bs) != PH_SUCCESS)
+        if (ph_context_set_block_params(ctx, bs) != PH_SUCCESS) {
             continue;
+        }
         char what[32];
         snprintf(what, sizeof(what), "block_size %d", bs);
         reconcile(ctx, PH_ALGO_BMH, what);
@@ -110,8 +115,9 @@ static void test_info_matches_every_computed_digest(void) {
     ASSERT_OK(ph_context_set_block_params(ctx, 16));
     ASSERT_OK(ph_context_set_phash_params(ctx, 16, 6));
     ASSERT_OK(ph_context_set_whash_mode(ctx, PH_WHASH_FULL));
-    for (int a = 0; a < PH_ALGORITHM_COUNT; a++)
+    for (int a = 0; a < PH_ALGORITHM_COUNT; a++) {
         reconcile(ctx, (ph_algorithm_t)a, "configured");
+    }
 
     ph_free(ctx);
     PASS("test_info_matches_every_computed_digest");

@@ -5,7 +5,9 @@
 #include "loader.h"
 #include "loaders/backends.h"
 #include "safety.h"
+
 #include "spng.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,23 +29,26 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     /* PNG has no format-level scaled decode; decode_scale is a JPEG-only optimization
      * (see ph_context_set_decode_scale()), silently ignored here as documented. */
     (void)decode_scale;
-    if (!buffer || size < 8)
+    if (!buffer || size < 8) {
         return NULL;
+    }
 
     /* Checked before the buffer reaches libpng/spng so both backends agree on the
      * verdict and the error code, and so an absurd dimension is refused before any
      * row buffer is sized. */
     if (!ph_png_dimensions_within_limit(buffer, size)) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "PNG dimension exceeds the supported maximum");
         return NULL;
     }
 
     spng_ctx *ctx = spng_ctx_new(0);
     if (!ctx) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_ALLOCATION_FAILED;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
         return NULL;
     }
@@ -55,8 +60,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
 
     int ret = spng_set_png_buffer(ctx, buffer, size);
     if (ret != 0) {
-        if (out_err)
+        if (out_err) {
             *out_err = ph_spng_err(ret);
+        }
         ph_set_err_msg(err_msg, err_msg_cap, spng_strerror(ret));
         spng_ctx_free(ctx);
         return NULL;
@@ -65,16 +71,18 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     struct spng_ihdr ihdr;
     ret = spng_get_ihdr(ctx, &ihdr);
     if (ret != 0) {
-        if (out_err)
+        if (out_err) {
             *out_err = ph_spng_err(ret);
+        }
         ph_set_err_msg(err_msg, err_msg_cap, spng_strerror(ret));
         spng_ctx_free(ctx);
         return NULL;
     }
 
     if (ph_exceeds_pixel_limit(ihdr.width, ihdr.height, max_pixels)) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         spng_ctx_free(ctx);
         return NULL;
@@ -93,15 +101,17 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
      * bytes for the same input. */
     const int gray_native = (ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE && ihdr.bit_depth <= 8);
     int fmt;
-    if (req_comp == 1)
+    if (req_comp == 1) {
         fmt = gray_native ? SPNG_FMT_G8 : SPNG_FMT_RGB8;
-    else
+    } else {
         fmt = SPNG_FMT_RGB8;
+    }
     size_t out_size;
     ret = spng_decoded_image_size(ctx, fmt, &out_size);
     if (ret != 0) {
-        if (out_err)
+        if (out_err) {
             *out_err = ph_spng_err(ret);
+        }
         ph_set_err_msg(err_msg, err_msg_cap, spng_strerror(ret));
         spng_ctx_free(ctx);
         return NULL;
@@ -109,8 +119,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
 
     unsigned char *data = (unsigned char *)malloc(out_size);
     if (!data) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_ALLOCATION_FAILED;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
         spng_ctx_free(ctx);
         return NULL;
@@ -118,8 +129,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
 
     ret = spng_decode_image(ctx, data, out_size, fmt, 0);
     if (ret != 0) {
-        if (out_err)
+        if (out_err) {
             *out_err = ph_spng_err(ret);
+        }
         ph_set_err_msg(err_msg, err_msg_cap, spng_strerror(ret));
         free(data);
         spng_ctx_free(ctx);
@@ -141,8 +153,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
         /* Hand back a buffer of the size the caller believes it got. A failed shrink
          * is harmless -- the original block stays valid and merely oversized. */
         unsigned char *shrunk = (unsigned char *)realloc(data, num_pixels ? num_pixels : 1);
-        if (shrunk)
+        if (shrunk) {
             data = shrunk;
+        }
     }
 
     *width = (int)ihdr.width;

@@ -31,12 +31,12 @@
  * (CMakeLists.txt, PHASH_LIBRARY_WARNING_CANDIDATES) are silenced for this file, which
  * holds nothing else. */
 #if defined(__GNUC__)
-#pragma GCC diagnostic ignored "-Wcast-qual"
-#pragma GCC diagnostic ignored "-Wfloat-equal"
-#pragma GCC diagnostic ignored "-Wcast-align"
-#pragma GCC diagnostic ignored "-Wdouble-promotion"
-#pragma GCC diagnostic ignored "-Wconversion"
-#pragma GCC diagnostic ignored "-Wsign-conversion"
+#    pragma GCC diagnostic ignored "-Wcast-qual"
+#    pragma GCC diagnostic ignored "-Wfloat-equal"
+#    pragma GCC diagnostic ignored "-Wcast-align"
+#    pragma GCC diagnostic ignored "-Wdouble-promotion"
+#    pragma GCC diagnostic ignored "-Wconversion"
+#    pragma GCC diagnostic ignored "-Wsign-conversion"
 #endif
 
 #define STB_IMAGE_RESIZE_IMPLEMENTATION

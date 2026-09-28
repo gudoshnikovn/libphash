@@ -56,60 +56,70 @@
  * runtime-probe/graceful-skip contract (see shim_is_effective() in the tests) covers
  * this the same way it covers a shared-library build. */
 #if defined(__SANITIZE_ADDRESS__)
-#define PH_SHIM_SUPPORTED 0
+#    define PH_SHIM_SUPPORTED 0
 #elif defined(__has_feature)
-#if __has_feature(address_sanitizer)
-#define PH_SHIM_SUPPORTED 0
-#endif
+#    if __has_feature(address_sanitizer)
+#        define PH_SHIM_SUPPORTED 0
+#    endif
 #endif
 
 #ifndef PH_SHIM_SUPPORTED
-#if defined(__APPLE__)
-#define PH_SHIM_SUPPORTED 1
-#include <malloc/malloc.h>
-#elif defined(__GLIBC__)
-#define PH_SHIM_SUPPORTED 1
+#    if defined(__APPLE__)
+#        define PH_SHIM_SUPPORTED 1
+#        include <malloc/malloc.h>
+#    elif defined(__GLIBC__)
+#        define PH_SHIM_SUPPORTED 1
 extern void *__libc_malloc(size_t);
 extern void *__libc_calloc(size_t, size_t);
 extern void *__libc_realloc(void *, size_t);
 extern void __libc_free(void *);
 extern void *__libc_memalign(size_t, size_t);
-#else
-#define PH_SHIM_SUPPORTED 0
-#endif
+#    else
+#        define PH_SHIM_SUPPORTED 0
+#    endif
 #endif
 
 /* ---- real allocator access -------------------------------------------- */
 
 #if PH_SHIM_SUPPORTED
-#if defined(__APPLE__)
+#    if defined(__APPLE__)
 static void *ph_real_malloc(size_t n) { return malloc_zone_malloc(malloc_default_zone(), n); }
+
 static void *ph_real_calloc(size_t c, size_t n) {
     return malloc_zone_calloc(malloc_default_zone(), c, n);
 }
+
 static void *ph_real_realloc(void *p, size_t n) {
     return malloc_zone_realloc(malloc_default_zone(), p, n);
 }
+
 static void ph_real_free(void *p) {
-    if (!p)
+    if (!p) {
         return;
+    }
     /* The pointer may come from a zone other than the default one (or, for a
      * pointer libSystem never registered, from none at all); freeing it into
      * the wrong zone would corrupt the heap. */
     malloc_zone_t *z = malloc_zone_from_ptr(p);
-    if (z)
+    if (z) {
         malloc_zone_free(z, p);
+    }
 }
+
 static void *ph_real_memalign(size_t align, size_t n) {
     return malloc_zone_memalign(malloc_default_zone(), align, n);
 }
-#else
+#    else
 static void *ph_real_malloc(size_t n) { return __libc_malloc(n); }
+
 static void *ph_real_calloc(size_t c, size_t n) { return __libc_calloc(c, n); }
+
 static void *ph_real_realloc(void *p, size_t n) { return __libc_realloc(p, n); }
+
 static void ph_real_free(void *p) { __libc_free(p); }
+
 static void *ph_real_memalign(size_t align, size_t n) { return __libc_memalign(align, n); }
-#endif
+#    endif
 #endif /* PH_SHIM_SUPPORTED */
 
 /* ---- shim state -------------------------------------------------------- */
@@ -138,7 +148,7 @@ static ph_shim_state_t ph_shim; /* zero-initialised, never heap-allocated */
 static size_t ph_shim_hash(void *p) {
     uintptr_t v = (uintptr_t)p;
     v ^= v >> 33;
-    v *= (uintptr_t)0xff51afd7ed558ccdULL;
+    v *= (uintptr_t)0xFF51AFD7ED558CCDULL;
     v ^= v >> 29;
     return (size_t)(v & (PH_SHIM_SLOTS - 1u));
 }
@@ -171,8 +181,9 @@ static int ph_shim_untrack(void *p) {
             for (size_t j = probe + 1; j < PH_SHIM_SLOTS; j++) {
                 size_t m = (i + j) & (PH_SHIM_SLOTS - 1u);
                 ph_shim_slot_t moved = ph_shim.slots[m];
-                if (moved.ptr == NULL)
+                if (moved.ptr == NULL) {
                     break;
+                }
                 ph_shim.slots[m].ptr = NULL;
                 ph_shim.slots[m].size = 0;
                 ph_shim.live--;
@@ -180,16 +191,18 @@ static int ph_shim_untrack(void *p) {
             }
             return 1;
         }
-        if (ph_shim.slots[k].ptr == NULL)
+        if (ph_shim.slots[k].ptr == NULL) {
             return 0;
+        }
     }
     return 0;
 }
 
 /* Returns 1 when this allocation must fail. */
 static int ph_shim_should_fail(void) {
-    if (!ph_shim.armed)
+    if (!ph_shim.armed) {
         return 0;
+    }
     ph_shim.counter++;
     if (ph_shim.fail_at != 0 && ph_shim.counter == ph_shim.fail_at) {
         ph_shim.injected++;
@@ -199,55 +212,67 @@ static int ph_shim_should_fail(void) {
 }
 
 void *malloc(size_t n) {
-    if (ph_shim_should_fail())
+    if (ph_shim_should_fail()) {
         return NULL;
+    }
     void *p = ph_real_malloc(n);
-    if (p && ph_shim.armed)
+    if (p && ph_shim.armed) {
         ph_shim_track(p, n);
+    }
     return p;
 }
 
 void *calloc(size_t count, size_t n) {
-    if (ph_shim_should_fail())
+    if (ph_shim_should_fail()) {
         return NULL;
+    }
     void *p = ph_real_calloc(count, n);
-    if (p && ph_shim.armed)
+    if (p && ph_shim.armed) {
         ph_shim_track(p, count * n);
+    }
     return p;
 }
 
 void *realloc(void *old, size_t n) {
-    if (ph_shim_should_fail())
+    if (ph_shim_should_fail()) {
         return NULL; /* on failure the original block must stay valid */
+    }
     int tracked = old ? ph_shim_untrack(old) : 0;
     void *p = ph_real_realloc(old, n);
     if (!p) {
-        if (tracked)
+        if (tracked) {
             ph_shim_track(old, n); /* nothing moved; keep owning the old block */
+        }
         return NULL;
     }
-    if (tracked || ph_shim.armed)
+    if (tracked || ph_shim.armed) {
         ph_shim_track(p, n);
+    }
     return p;
 }
 
 void free(void *p) {
-    if (!p)
+    if (!p) {
         return;
+    }
     ph_shim_untrack(p);
     ph_real_free(p);
 }
 
 int posix_memalign(void **out, size_t align, size_t n) {
-    if (!out)
+    if (!out) {
         return EINVAL;
-    if (ph_shim_should_fail())
+    }
+    if (ph_shim_should_fail()) {
         return ENOMEM;
+    }
     void *p = ph_real_memalign(align, n);
-    if (!p)
+    if (!p) {
         return ENOMEM;
-    if (ph_shim.armed)
+    }
+    if (ph_shim.armed) {
         ph_shim_track(p, n);
+    }
     *out = p;
     return 0;
 }
@@ -278,8 +303,11 @@ static void ph_shim_arm(long fail_at) {
 static void ph_shim_disarm(void) { ph_shim.armed = 0; }
 
 static long ph_shim_count(void) { return ph_shim.counter; }
+
 static long ph_shim_live(void) { return ph_shim.live; }
+
 static long ph_shim_injected(void) { return ph_shim.injected; }
+
 static int ph_shim_overflowed(void) { return ph_shim.overflow; }
 
 #endif /* PH_TEST_ALLOC_SHIM_H */

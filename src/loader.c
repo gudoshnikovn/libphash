@@ -1,7 +1,10 @@
 #include "loader.h"
-#include "../vendor/stb_image.h"
+
 #include "loaders/backends.h"
 #include "safety.h"
+
+#include "../vendor/stb_image.h"
+
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -32,8 +35,9 @@ static int ph_can_read_stb(const uint8_t *magic, size_t len) {
     // precisely instead of stb_image failing generically with "unknown image
     // type" -- stb_image has no WebP decoder at all, so it would never have
     // succeeded here anyway.
-    if (ph_magic_is_webp(magic, len))
+    if (ph_magic_is_webp(magic, len)) {
         return 0;
+    }
     return 1;
 }
 
@@ -64,12 +68,14 @@ static const char *const ph_stb_unsupported_reasons[] = {
 };
 
 static int ph_stb_reason_is_unsupported(const char *reason) {
-    if (!reason)
+    if (!reason) {
         return 0;
+    }
     for (size_t i = 0; i < sizeof(ph_stb_unsupported_reasons) / sizeof(*ph_stb_unsupported_reasons);
          i++) {
-        if (strcmp(reason, ph_stb_unsupported_reasons[i]) == 0)
+        if (strcmp(reason, ph_stb_unsupported_reasons[i]) == 0) {
             return 1;
+        }
     }
     return 0;
 }
@@ -99,11 +105,13 @@ static const char *const ph_stb_oom_reasons[] = {
 };
 
 static int ph_stb_reason_is_oom(const char *reason) {
-    if (!reason)
+    if (!reason) {
         return 0;
+    }
     for (size_t i = 0; i < sizeof(ph_stb_oom_reasons) / sizeof(*ph_stb_oom_reasons); i++) {
-        if (strcmp(reason, ph_stb_oom_reasons[i]) == 0)
+        if (strcmp(reason, ph_stb_oom_reasons[i]) == 0) {
             return 1;
+        }
     }
     return 0;
 }
@@ -124,12 +132,14 @@ static const char *const ph_stb_too_large_reasons[] = {
 };
 
 static int ph_stb_reason_is_too_large(const char *reason) {
-    if (!reason)
+    if (!reason) {
         return 0;
+    }
     for (size_t i = 0; i < sizeof(ph_stb_too_large_reasons) / sizeof(*ph_stb_too_large_reasons);
          i++) {
-        if (strcmp(reason, ph_stb_too_large_reasons[i]) == 0)
+        if (strcmp(reason, ph_stb_too_large_reasons[i]) == 0) {
             return 1;
+        }
     }
     return 0;
 }
@@ -150,14 +160,16 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
     if (stbi_info_from_memory(data, (int)len, &iw, &ih, &icomp)) {
         uint64_t w64 = ph_abs_dim(iw), h64 = ph_abs_dim(ih);
         if (ph_exceeds_dimension_limit(w64, h64)) {
-            if (out_err)
+            if (out_err) {
                 *out_err = PH_ERR_IMAGE_TOO_LARGE;
+            }
             ph_set_err_msg(err_msg, err_msg_cap, "Image dimension exceeds the supported maximum");
             return NULL;
         }
         if (ph_exceeds_pixel_limit(w64, h64, max_pixels)) {
-            if (out_err)
+            if (out_err) {
                 *out_err = PH_ERR_IMAGE_TOO_LARGE;
+            }
             ph_set_err_msg(err_msg, err_msg_cap,
                            "Image exceeds the configured maximum pixel count");
             return NULL;
@@ -167,22 +179,25 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
     uint8_t *decoded = stbi_load_from_memory(data, (int)len, w, h, ch, req_comp);
     if (!decoded) {
         const char *reason = stbi_failure_reason();
-        if (reason)
+        if (reason) {
             ph_set_err_msg(err_msg, err_msg_cap, reason);
+        }
         if (out_err) {
-            if (ph_stb_reason_is_unsupported(reason))
+            if (ph_stb_reason_is_unsupported(reason)) {
                 *out_err = PH_ERR_UNSUPPORTED_FORMAT;
-            else if (ph_stb_reason_is_oom(reason))
+            } else if (ph_stb_reason_is_oom(reason)) {
                 *out_err = PH_ERR_ALLOCATION_FAILED;
-            else if (ph_stb_reason_is_too_large(reason))
+            } else if (ph_stb_reason_is_too_large(reason)) {
                 *out_err = PH_ERR_IMAGE_TOO_LARGE;
-            else
+            } else {
                 *out_err = PH_ERR_CORRUPT_DATA;
+            }
         }
         return NULL;
     }
-    if (req_comp != 0)
+    if (req_comp != 0) {
         *ch = req_comp;
+    }
     return decoded;
 }
 
@@ -196,10 +211,12 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
  * is registered ahead of the stb catch-all, so it really does intercept input --
  * it must never end up in a shipped artifact. */
 static int ph_mock_can_read(const uint8_t *magic, size_t len) {
-    if (len >= 4 && magic[0] == 0xDE && magic[1] == 0xAD)
+    if (len >= 4 && magic[0] == 0xDE && magic[1] == 0xAD) {
         return 1;
+    }
     return 0;
 }
+
 static uint8_t *ph_mock_decode(const uint8_t *data, size_t len, int *w, int *h, int *ch, int req,
                                uint64_t max_pixels, ph_decode_scale_t decode_scale,
                                ph_error_t *out_err, char *err_msg, size_t err_msg_cap) {
@@ -255,8 +272,9 @@ static atomic_flag s_warmup_lock = ATOMIC_FLAG_INIT;
 static atomic_bool s_warmup_done = false;
 
 static void ph_warm_decoder_dispatch(void) {
-    if (atomic_load(&s_warmup_done))
+    if (atomic_load(&s_warmup_done)) {
         return;
+    }
     while (atomic_flag_test_and_set(&s_warmup_lock)) {
     }
     if (!atomic_load(&s_warmup_done)) {
@@ -290,39 +308,50 @@ static void ph_warm_decoder_dispatch(void) {
  * an embedded EXIF thumbnail does not count), entropy-coded data after SOS is scanned for
  * the next real marker (FF followed by anything but a stuffed 00 or a restart marker). */
 static int ph_jpeg_reaches_eoi(const uint8_t *p, size_t n) {
-    if (n < 2 || p[0] != 0xFF || p[1] != 0xD8)
+    if (n < 2 || p[0] != 0xFF || p[1] != 0xD8) {
         return 0;
+    }
     size_t pos = 2;
     for (;;) {
-        while (pos < n && p[pos] != 0xFF) /* tolerate stray bytes between segments */
+        while (pos < n && p[pos] != 0xFF) { /* tolerate stray bytes between segments */
             pos++;
-        while (pos < n && p[pos] == 0xFF) /* fill bytes */
+        }
+        while (pos < n && p[pos] == 0xFF) { /* fill bytes */
             pos++;
-        if (pos >= n)
+        }
+        if (pos >= n) {
             return 0;
+        }
         uint8_t m = p[pos++];
-        if (m == 0xD9)
+        if (m == 0xD9) {
             return 1;
-        if (m == 0x01 || (m >= 0xD0 && m <= 0xD7) || m == 0x00)
+        }
+        if (m == 0x01 || (m >= 0xD0 && m <= 0xD7) || m == 0x00) {
             continue; /* standalone markers carry no length */
-        if (n - pos < 2)
+        }
+        if (n - pos < 2) {
             return 0;
+        }
         size_t seglen = ((size_t)p[pos] << 8) | p[pos + 1];
-        if (seglen < 2 || seglen > n - pos)
+        if (seglen < 2 || seglen > n - pos) {
             return 0;
+        }
         pos += seglen;
-        if (m != 0xDA)
+        if (m != 0xDA) {
             continue;
+        }
         /* Entropy-coded data up to the next marker. */
         for (;;) {
-            if (pos >= n)
+            if (pos >= n) {
                 return 0;
+            }
             if (p[pos] != 0xFF) {
                 pos++;
                 continue;
             }
-            if (pos + 1 >= n)
+            if (pos + 1 >= n) {
                 return 0;
+            }
             uint8_t next = p[pos + 1];
             if (next == 0x00 || (next >= 0xD0 && next <= 0xD7)) {
                 pos += 2;
@@ -339,10 +368,12 @@ static int ph_png_reaches_iend(const uint8_t *p, size_t n) {
     while (n - pos >= 12) {
         size_t len = ((size_t)p[pos] << 24) | ((size_t)p[pos + 1] << 16) |
                      ((size_t)p[pos + 2] << 8) | p[pos + 3];
-        if (len > 0x7FFFFFFFu || len > n - pos - 12)
+        if (len > 0x7FFFFFFFu || len > n - pos - 12) {
             return 0;
-        if (memcmp(p + pos + 4, "IEND", 4) == 0)
+        }
+        if (memcmp(p + pos + 4, "IEND", 4) == 0) {
             return 1;
+        }
         pos += 12 + len;
     }
     return 0;
@@ -350,8 +381,9 @@ static int ph_png_reaches_iend(const uint8_t *p, size_t n) {
 
 /* The RIFF header states the file size; a truncated file is shorter than it says. */
 static int ph_webp_riff_complete(const uint8_t *p, size_t n) {
-    if (n < 12)
+    if (n < 12) {
         return 0;
+    }
     uint32_t riff =
         (uint32_t)p[4] | ((uint32_t)p[5] << 8) | ((uint32_t)p[6] << 16) | ((uint32_t)p[7] << 24);
     return (uint64_t)riff + 8 <= (uint64_t)n;
@@ -360,12 +392,15 @@ static int ph_webp_riff_complete(const uint8_t *p, size_t n) {
 /* NULL when the container is complete (or not one of the three formats), otherwise the
  * diagnostic for a truncated one. */
 static const char *ph_container_truncation(const uint8_t *p, size_t n) {
-    if (n >= 2 && p[0] == 0xFF && p[1] == 0xD8)
+    if (n >= 2 && p[0] == 0xFF && p[1] == 0xD8) {
         return ph_jpeg_reaches_eoi(p, n) ? NULL : "JPEG is truncated: no end-of-image marker";
-    if (ph_magic_is_png(p, n))
+    }
+    if (ph_magic_is_png(p, n)) {
         return ph_png_reaches_iend(p, n) ? NULL : "PNG is truncated: no IEND chunk";
-    if (ph_magic_is_webp(p, n))
+    }
+    if (ph_magic_is_webp(p, n)) {
         return ph_webp_riff_complete(p, n) ? NULL : "WebP is truncated: shorter than its RIFF size";
+    }
     return NULL;
 }
 
@@ -373,14 +408,17 @@ uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int 
                           int *channels, int req_comp, uint64_t max_pixels,
                           ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
                           size_t err_msg_cap) {
-    if (out_err)
+    if (out_err) {
         *out_err = PH_SUCCESS;
-    if (!buffer || length == 0)
+    }
+    if (!buffer || length == 0) {
         return NULL;
+    }
 
     if (length > PH_MAX_ENCODED_SIZE) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "Encoded image is larger than 2 GiB - 1 byte");
         return NULL;
     }
@@ -394,8 +432,9 @@ uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int 
      * the same code. Every other format reaches the cap through its backend, which gets
      * the dimensions from its own header parse. */
     if (ph_magic_is_png(buffer, length) && !ph_png_dimensions_within_limit(buffer, length)) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        }
         ph_set_err_msg(err_msg, err_msg_cap, "PNG dimension exceeds the supported maximum");
         return NULL;
     }
@@ -408,26 +447,30 @@ uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int 
                                    decode_scale, &err, err_msg, err_msg_cap);
             if (data) {
                 const char *truncated = ph_container_truncation(buffer, length);
-                if (!truncated)
+                if (!truncated) {
                     return data;
+                }
                 ph_free_image(data);
-                if (out_err)
+                if (out_err) {
                     *out_err = PH_ERR_CORRUPT_DATA;
+                }
                 ph_set_err_msg(err_msg, err_msg_cap, truncated);
                 return NULL;
             }
             // The magic bytes matched this backend, so a decode failure here is a
             // definitive answer (too large / corrupt): don't let a later backend or
             // the stb_image fallback re-attempt the same data.
-            if (out_err)
+            if (out_err) {
                 *out_err = (err != PH_SUCCESS) ? err : PH_ERR_CORRUPT_DATA;
+            }
             return NULL;
         }
     }
 #ifndef PH_USE_WEBP
     if (ph_magic_is_webp(buffer, length)) {
-        if (out_err)
+        if (out_err) {
             *out_err = PH_ERR_DECODER_UNAVAILABLE;
+        }
         ph_set_err_msg(err_msg, err_msg_cap,
                        "WebP support was not compiled into this build (PH_USE_WEBP)");
         return NULL;

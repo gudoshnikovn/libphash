@@ -28,6 +28,7 @@
 #include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -79,8 +80,9 @@ static void test_dct_matrix_is_orthonormal(void) {
     for (int i = 0; i < 32; i++) {
         for (int j = i; j < 32; j++) {
             double dot = 0.0;
-            for (int k = 0; k < 32; k++)
+            for (int k = 0; k < 32; k++) {
                 dot += (double)m[i * 32 + k] * (double)m[j * 32 + k];
+            }
             assert_close(dot, (i == j) ? 1.0 : 0.0, 1e-5, "DCT row orthonormality");
         }
     }
@@ -140,8 +142,9 @@ static void test_dct2_of_constant_image(void) {
      * X[0][0] = (1/sqrt(N))^2 * N^2 * v = N * v, and every other coefficient is zero
      * because every row but the first sums to zero. */
     assert_close(out[0], (double)N * value, 0.05, "DC coefficient of a constant image");
-    for (int i = 1; i < R * R; i++)
+    for (int i = 1; i < R * R; i++) {
         assert_close(out[i], 0.0, 0.05, "AC coefficient of a constant image");
+    }
 
     /* The degenerate case, at its most extreme: DC is 6400 and all 63 AC coefficients
      * are 0, so the median -- taken over the AC terms alone, as pHash does -- is 0, and
@@ -257,8 +260,9 @@ static void test_dct_median_ignores_dc_without_changing_the_hash(void) {
 
         uint64_t diff = with_dc ^ without_dc;
         int changed = 0;
-        for (uint64_t d = diff; d; d &= d - 1)
+        for (uint64_t d = diff; d; d &= d - 1) {
             changed++;
+        }
         if (changed > 1) {
             fprintf(stderr,
                     "[FAIL] variant %d: leaving DC out of the median moved %d bits (%016llx vs "
@@ -296,10 +300,12 @@ static void test_dct2_concentrates_a_single_cosine(void) {
     double target = fabs(out[0 * R + freq]);
     for (int u = 0; u < R; u++) {
         for (int v = 0; v < R; v++) {
-            if (u == 0 && v == freq)
+            if (u == 0 && v == freq) {
                 continue;
-            if (u == 0 && v == 0)
+            }
+            if (u == 0 && v == 0) {
                 continue; /* DC carries the offset of the cosine */
+            }
             if (fabs(out[u * R + v]) > target * 0.01) {
                 fprintf(stderr, "[FAIL] energy leaked to coefficient (%d,%d): %.3f vs %.3f\n", u, v,
                         (double)out[u * R + v], target);
@@ -320,8 +326,9 @@ static void test_dct2_concentrates_a_single_cosine(void) {
 
 static double dct1_direct(const double *x, int n, int k) {
     double sum = 0.0;
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++) {
         sum += x[i] * cos(M_PI * (2.0 * i + 1.0) * k / (2.0 * n));
+    }
     return sum * (k == 0 ? 1.0 / sqrt((double)n) : sqrt(2.0 / (double)n));
 }
 
@@ -341,8 +348,9 @@ static void test_dct1_partial_matches_direct_definition(void) {
 
     double out[40];
     ASSERT_OK(ph_dct1d_partial(in, N, K, out));
-    for (int k = 0; k < K; k++)
+    for (int k = 0; k < K; k++) {
         assert_close(out[k], dct1_direct(in, N, k), 1e-9, "ph_dct1d_partial vs the definition");
+    }
 
     printf("test_dct1_partial_matches_direct_definition: PASSED\n");
 }
@@ -352,14 +360,16 @@ static void test_dct1_of_a_constant_vector(void) {
      * a flat image produce an all-zero radial digest rather than quantisation noise. */
     const int N = 180, K = 40;
     double in[180];
-    for (int i = 0; i < N; i++)
+    for (int i = 0; i < N; i++) {
         in[i] = 7.5;
+    }
 
     double out[40];
     ASSERT_OK(ph_dct1d_partial(in, N, K, out));
     assert_close(out[0], 7.5 * sqrt((double)N), 1e-9, "coefficient 0 of a constant vector");
-    for (int k = 1; k < K; k++)
+    for (int k = 1; k < K; k++) {
         assert_close(out[k], 0.0, 1e-9, "AC coefficient of a constant vector");
+    }
 
     printf("test_dct1_of_a_constant_vector: PASSED\n");
 }
@@ -392,8 +402,9 @@ static void test_haar_is_orthonormal(void) {
     }
 
     ph_haar_1d_float(data, 16, temp);
-    for (int i = 0; i < 16; i++)
+    for (int i = 0; i < 16; i++) {
         after += (double)data[i] * data[i];
+    }
 
     assert_close(after, before, 1e-4, "Haar energy preservation");
     printf("test_haar_is_orthonormal: PASSED\n");
@@ -412,8 +423,9 @@ static void test_haar_on_a_step_signal(void) {
     assert_close(data[1], 0.0, 1e-6, "Haar step: average of (0,0)");
     assert_close(data[2], 2.0 * s, 1e-6, "Haar step: average of (1,1)");
     assert_close(data[3], 2.0 * s, 1e-6, "Haar step: average of (1,1)");
-    for (int i = 4; i < 8; i++)
+    for (int i = 4; i < 8; i++) {
         assert_close(data[i], 0.0, 1e-6, "Haar step: detail within a constant pair");
+    }
 
     printf("test_haar_on_a_step_signal: PASSED\n");
 }
@@ -442,9 +454,11 @@ static void test_block_means_on_an_exact_multiple(void) {
     for (int by = 0; by < G; by++) {
         for (int bx = 0; bx < G; bx++) {
             unsigned sum = 0;
-            for (int y = 0; y < B; y++)
-                for (int x = 0; x < B; x++)
+            for (int y = 0; y < B; y++) {
+                for (int x = 0; x < B; x++) {
                     sum += src[(by * B + y) * W + (bx * B + x)];
+                }
+            }
             double want = (double)sum / (B * B);
             /* One level of slack for the resampler's rounding of the same mean. */
             assert_close(got[by * G + bx], want, 1.0, "box resample equals the block mean");
@@ -477,12 +491,14 @@ static double exact_fractional_block_mean(const uint8_t *img, int w, int h, int 
     double sum = 0.0, weight = 0.0;
     for (int y = (int)floor(y0); y < (int)ceil(y1); y++) {
         double wy = fmin(y + 1.0, y1) - fmax((double)y, y0);
-        if (wy <= 0.0)
+        if (wy <= 0.0) {
             continue;
+        }
         for (int x = (int)floor(x0); x < (int)ceil(x1); x++) {
             double wx = fmin(x + 1.0, x1) - fmax((double)x, x0);
-            if (wx <= 0.0)
+            if (wx <= 0.0) {
                 continue;
+            }
             sum += wx * wy * img[(size_t)y * w + x];
             weight += wx * wy;
         }
@@ -498,14 +514,16 @@ static void test_block_means_on_a_non_multiple(void) {
         int w = SIZES[c][0], h = SIZES[c][1];
         uint8_t *src = (uint8_t *)malloc((size_t)w * h);
         ASSERT_PTR_NOT_NULL(src);
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
                 src[(size_t)y * w + x] = (uint8_t)((x * 7 + y * 13 + ((x * y) % 29) * 3) & 0xFF);
+            }
+        }
 
         uint8_t got[64];
         ph_resize_box(src, w, h, got, G, G);
 
-        for (int by = 0; by < G; by++)
+        for (int by = 0; by < G; by++) {
             for (int bx = 0; bx < G; bx++) {
                 double want = exact_fractional_block_mean(src, w, h, bx, by, G);
                 /* Half a level: the resampler rounds the same mean into a byte. Note this
@@ -518,6 +536,7 @@ static void test_block_means_on_a_non_multiple(void) {
                     exit(1);
                 }
             }
+        }
         free(src);
     }
 
@@ -532,8 +551,9 @@ static int bmh_bits_set(const uint8_t *pixels, int w, int h, int block_size) {
     ph_digest_t d;
     ASSERT_OK(ph_compute_bmh(ctx, &d));
     int bits = 0;
-    for (int i = 0; i < d.size * 8; i++)
+    for (int i = 0; i < d.size * 8; i++) {
         bits += (d.data[i / 8] >> (i % 8)) & 1;
+    }
     ph_free(ctx);
     return bits;
 }
@@ -551,13 +571,14 @@ static void test_bmh_thresholds_on_the_median(void) {
     /* 1. Distinct block values: a staircase, one step per block row and column, so the
      * 64 blocks of an 8x8 grid take 64 different values. Here the median splits the
      * blocks exactly in half -- 32 bits set, whatever the values are. */
-    for (int y = 0; y < H; y++)
+    for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             int block = (y / 8) * 8 + (x / 8);
             uint8_t v = (uint8_t)(2 + block * 3); /* 2..191, all distinct */
             size_t o = ((size_t)y * W + x) * 3;
             pixels[o] = pixels[o + 1] = pixels[o + 2] = v;
         }
+    }
     int bits = bmh_bits_set(pixels, W, H, 8);
     if (bits != 32) {
         fprintf(stderr, "[FAIL] BMH set %d of 64 bits on distinct block values, expected 32\n",
@@ -571,12 +592,13 @@ static void test_bmh_thresholds_on_the_median(void) {
      * degenerate on this image -- the point is which rule produced it, and that ties are
      * what stop the median from balancing. Fifty-six blocks share one value here; no
      * threshold can split them. */
-    for (int y = 0; y < H; y++)
+    for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
             uint8_t v = (y < 8) ? 255 : 10;
             size_t o = ((size_t)y * W + x) * 3;
             pixels[o] = pixels[o + 1] = pixels[o + 2] = v;
         }
+    }
     bits = bmh_bits_set(pixels, W, H, 8);
     if (bits != 64) {
         fprintf(stderr,
@@ -660,7 +682,11 @@ static void test_colour_moments_digest_keeps_the_skew_sign(void) {
  * ph_compute_moments() produced, to within the 1/128 resolution. */
 static void test_colour_moments_digest_round_trips_the_values(void) {
     /* A deliberately lopsided image, so none of the nine moments is zero or degenerate. */
-    enum { W = 8, H = 8 };
+    enum {
+        W = 8,
+        H = 8,
+    };
+
     uint8_t px[W * H * 3];
     for (int i = 0; i < W * H; i++) {
         px[i * 3 + 0] = (uint8_t)(i < 50 ? 10 : 240);

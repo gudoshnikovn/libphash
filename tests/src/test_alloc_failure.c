@@ -11,7 +11,6 @@
  */
 
 #include "alloc_shim.h"
-
 #include "libphash.h"
 #include "test_macros.h"
 
@@ -20,7 +19,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define PNG_PATH TEST_DATA_DIR "/photo_complex.png"
+#define PNG_PATH  TEST_DATA_DIR "/photo_complex.png"
 #define JPEG_PATH TEST_DATA_DIR "/photo.jpeg"
 #define WEBP_PATH TEST_DATA_DIR "/photo.webp"
 
@@ -76,9 +75,9 @@ static void guard_check(const uint8_t *front, const uint8_t *back, const char *t
 
 /* ---- result checking --------------------------------------------------- */
 
-#define ALLOW_ALLOC 0x1  /* PH_ERR_ALLOCATION_FAILED */
-#define ALLOW_DECODE 0x2 /* PH_ERR_DECODER_UNAVAILABLE: e.g. WebP with no decoder built in */
-#define ALLOW_EMPTY 0x4  /* PH_ERR_EMPTY_IMAGE: the load before the hash failed */
+#define ALLOW_ALLOC   0x1 /* PH_ERR_ALLOCATION_FAILED */
+#define ALLOW_DECODE  0x2 /* PH_ERR_DECODER_UNAVAILABLE: e.g. WebP with no decoder built in */
+#define ALLOW_EMPTY   0x4 /* PH_ERR_EMPTY_IMAGE: the load before the hash failed */
 /* PH_ERR_CORRUPT_DATA, but ONLY for the decode checks below that opt into this
  * flag -- NOT a blanket allowance. Two vendored decoders have a specific internal
  * allocation whose failure they cannot cleanly distinguish from a genuinely broken
@@ -103,16 +102,21 @@ static void guard_check(const uint8_t *front, const uint8_t *back, const char *t
 #define ALLOW_CORRUPT 0x8
 
 static int check(const char *tag, ph_error_t err, int allowed) {
-    if (err == PH_SUCCESS)
+    if (err == PH_SUCCESS) {
         return 1;
-    if (err == PH_ERR_ALLOCATION_FAILED && (allowed & ALLOW_ALLOC))
+    }
+    if (err == PH_ERR_ALLOCATION_FAILED && (allowed & ALLOW_ALLOC)) {
         return 0;
-    if (err == PH_ERR_DECODER_UNAVAILABLE && (allowed & ALLOW_DECODE))
+    }
+    if (err == PH_ERR_DECODER_UNAVAILABLE && (allowed & ALLOW_DECODE)) {
         return 0;
-    if (err == PH_ERR_EMPTY_IMAGE && (allowed & ALLOW_EMPTY))
+    }
+    if (err == PH_ERR_EMPTY_IMAGE && (allowed & ALLOW_EMPTY)) {
         return 0;
-    if (err == PH_ERR_CORRUPT_DATA && (allowed & ALLOW_CORRUPT))
+    }
+    if (err == PH_ERR_CORRUPT_DATA && (allowed & ALLOW_CORRUPT)) {
         return 0;
+    }
     defect("%s returned unexpected error %d (%s)", tag, (int)err, ph_get_error_string(err));
     return 0;
 }
@@ -162,32 +166,32 @@ static void hash_battery(ph_context_t *ctx, golden_t *out, const golden_t *ref) 
     guarded_digest_t g;
     int allowed = ALLOW_ALLOC | ALLOW_EMPTY;
 
-#define U64_HASH(call, field, tag)                                                                 \
-    do {                                                                                           \
-        guard_init(&u, sizeof(u));                                                                 \
-        u.v = 0;                                                                                   \
-        int ok = check(tag, call(ctx, &u.v), allowed);                                             \
-        guard_check(u.front, u.back, tag);                                                         \
-        if (ok && out)                                                                             \
-            out->field = u.v;                                                                      \
-        if (ok && ref && ref->valid && u.v != ref->field)                                          \
-            defect("%s reported success but returned %016llx instead of %016llx", tag,             \
-                   (unsigned long long)u.v, (unsigned long long)ref->field);                       \
+#define U64_HASH(call, field, tag)                                                     \
+    do {                                                                               \
+        guard_init(&u, sizeof(u));                                                     \
+        u.v = 0;                                                                       \
+        int ok = check(tag, call(ctx, &u.v), allowed);                                 \
+        guard_check(u.front, u.back, tag);                                             \
+        if (ok && out)                                                                 \
+            out->field = u.v;                                                          \
+        if (ok && ref && ref->valid && u.v != ref->field)                              \
+            defect("%s reported success but returned %016llx instead of %016llx", tag, \
+                   (unsigned long long)u.v, (unsigned long long)ref->field);           \
     } while (0)
 
-#define DIGEST_HASH(call, field, tag)                                                              \
-    do {                                                                                           \
-        guard_init(&g, sizeof(g));                                                                 \
-        memset(&g.d, 0, sizeof(g.d));                                                              \
-        int ok = check(tag, call(ctx, &g.d), allowed);                                             \
-        guard_check(g.front, g.back, tag);                                                         \
-        if (ok && out)                                                                             \
-            out->field = g.d;                                                                      \
-        if (ok && ref && ref->valid &&                                                             \
-            (g.d.size != ref->field.size || memcmp(g.d.data, ref->field.data, g.d.size) != 0))     \
-            defect("%s reported success but returned a digest differing from the "                 \
-                   "reference",                                                                    \
-                   tag);                                                                           \
+#define DIGEST_HASH(call, field, tag)                                                          \
+    do {                                                                                       \
+        guard_init(&g, sizeof(g));                                                             \
+        memset(&g.d, 0, sizeof(g.d));                                                          \
+        int ok = check(tag, call(ctx, &g.d), allowed);                                         \
+        guard_check(g.front, g.back, tag);                                                     \
+        if (ok && out)                                                                         \
+            out->field = g.d;                                                                  \
+        if (ok && ref && ref->valid &&                                                         \
+            (g.d.size != ref->field.size || memcmp(g.d.data, ref->field.data, g.d.size) != 0)) \
+            defect("%s reported success but returned a digest differing from the "             \
+                   "reference",                                                                \
+                   tag);                                                                       \
     } while (0)
 
     U64_HASH(ph_compute_ahash, ahash, "ph_compute_ahash");
@@ -209,8 +213,9 @@ static void hash_battery(ph_context_t *ctx, golden_t *out, const golden_t *ref) 
 #undef U64_HASH
 #undef DIGEST_HASH
 
-    if (out)
+    if (out) {
         out->valid = 1;
+    }
 }
 
 /* Compares a clean run against the recorded reference. Any difference means an
@@ -228,11 +233,12 @@ static void check_recovery(ph_context_t *ctx) {
     }
     hash_battery(ctx, &now, NULL);
 
-    if (!g_golden.valid)
+    if (!g_golden.valid) {
         return;
-#define CMP_U64(f)                                                                                 \
-    if (now.f != g_golden.f)                                                                       \
-    defect("recovery: %s differs after the failure (%016llx vs %016llx)", #f,                      \
+    }
+#define CMP_U64(f)                                                            \
+    if (now.f != g_golden.f)                                                  \
+    defect("recovery: %s differs after the failure (%016llx vs %016llx)", #f, \
            (unsigned long long)now.f, (unsigned long long)g_golden.f)
     CMP_U64(ahash);
     CMP_U64(dhash);
@@ -240,8 +246,8 @@ static void check_recovery(ph_context_t *ctx) {
     CMP_U64(whash_fast);
     CMP_U64(whash_full);
 #undef CMP_U64
-#define CMP_DIGEST(f)                                                                              \
-    if (now.f.size != g_golden.f.size || memcmp(now.f.data, g_golden.f.data, now.f.size) != 0)     \
+#define CMP_DIGEST(f)                                                                          \
+    if (now.f.size != g_golden.f.size || memcmp(now.f.data, g_golden.f.data, now.f.size) != 0) \
     defect("recovery: %s digest differs after the failure", #f)
     CMP_DIGEST(bmh);
     CMP_DIGEST(mhash);
@@ -261,8 +267,9 @@ static void scen_create(int recording) {
     ph_error_t err = ph_create(&ctx);
     if (err != PH_SUCCESS) {
         check("ph_create", err, ALLOW_ALLOC);
-        if (ctx != NULL)
+        if (ctx != NULL) {
             defect("ph_create failed but still handed back a context pointer");
+        }
         return;
     }
     ASSERT_PTR_NOT_NULL(ctx);
@@ -272,37 +279,43 @@ static void scen_create(int recording) {
 static void scen_load_file(int recording) {
     (void)recording;
     ph_context_t *ctx = NULL;
-    if (ph_create(&ctx) != PH_SUCCESS)
+    if (ph_create(&ctx) != PH_SUCCESS) {
         return;
+    }
     ph_error_t err = ph_load_from_file(ctx, PNG_PATH);
     check("ph_load_from_file", err, ALLOW_ALLOC | ALLOW_DECODE | ALLOW_CORRUPT);
-    if (err != PH_SUCCESS && ph_is_loaded(ctx))
+    if (err != PH_SUCCESS && ph_is_loaded(ctx)) {
         defect("ph_load_from_file failed but the context reports an image is loaded");
+    }
     ph_free(ctx);
 }
 
 static void scen_load_memory(int recording) {
     (void)recording;
     ph_context_t *ctx = NULL;
-    if (ph_create(&ctx) != PH_SUCCESS)
+    if (ph_create(&ctx) != PH_SUCCESS) {
         return;
+    }
     ph_error_t err = ph_load_from_memory(ctx, g_jpeg.data, g_jpeg.size);
     check("ph_load_from_memory", err, ALLOW_ALLOC | ALLOW_DECODE | ALLOW_CORRUPT);
-    if (err != PH_SUCCESS && ph_is_loaded(ctx))
+    if (err != PH_SUCCESS && ph_is_loaded(ctx)) {
         defect("ph_load_from_memory failed but the context reports an image is loaded");
+    }
     ph_free(ctx);
 }
 
 static void scen_hash_all(int recording) {
     ph_context_t *ctx = NULL;
-    if (ph_create(&ctx) != PH_SUCCESS)
+    if (ph_create(&ctx) != PH_SUCCESS) {
         return;
+    }
     ph_error_t err = ph_load_from_memory(ctx, g_png.data, g_png.size);
     check("ph_load_from_memory", err, ALLOW_ALLOC | ALLOW_DECODE | ALLOW_CORRUPT);
 
     hash_battery(ctx, recording ? &g_golden : NULL, recording ? NULL : &g_golden);
-    if (!recording)
+    if (!recording) {
         check_recovery(ctx);
+    }
 
     ph_free(ctx);
 }
@@ -313,8 +326,9 @@ static void scen_batch(int recording) {
     (void)recording;
     static const char *paths[] = {PNG_PATH, JPEG_PATH, WEBP_PATH};
     ph_context_t *ctx = NULL;
-    if (ph_create(&ctx) != PH_SUCCESS)
+    if (ph_create(&ctx) != PH_SUCCESS) {
         return;
+    }
 
     for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]); i++) {
         /* A build without a WebP decoder reports PH_ERR_DECODER_UNAVAILABLE here,
@@ -367,13 +381,15 @@ static void build_oriented_jpeg(void) {
 
 static void scen_load_oriented(int recording) {
     ph_context_t *ctx = NULL;
-    if (ph_create(&ctx) != PH_SUCCESS)
+    if (ph_create(&ctx) != PH_SUCCESS) {
         return;
+    }
     ph_error_t err = ph_load_from_memory(ctx, g_oriented.data, g_oriented.size);
     check("ph_load_from_memory(oriented)", err, ALLOW_ALLOC | ALLOW_DECODE | ALLOW_CORRUPT);
     if (err != PH_SUCCESS) {
-        if (ph_is_loaded(ctx))
+        if (ph_is_loaded(ctx)) {
             defect("the oriented load failed but the context reports an image is loaded");
+        }
         ph_free(ctx);
         return;
     }
@@ -424,12 +440,15 @@ static long run_scenario(const scenario_t *s, long fail_at, int recording) {
 
     long leaked = ph_shim_live();
     long count = ph_shim_count();
-    if (ph_shim_overflowed())
+    if (ph_shim_overflowed()) {
         defect("allocation tracker overflowed; raise PH_SHIM_SLOTS");
-    if (leaked != 0)
+    }
+    if (leaked != 0) {
         defect("%ld allocation(s) leaked", leaked);
-    if (fail_at > 0 && ph_shim_injected() == 0 && fail_at <= count)
+    }
+    if (fail_at > 0 && ph_shim_injected() == 0 && fail_at <= count) {
         defect("expected to inject a failure at #%ld but never reached it", fail_at);
+    }
     ph_shim_reset();
     return count;
 }
@@ -444,8 +463,9 @@ static int shim_is_effective(void) {
     ph_context_t *ctx = NULL;
     ph_error_t err = ph_create(&ctx);
     long seen = ph_shim_count();
-    if (err == PH_SUCCESS)
+    if (err == PH_SUCCESS) {
         ph_free(ctx);
+    }
     ph_shim_disarm();
     ph_shim_reset();
     return seen > 0;
@@ -522,22 +542,24 @@ static void test_stb_oom_reason_pinned(void) {
         }
         ph_error_t err = ph_load_from_memory(ctx, g_jpeg.data, g_jpeg.size);
         if (err == PH_ERR_ALLOCATION_FAILED &&
-            strcmp(ph_get_last_error_message(ctx), "outofmem") == 0)
+            strcmp(ph_get_last_error_message(ctx), "outofmem") == 0) {
             saw_outofmem = 1;
+        }
         ph_free(ctx);
         ph_shim_disarm();
         ph_shim_reset();
     }
 
-    if (!saw_outofmem)
+    if (!saw_outofmem) {
         defect("no injected allocation failure reproduced stb_image's literal "
                "\"outofmem\" reason over %ld failure point(s) -- ph_stb_reason_is_oom() "
                "may be stale against the vendored stb_image.h",
                n);
-    else
+    } else {
         printf("  %-24s stb \"outofmem\" reason reproduced and mapped to "
                "PH_ERR_ALLOCATION_FAILED\n",
                "stb oom pinning");
+    }
 }
 
 int main(void) {
@@ -569,8 +591,9 @@ int main(void) {
         }
 
         /* Pass 2: fail allocation #k, for every k. */
-        for (long k = 1; k <= n; k++)
+        for (long k = 1; k <= n; k++) {
             (void)run_scenario(s, k, 0);
+        }
 
         total_points += n;
         printf("  %-24s %3ld allocation(s), %3ld failure point(s) exercised\n", s->name, n, n);

@@ -1,6 +1,7 @@
 #include "hashes/hashes.h"
 #include "libphash.h"
 #include "test_macros.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,12 +14,14 @@ void test_color_histogram_bin_unit() {
     /* Every bin index is inside the digest, for every colour in the cube. Stepping by 17
      * covers 16 values per channel, which is enough to catch an off-by-one at any edge
      * without walking all 16.7 million. */
-    for (int r = 0; r < 256; r += 17)
-        for (int g = 0; g < 256; g += 17)
+    for (int r = 0; r < 256; r += 17) {
+        for (int g = 0; g < 256; g += 17) {
             for (int b = 0; b < 256; b += 17) {
                 int bin = ph_color_histogram_bin(r, g, b);
                 ASSERT(bin >= 0 && bin < PH_COLOR_BINS);
             }
+        }
+    }
     /* And at the corners exactly, which the step above skips. */
     const int corners[8][3] = {{0, 0, 0},     {255, 0, 0},   {0, 255, 0},   {0, 0, 255},
                                {255, 255, 0}, {255, 0, 255}, {0, 255, 255}, {255, 255, 255}};
@@ -150,8 +153,9 @@ void test_histogram_intersection_is_exact() {
                 b.data[i] = (uint8_t)(state >> 24);
                 nonzero |= a.data[i];
             }
-            if (!nonzero)
+            if (!nonzero) {
                 a.data[0] = 1;
+            }
 
             /* Same shape at twice the scale: bins halved so the doubled copy fits a byte. */
             scaled = a;
@@ -210,10 +214,12 @@ void test_color_hash_separates_flat_colours() {
         {"black", 8, 8, 8},       {"mid grey", 128, 128, 128},  {"white", 248, 248, 248},
         {"dark red", 90, 20, 20}, {"light red", 240, 170, 170}, {"blue", 30, 40, 220},
     };
+
     const int n = (int)(sizeof(colours) / sizeof(colours[0]));
     ph_digest_t d[6];
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++) {
         flat_digest(colours[i].r, colours[i].g, colours[i].b, &d[i]);
+    }
 
     /* Black against white is the pair that the rejected quantisations merged. */
     double v = 0.0;
@@ -227,7 +233,7 @@ void test_color_hash_separates_flat_colours() {
     }
 
     /* And every distinguishable pair here stays distinguishable. */
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
             ASSERT_OK(ph_histogram_intersection(&d[i], &d[j], &v));
             if (v > 0.01) {
@@ -236,6 +242,7 @@ void test_color_hash_separates_flat_colours() {
                 exit(1);
             }
         }
+    }
 
     /* The known limit, asserted as a limit: three intensity bins cannot split the bottom
      * third, so a very dark grey and a slightly less dark grey do collide. Documented in
@@ -304,8 +311,9 @@ void test_color_hash_requires_color() {
     ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
 
     ASSERT_INT_EQ(PH_ERR_REQUIRES_COLOR, ph_compute_color_hash(ctx, &digest));
-    for (size_t i = 0; i < sizeof(digest); i++)
+    for (size_t i = 0; i < sizeof(digest); i++) {
         ASSERT_INT_EQ(0xAB, ((const uint8_t *)&digest)[i]);
+    }
 
     /* Grayscale-only algorithms are unaffected. */
     uint64_t ahash = 0;
@@ -323,8 +331,9 @@ void test_color_hash_refuses_one_channel_pixels() {
     ph_digest_t digest;
     memset(&digest, 0, sizeof(digest));
 
-    for (int i = 0; i < 16 * 16; i++)
+    for (int i = 0; i < 16 * 16; i++) {
         gray[i] = (uint8_t)i;
+    }
 
     ASSERT_OK(ph_create(&ctx));
     ASSERT_OK(ph_load_from_pixels(ctx, gray, 16, 16, 1, 0));
@@ -347,7 +356,10 @@ void test_color_hash_refuses_one_channel_pixels() {
  * because it is the one a caller is most likely to hit by accident: one pixel is its own
  * largest bin, so a 1x1 image produces exactly one bin at 255, whatever its colour. */
 void test_color_histogram_counts_are_scaled_against_the_largest_bin() {
-    enum { N = 16 };
+    enum {
+        N = 16,
+    };
+
     uint8_t px[N * 3];
 
     struct {
@@ -381,9 +393,11 @@ void test_color_histogram_counts_are_scaled_against_the_largest_bin() {
 
         ASSERT_UINT8_EQ(255, d.data[red_bin]);
         ASSERT_UINT8_EQ(cases[c].expected, d.data[blue_bin]);
-        for (int i = 0; i < d.size; i++)
-            if (i != red_bin && i != blue_bin)
+        for (int i = 0; i < d.size; i++) {
+            if (i != red_bin && i != blue_bin) {
                 ASSERT_UINT8_EQ(0, d.data[i]);
+            }
+        }
     }
 
     /* One pixel: one bin, full scale. */
@@ -396,9 +410,11 @@ void test_color_histogram_counts_are_scaled_against_the_largest_bin() {
     ph_free(ctx);
     ASSERT_UINT8_EQ(255, d.data[ph_color_histogram_bin(30, 200, 90)]);
     int filled = 0;
-    for (int i = 0; i < d.size; i++)
-        if (d.data[i])
+    for (int i = 0; i < d.size; i++) {
+        if (d.data[i]) {
             filled++;
+        }
+    }
     ASSERT_INT_EQ(1, filled);
 
     PASS("test_color_histogram_counts_are_scaled_against_the_largest_bin");

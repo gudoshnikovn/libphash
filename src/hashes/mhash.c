@@ -42,23 +42,27 @@
 #include "hashes/hashes.h"
 #include "image/image.h"
 #include "safety.h"
+
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
 int ph_mh_kernel(float alpha, float level, float *out, int max_side) {
-    if (!out || !(alpha > 0.0f))
+    if (!out || !(alpha > 0.0f)) {
         return 0;
+    }
 
     /* sigma here is the kernel's half-width in samples, not the width of a Gaussian:
      * pHash names it that and computes it as an integer, which is what fixes the kernel
      * at 17x17 for the defaults. */
     int sigma = (int)(4.0f * powf(alpha, level));
-    if (sigma < 1)
+    if (sigma < 1) {
         return 0;
+    }
     int side = 2 * sigma + 1;
-    if (side > max_side)
+    if (side > max_side) {
         return 0;
+    }
 
     float scale = powf(alpha, -level);
     for (int y = 0; y < side; y++) {
@@ -115,18 +119,22 @@ void ph_mh_block_sums(const uint8_t *img, int n, int block, const float *kernel,
 
     for (int y = 0; y < pad_n; y++) {
         int sy = y - half;
-        if (sy < 0)
+        if (sy < 0) {
             sy = 0;
-        if (sy >= n)
+        }
+        if (sy >= n) {
             sy = n - 1;
+        }
         const uint8_t *srow = &img[ph_size(sy) * ph_size(n)];
         uint8_t *drow = &padded[ph_size(y) * pad];
         for (int x = 0; x < pad_n; x++) {
             int sx = x - half;
-            if (sx < 0)
+            if (sx < 0) {
                 sx = 0;
-            if (sx >= n)
+            }
+            if (sx >= n) {
                 sx = n - 1;
+            }
             drow[x] = srow[sx];
         }
     }
@@ -164,14 +172,17 @@ void ph_mh_block_sums(const uint8_t *img, int n, int block, const float *kernel,
 }
 
 PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
-    if (!ctx || !out_digest)
+    if (!ctx || !out_digest) {
         return PH_ERR_INVALID_ARGUMENT;
-    if (!ctx->image.is_loaded)
+    }
+    if (!ctx->image.is_loaded) {
         return PH_ERR_EMPTY_IMAGE;
+    }
 
     const int n = ctx->config.mhash_size;
-    if (n < PH_MH_MIN_IMAGE_SIZE || n > PH_MH_MAX_IMAGE_SIZE)
+    if (n < PH_MH_MIN_IMAGE_SIZE || n > PH_MH_MAX_IMAGE_SIZE) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
     /* The grid is always 31x31, so the digest is always 576 bits whatever the preset;
      * the block size follows from the preset instead. */
     const int block = n / PH_MH_GRID;
@@ -180,8 +191,9 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
     ph_digest_begin(out_digest, ctx, PH_ALGO_MHASH);
 
     uint8_t *gray = ph_get_gray(ctx);
-    if (!gray)
+    if (!gray) {
         return PH_ERR_ALLOCATION_FAILED;
+    }
 
     /* The blur runs at full resolution, before the resize, as in the source. Its two
      * buffers -- five bytes per source pixel -- are plain heap allocations released here,
@@ -258,16 +270,18 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
             int ox = wx * PH_MH_WINDOW_STRIDE;
             float window[PH_MH_WINDOW * PH_MH_WINDOW];
             float sum = 0.0f;
-            for (int y = 0; y < PH_MH_WINDOW; y++)
+            for (int y = 0; y < PH_MH_WINDOW; y++) {
                 for (int x = 0; x < PH_MH_WINDOW; x++) {
                     float v = blocks[(oy + y) * PH_MH_GRID + (ox + x)];
                     window[y * PH_MH_WINDOW + x] = v;
                     sum += v;
                 }
+            }
             float mean = sum / (float)(PH_MH_WINDOW * PH_MH_WINDOW);
             for (int i = 0; i < PH_MH_WINDOW * PH_MH_WINDOW; i++) {
-                if (window[i] > mean)
+                if (window[i] > mean) {
                     out_digest->data[bit / 8] |= (uint8_t)(0x80u >> (bit % 8));
+                }
                 bit++;
             }
         }

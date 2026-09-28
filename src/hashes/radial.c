@@ -60,13 +60,15 @@
 #include "context.h"
 #include "hashes/hashes.h"
 #include "image/image.h"
+
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
 float ph_get_pixel_bilinear(const uint8_t *img, int w, int h, float x, float y) {
-    if (x < 0.0f || x >= (float)(w - 1) || y < 0.0f || y >= (float)(h - 1))
+    if (x < 0.0f || x >= (float)(w - 1) || y < 0.0f || y >= (float)(h - 1)) {
         return -1.0f;
+    }
 
     int x1 = (int)x;
     int y1 = (int)y;
@@ -114,8 +116,9 @@ double ph_projection_variance(const uint8_t *img, int w, int h, double cx, doubl
     if (count > 0) {
         double mean = sum / (double)count;
         double var = (sum_sq / (double)count) - (mean * mean);
-        if (var < 0)
+        if (var < 0) {
             var = 0;
+        }
         return var;
     }
     return 0.0;
@@ -130,8 +133,9 @@ double ph_projection_variance(const uint8_t *img, int w, int h, double cx, doubl
  * partial output (40 of 180 coefficients) is what the algorithm wants, N is small, and
  * the projection sampling above it costs several times more. */
 ph_error_t ph_dct1d_partial(const double *in, int n, int coeffs, double *out) {
-    if (!in || !out || n < 1 || coeffs < 1 || coeffs > n)
+    if (!in || !out || n < 1 || coeffs < 1 || coeffs > n) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     const double scale = M_PI / (2.0 * (double)n);
     const double c0 = 1.0 / sqrt((double)n);
@@ -139,33 +143,38 @@ ph_error_t ph_dct1d_partial(const double *in, int n, int coeffs, double *out) {
 
     for (int k = 0; k < coeffs; k++) {
         double sum = 0.0;
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < n; i++) {
             sum += in[i] * cos(scale * (double)(2 * i + 1) * (double)k);
+        }
         out[k] = sum * (k == 0 ? c0 : ck);
     }
     return PH_SUCCESS;
 }
 
 PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_digest) {
-    if (!ctx || !out_digest)
+    if (!ctx || !out_digest) {
         return PH_ERR_INVALID_ARGUMENT;
-    if (!ctx->image.is_loaded)
+    }
+    if (!ctx->image.is_loaded) {
         return PH_ERR_EMPTY_IMAGE;
+    }
 
     int projections = ctx->config.radial_projections;
     int samples = ctx->config.radial_samples;
     /* Fewer angles than coefficients is not a coarser hash, it is no hash: a DCT of an
      * n-element vector has n coefficients. The setter rejects it; refuse here too rather
      * than hand back a digest quietly shorter than the caller configured. */
-    if (projections < PH_RADIAL_COEFFS || samples <= 0)
+    if (projections < PH_RADIAL_COEFFS || samples <= 0) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
 
     /* projections * sizeof(double) does not overflow size_t on a 64-bit target, but it
      * does on a 32-bit one. ph_context_set_radial_params() caps projections
      * at PH_RADIAL_MAX_PROJECTIONS, so this cannot trigger through the public API either;
      * kept as defence in depth. Refuse rather than wrap. */
-    if ((size_t)projections > SIZE_MAX / sizeof(double))
+    if ((size_t)projections > SIZE_MAX / sizeof(double)) {
         return PH_ERR_ALLOCATION_FAILED;
+    }
 
     /* Quantised DCT coefficients, PH_RADIAL_COEFFS of them whatever the angle count:
      * compare with ph_radial_similarity(). */
@@ -174,8 +183,9 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     size_t img_size = (size_t)ctx->image.width * (size_t)ctx->image.height;
 
     uint8_t *gray = ph_get_gray(ctx);
-    if (!gray)
+    if (!gray) {
         return PH_ERR_ALLOCATION_FAILED;
+    }
 
     /* `blurred` and `blur_scratch` -- five bytes per source pixel -- are plain heap
      * allocations, not arena blocks, for the reason given in mhash.c: the arena would keep
@@ -245,8 +255,9 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
         return PH_SUCCESS;
     }
     double spread = sqrt(spread_sq);
-    for (int i = 0; i < projections; i++)
+    for (int i = 0; i < projections; i++) {
         projection_variances[i] = (projection_variances[i] - mean_v) / spread;
+    }
 
     /* The transform, and the whole point of it: it decorrelates neighbouring angles and
      * compresses 180 numbers into the 40 that carry the shape of the profile. */
@@ -257,18 +268,21 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     ph_arena_release(ctx, arena_mark);
     free(blurred);
 
-    if (err != PH_SUCCESS)
+    if (err != PH_SUCCESS) {
         return err;
+    }
 
     /* Quantise as pHash does: affine map from [min, max] over the 40 coefficients onto
      * 0..255. */
     double min_c = coefficients[0];
     double max_c = coefficients[0];
     for (int k = 1; k < PH_RADIAL_COEFFS; k++) {
-        if (coefficients[k] < min_c)
+        if (coefficients[k] < min_c) {
             min_c = coefficients[k];
-        if (coefficients[k] > max_c)
+        }
+        if (coefficients[k] > max_c) {
             max_c = coefficients[k];
+        }
     }
 
     double span = max_c - min_c;

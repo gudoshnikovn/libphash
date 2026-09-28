@@ -4,6 +4,7 @@
 #include "libphash.h"
 #include "safety.h"
 #include "test_macros.h"
+
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
@@ -211,8 +212,9 @@ void test_setter_error_contract(void) {
  * call must leave the digest bit-for-bit identical. */
 static void assert_radial_digests_equal(const ph_digest_t *a, const ph_digest_t *b) {
     ASSERT_UINT8_EQ(a->size, b->size);
-    for (int i = 0; i < a->size; i++)
+    for (int i = 0; i < a->size; i++) {
         ASSERT_UINT8_EQ(a->data[i], b->data[i]);
+    }
 }
 
 void test_gamma_nan_cannot_corrupt_hash(void) {
@@ -224,8 +226,9 @@ void test_gamma_nan_cannot_corrupt_hash(void) {
     ASSERT_OK(ph_compute_radial_hash(ctx, &before));
     /* The baseline must not itself be degenerate, or this test would pass vacuously. */
     int nonzero = 0;
-    for (int i = 0; i < before.size; i++)
+    for (int i = 0; i < before.size; i++) {
         nonzero |= before.data[i];
+    }
     ASSERT(nonzero != 0);
 
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_gamma(ctx, (float)NAN));
@@ -266,12 +269,15 @@ void test_error_handling(void) {
     }
 
     // NULL arguments
-    if (ph_create(NULL) != PH_ERR_INVALID_ARGUMENT)
+    if (ph_create(NULL) != PH_ERR_INVALID_ARGUMENT) {
         exit(1);
-    if (ph_load_from_file(NULL, "test.jpg") != PH_ERR_INVALID_ARGUMENT)
+    }
+    if (ph_load_from_file(NULL, "test.jpg") != PH_ERR_INVALID_ARGUMENT) {
         exit(1);
-    if (ph_load_from_memory(NULL, (uint8_t *)"abc", 3) != PH_ERR_INVALID_ARGUMENT)
+    }
+    if (ph_load_from_memory(NULL, (uint8_t *)"abc", 3) != PH_ERR_INVALID_ARGUMENT) {
         exit(1);
+    }
 
     ph_free(ctx);
     PASS("test_error_handling");
