@@ -39,7 +39,14 @@ void ph_gaussian_blur_sigma(const uint8_t *src, int w, int h, float sigma, float
 /* Histogram equalisation over `levels` buckets (2..256), in place. */
 void ph_equalize_histogram(uint8_t *data, size_t n, int levels);
 
+/* The loaded image in grayscale: the image itself when it has one channel, otherwise a
+ * conversion made on first use and cached on the context until the image changes. NULL
+ * when nothing is loaded or the conversion cannot be allocated. */
 uint8_t *ph_get_gray(ph_context_t *ctx);
+
+/* Frees the cached grayscale conversion. Whoever replaces or drops the loaded image
+ * calls this; the cache belongs to src/image/color.c, which makes it. */
+void ph_drop_gray_cache(ph_context_t *ctx);
 
 /* EXIF Orientation (tag 0x0112) support. Only consulted when
  * ph_context_set_auto_orient() is enabled; degrades silently (returns 1, i.e.

@@ -14,9 +14,9 @@ static int g_failures = 0;
 
 static void check_balanced(const ph_context_t *ctx, size_t before, const char *what,
                            ph_error_t err) {
-    if (ctx->arena.offset != before) {
+    if (ph_arena_mark(ctx) != before) {
         fprintf(stderr, "[FAIL] %s (returned %d): arena offset %zu before, %zu after\n", what,
-                (int)err, before, ctx->arena.offset);
+                (int)err, before, ph_arena_mark(ctx));
         g_failures++;
     }
 }
@@ -27,13 +27,13 @@ static void run_all(ph_context_t *ctx, const char *label) {
     char what[128];
     for (int a = 0; a < PH_ALGORITHM_COUNT; a++) {
         ph_digest_t digest;
-        size_t before = ctx->arena.offset;
+        size_t before = ph_arena_mark(ctx);
         ph_error_t err = ph_compute_digest(ctx, (ph_algorithm_t)a, &digest);
         snprintf(what, sizeof(what), "%s: %s", label, ph_algorithm_name((ph_algorithm_t)a));
         check_balanced(ctx, before, what, err);
     }
     uint64_t out[PH_HASH_FLAGS_COUNT];
-    size_t before = ctx->arena.offset;
+    size_t before = ph_arena_mark(ctx);
     ph_error_t err =
         ph_compute_multi(ctx, PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH, out);
     snprintf(what, sizeof(what), "%s: multi", label);
@@ -56,7 +56,7 @@ static void test_success_paths(void) {
     ASSERT_PTR_NOT_NULL(ph_get_scratchpad(ctx, 5));
     run_all(ctx, "nested");
     ph_arena_release(ctx, outer);
-    ASSERT(ctx->arena.offset == outer);
+    ASSERT(ph_arena_mark(ctx) == outer);
 
     ph_free(ctx);
     PASS("test_success_paths");
@@ -138,7 +138,7 @@ static void test_allocation_failure_paths(void) {
             ASSERT_OK(ph_create(&ctx));
             ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
             ASSERT_OK(ph_context_set_whash_mode(ctx, PH_WHASH_FULL));
-            size_t before = ctx->arena.offset;
+            size_t before = ph_arena_mark(ctx);
             ph_shim_arm(k);
             ph_error_t err = ph_compute_digest(ctx, (ph_algorithm_t)a, &digest);
             ph_shim_disarm();

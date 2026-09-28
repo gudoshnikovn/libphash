@@ -229,13 +229,13 @@ void test_scratchpad_blocks_are_aligned() {
     ASSERT_OK(ph_create(&ctx));
 
     static const size_t sizes[] = {1, 3, 9, 17, 25, 1000, 1, 7};
-    size_t mark = ctx->arena.offset;
+    size_t mark = ph_arena_mark(ctx);
     for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
         uint8_t *block = ph_get_scratchpad(ctx, sizes[i]);
         ASSERT_PTR_NOT_NULL(block);
         ASSERT_INT_EQ(0, (int)((uintptr_t)block % PH_ARENA_ALIGNMENT));
     }
-    ctx->arena.offset = mark;
+    ph_arena_release(ctx, mark);
 
     ph_free(ctx);
     PASS("test_scratchpad_blocks_are_aligned");

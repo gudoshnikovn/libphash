@@ -18,8 +18,8 @@ void test_scratchpad_management(void) {
     uint8_t *p1 = ph_get_scratchpad(ctx, 100);
     ASSERT_PTR_NOT_NULL(p1);
     // Capacity should be at least 1024 (as per implementation)
-    if (ctx->arena.capacity < 1024) {
-        fprintf(stderr, "[FAIL] Initial capacity too small: %zu\n", ctx->arena.capacity);
+    if (ph_arena_capacity(ctx) < 1024) {
+        fprintf(stderr, "[FAIL] Initial capacity too small: %zu\n", ph_arena_capacity(ctx));
         exit(1);
     }
     // Verify 32-byte alignment
@@ -42,8 +42,8 @@ void test_scratchpad_management(void) {
     // Let's request something huge.
     uint8_t *p3 = ph_get_scratchpad(ctx, 2000);
     ASSERT_PTR_NOT_NULL(p3);
-    if (ctx->arena.capacity < ph_arena_align_up(128 + 200) + 2000) {
-        fprintf(stderr, "[FAIL] Capacity did not grow: %zu\n", ctx->arena.capacity);
+    if (ph_arena_capacity(ctx) < ph_arena_align_up(128 + 200) + 2000) {
+        fprintf(stderr, "[FAIL] Capacity did not grow: %zu\n", ph_arena_capacity(ctx));
         exit(1);
     }
 
@@ -57,17 +57,17 @@ void test_scratchpad_autotrim(void) {
 
     // Allocate a large buffer
     ph_get_scratchpad(ctx, 10000);
-    size_t large_capacity = ctx->arena.capacity;
+    size_t large_capacity = ph_arena_capacity(ctx);
 
     // Reset offset
-    ctx->arena.offset = 0;
+    ph_arena_release(ctx, 0);
 
     // Call ph_get_scratchpad with a small size.
     // If offset == 0 and capacity > size * 4, it trims: capacity ~10240 > 100 * 4.
     ph_get_scratchpad(ctx, 100);
 
-    if (ctx->arena.capacity >= large_capacity) {
-        fprintf(stderr, "[FAIL] Scratchpad did not auto-trim (cap=%zu)\n", ctx->arena.capacity);
+    if (ph_arena_capacity(ctx) >= large_capacity) {
+        fprintf(stderr, "[FAIL] Scratchpad did not auto-trim (cap=%zu)\n", ph_arena_capacity(ctx));
         // Note: Implementation might use a minimum 1024, so as long as it's smaller than
         // large_capacity it's fine.
     }

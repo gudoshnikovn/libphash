@@ -33,6 +33,11 @@ uint8_t *ph_get_gray(ph_context_t *ctx) {
     return ctx->image.gray_cache;
 }
 
+void ph_drop_gray_cache(ph_context_t *ctx) {
+    free(ctx->image.gray_cache);
+    ctx->image.gray_cache = NULL;
+}
+
 /* Scalar tail shared by ph_to_grayscale() (after its SIMD prefix, if any) and
  * ph_to_grayscale_scalar() (the whole buffer, for the SIMD-equivalence test in
  * tests/src/test_simd_equivalence.c). */

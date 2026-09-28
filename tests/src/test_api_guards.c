@@ -129,13 +129,13 @@ void test_scratchpad_stress(void) {
     // 1. Growth through repeated calls
     uint8_t *p1 = ph_get_scratchpad(ctx, 512);
     ASSERT_PTR_NOT_NULL(p1);
-    ASSERT_INT_EQ(512, (int)ctx->arena.offset);
+    ASSERT_INT_EQ(512, (int)ph_arena_mark(ctx));
 
     uint8_t *p2 = ph_get_scratchpad(ctx, 2048); // Triggers realloc/growth
     ASSERT_PTR_NOT_NULL(p2);
 
     // 2. Auto-trim logic
-    ctx->arena.offset = 0; // Simulate end of complex operation
+    ph_arena_release(ctx, 0); // Simulate end of complex operation
     // capacity is > 2560 here. Requesting 100 bytes should trigger trim
     ph_get_scratchpad(ctx, 100);
 
