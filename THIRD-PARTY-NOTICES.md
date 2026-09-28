@@ -9,15 +9,19 @@ While **libphash** itself is licensed under the **MIT License**, the following c
 ## 1. libjpeg-turbo
 
 * **Project:** [https://libjpeg-turbo.org/](https://libjpeg-turbo.org/)
-* **License:** IJG, Modified BSD, and zlib
+* **License:** IJG License (with the zlib License for the SIMD code)
 
-`libjpeg-turbo` is covered by three compatible licenses:
+libphash links libjpeg-turbo's **libjpeg API library** (`jpeg-static`, installed as
+`phash_jpeg`). That library is covered by the IJG (Independent JPEG Group) License, whose
+text is in `vendor/libjpeg-turbo/README.ijg`; its SIMD code is covered by the zlib
+License, which the IJG License subsumes in this context. libjpeg-turbo's Modified
+(3-clause) BSD License covers its TurboJPEG API library and build system, which libphash's
+binaries do not contain; `vendor/libjpeg-turbo/LICENSE.md` has the full terms.
 
-1. **The IJG (Independent JPEG Group) License**: This applies to the original libjpeg code.
-2. **The Modified (3-clause) BSD License**: This applies to the TurboJPEG API and most of the SIMD extensions.
-3. **The zlib License**: This applies to the libjpeg-turbo SIMD extensions based on the work of the Independent JPEG Group.
+The IJG License requires this statement in the documentation of any binary that
+contains the library:
 
-*Notice:* This software is based in part on the work of the Independent JPEG Group.
+*This software is based in part on the work of the Independent JPEG Group.*
 
 ---
 
@@ -26,13 +30,33 @@ While **libphash** itself is licensed under the **MIT License**, the following c
 * **Project:** [http://www.libpng.org/pub/png/libpng.html](http://www.libpng.org/pub/png/libpng.html)
 * **License:** libpng License 2.0
 
-Copyright (c) 1995-2022 The PNG Reference Library Authors.
-Copyright (c) 2018-2022 Cosmin Truta.
+PNG Reference Library License version 2 (`vendor/libpng/LICENSE`, which also carries
+the version 1 terms for older libpng releases):
+
+Copyright (c) 1995-2026 The PNG Reference Library Authors.
+Copyright (c) 2018-2026 Cosmin Truta.
 Copyright (c) 2000-2002, 2004, 2006-2018 Glenn Randers-Pehrson.
 Copyright (c) 1996-1997 Andreas Dilger.
 Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.
 
-The libpng software is provided "AS IS", without warranty of any kind, express or implied.
+The software is supplied "as is", without warranty of any kind, express or implied,
+including, without limitation, the warranties of merchantability, fitness for a
+particular purpose, title, and non-infringement. In no event shall the Copyright owners,
+or anyone distributing the software, be liable for any damages or other liability,
+whether in contract, tort or otherwise, arising from, out of, or in connection with the
+software, or the use or other dealings in the software, even if advised of the
+possibility of such damage.
+
+Permission is hereby granted to use, copy, modify, and distribute this software, or
+portions hereof, for any purpose, without fee, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not claim that you
+   wrote the original software. If you use this software in a product, an acknowledgment
+   in the product documentation would be appreciated, but is not required.
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+3. This Copyright notice may not be removed or altered from any source or altered source
+   distribution.
 
 ---
 
@@ -61,6 +85,8 @@ This software is dual-licensed to the public domain and under the following lice
 Copyright (c) 2017 Sean Barrett.
 
 **Modifications by the libphash authors:** allocation failures inside the zlib entry points and inside the allocating format probes are made visible through `stbi_failure_reason()` instead of being lost or overwritten. Each change is marked in the file with `/* libphash local patch (not upstream): ... */`; the reasoning is in `docs/development.md`. Both licenses permit modification; the notice above is retained, and this paragraph records the change as required of a modified copy.
+
+---
 
 ## 5. libwebp
 
@@ -108,7 +134,7 @@ Permission is granted to anyone to use this software for any purpose, including 
 
 | Library | Directory | License Type |
 | --- | --- | --- |
-| **libjpeg-turbo** | `vendor/libjpeg-turbo` | IJG / BSD-3 / zlib |
+| **libjpeg-turbo** | `vendor/libjpeg-turbo` | IJG (zlib for SIMD) |
 | **libpng** | `vendor/libpng` | libpng License 2.0 |
 | **libwebp** | `vendor/libwebp` | BSD 3-Clause |
 | **spng** | `vendor/spng` | BSD 2-Clause |
@@ -122,9 +148,4 @@ copied into `vendor/` instead, which is why their versions and hashes are writte
 above: without them an update leaves no trace. **Both are modified copies** — each carries
 a local patch to its out-of-memory handling, marked in the file and explained in
 `docs/development.md`, so two hashes are recorded for each: the file as it is here, and
-the upstream file it was derived from. A bump replaces the file, drops the patch and
-changes both hashes; re-apply, re-verify against `test_alloc_failure`, and update this
-section. They are not merely a licensing detail —
-`src/loader.c` classifies a decode failure by comparing against error strings that live
-inside `stb_image.h`, so replacing that file is a change that has to be reviewed against
-`ph_stb_unsupported_reasons[]` and `test_stb_failure_classification`.
+the upstream file it was derived from.

@@ -11,782 +11,481 @@ Nothing yet.
 
 ## [2.0.0] - Unreleased
 
-First major release. It is a major not because of the amount of new work, but because
-of a small number of changes a consumer **cannot notice at upgrade time**: the hash
-value produced for the same input can differ, and one error constant is gone. Read
-the BREAKING CHANGES section before upgrading, and see `MIGRATION.md` for the 1.x → 2.0
-walkthrough.
+First major release. It is a major because some changes are invisible at upgrade time:
+the same input can produce a different hash, several functions changed signature, and
+two error constants were removed. Read the BREAKING CHANGES section before upgrading, and
+see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
 
 ### BREAKING CHANGES
 
-- **`ph_compute_color_hash()` is a colour histogram now, returns a 108-byte digest, and
-  `PH_HASH_COLOR_HASH` is gone.** What it used to be was a port of ImageHash's `colorhash`,
-  for which ImageHash cites nothing at all, with thresholds that appear in no source. It is
-  now 108 bins of the opponent colour space compared by **`ph_histogram_intersection()`** —
-  a colour histogram with histogram intersection, after Swain & Ballard (1991), implemented
-  from secondary descriptions since the paper could not be obtained. Separability on the
-  test corpus went from 1.89 to 3.95; the quantisation was chosen by measuring sixteen
-  candidates. The signature takes a `ph_digest_t*`, stored values do not carry over, and
-  `PH_HASH_FLAGS_COUNT` is 4 — the bitfield multi-hash now covers only the four algorithms
-  that really are 64-bit.
+- **`ph_compute_color_hash()` is a colour histogram, returns a 108-byte digest.** 1.x
+  returned a `uint64_t` of 42 bits ported from ImageHash's `colorhash`, which cites no
+  source. It is 108 bins of the opponent colour space (red–green × blue–yellow ×
+  light–dark, 6 × 6 × 3), compared with **`ph_histogram_intersection()`** — a colour
+  histogram with histogram intersection, after Swain & Ballard (1991), implemented from
+  secondary descriptions of the paper. The signature takes a `ph_digest_t *`.
   *Restore the old behaviour:* not possible; recompute any stored ColorHash values.
 
-- **`ph_compute_mhash()` is a real Marr-Hildreth hash now, returns a 72-byte digest, and
-  `PH_HASH_MHASH` is gone.** What it used to compute was the sign of a four-neighbour
-  discrete Laplacian on an 18×18 grid — 64 bits, no Gaussian, no scale — under a name it
-  had no claim to. It now normalises the image to 512×512, equalises it, correlates it
-  with the Laplacian-of-Gaussian operator of Marr and Hildreth, and emits 576 bits, which
-  is the construction the reference implementation defines. The signature takes a
-  `ph_digest_t*`; stored values do not carry over; and 576 bits cannot travel through a
-  bitfield API that hands back `uint64_t`, so the multi-hash flag is removed and
-  `PH_HASH_FLAGS_COUNT` is 5 — call the function directly.
-  New: `ph_context_set_mhash_params()` exposes the kernel's scale (`alpha`, `level` — the
-  reference's own parameters) and the size the image is normalised to. The defaults are
-  the reference's and were kept after being measured against 23 alternatives.
+- **`ph_compute_mhash()` is a Marr–Hildreth hash and returns a 72-byte digest.** 1.x
+  returned a `uint64_t`: the sign of a four-neighbour discrete Laplacian on an 18×18 grid.
+  It normalises the image to 512×512, equalises it, correlates it with the
+  Laplacian-of-Gaussian operator of Marr and Hildreth, and emits 576 bits — the
+  construction pHash's `ph_mh_imagehash()` defines. The signature takes a `ph_digest_t *`.
+  `ph_context_set_mhash_params()` exposes the kernel's scale (`alpha`, `level`) and the
+  normalisation size; the defaults are the reference implementation's.
   *Restore the old behaviour:* not possible; recompute any stored mHash values.
 
 - **`ph_compute_color_moments_hash()` returns an 18-byte digest, not 9, and keeps the sign
-  of the skewness.** The third moment measures the *direction* of a distribution's
-  asymmetry, and the digest stored `fabs()` of it: two images whose channel distributions
-  were mirror images produced byte-identical skew bytes, and half of what the moment says
-  was unrecoverable. Each of the nine features is now a **signed 16-bit big-endian
-  fixed-point number in units of 1/128** (`PH_VECTOR16_SCALE`), tagged with the new
-  `PH_DIGEST_KIND_VECTOR16`. The scale is not a taste: over every distribution an 8-bit
-  channel admits, no moment can exceed a magnitude of 255, and 128 is the largest power of
-  two with 255 x 128 inside `int16` — so unlike the old encoding, which clamped at 255 and
-  truncated to whole units, nothing clamps and the resolution is 1/128 of a channel level.
-  `ph_l2_distance()` decodes the pairs and returns the distance in the moments' own units;
-  reading a 16-bit vector as bytes would treat each feature's high and low halves as two
-  independent features, which is why the new tag is separate rather than a wider
-  `PH_DIGEST_KIND_VECTOR`. Mixing the two encodings in one comparison is refused.
+  of the skewness.** 1.x stored each moment in one unsigned byte, clamped at 255, and
+  stored the skewness as `fabs()`, so mirror-image channel distributions were identical.
+  Each of the nine features is a **signed 16-bit big-endian fixed-point number in units of
+  1/128** (`PH_VECTOR16_SCALE`), tagged `PH_DIGEST_KIND_VECTOR16`. No attainable moment
+  exceeds a magnitude of 255, so nothing clamps. `ph_l2_distance()` decodes the pairs and
+  returns the distance in the moments' own units.
   *Restore the old behaviour:* not possible; recompute any stored ColorMoments values.
 
 - **`ph_digest_t` is 136 bytes, not 72, and carries a `kind` tag.** `PH_DIGEST_MAX_BYTES`
-  is now 128: the Marr-Hildreth hash is 576 bits and did not fit in 64, and the remaining
-  room is headroom taken once rather than twice. The byte after `size` is now `kind`, a
-  `ph_digest_kind_t` saying what the bytes are — a bit vector, transform coefficients, a
-  feature vector, a histogram — so that a comparison meant for one can **refuse** the
-  others instead of returning a plausible number that means nothing.
-  `ph_hamming_distance_digest()` and `ph_similarity_digest()` return -1 for a radial or
-  colour-moments digest; `ph_l2_distance()` returns -1 for a BMH digest. The tag never
-  chooses a metric for you. `PH_DIGEST_KIND_UNSPECIFIED` is zero, so a hand-filled struct
-  behaves exactly as before and simply gets no protection.
-  As a knock-on, `ph_context_set_block_params()` accepts up to 32 rather than 22: the
-  bound is the largest grid whose bits fit a digest, and it followed the capacity.
+  is 128 (1.x: 64): the Marr–Hildreth hash is 576 bits, and the rest is headroom for the
+  whole 2.x series. The byte after `size` is `kind`, a `ph_digest_kind_t` saying what the
+  bytes are — a bit vector, transform coefficients, a feature vector, a histogram — so a
+  comparison meant for one **refuses** the others instead of returning a plausible number
+  that means nothing: `ph_hamming_distance_digest()` returns -1 for a radial or
+  colour-moments digest, `ph_l2_distance()` for a BMH digest. The tag never chooses a
+  metric for you. `PH_DIGEST_KIND_UNSPECIFIED` is zero, so a hand-filled struct is
+  accepted everywhere and gets no protection.
   *Restore the old behaviour:* rebuild any FFI binding that hardcodes the layout; where a
-  comparison now returns -1, switch to the metric for that digest.
+  comparison returns -1, switch to the metric for that digest.
 
 - **The Block Mean Hash thresholds against the median of the block means, not their
   arithmetic mean, so every BMH value changes.** That is what Yang, Gu and Niu's method 1
-  specifies (step d and equation 3.9), and the median is what makes the bit distribution
-  balanced by construction — under the mean, a dark image with a few bright blocks
-  produces a lopsided hash. On photographs the two rules almost agree, so most values move
-  by a bit or two; on images with skewed block values, which is the case the median exists
-  to handle, they move a great deal. Note this also puts the library at odds with OpenCV's
-  `BlockMeanHash`, which thresholds on the mean (in a variable it calls `median`) — expect
-  BMH values to differ from OpenCV's.
+  specifies (step d and equation 3.9), and the median makes the bit distribution balanced
+  by construction — under the mean, a dark image with a few bright blocks produces a
+  lopsided hash. On photographs the two rules almost agree, so most values move by a bit
+  or two; on images with skewed block values they move a great deal. BMH values differ
+  from OpenCV's `BlockMeanHash`, which thresholds on the mean (in a variable it calls
+  `median`).
   *Restore the old behaviour:* not possible; recompute any stored BMH digests.
 
-- **Radial digests must now be compared with `ph_radial_similarity()`.** The algorithm's
-  source compares two radial hashes by the peak of their cross-correlation over cyclic
-  shifts, and that function exposes it, with the source's threshold available as
-  `PH_RADIAL_PCC_THRESHOLD` (0.9). `ph_similarity_digest()`, `ph_hamming_distance_digest()`
-  and `ph_l2_distance()` still accept a radial digest and still return a number, but that
-  number treats quantised DCT coefficients as a bit vector or a point in space and does not
-  mean what it appears to. Radial values also change once more in this release: the
-  variance vector is standardised before the transform, as the reference implementation
-  does — without it one byte of every digest was a constant 255, carrying no information
-  and inflating the correlation between every pair of digests.
-  *Restore the old behaviour:* not possible; recompute any stored radial digests.
-
-  One correction to earlier documentation while you are here: the Radial hash tolerates a
-  **few degrees** of rotation, plus an exact half turn — not the "up to 360°" this
-  project's own docs used to claim. Measured on a photograph: 1° → 0.993, 3° → 0.944,
-  5° → 0.870, 15° → 0.437, 90° → 0.243, 180° → 0.993, against 0.69 for an unrelated image.
-  That is what the algorithm's source delivers, and the reference implementation behaves
-  the same way; `docs/algorithm-provenance.md` §7 explains why the transform does not carry
-  a larger rotation.
-
-- **The Radial hash now applies the DCT its source specifies, and every radial value
-  changes.** The algorithm (De Roover et al. 2005, as pHash implements it) computes the
-  variance along one projection line per degree over 180°, then takes a 1-D DCT of that
-  vector and keeps the first 40 coefficients as the hash. This library was taking 40
-  *angles* and no transform — the 40 had been transplanted from the coefficient count
-  onto the angle count — so the digest was a raw, still-correlated variance profile at
-  4.5× coarser angular resolution. The digest is now always 40 bytes of quantised
-  coefficients, `ph_context_set_radial_params()`'s first argument is the number of
-  angles (40..131072, default 180) and no longer sets the digest width, and a value of
-  40 does **not** reproduce the old hashes. Rotation tolerance improves as a
-  side-effect — a quarter turn now moves a digest about a fifth as far as an unrelated
-  image does, against about a half before — but full rotation invariance still needs
-  the source's cross-correlation comparison, which this release does not add.
-  *Restore the old behaviour:* not possible; recompute any stored radial digests.
-
-- **The Radial hash's gamma default, exponent convention and blur sigma now match the
-  reference implementation, and every radial value changes again.** Three independent
-  divergences from pHash's own radial digest, found together: the gamma default was 2.2
-  (an unrelated sRGB display value, chosen before Radial had any reference implementation
-  to diverge from) where pHash defaults to 1.0 — an identity transform; pixels were raised
-  to `1.0 / gamma` where pHash raises them to `gamma` directly, so the same numeric value
-  passed to `ph_context_set_gamma()` meant a different exponent either way; and gamma was
-  applied against a fixed 0..255 range rather than normalised by the buffer's own maximum
-  and rescaled back, as pHash does. All three are now fixed together — at the default they
-  are algebraically identical (`(v/max)^1.0 * max == v` for any `max > 0`), so fixing only
-  the default would have produced the same default behaviour, but the convention and
-  normalisation also matter for any caller passing a non-default gamma explicitly, and
-  fixing them separately would have meant two golden-hash-breaking releases instead of
-  one. The blur that precedes gamma is also no longer a fixed, unparameterised 3×3 kernel
-  (effective sigma ≈ 0.707): `ph_context_set_radial_params()` takes a third argument,
-  `sigma`, default 3.5 — pHash's own header default — applied through the same
-  sigma-parameterised Gaussian blur mHash already used. Measured delta from the gamma
-  default change alone, real photo fixtures: mean PCC-distance 0.08–0.10, the same order
-  of magnitude as this library's normal intra-class variation from benign transforms.
-  History, the trust placed in pHash's own code as the source for these two parameters,
-  and the full measurement are in `docs/algorithm-provenance.md` §7.
+- **The Radial hash is reimplemented after its source, and every radial value changes.**
+  It takes the variance along one projection line per degree over 180°, standardises that
+  vector, applies a 1-D DCT and keeps the first 40 coefficients — always a 40-byte
+  digest (De Roover et al. 2005, as pHash implements it). 1.x took 40 angles, no
+  transform, and a digest one byte per angle.
+  `ph_context_set_radial_params()`'s first argument is the number of angles (40..131072,
+  default 180), and it takes a new third argument, `sigma`, the Gaussian blur before the
+  projections (default 3.5, pHash's own default; 1.x used a fixed 3×3 kernel). Gamma
+  follows pHash: default 1.0, pixels normalised by the buffer's maximum and raised to
+  `gamma` (1.x raised them to `1/gamma`, default 2.2). Compare digests with
+  **`ph_radial_similarity()`** — the peak of their cross-correlation over cyclic shifts,
+  with the source's threshold as `PH_RADIAL_PCC_THRESHOLD` (0.9); the bit and vector
+  metrics accept a radial digest but return a number that does not mean what it appears
+  to. The hash tolerates a few degrees of rotation plus an exact half turn (measured on a
+  photograph: 1° → 0.993, 5° → 0.870, 15° → 0.437, 90° → 0.243, 180° → 0.993, against
+  0.69 for an unrelated image).
   *Restore the old behaviour:* not possible; recompute any stored radial digests. A caller
-  who explicitly set gamma or relied on the old 3×3 blur must also review that call.
+  that sets gamma explicitly must review the value: the same number means the inverse
+  exponent.
 
-- **Automatic EXIF orientation is now on by default.** Images carrying an
-  `Orientation` tag other than 1 (most photos straight from phones and cameras) are
-  rotated/mirrored before hashing, so a hash now describes what a viewer displays
-  rather than the raw sensor buffer. **Every hash you have stored for such an image
-  changes.** There is no error and no warning — only a silently lower recall in
-  deduplication, so plan a rehash of the affected corpus.
-  *Restore the old behaviour:* `ph_context_set_auto_orient(ctx, 0)` after
-  `ph_create()`.
+- **Automatic EXIF orientation is on by default.** Images carrying an `Orientation` tag
+  other than 1 (most photos straight from phones and cameras) are rotated/mirrored before
+  hashing, so a hash describes what a viewer displays rather than the stored pixels.
+  **Every hash you have stored for such an image changes.** There is no error and no
+  warning — only a silently lower recall in deduplication, so plan a rehash of the
+  affected corpus.
+  *Restore the old behaviour:* `ph_context_set_auto_orient(ctx, 0)` after `ph_create()`.
 
-- **`PH_ERR_DECODE_FAILED` was removed from `ph_error_t`.** It had already stopped
-  being returned from anywhere while still being declared, so
-  `if (err == PH_ERR_DECODE_FAILED)` had quietly stopped matching with no compiler
-  diagnostic. Removing the name makes the break visible at compile time. Its numeric
-  value `-2` is retired and will not be reused.
-  *Restore the old behaviour:* not possible, and not desirable — replace the check
-  with the specific codes that superseded it: `PH_ERR_CORRUPT_DATA`,
-  `PH_ERR_UNSUPPORTED_FORMAT`, `PH_ERR_IMAGE_TOO_LARGE`, `PH_ERR_IO`,
-  `PH_ERR_DECODER_UNAVAILABLE`. A code-to-code mapping table is in `MIGRATION.md`.
+- **`PH_ERR_DECODE_FAILED` is removed from `ph_error_t`.** In 1.x it was returned for every
+  load failure; 2.0 returns the specific cause (see "Specific error codes" under Added).
+  Removing the name makes the change visible at compile time. Its value `-2` is reserved
+  and never reused.
+  *Restore the old behaviour:* not possible, and not desirable — replace the check with the
+  specific codes. A code-to-code mapping table is in `MIGRATION.md`.
 
 - **Hashing a context with no image returns `PH_ERR_EMPTY_IMAGE`, and
-  `PH_ERR_NOT_IMPLEMENTED` was removed.** Every `ph_compute_*` function and
-  `ph_compute_multi()` used to report "no image loaded" as `PH_ERR_INVALID_ARGUMENT`,
-  indistinguishable from a NULL pointer, while `PH_ERR_EMPTY_IMAGE` — the code that
-  describes exactly that — was never returned. Arguments are still checked first, so a
-  NULL pointer stays `PH_ERR_INVALID_ARGUMENT`. `PH_ERR_NOT_IMPLEMENTED` was returned
-  from nowhere; its value `-4` is retired like `-2`.
+  `PH_ERR_NOT_IMPLEMENTED` is removed.** Every `ph_compute_*` function reported "no image
+  loaded" as `PH_ERR_INVALID_ARGUMENT`, indistinguishable from a NULL pointer, while
+  `PH_ERR_EMPTY_IMAGE` — the code that describes exactly that — was never returned.
+  Arguments are checked first, so a NULL pointer stays `PH_ERR_INVALID_ARGUMENT`.
+  `PH_ERR_NOT_IMPLEMENTED` was returned from nowhere; its value `-4` is reserved like `-2`.
   *Restore the old behaviour:* treat `PH_ERR_EMPTY_IMAGE` the way you treated
   `PH_ERR_INVALID_ARGUMENT` after a hash call, and delete any check for
   `PH_ERR_NOT_IMPLEMENTED`. See `MIGRATION.md`.
 
-- **Every `ph_context_set_*` function returns `ph_error_t` instead of `void`, and
-  invalid input is now rejected.** One contract for all of them: a valid argument
-  returns `PH_SUCCESS`; anything else returns `PH_ERR_INVALID_ARGUMENT` and leaves
-  the configuration **completely unchanged** — never clamped, never partially
-  applied, never reset to defaults. Previously invalid input was swallowed silently,
-  so a caller could hash a whole batch with a configuration it never asked for.
-  Existing call sites still compile (the setters are deliberately not
-  `warn_unused_result`), but calls that used to be silently ignored now leave the
-  previous value in place. The bounds are implementation limits, not style:
-  `gamma` finite and in (0.001, 1000]; gray weights each ≥ 0 with a sum in
-  (0, INT_MAX/255]; `dct_size` 1..32; `reduction_size` 2..8 and ≤ `dct_size`;
-  radial `projections` 40..131072 (the lower bound is the fixed coefficient count
-  the DCT keeps, `PH_RADIAL_COEFFS` — fewer angles than that can't produce the hash
-  at all); radial `samples` 2..65536; `block_size` 2..32 (the lower bound is 2, not
-  1 — a single block's mean equals itself, so a one-block grid can't threshold
-  against a median; the upper bound was widened from 22 to 32 when the digest grew
-  to 128 bytes, see above); `whash_mode` a declared enumerator only.
-  *Restore the old behaviour:* not possible — pass values inside the documented
-  bounds, and check the return value wherever the argument comes from outside your
-  own code.
+- **Every `ph_context_set_*` function returns `ph_error_t` instead of `void`, and invalid
+  input is rejected.** 1.x ignored an out-of-range value, or, for the gray weights,
+  replaced it with the defaults, so a caller could hash a whole batch with a configuration
+  it never asked for. One contract for all of them: a valid argument returns
+  `PH_SUCCESS`; anything else returns `PH_ERR_INVALID_ARGUMENT` and leaves the
+  configuration **completely unchanged** — never clamped, never partially applied, never
+  reset to defaults. Existing call sites still compile (the setters are deliberately not
+  `warn_unused_result`). The bounds are implementation limits: `gamma` finite and in
+  (0.001, 1000]; gray weights each ≥ 0 with a sum in (0, INT_MAX/255]; `dct_size` 1..32;
+  `reduction_size` 2..8 and ≤ `dct_size`; radial `projections` 40..131072 (the lower bound
+  is the coefficient count the DCT keeps), `samples` 2..65536, `sigma` in (0, 64/3];
+  `block_size` 2..32 (a single block cannot threshold against a median; 32×32 bits is the
+  largest grid a digest holds — 1.x accepted any positive value and truncated the BMH
+  digest to 64 bytes above 22×22); `whash_mode` a declared enumerator only.
+  *Restore the old behaviour:* not possible — pass values inside the documented bounds,
+  and check the return value wherever the argument comes from outside your own code.
 
-- **Public helpers reading a `ph_digest_t` reject `size > PH_DIGEST_MAX_BYTES` (64)
-  instead of truncating.** `ph_digest_t` is a flat struct that FFI bindings assemble
-  by hand, and `size` could hold values `data` could not — `size = 200` read up to
-  128 bytes past the end of the struct. Functions returning `ph_error_t` now return
-  `PH_ERR_INVALID_ARGUMENT`; distance/similarity functions return `-1`. A `size` of
-  `0` is also uniformly `-1` from every comparison function now (it used to be `0`
-  from `ph_hamming_distance_digest()` and `ph_l2_distance()`, i.e. "identical" for
-  two digests without a single bit, while `ph_similarity_digest()` already returned
-  `-1`).
-  *Restore the old behaviour:* not possible — it was an out-of-bounds read. Make
-  sure hand-assembled digests carry a `size` of at most `PH_DIGEST_MAX_BYTES`.
+- **Public helpers reading a `ph_digest_t` reject `size > PH_DIGEST_MAX_BYTES` instead of
+  reading past `data`.** `ph_digest_t` is a flat struct that FFI bindings assemble by
+  hand, and in 1.x, with 64 data bytes, `size = 200` read 136 bytes past the end of the
+  array. Functions returning `ph_error_t` return `PH_ERR_INVALID_ARGUMENT`;
+  distance/similarity functions return `-1`. A `size` of `0` is `-1` from every
+  comparison function (1.x returned `0`, i.e. "identical", from
+  `ph_hamming_distance_digest()` and `ph_l2_distance()` for two digests without a bit).
+  *Restore the old behaviour:* not possible — it was an out-of-bounds read. Make sure
+  hand-assembled digests carry a `size` of at most `PH_DIGEST_MAX_BYTES`.
 
-- **The color algorithms refuse grayscale images.** `ph_compute_color_hash()` and
-  `ph_compute_color_moments_hash()` (and `ph_compute_multi()` with
-  `PH_HASH_COLOR_HASH`) return the new `PH_ERR_REQUIRES_COLOR` when the loaded image
-  has fewer than 3 channels, and leave the output untouched. They previously read
-  r/g/b out of one replicated channel and returned `PH_SUCCESS` with an outwardly
-  valid but meaningless result.
-  *Restore the old behaviour:* not possible — load the image in color
+- **The colour algorithms refuse grayscale images.** `ph_compute_color_hash()` and
+  `ph_compute_color_moments_hash()` return the new `PH_ERR_REQUIRES_COLOR` when the loaded
+  image has fewer than 3 channels, and leave the output untouched. 1.x read r/g/b out of
+  one replicated channel and returned `PH_SUCCESS` with an outwardly valid but meaningless
+  result.
+  *Restore the old behaviour:* not possible — load the image in colour
   (`ph_context_set_load_grayscale(ctx, 0)`, the default, or pass 3/4 channels to
-  `ph_load_from_pixels()`) before asking for a color hash.
+  `ph_load_from_pixels()`) before asking for a colour hash.
 
-- **`max_pixels = 0` no longer means "no limit".** It means "no limit of my own": an
-  implementation ceiling of `INT_MAX` (2147483647) pixels always applies and also
-  caps an explicitly configured larger value. An image above it is rejected with
-  `PH_ERR_IMAGE_TOO_LARGE`. Pixel indexing in the hot loops is done in `int`, so
-  such an image previously overflowed it — undefined behaviour and a heap overflow
-  reachable through the documented "0 = unlimited" mode. The default limit
-  (256 MP) is eight times below the ceiling, so only callers who deliberately raised
-  or disabled the limit are affected.
-  *Restore the old behaviour:* not possible, by design — the previous behaviour was
-  undefined.
+- **Images above 256 Mi pixels are rejected by default.** 1.x decoded any size. 2.0
+  refuses an image whose width × height exceeds `max_pixels` (default 268,435,456) before
+  allocating it, with `PH_ERR_IMAGE_TOO_LARGE`; see `ph_context_set_max_pixels()` under
+  Added.
+  *Restore the old behaviour:* raise the limit with `ph_context_set_max_pixels()`; an
+  implementation ceiling of `INT_MAX` pixels always applies.
 
 - **A single image dimension may not exceed 1000000 pixels.** The cap applies to every
   format and to both `ph_load_from_file()` and `ph_load_from_memory()`, on top of
-  `max_pixels` and independently of it — setting `max_pixels` higher, or to `0`, does
-  not lift it. An image beyond it is rejected with `PH_ERR_IMAGE_TOO_LARGE`. The area
-  limit on its own permits an absurd aspect ratio: a 268435456 × 1 image sits exactly
-  on the default 256 MP limit, yet makes the decoder size a single row of ~800 MB.
-  Real photographs are nowhere near this, so in practice only synthetic input is
-  affected. `ph_load_from_pixels()` is not subject to the cap.
-  *Restore the old behaviour:* not possible — split such an image yourself, or decode
-  it with your own decoder and pass the pixels to `ph_load_from_pixels()`.
+  `max_pixels` and independently of it — setting `max_pixels` higher, or to `0`, does not
+  lift it. The area limit on its own permits an absurd aspect ratio: a 268435456 × 1 image
+  sits exactly on the default limit, yet makes the decoder size a single row of ~800 MB.
+  Real photographs are nowhere near this. `ph_load_from_pixels()` is not subject to the
+  cap.
+  *Restore the old behaviour:* not possible — split such an image yourself, or decode it
+  with your own decoder and pass the pixels to `ph_load_from_pixels()`.
 
-- **`PH_VERSION_NUMBER` uses a new scheme:** `major*1000000 + minor*1000 + patch`
-  (2.0.0 → 2000000), replacing `major*10000 + minor*100 + patch`. The old scheme
-  collided as soon as a minor or patch exceeded 99 — 1.100.0 and 2.0.0 both produced
-  20000.
-  *Restore the old behaviour:* not possible — recompute any compile-time
-  `#if PH_VERSION_NUMBER >= ...` check against the new scheme.
+- **Non-regular files are rejected instead of decoded.** Passing a FIFO, a character
+  device or `/dev/stdin` to `ph_load_from_file()` returns `PH_ERR_IO`; 1.x's `stb_image`
+  fallback read such a path. Regular files are unaffected.
+  *Restore the old behaviour:* not possible by path — read the stream into memory yourself
+  and call `ph_load_from_memory()`, the supported way to hash something that is not a file
+  on disk.
 
-- **Shared builds now carry a versioned soname, `SOVERSION = 2`**
-  (`libphash.so.2` / `libphash.2.dylib`). Consumers linked against an unversioned
-  1.x shared library must relink. This is the only signal a consumer's linker gets
-  when the library breaks compatibility across a major version, so it is intentional
-  and permanent.
-  *Restore the old behaviour:* not applicable — relink against the installed 2.x
-  library. `find_package(phash 1.x REQUIRED)` correctly refuses to pick up the 2.0.0
-  package (`COMPATIBILITY SameMajorVersion`).
+- **`ph_can_use_libjpeg()`/`ph_can_use_libpng()` are renamed `ph_can_use_jpeg()`/
+  `ph_can_use_png()`**, so all three capability checks, with `ph_can_use_webp()`, are named
+  after the format. `ph_can_use_libpng()` answered `1` in a build using spng, where libpng
+  is not linked at all; the new name says what it answers — whether a native PNG decoder,
+  libpng or spng, is compiled in.
+  *Restore the old behaviour:* rename the calls; the return values are unchanged.
 
-- **The test-only mock decoder is no longer compiled into the library.** The
-  recommended Release build used to ship a backend that intercepted any buffer
-  starting with `DE AD` and "decoded" it into a 1×1 image. Such a buffer now yields
-  `PH_ERR_UNSUPPORTED_FORMAT`.
-  *Restore the old behaviour:* configure with `-DPHASH_ENABLE_MOCK_BACKEND=ON` (OFF
-  by default, deliberately not tied to `PHASH_BUILD_TESTS`, and it warns at configure
-  time). It is for testing only and must not be enabled in a shipped build.
+- **Public enums are 32 bits wide under `-fshort-enums`.** Each public enum ends in a
+  `*_FORCE_INT32_` enumerator that is not a real value. Under `-fshort-enums` — the default
+  ABI on ARM EABI — 1.x's enums shrank to one byte, so a library and a consumer built with
+  different settings silently disagreed on every `ph_error_t` return value. Only code
+  built with that flag sees a change.
+  *Restore the old behaviour:* not applicable — rebuild against the 2.0 header.
 
-- **Enabling both PNG backends is now a configure-time error.** `PHASH_USE_LIBPNG`
-  and `PHASH_USE_SPNG` are mutually exclusive; setting both used to silently pick one.
+- **Shared builds carry a versioned soname, `SOVERSION = 2`** (`libphash.so.2` /
+  `libphash.2.dylib`). Consumers linked against an unversioned 1.x shared library must
+  relink.
+  *Restore the old behaviour:* not applicable — relink against the installed 2.x library.
+
+- **The test-only mock decoder is not compiled into the library.** 1.x registered, in
+  every build, a backend that claimed any buffer starting with `DE AD` and "decoded" it
+  into a 1×1 image. Such a buffer yields `PH_ERR_UNSUPPORTED_FORMAT`.
+  *Restore the old behaviour:* configure with `-DPHASH_ENABLE_MOCK_BACKEND=ON` (OFF by
+  default; it warns at configure time). It is for testing only and must not be enabled in
+  a shipped build.
+
+- **Enabling both PNG backends is a configure-time error.** `PHASH_USE_LIBPNG` and
+  `PHASH_USE_SPNG` are mutually exclusive; 1.x built and linked both and used libpng.
   *Restore the old behaviour:* not applicable — choose one backend explicitly.
+
 - **The JPEG backend option is `PHASH_USE_LIBJPEG_TURBO`** (1.x: `PHASH_USE_TURBOJPEG`),
   named after the codec. Passing the old name stops the configure step and names the new
   one, rather than being ignored and building the default backend set.
   *Restore the old behaviour:* not applicable — pass `-DPHASH_USE_LIBJPEG_TURBO=…`.
-- **Non-regular files are rejected instead of decoded.** Passing a FIFO, a character
-  device or `/dev/stdin` to `ph_load_from_file()` now returns `PH_ERR_IO`. Previously
-  the fallback decoder would read such a path happily, so this turns a former
-  `PH_SUCCESS` into an error for those (exotic) inputs. Regular files are unaffected.
-  *Restore the old behaviour:* not possible by path — read the stream into memory
-  yourself and call `ph_load_from_memory()`, which is the supported way to hash
-  something that is not a file on disk.
-- **`ph_can_use_libjpeg()`/`ph_can_use_libpng()` are renamed `ph_can_use_jpeg()`/
-  `ph_can_use_png()`**, so all three capability checks, with `ph_can_use_webp()`, are
-  named after the format. `ph_can_use_libpng()` answered `1` in a build using spng, where
-  libpng is not linked at all; the new name says what it answers — whether a native PNG
-  decoder, libpng or spng, is compiled in.
-  *Restore the old behaviour:* rename the calls; the return values are unchanged.
-- **Public enums are 32 bits wide under `-fshort-enums`.** Each public enum now ends in a
-  `*_FORCE_INT32_` enumerator that is not a real value. Under `-fshort-enums` — the
-  default ABI on ARM EABI — the enums used to shrink to one byte, so a library and a
-  consumer built with different settings silently disagreed on every `ph_error_t` return
-  value and on the batch `status` field. Only code built with that flag sees a change.
-  *Restore the old behaviour:* not applicable — rebuild against the 2.0 header.
 
 ### Added
 
-- **Prebuilt release artifacts.** Each tagged release now publishes static and shared
+- **Prebuilt release artifacts.** Each tagged release publishes static and shared
   archives (headers, library, `LICENSE`, `THIRD-PARTY-NOTICES.md`) for linux-x86_64,
-  linux-arm64, macos-arm64, and windows-x86_64 on the GitHub Releases page, each built
+  linux-arm64, macos-arm64 and windows-x86_64 on the GitHub Releases page, each built
   with the full vendored decoder set and smoke-tested in isolation before publishing.
-  See the README's "Prebuilt binaries" section. macos-x86_64 was in the originally
-  planned matrix but is not shipped: GitHub's Intel-Mac hosted runner pool consistently
-  left that job queued for 20+ minutes with no runner ever assigned during validation,
-  while every other platform (including macos-arm64, the identical build recipe)
-  started within seconds — an infrastructure constraint outside this project's control.
-
-- **`ph_context_set_decode_scale()`** lets a caller opt into decoding JPEG at 1/2, 1/4 or
-  1/8 linear resolution instead of natively, trading accuracy for decode speed via
-  libjpeg-turbo's DCT-domain scaling. Default is `PH_DECODE_SCALE_FULL` — behavior and
-  golden hashes are unchanged unless a caller sets this explicitly. Only the JPEG backend
-  honors it; PNG has no format-level scaled decode and libwebp's scaling API resizes
-  *after* a full decode (no decode-time saving), so both backends decode at full
-  resolution regardless of the setting. Measured tradeoffs (speed saturates around 18%
-  at 1/8 because entropy decoding isn't skipped; accuracy holds on photographic content
-  but pHash and mHash can exceed this library's own same-scene-transform contract on
-  fine periodic textures) are in the setter's doc comment in `include/libphash.h`.
-  Radial, ColorMoments and ColorHash are not
-  resize-based, so at any scale other than full they operate directly on the reduced
-  buffer as their actual input, not as an approximation of the full-resolution result —
-  their accuracy at reduced scale has not been measured.
-
-- **`ph_context_set_whash_remove_max_haar_ll()`** exposes ImageHash's `remove_max_haar_ll`,
-  which zeroes the coarsest Haar LL band before the working decomposition. It defaults to
-  **off**, and turning it on does nothing: zeroing that single coefficient and
-  reconstructing subtracts the image mean from every sample, a constant subtraction shifts
-  the working LL band and its median alike, and a hash thresholded at the median is blind
-  to it — which is equally true of ImageHash, where the option is on by default. All the
-  test fixtures hash bit for bit identically either way. It is off rather than on because
-  the only thing it can change is the tie-breaking of coefficients that land exactly on the
-  median, which the extra transform pair decides by rounding error: on the synthetic corpus
-  that moves 49 of 192 images and costs separability 4.34 → 3.43 for no gain. The setter
-  exists for callers who need to mirror ImageHash's configuration. wHash values are
-  unchanged from 1.x by this.
-
-- **A stated scope and threat model.** The README now says what the library is for —
-  deduplicating a collection you control — and, more importantly, what it is not for.
-  Every hash here is deterministic and unkeyed, which is what makes deduplication work
-  and what makes the hashes straightforward to defeat deliberately. Do not use them as a
-  moderation filter, a copyright blocklist, or an integrity check on untrusted input.
-  Nothing about the code changed; the exclusion was always true and is now written down.
-
-- **`docs/algorithm-provenance.md`** traces each of the nine hashes to its primary
-  source and records, per algorithm, where this implementation departs from it. It
-  names the departures that are known to contradict a published formula — most of them
-  in the radial hash — so that a choice of algorithm can be made with the gaps visible
-  rather than discovered. Two attributions are corrected there: wHash has no primary
-  source, and mHash is not a Marr-Hildreth hash. `docs/references.md` is the matching
-  bibliography, and every `src/hashes/*.c` file now opens with its own citation.
+  See the README's "Prebuilt binaries" section.
 
 - **Batch API.** `ph_hash_files()` and `ph_hash_buffers()` hash a batch of files or
-  in-memory buffers, optionally across an internal thread pool (`threads`: 0 = one
-  worker per detected core, 1 = sequential on the calling thread, >1 = that many
-  workers). Per-item failures are reported in `ph_batch_item_t::status` /
-  `ph_batch_buffer_item_t::status` and never abort the batch; the return value
-  reports only failures that stopped the batch from being worked on at all.
-  Each item's `hashes[]` holds `PH_BATCH_HASHES_CAPACITY` (8) slots rather than one
-  per currently defined algorithm, so new `uint64_t` algorithms can be added inside
-  2.x without changing the structs' size or layout.
-- **`ph_hash_files_ex()`/`ph_hash_buffers_ex()`** take a `ph_batch_options_t`
-  (initialise it with `ph_batch_options_init()`): a template context whose whole
-  configuration, `max_pixels` included, applies to every item; a `should_continue`
-  callback that stops the batch, returning the new **`PH_ERR_CANCELLED`** and storing it
-  in every item not started; and an `on_progress` callback. The plain
-  `ph_hash_files()`/`ph_hash_buffers()` keep running on the default configuration, and
-  their documentation now says so, along with how peak memory grows with the thread
-  count.
-- **`ph_compute_multi()`** computes several `uint64_t` algorithms in one call,
-  selected by a `ph_hash_flags_t` bitmask, sharing the grayscale conversion across
-  them. Results are bit-for-bit identical to the individual `ph_compute_*` calls.
-- **`ph_load_from_pixels()`** hashes an already-decoded pixel buffer (OpenCV, PIL,
-  numpy, a video frame), skipping the encode/decode round-trip. Accepts 1, 3 or 4
-  channels and an arbitrary row stride.
-- **Hex and similarity helpers:** `ph_digest_to_hex()`, `ph_digest_from_hex()`,
-  `ph_hash_to_hex()`, `ph_similarity()`, `ph_similarity_digest()`. A digest's text form
-  is `<kind>:<hex>` (e.g. `coefficients:1f80…`), and decoding restores the kind, so
-  digests read back from storage still refuse the wrong comparison metric.
-  `PH_DIGEST_HEX_BUFFER_SIZE` is a buffer size that fits any digest.
-- **`libphash.h` includes `phash_version.h`**, so `PH_VERSION_NUMBER` and the other
-  version macros are available to anyone who includes the public header. The two files
-  are installed side by side; code that copies the header by hand needs both.
+  in-memory buffers, optionally across an internal thread pool (`threads`: 0 = one worker
+  per CPU the process may use — the affinity mask on Linux and Windows, the cgroup CPU
+  quota on Linux; 1 = sequential on the calling thread; >1 = that many workers). On
+  Windows the automatic count covers the current processor group (at most 64 logical
+  processors); pass an explicit count for more. Per-item failures are reported in
+  `ph_batch_item_t::status` / `ph_batch_buffer_item_t::status` and never abort the batch;
+  the return value reports only failures that stopped the batch from being worked on at
+  all, and the arguments are validated even for an empty batch. Each item's `hashes[]`
+  holds `PH_BATCH_HASHES_CAPACITY` (8) slots rather than one per currently defined
+  algorithm, so new `uint64_t` algorithms can be added inside 2.x without changing the
+  structs' size or layout. Peak memory grows linearly with the worker count; the header
+  documents the bound.
+- **`ph_hash_files_ex()`/`ph_hash_buffers_ex()`** take a `ph_batch_options_t` (initialise
+  it with `ph_batch_options_init()`): a template context whose whole configuration,
+  `max_pixels` included, applies to every item; a `should_continue` callback that stops the
+  batch, returning the new **`PH_ERR_CANCELLED`** and storing it in every item not started;
+  and an `on_progress` callback. The plain `ph_hash_files()`/`ph_hash_buffers()` run on the
+  default configuration.
+- **`ph_compute_multi()`** computes several of the four `uint64_t` algorithms (aHash,
+  dHash, pHash, wHash) in one call, selected by a `ph_hash_flags_t` bitmask, sharing the
+  grayscale conversion across them. Results are bit-for-bit identical to the individual
+  `ph_compute_*` calls.
 - **Algorithms as values.** `ph_algorithm_t` names every algorithm (contiguous from 0 to
   `PH_ALGORITHM_COUNT - 1`; for the four `uint64_t` ones the `ph_hash_flags_t` bit is
   `1 << value`). `ph_compute_digest()` computes any of them into a `ph_digest_t` — the
   `uint64_t` algorithms as 8-byte `bits` digests — so one code path can store and compare
-  every algorithm. `ph_digest_info()` reports a digest's size and kind without an image,
-  from the same code that sets them on every computed digest. `ph_algorithm_name()`/
-  `ph_algorithm_from_name()` convert to and from stable names such as `"radial"`.
-- **`ph_hash_from_hex()`** decodes the 16-digit text `ph_hash_to_hex()` writes, and
-  **`ph_context_get_gray_weights()`** reads back the grayscale weights a context uses —
+  every algorithm. `ph_digest_info()` reports a digest's size and kind without an image.
+  `ph_algorithm_name()`/`ph_algorithm_from_name()` convert to and from stable names such
+  as `"radial"`.
+- **`ph_load_from_pixels()`** hashes an already-decoded pixel buffer (OpenCV, PIL, numpy,
+  a video frame), skipping the encode/decode round-trip. Accepts 1, 3 or 4 channels and an
+  arbitrary row stride; the `max_pixels` limit applies to it too.
+- **`ph_radial_similarity()`** and **`ph_histogram_intersection()`**, the comparisons the
+  Radial hash and ColorHash are defined with (see BREAKING CHANGES). Histogram
+  intersection is computed exactly: identical or proportionally scaled histograms score
+  exactly `1.0`, swapping the arguments gives a bit-identical result, and the value is the
+  same on every platform.
+- **Hex and similarity helpers:** `ph_digest_to_hex()`, `ph_digest_from_hex()`,
+  `ph_hash_to_hex()`, `ph_hash_from_hex()`, `ph_similarity()`, `ph_similarity_digest()`. A
+  digest's text form is `<kind>:<hex>` (e.g. `coefficients:1f80…`), and decoding restores
+  the kind, so digests read back from storage still refuse the wrong comparison metric.
+  Hex digits are accepted in either case. `PH_DIGEST_HEX_BUFFER_SIZE` is a buffer size that
+  fits any digest.
+- **`ph_context_get_gray_weights()`** reads back the grayscale weights a context uses —
   the normalized values, which differ from what was passed to the setter.
-- **`ph_get_build_info()`** returns one line describing how the library was built —
-  version, JPEG/PNG/WebP backends, zlib, whether the batch functions can use threads,
-  the SIMD target, and whether the test-only mock decoder is compiled in — for logs and
-  bug reports.
-- **`ph_get_last_error_message()`** returns a short diagnostic string about the most
-  recent failure on a context (e.g. the decoder-reported reason a load failed).
-- **`ph_version_number()`** returns the version as one comparable integer, for FFI
-  callers that would otherwise parse the string.
-- **Specific error codes** replacing the old decode catch-all: `PH_ERR_IMAGE_TOO_LARGE`,
+- **`ph_context_set_decode_scale()`** lets a caller opt into decoding JPEG at 1/2, 1/4 or
+  1/8 linear resolution instead of natively, trading accuracy for decode speed via
+  libjpeg-turbo's DCT-domain scaling. Default is `PH_DECODE_SCALE_FULL`. Only the JPEG
+  backend honors it; PNG has no format-level scaled decode and libwebp's scaling API
+  resizes *after* a full decode (no decode-time saving), so both backends decode at full
+  resolution regardless of the setting. Measured tradeoffs (speed saturates around 18% at
+  1/8 because entropy decoding isn't skipped; accuracy holds on photographic content but
+  pHash and mHash can exceed this library's own same-scene-transform contract on fine
+  periodic textures) are in the setter's doc comment in `include/libphash.h`. Radial,
+  ColorMoments and ColorHash are not resize-based, so at any scale other than full they
+  operate directly on the reduced buffer as their actual input — their accuracy at reduced
+  scale has not been measured.
+- **`ph_context_set_whash_remove_max_haar_ll()`** exposes ImageHash's `remove_max_haar_ll`,
+  which zeroes the coarsest Haar LL band before the working decomposition. It defaults to
+  **off**, and turning it on does not change a bit except by rounding a tie: zeroing that
+  single coefficient and reconstructing subtracts the image mean from every sample, a
+  constant subtraction shifts the working LL band and its median alike, and a hash
+  thresholded at the median is blind to it — equally true of ImageHash, where the option is
+  on by default. The setter exists for callers who need to mirror ImageHash's
+  configuration.
+- **`ph_context_set_max_pixels()`** — a decompression-bomb guard applied before any pixel
+  buffer is allocated, in every decoder and every build. Defaults to 256 Mi pixels;
+  exceeding it fails with `PH_ERR_IMAGE_TOO_LARGE`. `0` removes the caller's own limit, but
+  an implementation ceiling of `INT_MAX` (2147483647) pixels always applies and also caps
+  any larger configured value, because pixel indexing inside the library is done in `int`.
+- **EXIF/metadata orientation**, applied automatically by default (see BREAKING CHANGES)
+  and controllable via `ph_context_set_auto_orient()`. Orientation is read from JPEG APP1,
+  the WebP `EXIF` chunk and the PNG `eXIf` chunk. Missing or malformed metadata is treated
+  as "no transform needed", never as an error; an allocation failure while applying a real
+  orientation fails the load with `PH_ERR_ALLOCATION_FAILED`, so an image is never hashed
+  in an orientation the caller did not ask for.
+- **Specific error codes** replacing 1.x's single decode failure: `PH_ERR_IMAGE_TOO_LARGE`,
   `PH_ERR_UNSUPPORTED_FORMAT`, `PH_ERR_CORRUPT_DATA`, `PH_ERR_DECODER_UNAVAILABLE`,
-  `PH_ERR_IO`, plus `PH_ERR_REQUIRES_COLOR`. `ph_error_t` now documents its ABI rule:
-  values are spelled out explicitly, new codes are only appended, and a removed
-  code's value stays retired.
-- **EXIF/metadata orientation support**, applied automatically by default (see
-  BREAKING CHANGES) and controllable via `ph_context_set_auto_orient()`. Orientation
-  is read from JPEG APP1, the WebP `EXIF` chunk and the PNG `eXIf` chunk. Missing or
-  malformed metadata is treated as "no transform needed", never as an error.
-- **`ph_context_set_max_pixels()`** — a decompression-bomb guard applied before any
-  pixel buffer is allocated. Defaults to 256 MP; exceeding it fails with
-  `PH_ERR_IMAGE_TOO_LARGE`.
-- **More input formats for free:** `stb_image` is now registered as an unconditional
-  last-resort decoder backend, adding BMP/GIF/TGA/PSD/HDR/PIC/PNM and covering
-  JPEG/PNG in builds without a native decoder for them. WebP is deliberately excluded
-  from the fallback so a WebP file in a build without `PHASH_USE_WEBP` reports
-  `PH_ERR_DECODER_UNAVAILABLE` precisely instead of failing generically. TIFF and
-  AVIF/HEIC remain unsupported.
+  `PH_ERR_IO`, plus `PH_ERR_REQUIRES_COLOR` and `PH_ERR_CANCELLED`. Every build and every
+  decoder answers the same input with the same code:
+  - `PH_ERR_IO` — a missing path (including a dangling symlink), no read permission, a
+    non-regular file, an empty file, or a file larger than the address space (a 32-bit
+    build fed something above 4 GB), decided before any decoder sees the bytes;
+  - `PH_ERR_IMAGE_TOO_LARGE` — above `max_pixels`, the per-dimension cap or the `INT_MAX`
+    ceiling, or encoded input over `INT_MAX` bytes;
+  - `PH_ERR_ALLOCATION_FAILED` — a decoder ran out of memory, in every backend (the
+    vendored `stb_image` is patched locally so its fallback path reports this too);
+  - `PH_ERR_DECODER_UNAVAILABLE` — a WebP file in a build without `PHASH_USE_WEBP`.
+  `ph_error_t` documents its ABI rule: values are spelled out explicitly, new codes are
+  only appended, and a value is never reused.
+- **`ph_get_last_error_message()`** returns a short diagnostic string about the most recent
+  failure on a context (e.g. the decoder-reported reason a load failed). Every decoder
+  backend fills it on every failure path, and the message is always valid UTF-8, cut on a
+  character boundary.
+- **`ph_get_build_info()`** returns one line describing how the library was built —
+  version, JPEG/PNG/WebP backends, zlib, whether the batch functions can use threads, the
+  SIMD target, and whether the test-only mock decoder is compiled in — for logs and bug
+  reports.
+- **`ph_version_number()`** and the **`phash_version.h`** header, included by
+  `libphash.h`: the version as one comparable integer, `major*1000000 + minor*1000 +
+  patch` (2.0.0 → 2000000), at run time and as `PH_VERSION_NUMBER` at compile time. The
+  two headers are installed side by side; code that copies the header by hand needs both.
 - **Packaging:** `install()` rules, a `phashConfig.cmake` package usable via
-  `find_package(phash)`, and a relocatable `libphash.pc` for pkg-config. The
-  generated `phash_version.h` is installed next to `libphash.h`, so consumers get a
-  compile-time version macro and not just the runtime `ph_version()`.
-- **`PHASH_USE_ZLIB_NG` build option** to build libpng/spng against zlib-ng.
-- **`PHASH_STRICT_DEPS` build option** turning the previously silent "TurboJPEG not
-  found, falling back to stb_image" and "zlib-ng submodule not found" warnings into
-  configure-time errors, so a green build actually proves the vendored decoders were
-  built and linked.
+  `find_package(phash)` (`COMPATIBILITY SameMajorVersion`), and a relocatable
+  `libphash.pc` for pkg-config. Both carry the backend libraries the build was configured
+  with, the vendored JPEG codec installed as `-lphash_jpeg` so it cannot shadow a system
+  libjpeg. `PHASH_STATIC_DEFINE` is the macro a build system other than this project's own
+  CMake must define when linking libphash statically on Windows; the exported target and
+  the `.pc` file set it automatically. `add_subdirectory()` works for static and shared
+  parents and leaves the parent project's settings and cache as it found them.
+- **`PHASH_USE_ZLIB_NG` build option** to build libpng/spng against the vendored zlib-ng,
+  safe for concurrent first decodes. The JPEG backend decodes through libjpeg-turbo's
+  libjpeg API, whose archive carries no zlib or spng of its own to compete with it.
+- **`PHASH_STRICT_DEPS` build option** turning the "libjpeg-turbo not found, falling back
+  to stb_image" and "zlib-ng submodule not found" warnings into configure-time errors, so a
+  green build proves the vendored decoders were built and linked.
+- **`docs/algorithm-provenance.md`** traces each of the nine hashes to its primary source
+  and records, per algorithm, where this implementation departs from it; wHash has no
+  primary source. `docs/references.md` is the matching bibliography, and every
+  `src/hashes/*.c` file opens with its own citation.
+- **A stated scope and threat model** in the README: the library is for deduplicating a
+  collection you control. Every hash here is deterministic and unkeyed, which is what
+  makes deduplication work and what makes the hashes straightforward to defeat
+  deliberately; do not use them as a moderation filter, a copyright blocklist, or an
+  integrity check on untrusted input.
 - **Fuzzing and sanitizers:** a libFuzzer harness for the decode path
   (`PHASH_BUILD_FUZZERS`) and ASan/UBSan CI jobs.
-- **CI across platforms:** Linux x86_64 (gcc and clang), Linux arm64 and macOS arm64
-  for the full build — so the NEON paths actually run — plus a minimal
-  (stb_image-only) matrix over Linux/macOS/Windows that exercises the MSVC path, an
-  `install()`/pkg-config/`find_package` smoke test, an `add_subdirectory()` smoke
-  test, and a benchmark job that gates on a regression against the base branch.
+- **CI across platforms:** Linux x86_64 (gcc and clang), Linux arm64 and macOS arm64 for
+  the full build — so the NEON paths actually run — plus a minimal (stb_image-only) matrix
+  over Linux/macOS/Windows that exercises the MSVC path, an `install()`/pkg-config/
+  `find_package` smoke test, an `add_subdirectory()` smoke test, and a benchmark job that
+  gates on a regression against the base branch.
 - **A native linux/arm64 Docker development environment.**
 - **Tests:** a perceptual robustness suite and a golden-hash regression suite.
 
 ### Changed
 
-- Vendored decoder submodules bumped to their latest stable tags.
-- `THIRD-PARTY-NOTICES.md` now names the exact version of the two copied stb headers
-  (`stb_image` v2.30, `stb_image_resize2` v2.18), records that both are modified
-  copies, and gives two hashes for each: the file as vendored and the upstream file
-  it was derived from. Everything else under `vendor/` is a submodule, whose revision
-  the repository already records.
-- The library version has a single source of truth: `project(libphash VERSION ...)`
-  in `CMakeLists.txt`, from which `phash_version.h` is generated. There are no
-  version literals in sources, scripts, CI or the README any more.
-- The Radial hash's scratch allocations moved onto the context arena, removing
-  per-call `malloc()`/`free()` traffic from the hot path.
-- Thread defaults now match across build systems, and `libphash.pc` is relocatable.
-- `make debug` and `make coverage` inherit `CFLAGS` instead of replacing it.
-- **Documentation corrections that follow from the provenance work.** `docs/algorithms.md`
-  claimed the radial hash gives "unmatched robustness against rotation (up to 360°)". It
-  does not: that invariance comes from comparing two hashes by the peak of their
-  cross-correlation, and this library compares digests element-wise. The claim is
-  withdrawn until the comparison is implemented. The same page described mHash as
-  configurable through `ph_context_set_block_params`, which mHash ignores.
-- Documentation fix: the gamma setting affects the Radial hash and nothing else.
-  Its default of 2.2 is under review for a future release; it is deliberately not
-  changed in 2.0.0, since changing it would move Radial hashes.
-- The batch API validates its arguments *before* the `n == 0` shortcut, so an empty
-  batch no longer excuses a malformed call.
-- `PH_ERR_IO` is now reported for files that cannot be opened or read, instead of a
-  generic decode failure, and it means the same thing on every platform. The Windows
-  build previously skipped the check entirely and answered
-  `PH_ERR_UNSUPPORTED_FORMAT` or `PH_ERR_CORRUPT_DATA` for a missing file. The cases
-  are: missing path (including a dangling symlink), no read permission, not a regular
-  file, and an empty file. All of them are decided before any decoder sees the bytes,
-  and all of them leave a description in `ph_get_last_error_message()`.
-- Batch thread auto-detection on Windows is documented as covering only the current
-  processor group (at most 64 logical processors); pass an explicit thread count and
-  set affinity yourself if you need more.
-- `ph_load_from_file()` opens the file once instead of up to six times per call, and
-  decodes through exactly the same code path as `ph_load_from_memory()`. Loading is
-  measurably cheaper in builds without the bundled decoders (8-11% faster on a small
-  JPEG); with them the file handling was already a small fraction of the work. The
-  checks that used to accept a path can no longer disagree with the bytes that are
-  actually decoded.
-- Auto-orientation, the `max_pixels` limit and format detection now behave identically
-  whether an image comes from a path or from a buffer, and are covered by a parity test.
-- Applying EXIF orientation is 1.3-7.5x faster, which matters because auto-orientation
-  is on by default: whole-row copies for the flips and a tiled walk for the four
-  transposing orientations, in place of a pixel-at-a-time copy. On a 20 Mp photo the
-  transposing orientations drop from 84-105 ms to 12-20 ms. The transformed pixels are
-  bit-for-bit what they were, so no hash moves.
-- Loading from a file holds the encoded bytes in memory (mapped where the platform
-  allows it) alongside the decoded image, where some build configurations previously
-  read them incrementally. For ordinary images the encoded bytes are a small fraction
-  of the decoded ones, but callers hashing very large files on a tight memory budget
-  should be aware of the change.
-- CMake now pins `CMAKE_C_STANDARD` to 17 (was implicitly whatever the compiler
-  defaulted to, e.g. gnu17 on modern gcc/clang, gnu11 or lower on older ones), with
-  `CMAKE_C_EXTENSIONS` off — nothing in this codebase needs the GNU dialect. A new
-  CI job builds and runs the full test suite under C11/C17/C23 on Linux and macOS to
-  track readiness for raising the default later (Windows/MSVC's C23 support isn't
-  there yet, which is why 23 isn't the default now). Raises the minimum CMake version
-  to 3.21 (needed to recognize the C17/C23 standard values).
-- Clang is now the default compiler in both build systems (`CMakePresets.json`'s
-  `clang` preset; the Makefile's `CC`) — still fully overridable
-  (`-DCMAKE_C_COMPILER=gcc`, `CC=gcc make`, or the `gcc` preset). CI continues to
-  test both compilers on every push.
-- A plain `cmake -B build` now builds the vendored TurboJPEG submodule itself if it
-  isn't built yet, instead of silently falling back to stb_image — previously only
-  the CI workflow did this sub-build, as a separate manual step.
-- **Minimum supported 32-bit x86 CPU is now one with SSE2** (~Pentium 4/Athlon 64,
-  2000-2003 onward). Both build systems force `-mfpmath=sse -msse2` there to avoid
-  x87 extended-precision float math, whose results depend on the compiler/CPU in a
-  way SSE2's don't — see "Fixed" for the hash-divergence bug this closes. Every other
-  architecture this library targets was already unaffected (fixed-width float ABI).
-- Documented: two hash algorithms can differ by a few bits between CPU architectures
-  for near-uniform/degenerate input (e.g. a single flat colour), because floating-point
+- Vendored decoder submodules are at their latest stable tags.
+- `THIRD-PARTY-NOTICES.md` names the exact version of the two copied stb headers
+  (`stb_image` v2.30, `stb_image_resize2` v2.18), records that both are modified copies,
+  and gives two hashes for each: the file as vendored and the upstream file it was derived
+  from.
+- **pHash excludes the DC coefficient from the median it thresholds against**, as pHash's
+  own `ph_dct_imagehash()` does; 1.x included it. A median is not dragged by an outlier,
+  so this can move a bit only on an exact tie: across 807 photographs no pHash value
+  changes against a 1.x build without FMA contraction.
+- `ph_load_from_file()` opens the file once (1.x could open it twice) and decodes through
+  exactly the same code path as `ph_load_from_memory()`, so auto-orientation, the size
+  limits and format detection behave identically for a path and a buffer. It holds the
+  encoded bytes in memory (mapped where the platform allows it) alongside the decoded
+  image, where 1.x's `stb_image` path read them incrementally; for ordinary images the
+  encoded bytes are a small fraction of the decoded ones, but callers hashing very large
+  files on a tight memory budget should be aware of it.
+- CMake pins `CMAKE_C_STANDARD` to 17 (1.x left it to the compiler's default), with
+  `CMAKE_C_EXTENSIONS` off; the Makefile uses `-std=c17` too. The minimum CMake version is
+  3.21 (1.x: 3.10), needed to recognize the C17/C23 standard values.
+- Each CMake build type gets its own optimisation level (`Debug` unoptimised, `Release`
+  `-O3`, `RelWithDebInfo` `-O2`, `MinSizeRel` `-Os`); 1.x forced `-O3` on top of every
+  build type. A standalone configure that names no build type defaults to `Release`; under
+  `add_subdirectory()` the parent's build type applies. The project's warning flags are not
+  applied to the vendored decoders.
+- Clang is the default compiler in both build systems (`CMakePresets.json`'s `clang`
+  preset; the Makefile's `CC`; 1.x: `gcc`) — still fully overridable
+  (`-DCMAKE_C_COMPILER=gcc`, `CC=gcc make`, or the `gcc` preset).
+- A plain `cmake -B build` builds the vendored libjpeg-turbo submodule itself if it isn't
+  built yet, instead of warning and falling back to stb_image.
+- `make debug` inherits `CFLAGS` instead of replacing it.
+- **libphash builds with `-ffp-contract=off`**, so GCC and Clang builds produce identical
+  hashes on arm64. On arm64 a 1.x build made by a compiler that contracts multiply-adds
+  into FMA (Clang's default) can give different pHash values on some images (20 of 807
+  photographs, all PNG, in one measurement); x86-64 hashes are unaffected.
+- **Minimum supported 32-bit x86 CPU is one with SSE2** (~Pentium 4/Athlon 64, 2000-2003
+  onward). Both build systems force `-mfpmath=sse -msse2` there to avoid x87
+  extended-precision float math, whose results depend on the compiler/CPU in a way SSE2's
+  don't — see "Fixed". Every other architecture this library targets is unaffected.
+- Two hash algorithms can differ by a few bits between CPU architectures for
+  near-uniform/degenerate input (e.g. a single flat colour), because floating-point
   addition isn't associative and pHash/Radial threshold their coefficients against a
   median that such input places right at the boundary. Ordinary photographs are not
-  affected. `tests/data/golden_hashes.*` fixtures are namespaced by architecture for
-  this reason.
+  affected. `tests/data/golden_hashes.*` fixtures are namespaced by architecture for this
+  reason.
 
 ### Fixed
 
-- **The bundled zlib-ng was not used for PNG in a full build, and static links carried a
-  second zlib and spng.** The vendored libjpeg-turbo 3.x builds its own zlib and spng into
-  its TurboJPEG archive; linked first, those copies won on macOS and the PNG decoders used
-  them instead of zlib-ng. The JPEG backend now uses libjpeg-turbo's libjpeg API, which has
-  neither. JPEG pixels and hashes are unchanged. Link flags: the installed JPEG archive is
-  now `-lphash_jpeg` (was `-lturbojpeg`); `pkg-config`/`find_package(phash)` pick it up
-  automatically.
-- **`threads = 0` ignored container and affinity CPU limits.** The batch API started one
-  worker per CPU of the machine, so a container limited to 2 of 6 CPUs ran 6 workers —
-  three times the memory for no throughput. It now counts the CPUs the process may use:
-  the affinity mask on Linux and Windows, and the cgroup CPU quota on Linux.
-- **ThreadSanitizer reported a data race on the first parallel PNG decodes.** zlib-ng
-  initialises its CPU dispatch table lazily and unsynchronised; the first concurrent
-  decodes of a process (a cold `ph_hash_files()`, or your own threads) raced on it. The
-  library now completes that initialisation once, under a lock, before its first decode.
-- **`ph_get_last_error_message()` could return invalid UTF-8.** A message quoting a long
-  non-ASCII path (about 75 Cyrillic characters) was cut in the middle of a character. The
-  cut now always falls on a character boundary.
-- **An encoded buffer over 2 GiB was decoded from a truncated length.** In a build where
-  the format went to `stb_image`, the length was cut to an `int`: a valid image in a
-  2 GiB + 4 KiB buffer was reported as not an image, and past 4 GiB the length wrapped
-  and the start of the buffer was decoded as if it were the whole file. Encoded input
-  over `INT_MAX` bytes now fails with `PH_ERR_IMAGE_TOO_LARGE` in every build.
-- **An oversized image was reported as corrupt in the minimal build.** A header that
-  `stb_image` refuses for its size (a 20000×20000 PNG, for one) came back as
-  `PH_ERR_CORRUPT_DATA`; the native decoders answer the same header with
-  `PH_ERR_IMAGE_TOO_LARGE`, and now every build does.
-- **A truncated JPEG or PNG loaded successfully in the minimal build.** `stb_image`, the
-  only decoder of a build without the vendored libraries, decodes what it could read of a
-  half-downloaded file and reports success, while the native decoders reject the same
-  bytes; the same file was an error in one build and a hash of part of a picture in
-  another. Every build now requires the file to reach its own end (JPEG end-of-image
-  marker, PNG `IEND`, the WebP RIFF size) and returns `PH_ERR_CORRUPT_DATA` otherwise.
-  Data after that end is still accepted.
-- **A load could succeed with the EXIF orientation silently not applied.** When the buffer
-  for rotating an oriented photo could not be allocated, `ph_load_from_file()`/
-  `ph_load_from_memory()` returned `PH_SUCCESS` with the image left in sensor orientation,
-  and every hash described a picture the caller never asked for. The load now fails with
-  `PH_ERR_ALLOCATION_FAILED` and no image is loaded.
+- **A truncated JPEG or PNG loaded successfully when decoded by `stb_image`.** It decoded
+  what it could read of a half-downloaded file and reported success, while the native
+  decoders rejected the same bytes. Every build requires the file to reach its own end
+  (JPEG end-of-image marker, PNG `IEND`, the WebP RIFF size) and returns
+  `PH_ERR_CORRUPT_DATA` otherwise. Data after that end is still accepted.
+- **An encoded buffer over 2 GiB was decoded from a truncated length.** On the `stb_image`
+  path the length was cut to an `int`: a valid image in a 2 GiB + 4 KiB buffer was reported
+  as not an image, and past 4 GiB the length wrapped and the start of the buffer was
+  decoded as if it were the whole file. Encoded input over `INT_MAX` bytes fails with
+  `PH_ERR_IMAGE_TOO_LARGE` in every build.
 - **pHash with an odd `dct_size` read and wrote misaligned `float`s.** Every odd value from
-  3 to 31 — all accepted by `ph_context_set_phash_params()` — placed the DCT buffers at an
-  odd address: undefined behaviour, reported by UBSan and a crash on strict-alignment
-  targets. Hash values do not change.
+  3 to 31 placed the DCT buffers at an odd address: undefined behaviour, reported by UBSan
+  and a crash on strict-alignment targets. Hash values do not change.
+- `ph_compute_phash()` returned a hash computed from **uninitialized memory** when the DCT
+  parameters were out of range; out-of-range parameters are rejected.
 - **`ph_context_get_dimensions()` reported an image that was no longer loaded.** A failed
   `ph_load_from_file()`/`ph_load_from_memory()` drops the previous image, but its width,
-  height and channel count stayed behind; they are now reset to 0 with it. It and
-  `ph_is_loaded()` now take a `const ph_context_t *`.
-- **The library did not compile on Linux/glibc.** Fixing the C standard also turned off
-  the compiler's language extensions, which makes it define `__STRICT_ANSI__`; glibc
-  hides every declaration that is not ISO C behind that macro, so `M_PI`,
-  `clock_gettime()`, `openat()` and `mkstemp()` disappeared and the recommended CMake
-  build failed outright on any glibc system. macOS was unaffected, which is why it went
-  unnoticed. The library now defines `M_PI` itself instead of expecting a libc to, and
-  the few test translation units that genuinely need POSIX request it explicitly, so the
-  build stays strictly conforming rather than falling back to a GNU dialect. Consumers
-  building libphash on Linux need no workaround and no `-std=gnu17`.
-
+  height and channel count stayed behind; they are reset to 0 with it. It and
+  `ph_is_loaded()` take a `const ph_context_t *`.
+- Resizing and Gaussian blur reported an allocation failure as `PH_SUCCESS` with a hash
+  computed over garbage. aHash, dHash, pHash, wHash, mHash, BMH and Radial return
+  `PH_ERR_ALLOCATION_FAILED` instead. No hash value changes on the success path.
+- Pixel counts were computed in `int` and could overflow (undefined behaviour); they are
+  computed in `size_t`.
+- **`ph_hamming_distance_digest()` silently undercounted on x86_64** for a digest whose
+  size in bytes wasn't a multiple of 32: the AVX2 loop advances its index as a byte offset,
+  but the SSE4.2 loop that follows compared that same index against a word count, so the
+  last bytes of the digest were dropped from the popcount without any error. arm64 (NEON
+  path) was not affected.
+- **32-bit x86 (`i686`) builds could produce a different hash than a 64-bit build for the
+  same image**, including a degenerate all-zero pHash for a uniform-colour input that a
+  64-bit build hashes normally: GCC/Clang default to x87 extended-precision intermediates
+  on 32-bit x86. See "Changed" for the SSE2 floor.
+- The AVX2 Hamming-distance path called an intrinsic (`_mm256_extract_epi64`) that does
+  not exist on 32-bit x86, so a 32-bit x86 build with AVX2 available failed to link. AVX2
+  is gated on `__x86_64__`/`_M_X64` in addition to `__AVX2__`.
 - **The library did not compile for any target where `size_t` is not `unsigned long`.**
-  The three native decoder backends (JPEG, PNG, WebP) declared their compressed-buffer
-  length as `unsigned long`, while the internal backend table they are registered in
-  declares it as `size_t`. Those are the same type on every 64-bit Linux and macOS
-  target, so nothing ever complained there; anywhere else they differ, and assigning
-  such a function into the table is a constraint violation — GCC 14 and newer, and
-  Clang 16 and newer, reject it outright, so a 32-bit build failed to compile. On
-  Windows x64 the mismatch compiled but was worse: the caller passed a 64-bit length and
-  the decoder read a 32-bit one. Buffer lengths are `size_t` throughout now. A JPEG
-  buffer larger than the range libjpeg-turbo's own API accepts is reported as
-  `PH_ERR_IMAGE_TOO_LARGE` rather than silently truncated.
-
-- **On arm64, hash values depended on the compiler and the C dialect libphash was built
-  with.** Whether the compiler fused multiply-add sequences into single FMA instructions
-  was left at its default, and that default differs between GCC and Clang, and for GCC
-  between `-std=gnu17` and `-std=c17`. Because pHash thresholds each coefficient against
-  the median, a last-bit difference could flip bits: the same image gave different pHash
-  values from a GCC build and a Clang build. libphash now always builds with
-  `-ffp-contract=off`, so GCC and Clang builds on arm64 produce identical hashes. x86-64
-  hashes are unchanged. On arm64 some pHash and Radial values differ from earlier 2.0.0
-  development builds.
-
-- **The CMake build ignored `CMAKE_BUILD_TYPE` for the optimisation level.** `-O3`
-  (`/O2` on MSVC) was forced on top of every build type, so a `Debug` build was
-  optimised and `RelWithDebInfo`/`MinSizeRel` were silently turned into `-O3`. Each build
-  type now gets its own level (`Debug` unoptimised, `Release` `-O3`, `RelWithDebInfo`
-  `-O2`, `MinSizeRel` `-Os`), and a standalone configure that names no build type
-  defaults to `Release`. When libphash is added with `add_subdirectory()`, the parent's
-  build type applies and no default is imposed. The project's warning flags are no
-  longer applied to the vendored decoders.
-
-- **`ph_histogram_intersection()` did not score a histogram against itself as exactly
-  `1.0`.** The score was summed in floating point, and for roughly a third of histograms
-  that sum landed one ulp short — `0.99999999999999989` instead of `1.0` — with which
-  histograms were affected depending on the platform and the compiler flags. The CMake
-  build on x86_64 additionally compiled this code with `-ffast-math`, so the same pair
-  of digests could compare differently there than on arm64 or in the Makefile build.
-  The score is now computed exactly: identical or proportionally scaled histograms score
-  exactly `1.0`, swapping the arguments gives a bit-identical result, and the value is
-  the same on every platform. Other scores change by at most a few units in the last
-  place, toward the correctly rounded value. ColorHash digests themselves are unchanged.
-
-- **`libphash.h` could not be included by GCC in C23 mode.** Every exported function was
-  declared with the C23 `[[nodiscard]]` attribute placed after the visibility attribute,
-  a position C23 does not allow. Clang tolerates it; GCC 14 and newer reject it with one
-  error per declaration, so any program compiled with `gcc -std=c23` — and, since GCC 15
-  defaults to C23, any program compiled with plain `gcc` — failed to build as soon as it
-  included the header. The same affected the portable Makefile build of the library
-  itself, which passed no `-std` and so inherited GCC 15's default. The attributes are in
-  the conforming order now, discarding a `PH_NODISCARD` result still warns, and the
-  Makefile pins `-std=c17`, the same dialect the CMake build uses.
-
-- **A native-toolchain Windows build (either linkage) could not previously succeed at
-  all**, for any consumer, not just this project's own CI or release artifacts. Building
-  statically failed to even compile (`PH_API` had no case for "this is a static library"
-  on Windows, only "building the DLL" or "importing one" — MSVC rejected every exported
-  function's own definition as a redefinition of a dllimport declaration); building
-  either linkage with the vendored decoder set failed to configure or link over several
-  further issues: `<stdatomic.h>` needs `/experimental:c11atomics` in addition to
-  `/std:c11` on MSVC, `M_PI` is not declared by its `<math.h>` at all, there is no `libm`
-  to link on Windows at all, and the installed link paths for the vendored codec archives assumed
-  Unix `ar` naming (`lib<name>.a`) unconditionally. None of this had ever been exercised
-  on an actual Windows compiler before — CI's own `minimal-build (windows-latest)` leg
-  existed but had likewise never run on a live GitHub Actions runner. New public macro:
-  `PHASH_STATIC_DEFINE`, which a build system other than this project's own CMake must
-  define itself when statically linking libphash on Windows (CMake's exported target and
-  the generated `.pc` file both set it automatically).
-- **pHash thresholds its 8×8 DCT block against the median of its 63 AC coefficients**,
-  leaving the DC term out of that median as the reference implementation does. It had been
-  included. In practice this changes nothing: no pHash value in the test fixtures moves,
-  and the only way the two can differ at all is a single bit when the two middle
-  coefficients tie to within a float ulp — contrary to the usual explanation, a median is
-  not dragged by an outlier. Recorded because it is a conformance change you may see on
-  degenerate input, not because it will move your hashes.
+  The native decoder backends declared their compressed-buffer length as `unsigned long`
+  while the backend table declares it as `size_t`: GCC 14+/Clang 16+ reject that on a
+  32-bit target, and on Windows x64 it compiled but the decoder read a 32-bit length out of
+  a 64-bit one. Buffer lengths are `size_t` throughout.
+- **`libphash.h` could not be included by GCC in C23 mode** — and, since GCC 15 defaults to
+  C23, by any program compiled with plain `gcc`. `PH_NODISCARD` stood after the visibility
+  attribute, a position C23 does not allow; the attributes are in the conforming order.
+- **A Windows build could not succeed with a native toolchain.** A static build failed to
+  compile (`PH_API` had no case for a static library), and a build with any of the bundled
+  decoders failed on POSIX-only file-mapping headers, `<stdatomic.h>` under MSVC, the
+  missing `M_PI` and `libm`, and Unix archive naming in the link paths. Both linkages build
+  with MSVC; see `PHASH_STATIC_DEFINE` under Added.
+- PNG decoder: `setjmp` is armed *before* the info struct is created, so an early libpng
+  error does not longjmp into an unprepared state; the `row_ptrs` allocation is checked for
+  overflow; an error while reading the pixels frees every buffer the decoder allocated.
+- The spng backend could not decode to grayscale at all: it asked spng for an 8-bit gray
+  output format unconditionally, which spng only accepts for images that are already
+  grayscale. It converts when the source format requires it, byte for byte identically to
+  the libpng backend.
+- `add_subdirectory()` forced libpng's `PNG_SHARED`/`PNG_STATIC` into the parent project's
+  cache; see Packaging under Added.
+- The vendored `stb_image_resize2` crashed or leaked when one of its internal allocations
+  failed under AddressSanitizer's separate-allocation mode. Patched locally pending an
+  upstream fix.
 - **aHash now thresholds a pixel exactly equal to the mean as set, not clear**
   (`pixel >= mean`, was `pixel > mean`), matching the tie-break this library already
   uses for BMH. The source leaves the tie unstated either way. This moves aHash's
   result only on a genuinely flat/uniform image, where every pixel equals the mean —
   the all-zero hash becomes all-ones. No ordinary photograph has this property.
-- `ph_compute_phash()` returned a hash computed from **uninitialized memory** when
-  the DCT parameters were out of range; out-of-range parameters are now rejected.
-- Pixel counts were computed in `int` and could overflow (undefined behaviour); they
-  are computed in `size_t` now. This also closed a decompression-bomb hole in
-  `ph_load_from_pixels()`, which bypassed the pixel-limit check entirely.
-- Windows batch thread-pool wait was racy and undefined; the pool now joins its
-  workers correctly.
-- PNG decoder: `setjmp` is now armed *before* the info struct is created, so an early
-  libpng error no longer longjmps into an unprepared state.
-- PNG decoder: the `row_ptrs` allocation is now checked for overflow.
-- PNG decoder: a deliberate dimension cap is applied instead of raising libpng's own
-  user limit.
-- The spng backend could not decode to grayscale at all: it asked spng for an 8-bit
-  gray output format unconditionally, which spng only accepts for images that are
-  already grayscale, so loading any truecolor, palette, gray+alpha or 16-bit PNG with
-  grayscale loading enabled failed with `PH_ERR_CORRUPT_DATA`. It now converts when
-  the source format requires it, byte for byte identically to the libpng backend.
-- `add_subdirectory()` no longer clobbers the parent project's settings, and works for
-  both static and shared parents. The zlib-ng block in particular used to leave a
-  `ZLIB_LIBRARY` pin behind in the parent's cache.
-- The exported CMake package declares its `Threads` dependency, so
-  `find_package(phash)` links correctly in a consumer project.
-- Fuzzer targets link correctly when built together with the tests.
-- A build for Windows with any of the bundled native decoders enabled failed to
-  compile: the file-mapping code was guarded by the decoder switches but used
-  POSIX-only headers. It now sits behind its own platform check, with a portable read
-  fallback.
-- `ph_load_from_memory()` could return `PH_SUCCESS` without having loaded an image,
-  in the case where the decoder reported failure without setting an error code.
-- A file larger than `SIZE_MAX` (a 32-bit build fed something above 4 GB) is reported
-  as `PH_ERR_IO` instead of failing inside the mapping call.
-- A top-down BMP (legitimately negative height from `stbi_info`) was rejected as
-  `PH_ERR_IMAGE_TOO_LARGE` regardless of its actual size, because the signed height
-  was cast straight to `uint64_t`.
-- `ph_digest_from_hex()` accepted uppercase input as documented but this was never
-  tested; mismatched digest sizes in the comparison functions were also unchecked.
-- `make clean` removes stray `*.o` files left outside `obj/`.
-- UBSan alignment noise originating in the vendored `stb_image_resize2.h` is
-  suppressed, so the sanitizer output is actionable again.
-- Resizing and Gaussian blur reported an allocation failure as `PH_SUCCESS` with a
-  hash computed over stack or heap garbage. `ph_resize_box()`, `ph_resize_mitchell()`
-  and `ph_apply_gaussian_blur()` now propagate the failure, so aHash, dHash, pHash,
-  wHash, mHash, BMH and Radial return `PH_ERR_ALLOCATION_FAILED` instead of a value
-  indistinguishable from a real hash. No hash value changes on the success path.
-- The vendored `stb_image_resize2` crashed or leaked when one of its internal
-  allocations failed under AddressSanitizer's separate-allocation mode (reachable
-  only under real memory pressure with a sanitizer build). Patched locally pending
-  an upstream fix.
-- The `stb_image` decoder fallback reported an out-of-memory condition during decode
-  as `PH_ERR_CORRUPT_DATA` — a verdict on the input file, when the file was fine and
-  the process simply ran out of memory. It now reports `PH_ERR_ALLOCATION_FAILED`,
-  matching what the native JPEG/PNG/WebP backends already reported for their own
-  allocation failures.
-- The same misdiagnosis survived in the `stb_image` fallback wherever the vendored
-  decoder itself lost the reason: its zlib entry points returned NULL without setting
-  one, and its format dispatch overwrote an allocating probe's out-of-memory reason
-  with `"unknown image type"`. An out-of-memory PNG was reported as corrupt and an
-  out-of-memory JPEG as an unrecognized format. Patched locally in
-  `vendor/stb_image.h` pending an upstream fix; all 83 allocation-failure points in
-  the test suite now report `PH_ERR_ALLOCATION_FAILED`.
-- The native JPEG, PNG and WebP decoder backends left `ph_get_last_error_message()`
-  empty on 16 of their own failure paths, while the `stb_image` fallback already
-  filled it for the same error codes. The same input could therefore get a
-  diagnostic message in one build configuration and an empty string in another for
-  an identical `ph_error_t`. Every native backend, including the alternative spng
-  PNG path, now fills the message on every failure.
-- The PNG decoder reported a configured `max_pixels` (or a single dimension close to
-  it) as `PH_ERR_CORRUPT_DATA` instead of `PH_ERR_IMAGE_TOO_LARGE` when the rejection
-  came from libpng's own per-dimension limit rather than this library's own
-  post-header check: libpng reports that specific case as a warning, which was
-  silently discarded, so only the generic fatal error that followed it reached the
-  caller. An intact, ordinary image now correctly reports "too large" rather than
-  "corrupt" when it is rejected for size.
-- **`ph_hamming_distance_digest()` silently undercounted on x86_64** for a digest
-  whose size in bytes wasn't a multiple of 32: the AVX2 loop advances its index as a
-  byte offset, but the SSE4.2 loop that follows it compared that same index directly
-  against a word count and indexed into the buffer with it, so for a size like 33 the
-  SSE4.2 loop's body never ran and the scalar tail that should have covered the
-  remainder was skipped too — the last bytes of the digest were dropped from the
-  popcount without any error. Every digest size 2.0.0 ships (mHash 72 bytes, colour
-  histogram 108 bytes, up to 128 bytes generally) can trigger this; arm64 (NEON path)
-  was never affected.
-- PNG/JPEG/WebP native decoders misreported their own internal allocation failures as
-  `PH_ERR_CORRUPT_DATA` on several further paths beyond the ones fixed earlier in this
-  release: `png_create_read_struct()`/`png_create_info_struct()`/`tjInitDecompress()`
-  returning NULL, libpng's and libjpeg-turbo's own out-of-memory message text going
-  unrecognized, and libwebp's simple decode API being unable to distinguish OOM from a
-  corrupt bitstream at all (switched to the advanced `WebPDecode()`/
-  `WebPDecoderConfig` API, which reports a precise `VP8_STATUS_OUT_OF_MEMORY`). Also:
-  `png_read_image()` could still longjmp out after this function's own scratch buffers
-  were allocated, and the cleanup path only freed one of them — a real leak on that
-  path, now fixed alongside the misclassification. The alternative spng PNG backend
-  had the identical classification gap (`SPNG_EMEM`, unchecked) plus, separately, a
-  cleanup pointer declared as a volatile-qualified pointer *to* non-volatile data
-  rather than a volatile pointer, undefined by C11 across the `setjmp`/`longjmp` it
-  was meant to protect.
-- **32-bit x86 (`i686`) builds could produce a different hash than a 64-bit build for
-  the same image**, including a degenerate all-zero pHash for a uniform-colour input
-  that a 64-bit build hashes normally. Root cause: GCC/Clang default to x87 FPU
-  extended-precision intermediates for scalar `float`/`double` math on 32-bit x86,
-  not SSE2, unlike every other architecture this library targets. Both build systems
-  now force `-mfpmath=sse -msse2` on 32-bit x86, which raises the minimum supported
-  32-bit x86 CPU to one with SSE2 (~Pentium 4/Athlon 64, 2000-2003 onward — the same
-  floor most current Linux distributions already assume for `i686`). See "Changed"
-  for the minimum-CPU note.
-- The AVX2 Hamming-distance path called an intrinsic (`_mm256_extract_epi64`) that
-  needs a 64-bit register and does not exist on 32-bit x86 at all, so any 32-bit x86
-  build with AVX2 available failed to link. AVX2 is now gated on `__x86_64__`/`_M_X64`
-  in addition to `__AVX2__`; 32-bit x86 falls through to the SSE4.2 path instead
-  (AVX2 implies SSE4.2).
 
 ### Security
 
-- **Decompression bombs** are rejected before any pixel buffer is allocated, via a
-  configurable `max_pixels` limit (256 MP by default) plus an unconditional
-  `INT_MAX`-pixel implementation ceiling.
+- **Decompression bombs** are rejected before any pixel buffer is allocated (1.x had no
+  size limit), via a configurable `max_pixels` limit (256 Mi pixels by default), an
+  unconditional `INT_MAX`-pixel implementation ceiling, and a per-dimension cap of 1000000
+  pixels that no `max_pixels` setting can lift.
+- **Heap overflow / signed overflow** reachable through `int` pixel-count arithmetic on
+  large images. Fixed by the ceiling and by `size_t` arithmetic.
 - **Out-of-bounds read** in every public helper that reads a `ph_digest_t`: a
-  hand-assembled digest with `size > 64` read past the end of the struct. Now
-  rejected.
-- **Heap overflow / signed overflow** reachable through `max_pixels = 0` and through
-  `int` pixel-count arithmetic. Fixed by the ceiling and by `size_t` arithmetic.
-- **The mock decoder no longer ships in release builds.** It was registered ahead of
-  the real catch-all backend and intercepted any input beginning with `DE AD`.
-- **Absurd aspect ratios** are rejected by a per-dimension cap of 1000000 pixels that
-  no `max_pixels` setting can lift, in every format and every build configuration.
+  hand-assembled digest with `size > 64` read past the end of the struct. Rejected.
+- **The mock decoder does not ship.** 1.x registered it in every build, ahead of the real
+  catch-all backend, where it intercepted any input beginning with `DE AD`.
 - **Heap out-of-bounds write / segfault in the Block Mean Hash** on a 32-bit build:
-  `block_size * block_size` was cast to `size_t` before multiplying, which only
-  prevents overflow where `size_t` is wider than `int` — on 32-bit `size_t` it
-  wrapped, in one case masking the correct `PH_ERR_ALLOCATION_FAILED` response for
-  the wrong reason and in another producing a 1-byte scratch buffer that the resize
-  step then wrote a full block into. Routed through the same overflow-checked
-  allocation-size helper (`ph_safe_image_alloc_size()`) the rest of the codebase
-  already uses instead of repeating the unsafe local pattern.
+  `block_size * block_size` was cast to `size_t` before multiplying, which only prevents
+  overflow where `size_t` is wider than `int` — on 32-bit `size_t` it wrapped and produced
+  a 1-byte scratch buffer that the resize step then wrote a full block into. The size goes
+  through the library's overflow-checked allocation-size helper.
 - **PNG decoder hardening:** overflow-checked `row_ptrs` allocation, the dimension cap
   applied straight from the IHDR, and `setjmp` armed before the info struct exists.
-- The decode path is now fuzzed (libFuzzer) and built under ASan/UBSan in CI.
+- The decode path is fuzzed (libFuzzer) and built under ASan/UBSan in CI.
 
 ## [1.10.4] - 2026-04-19
 

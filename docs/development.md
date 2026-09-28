@@ -464,7 +464,11 @@ that reason in two independent places, so a decode that failed purely because
 Each change carries the same `/* libphash local patch (not upstream): ... */`
 marker as the resize patch above (search the file for it). Without the patch, 5 of
 `test_alloc_failure`'s 83 failure points misreport. As with the resize patch, **a bump
-of this vendored file must re-apply and re-verify it** against `test_alloc_failure`.
+of this vendored file must re-apply and re-verify it** against `test_alloc_failure`, and
+record the new pair of hashes in `THIRD-PARTY-NOTICES.md`. `src/loader.c` classifies a
+decode failure by comparing against error strings that live inside `stb_image.h`, so a
+bump also has to be reviewed against `ph_stb_unsupported_reasons[]` and
+`test_stb_failure_classification`.
 See SECURITY.md's "Vendored dependencies" section for how this project tracks the two
 copied-in stb headers against upstream.
 
