@@ -23,9 +23,11 @@
 # compiler next.
 #
 # Scope note: the loaders are checked in their stb_image-only configuration, since
-# that is the one that needs no vendored headers to be present. The native decoder
-# backends are compiled under the same strict dialect by every CMake leg that enables
-# them, so they are covered by those, not here.
+# that is the one that needs no vendored headers to be present. In it jpeg.c and webp.c
+# compile to nothing, and the two PNG backends (png_libpng.c, png_spng.c) are not part
+# of the build at all -- the build adds the one its option selects -- so they are left
+# out here the same way. The native decoder backends are compiled under the same strict
+# dialect by every CMake leg that enables them, so they are covered by those, not here.
 set -euo pipefail
 
 STD="${1:-17}"
@@ -78,7 +80,7 @@ check() {
 
 while IFS= read -r src; do
     check "$src" "${LIB_FLAGS[@]}"
-done < <(find "$ROOT_DIR/src" -name '*.c' | sort)
+done < <(find "$ROOT_DIR/src" -name '*.c' ! -name 'png_libpng.c' ! -name 'png_spng.c' | sort)
 
 while IFS= read -r src; do
     check "$src" "${TEST_FLAGS[@]}"
