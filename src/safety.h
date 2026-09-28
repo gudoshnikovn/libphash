@@ -4,6 +4,7 @@
 /* Limits every decode path enforces, overflow-checked allocation sizes, and the
  * fixed-size diagnostic buffer helpers. Nothing here allocates. */
 
+#include <assert.h>
 #include <limits.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -11,6 +12,19 @@
 /* Default cap on width*height before decoding a pixel buffer (decompression-bomb
  * protection). Overridable via ph_context_set_max_pixels(); 0 disables it. */
 #define PH_DEFAULT_MAX_PIXELS ((uint64_t)256 * 1024 * 1024)
+
+/* A dimension, count or index as a size_t, for size and address arithmetic.
+ *
+ * Dimensions reach the library as int -- through the public API and the configuration --
+ * and every one is checked non-negative before it gets here. This is the one sanctioned
+ * int -> size_t conversion: the name states the precondition, and a debug build checks
+ * it, where a bare (size_t) cast would turn a negative value into a huge one without a
+ * word. A cast whose correctness rests on anything else is written out with its reason
+ * (docs/development.md, "Conversions and casts"). */
+static inline size_t ph_size(int v) {
+    assert(v >= 0);
+    return (size_t)v;
+}
 
 /* Computes w * h * channels for an allocation size, refusing to silently wrap.
  * Returns 0 (and leaves *out untouched) if the product would overflow size_t;

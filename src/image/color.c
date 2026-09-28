@@ -44,9 +44,11 @@ void ph_drop_gray_cache(ph_context_t *ctx) {
 static void grayscale_scalar_range(const uint8_t *s, uint8_t *d, size_t count, int channels,
                                    int r_w, int g_w, int b_w) {
     for (size_t i = 0; i < count; i++) {
-        uint32_t r = s[0];
-        uint32_t g = s[1];
-        uint32_t b = s[2];
+        /* int: the weights are non-negative ints summing to PH_GRAY_WEIGHT_SCALE, so the
+         * weighted sum stays small, non-negative and signed throughout. */
+        int r = s[0];
+        int g = s[1];
+        int b = s[2];
         *d++ = (uint8_t)((r * r_w + g * g_w + b * b_w) >> PH_GRAY_WEIGHT_SHIFT);
         s += channels;
     }

@@ -204,24 +204,22 @@ PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels, 
     if (ph_exceeds_pixel_limit((uint64_t)width, (uint64_t)height, ctx->config.max_pixels))
         return PH_ERR_IMAGE_TOO_LARGE;
 
-    unsigned long long row_bytes = (unsigned long long)width * (unsigned long long)channels;
-    if (stride < 0 || (stride != 0 && (unsigned long long)stride < row_bytes))
+    /* width, height and channels are positive from here on. A product that does not fit
+     * size_t (a 32-bit build) is refused rather than wrapped. */
+    size_t row_bytes, total_bytes;
+    if (!ph_safe_image_alloc_size(ph_size(width), 1, ph_size(channels), &row_bytes) ||
+        !ph_safe_image_alloc_size(ph_size(width), ph_size(height), ph_size(channels), &total_bytes))
         return PH_ERR_INVALID_ARGUMENT;
-    unsigned long long src_stride = (stride == 0) ? row_bytes : (unsigned long long)stride;
-
-    /* Cannot wrap: width and height are each <= INT_MAX and channels <= 4, so the
-     * product is at most 4 * (2^31 - 1)^2, which stays below ULLONG_MAX. */
-    unsigned long long total_bytes = row_bytes * (unsigned long long)height;
-    if (total_bytes == 0 || total_bytes > SIZE_MAX)
+    if (stride < 0 || (stride != 0 && ph_size(stride) < row_bytes))
         return PH_ERR_INVALID_ARGUMENT;
+    size_t src_stride = (stride == 0) ? row_bytes : ph_size(stride);
 
-    uint8_t *dst = malloc((size_t)total_bytes);
+    uint8_t *dst = malloc(total_bytes);
     if (!dst)
         return PH_ERR_ALLOCATION_FAILED;
 
-    for (int y = 0; y < height; y++) {
-        memcpy(dst + (size_t)y * row_bytes, pixels + (size_t)y * src_stride, (size_t)row_bytes);
-    }
+    for (size_t y = 0, rows = ph_size(height); y < rows; y++)
+        memcpy(dst + y * row_bytes, pixels + y * src_stride, row_bytes);
 
     if (ctx->image.raw_rgb)
         ph_free_image(ctx->image.raw_rgb);

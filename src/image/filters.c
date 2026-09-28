@@ -1,4 +1,5 @@
 #include "image/image.h"
+#include "safety.h"
 #include <math.h>
 #include <stdint.h>
 
@@ -45,24 +46,24 @@ static float blur_clamped_tap_sum(const uint8_t *row, int w, int x, const float 
 /* out[i] = sum over t of kernel[t] * src[t * stride + i], for i in [0, n), t in order.
  * PH_BLUR_LANES outputs at a time stay in registers across all taps; the tail that does
  * not fill a block takes the same sum one output at a time. */
-static void blur_taps(const float *restrict src, size_t stride, const float *kernel, int taps,
-                      int n, float *restrict out) {
-    int i = 0;
+static void blur_taps(const float *restrict src, size_t stride, const float *kernel, size_t taps,
+                      size_t n, float *restrict out) {
+    size_t i = 0;
     for (; i + PH_BLUR_LANES <= n; i += PH_BLUR_LANES) {
         float acc[PH_BLUR_LANES] = {0.0f};
-        for (int t = 0; t < taps; t++) {
+        for (size_t t = 0; t < taps; t++) {
             const float kt = kernel[t];
-            const float *restrict s = src + (size_t)t * stride + i;
-            for (int j = 0; j < PH_BLUR_LANES; j++)
+            const float *restrict s = src + t * stride + i;
+            for (size_t j = 0; j < PH_BLUR_LANES; j++)
                 acc[j] += kt * s[j];
         }
-        for (int j = 0; j < PH_BLUR_LANES; j++)
+        for (size_t j = 0; j < PH_BLUR_LANES; j++)
             out[i + j] = acc[j];
     }
     for (; i < n; i++) {
         float acc = 0.0f;
-        for (int t = 0; t < taps; t++)
-            acc += kernel[t] * src[(size_t)t * stride + i];
+        for (size_t t = 0; t < taps; t++)
+            acc += kernel[t] * src[t * stride + i];
         out[i] = acc;
     }
 }
@@ -87,7 +88,7 @@ static void blur_row_horizontal(const uint8_t *restrict row, int w, const float 
         for (int i = 0; i < n + 2 * radius; i++)
             in[i] = (float)s[i];
         /* Stride 1: tap t reads in[t + i]. */
-        blur_taps(in, 1, kernel, 2 * radius + 1, n, out + x0);
+        blur_taps(in, 1, kernel, ph_size(2 * radius + 1), ph_size(n), out + x0);
     }
 }
 
@@ -112,8 +113,10 @@ void ph_gaussian_blur_sigma(const uint8_t *src, int w, int h, float sigma, float
     for (int i = 0; i <= 2 * radius; i++)
         kernel[i] /= sum;
 
+    const size_t width = ph_size(w);
     for (int y = 0; y < h; y++)
-        blur_row_horizontal(src + (size_t)y * w, w, kernel, radius, scratch + (size_t)y * w);
+        blur_row_horizontal(src + ph_size(y) * width, w, kernel, radius,
+                            scratch + ph_size(y) * width);
 
     /* Rows [radius, h - radius) read 2*radius+1 consecutive rows of `scratch` with no
      * clamping; the rows within `radius` of either edge gather their clamped rows into
@@ -124,8 +127,8 @@ void ph_gaussian_blur_sigma(const uint8_t *src, int w, int h, float sigma, float
         int n = w - x0 < PH_BLUR_STRIP ? w - x0 : PH_BLUR_STRIP;
         for (int y = 0; y < h; y++) {
             if (y >= radius && y + radius < h) {
-                blur_taps(scratch + (size_t)(y - radius) * w + x0, (size_t)w, kernel,
-                          2 * radius + 1, n, acc);
+                blur_taps(scratch + ph_size(y - radius) * width + x0, width, kernel,
+                          ph_size(2 * radius + 1), ph_size(n), acc);
             } else {
                 for (int k = -radius; k <= radius; k++) {
                     int sy = y + k;
@@ -133,7 +136,7 @@ void ph_gaussian_blur_sigma(const uint8_t *src, int w, int h, float sigma, float
                         sy = 0;
                     if (sy >= h)
                         sy = h - 1;
-                    rows[k + radius] = scratch + (size_t)sy * w + x0;
+                    rows[k + radius] = scratch + ph_size(sy) * width + x0;
                 }
                 for (int i = 0; i < n; i++) {
                     float a = 0.0f;
@@ -142,7 +145,7 @@ void ph_gaussian_blur_sigma(const uint8_t *src, int w, int h, float sigma, float
                     acc[i] = a;
                 }
             }
-            uint8_t *d = dst + (size_t)y * w + x0;
+            uint8_t *d = dst + ph_size(y) * width + x0;
             for (int i = 0; i < n; i++) {
                 int v = (int)(acc[i] + 0.5f);
                 d[i] = (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v);

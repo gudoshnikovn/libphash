@@ -41,6 +41,7 @@
 #include "context.h"
 #include "hashes/hashes.h"
 #include "image/image.h"
+#include "safety.h"
 #include <math.h>
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -164,9 +165,10 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     /* One block, three buffers. The byte buffer comes first and its size is rounded up so
      * that the float buffers behind it stay aligned: dct_size^2 is odd for an odd
      * dct_size. */
-    size_t sz1 = ph_arena_align_up((size_t)dct_size * dct_size);                // dct_input
-    size_t sz2 = use_cache ? 0 : ((size_t)dct_size * dct_size * sizeof(float)); // dct_mat
-    size_t sz3 = (size_t)reduction_size * reduction_size * sizeof(float);       // dct_out
+    const size_t dct_n = ph_size(dct_size), red_n = ph_size(reduction_size);
+    size_t sz1 = ph_arena_align_up(dct_n * dct_n);              // dct_input
+    size_t sz2 = use_cache ? 0 : dct_n * dct_n * sizeof(float); // dct_mat
+    size_t sz3 = red_n * red_n * sizeof(float);                 // dct_out
 
     ph_arena_mark_t arena_mark = ph_arena_mark(ctx);
     uint8_t *scratch = ph_get_scratchpad(ctx, sz1 + sz2 + sz3);

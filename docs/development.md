@@ -230,6 +230,26 @@ We use `clang-format` with a custom style (based on LLVM with minor tweaks).
   `tests/src/` (e.g., `PH_HASHES_HASHES_H` for `src/hashes/hashes.h`).
 - **Files**: lower case with underscores (e.g., `color_moments.c`).
 
+## Conversions and casts
+
+The library builds with `-Wconversion -Wsign-conversion`: an implicit conversion that can
+change a value -- a signed int turning into a huge `size_t`, a `double` narrowing into a
+`float` or a byte -- is a warning. A cast is not the way to silence one. The order of
+preference:
+
+1. **The right type from the start.** A size, count, offset or loop index over a buffer
+   is `size_t`; a value that is naturally small and signed (a pixel, a weight, a clamped
+   coordinate) stays `int` and is never mixed with unsigned arithmetic.
+2. **One conversion at the boundary.** Dimensions arrive as `int` from the public API and
+   the configuration and are validated there. Where such a value enters size or address
+   arithmetic, it goes through `ph_size()` (`src/safety.h`) -- once, into a `size_t`
+   local -- which names the precondition and checks it in debug builds.
+3. **A cast only with its reason.** A cast is right when the code knows something the
+   type system does not: a value already range-checked, a narrowing that rounding makes
+   exact, a type a third-party API insists on. The reason is stated next to it or is
+   evident from the check directly above it. A cast whose only purpose is to make a
+   warning go away is a defect: it hides exactly the value the warning is about.
+
 ## Headers and includes
 
 - `include/libphash.h` is the whole public API. Everything under `src/` is internal and

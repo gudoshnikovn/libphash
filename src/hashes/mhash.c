@@ -41,6 +41,7 @@
 #include "context.h"
 #include "hashes/hashes.h"
 #include "image/image.h"
+#include "safety.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -100,13 +101,17 @@ size_t ph_mh_block_sums_scratch(int n, int half) {
 
 void ph_mh_block_sums(const uint8_t *img, int n, int block, const float *kernel, int side,
                       uint8_t *scratch, float *out) {
-    int half = side / 2;
+    const int half = side / 2;
     const int pad_n = n + 2 * half;
+    /* Sizes and offsets in size_t; the signed values are kept only where an edge is
+     * clamped, which needs them to go negative. */
+    const size_t pad = ph_size(pad_n);
+    const size_t istride = pad + 1;
     /* The int64_t array goes first: the scratchpad is suitably aligned, and putting the
      * byte buffer first would leave it aligned only when pad_n * pad_n happens to be a
      * multiple of eight. */
     int64_t *integral = ph_arena_at(scratch, 0);
-    uint8_t *padded = scratch + (size_t)(pad_n + 1) * (size_t)(pad_n + 1) * sizeof(int64_t);
+    uint8_t *padded = scratch + istride * istride * sizeof(int64_t);
 
     for (int y = 0; y < pad_n; y++) {
         int sy = y - half;
@@ -114,8 +119,8 @@ void ph_mh_block_sums(const uint8_t *img, int n, int block, const float *kernel,
             sy = 0;
         if (sy >= n)
             sy = n - 1;
-        const uint8_t *srow = &img[(size_t)sy * n];
-        uint8_t *drow = &padded[(size_t)y * pad_n];
+        const uint8_t *srow = &img[ph_size(sy) * ph_size(n)];
+        uint8_t *drow = &padded[ph_size(y) * pad];
         for (int x = 0; x < pad_n; x++) {
             int sx = x - half;
             if (sx < 0)
@@ -127,15 +132,13 @@ void ph_mh_block_sums(const uint8_t *img, int n, int block, const float *kernel,
     }
 
     /* integral[y * istride + x] is the sum of padded[0..y-1][0..x-1]. */
-    const int istride = pad_n + 1;
-    memset(integral, 0, (size_t)istride * sizeof(int64_t));
-    for (int y = 0; y < pad_n; y++) {
+    memset(integral, 0, istride * sizeof(int64_t));
+    for (size_t y = 0; y < pad; y++) {
         int64_t row_sum = 0;
-        integral[(size_t)(y + 1) * istride] = 0;
-        for (int x = 0; x < pad_n; x++) {
-            row_sum += padded[(size_t)y * pad_n + x];
-            integral[(size_t)(y + 1) * istride + (x + 1)] =
-                integral[(size_t)y * istride + (x + 1)] + row_sum;
+        integral[(y + 1) * istride] = 0;
+        for (size_t x = 0; x < pad; x++) {
+            row_sum += padded[y * pad + x];
+            integral[(y + 1) * istride + (x + 1)] = integral[y * istride + (x + 1)] + row_sum;
         }
     }
 
@@ -147,8 +150,8 @@ void ph_mh_block_sums(const uint8_t *img, int n, int block, const float *kernel,
             for (int ky = 0; ky < side; ky++) {
                 const float *krow = &kernel[ky * side];
                 int ry = y0 + ky;
-                const int64_t *top = &integral[(size_t)ry * istride];
-                const int64_t *bot = &integral[(size_t)(ry + block) * istride];
+                const int64_t *top = &integral[ph_size(ry) * istride];
+                const int64_t *bot = &integral[ph_size(ry + block) * istride];
                 for (int kx = 0; kx < side; kx++) {
                     int rx = x0 + kx;
                     int64_t box = bot[rx + block] - bot[rx] - top[rx + block] + top[rx];

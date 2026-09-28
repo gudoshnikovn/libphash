@@ -38,6 +38,7 @@
 #include "context.h"
 #include "hashes/hashes.h"
 #include "image/image.h"
+#include "safety.h"
 #include <stdlib.h>
 
 void ph_haar_1d_float(float *data, int n, float *temp) {
@@ -190,9 +191,10 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
         return PH_ERR_ALLOCATION_FAILED;
 
     /* Rounded up so the float buffers behind the byte one stay aligned. */
-    size_t sz_scaled = ph_arena_align_up((size_t)image_scale * image_scale);
-    size_t sz_d = (size_t)image_scale * image_scale * sizeof(float);
-    size_t sz_temps = (size_t)image_scale * 2 * sizeof(float);
+    const size_t scale = ph_size(image_scale);
+    size_t sz_scaled = ph_arena_align_up(scale * scale);
+    size_t sz_d = scale * scale * sizeof(float);
+    size_t sz_temps = scale * 2 * sizeof(float);
 
     ph_arena_mark_t arena_mark = ph_arena_mark(ctx);
     uint8_t *scratch_mem = ph_get_scratchpad(ctx, sz_scaled + sz_d + sz_temps);

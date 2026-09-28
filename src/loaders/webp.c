@@ -52,7 +52,8 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
         ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         return NULL;
     }
-    size_t stride = (size_t)w * out_channels;
+    /* int, the type libwebp takes: WebP caps a dimension at 16383, so w * 3 fits. */
+    int stride = w * out_channels;
 
     unsigned char *output = (unsigned char *)malloc(out_size);
     if (!output) {
@@ -79,7 +80,7 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
     config.output.colorspace = MODE_RGB;
     config.output.is_external_memory = 1;
     config.output.u.RGBA.rgba = output;
-    config.output.u.RGBA.stride = (int)stride;
+    config.output.u.RGBA.stride = stride;
     config.output.u.RGBA.size = out_size;
 
     VP8StatusCode status = WebPDecode(buffer, size, &config);

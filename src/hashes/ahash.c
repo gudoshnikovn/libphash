@@ -40,14 +40,14 @@ PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash) {
         return PH_ERR_ALLOCATION_FAILED;
 
     uint64_t total_sum = 0;
-    int num_pixels = PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE;
-    for (int i = 0; i < num_pixels; i++) {
+    const size_t num_pixels = PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE;
+    for (size_t i = 0; i < num_pixels; i++) {
         total_sum += hash_input[i];
     }
     uint8_t avg = (uint8_t)(total_sum / num_pixels);
 
     uint64_t hash = 0;
-    for (int i = 0; i < num_pixels; i++) {
+    for (size_t i = 0; i < num_pixels; i++) {
         if (hash_input[i] >= avg) {
             hash |= (1ULL << (63 - i));
         }
