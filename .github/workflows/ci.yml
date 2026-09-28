@@ -613,5 +613,10 @@ jobs:
         # build tree. Only an integration build can show that.
         ./scripts/smoke_add_subdirectory.sh
 
+    # The shared library exports include/libphash.h and nothing else -- not the
+    # internal ph_* helpers, not stb_image, not the vendored decoders it links.
+    - name: Check the shared library's exported symbols
+      run: ./scripts/check_exported_symbols.sh
+
     - name: Build and run examples/
       run: ./scripts/build_examples.sh

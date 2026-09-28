@@ -15,7 +15,11 @@ GENERATED_DIR = generated
 # -ffp-contract=off: the same explicit no-FMA-fusion policy CMakeLists.txt sets, and
 # for the same reason -- left to the compiler it follows the dialect (GCC fuses under
 # gnuNN, not under cNN) and moves pHash's bits on any target with hardware FMA.
-CFLAGS = -std=c17 -ffp-contract=off -I./include -I./src -I./$(GENERATED_DIR) -O3 -Wall -Wextra -fPIC
+#
+# -fvisibility=hidden: only what include/libphash.h marks PH_API is visible outside the
+# archive, as in the CMake build, so a consumer that links libphash.a into a shared
+# library of its own does not re-export the internals or the stb_image instantiation.
+CFLAGS = -std=c17 -ffp-contract=off -fvisibility=hidden -I./include -I./src -I./$(GENERATED_DIR) -O3 -Wall -Wextra -fPIC
 LDFLAGS = -lm
 
 # Architecture-specific optimizations

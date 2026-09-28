@@ -381,6 +381,33 @@ endif()
 # which would make -Werror impossible (it would fail on their code, not ours).
 target_compile_options(phash PRIVATE ${PHASH_OWN_COMPILE_OPTIONS} ${PHASH_LIBRARY_WARNINGS})
 
+# The library's exported surface is include/libphash.h and nothing else. Two mechanisms,
+# because the symbols come from two places:
+#  - our own objects are compiled hidden, so only what PH_API marks default-visible
+#    leaves them (internal ph_* helpers and the stb_image instantiation included);
+#  - the vendored decoders arrive as static archives compiled with default visibility,
+#    and a shared libphash would re-export all of them -- libpng, libjpeg, libwebp and
+#    zlib under their own names, interposing on an application's copy of the same
+#    library. The linker's export list keeps only ph_*.
+# Hidden visibility applies to the static archive too, so a consumer that links it into
+# a shared library of its own does not re-export our internals either. MSVC exports only
+# __declspec(dllexport) and needs neither.
+set_target_properties(phash PROPERTIES C_VISIBILITY_PRESET hidden)
+if(PHASH_BUILD_SHARED AND NOT WIN32)
+    include(CheckLinkerFlag)
+    if(APPLE)
+        target_link_options(phash PRIVATE
+            "LINKER:-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/cmake/phash.exported_symbols")
+    else()
+        check_linker_flag(C "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/cmake/phash.map"
+            PHASH_HAS_VERSION_SCRIPT)
+        if(PHASH_HAS_VERSION_SCRIPT)
+            target_link_options(phash PRIVATE
+                "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/cmake/phash.map")
+        endif()
+    endif()
+endif()
+
 if(PHASH_COVERAGE)
     # -O0: matches Makefile's `coverage` (PHASH_COVERAGE=1 there too, same intent,
     # unrelated implementation) -- line/branch counts are only trustworthy without
@@ -863,8 +890,18 @@ if(PHASH_BUILD_TESTS)
     file(GLOB TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/tests/src/test_*.c")
     foreach(test_src ${TEST_SOURCES})
         get_filename_component(test_name ${test_src} NAME_WE)
-        add_executable(${test_name} ${test_src})
-        target_link_libraries(${test_name} PRIVATE phash)
+        # Tests reach internal functions (src/*.h) as well as the public API. A shared
+        # libphash exports only the public API, so in a shared build the tests link the
+        # library's object files and its link dependencies directly instead.
+        if(PHASH_BUILD_SHARED)
+            add_executable(${test_name} ${test_src} $<TARGET_OBJECTS:phash>)
+            target_link_libraries(${test_name} PRIVATE $<GENEX_EVAL:$<TARGET_PROPERTY:phash,LINK_LIBRARIES>>)
+            target_include_directories(${test_name} PRIVATE
+                $<TARGET_PROPERTY:phash,INCLUDE_DIRECTORIES>)
+        else()
+            add_executable(${test_name} ${test_src})
+            target_link_libraries(${test_name} PRIVATE phash)
+        endif()
         target_compile_options(${test_name} PRIVATE ${PHASH_OWN_COMPILE_OPTIONS})
         target_include_directories(${test_name} PRIVATE 
             ${CMAKE_CURRENT_SOURCE_DIR}/src

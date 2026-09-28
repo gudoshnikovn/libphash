@@ -1,0 +1,9 @@
+/* GNU ld / lld version script for the shared libphash: export the public API
+ * (every PH_API function in include/libphash.h is named ph_*) and nothing else.
+ * See the comment on C_VISIBILITY_PRESET in CMakeLists.txt. */
+{
+    global:
+        ph_*;
+    local:
+        *;
+};

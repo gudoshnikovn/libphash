@@ -62,7 +62,7 @@ static float s_dct_matrix_32[32 * 32];
 static atomic_flag s_dct_32_lock = ATOMIC_FLAG_INIT;
 static atomic_bool s_dct_32_init = false;
 
-void init_dct_matrix(void) {
+static void ph_init_dct_matrix(void) {
     if (atomic_load(&s_dct_32_init))
         return;
 
@@ -79,7 +79,7 @@ void init_dct_matrix(void) {
 }
 
 const float *ph_get_dct_matrix_32(void) {
-    init_dct_matrix();
+    ph_init_dct_matrix();
     return s_dct_matrix_32;
 }
 
@@ -176,7 +176,7 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     float *dct_out;
 
     if (use_cache) {
-        init_dct_matrix();
+        ph_init_dct_matrix();
         dct_mat = s_dct_matrix_32;
         dct_out = (float *)(scratch + sz1);
     } else {

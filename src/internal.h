@@ -186,9 +186,6 @@ void ph_haar_2d_level_inverse(float *data, int size, int stride, float *temp_row
 
 const float *ph_get_dct_matrix_32(void);
 
-/* Initializes the DCT matrix (thread-safe, idempotent) */
-void init_dct_matrix(void);
-
 /* EXIF Orientation (tag 0x0112) support. Only consulted when
  * ph_context_set_auto_orient() is enabled; degrades silently (returns 1, i.e.
  * "no transform needed") on any malformed/absent metadata rather than failing
