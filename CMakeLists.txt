@@ -292,16 +292,16 @@ else()
         # -DCMAKE_C_FLAGS=-m32 -DCMAKE_SYSTEM_PROCESSOR=i686 in ci.yml is silently
         # overridden back to the runner's real "x86_64" during project(), and this
         # branch would match "x86_64|amd64" for that leg too (and hand -mavx2 to
-        # src/hashes/common.c on a 32-bit build). CMAKE_SIZEOF_VOID_P, by contrast, is derived from an actual compiled
+        # src/compare.c on a 32-bit build). CMAKE_SIZEOF_VOID_P, by contrast, is derived from an actual compiled
         # test binary and correctly reflects -m32, so it's what distinguishes the two
         # x86 widths below.
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|i[3-6]86|^x86$")
             if(CMAKE_SIZEOF_VOID_P EQUAL 8)
                 add_compile_options(-msse4.2)
-                # Dynamically check for AVX2 support and apply ONLY to common.c
+                # Dynamically check for AVX2 support and apply ONLY to compare.c
                 check_c_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
                 if(COMPILER_SUPPORTS_AVX2)
-                    set_source_files_properties(src/hashes/common.c PROPERTIES COMPILE_OPTIONS "-mavx2")
+                    set_source_files_properties(src/compare.c PROPERTIES COMPILE_OPTIONS "-mavx2")
                 endif()
             else()
                 # 32-bit x86 has no fixed float ABI of its own -- GCC/Clang

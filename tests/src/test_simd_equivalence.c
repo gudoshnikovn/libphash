@@ -1,7 +1,7 @@
 /*
  * test_simd_equivalence.c
  *
- * Checks color.c's NEON grayscale path, phash.c's NEON dot product and common.c's
+ * Checks color.c's NEON grayscale path, phash.c's NEON dot product and compare.c's
  * AVX2/SSE4.2/NEON Hamming distance against their scalar fallbacks. A mismatch here means two
  * different hashes for the same input depending on which architecture ran it -- exactly the class
  * of bug that would otherwise surface as an unexplained golden-hash mismatch.

@@ -86,7 +86,11 @@ Divided into specific implementations corresponding to unique theoretical proper
   features.
 - `multi.c`: `ph_compute_multi()`'s shared-grayscale batching of the four `uint64_t`
   algorithms (aHash/dHash/pHash/wHash) in one call.
-- `common.c`: bit-packing/statistics helpers shared by several of the above.
+- `common.c`: the median threshold pHash and wHash share (`ph_median_bitpack*`).
+
+Comparison and serialisation of finished digests (`ph_hamming_distance*`,
+`ph_similarity*`, `ph_l2_distance`, `ph_radial_similarity`, the hex helpers) live in
+`src/compare.c`, outside the algorithms directory.
 
 Every one of these is traced to its source (or, for wHash, to the absence of one), and
 every known divergence from

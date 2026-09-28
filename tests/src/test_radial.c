@@ -78,7 +78,7 @@ void test_radial_similarity_contract() {
     ASSERT_OK(ph_radial_similarity(&a, &b, &pcc));
     ASSERT_FLOAT_EQ(1.0, pcc, 1e-9); /* a digest against itself */
 
-    /* Symmetric, unlike pHash's own ph_crosscorr() -- see the note in common.c. */
+    /* Symmetric, unlike pHash's own ph_crosscorr() -- see the note in src/compare.c. */
     double back = -9.0;
     for (int i = 0; i < 8; i++)
         b.data[i] = (uint8_t)(200 - 7 * i);
