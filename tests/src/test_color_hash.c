@@ -292,9 +292,8 @@ void test_color_hash_e2e() {
     PASS("test_color_hash_e2e");
 }
 
-/* A grayscale-loaded image carries no colour information at all -- ColorHash used
- * to silently classify every pixel from a single replicated channel and still report
- * PH_SUCCESS. It must refuse instead, without writing to the output. */
+/* A grayscale-loaded image carries no colour information at all. ColorHash must refuse
+ * rather than bin a replicated channel, and must not write to the output. */
 void test_color_hash_requires_color() {
     ph_context_t *ctx = NULL;
     ph_digest_t digest;

@@ -144,13 +144,13 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
  *
  * Two encodings reach here. PH_DIGEST_KIND_VECTOR is one unsigned byte per feature.
  * PH_DIGEST_KIND_VECTOR16 is one signed 16-bit big-endian fixed-point number per feature,
- * in units of 1/PH_VECTOR16_SCALE -- which is what ColorMoments emits since 2.0.0, because
+ * in units of 1/PH_VECTOR16_SCALE -- which is what ColorMoments emits, because
  * the third moment has a sign. The two must not be conflated: reading a 16-bit vector as
  * bytes treats each feature's high and low halves as separate features, so a difference of
  * one level in the high byte and one of 1/128 in the low byte would count the same.
  *
  * A digest tagged PH_DIGEST_KIND_UNSPECIFIED -- what a hand-filled FFI struct holds -- is
- * still read as bytes, which is what it was before the tag existed. It is only when one
+ * read as bytes. It is only when one
  * side says VECTOR16 that the pairs are decoded, and then the other side must agree or be
  * unspecified. */
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b) {

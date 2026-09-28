@@ -7,7 +7,7 @@
 #include "internal.h"
 
 /* MSVC only ships <stdatomic.h> under /std:c11 or later (VS 17.5+); the CMake
- * build sets that flag explicitly (see CMakeLists.txt), but a build invoking
+ * build gets that flag from CMAKE_C_STANDARD (see CMakeLists.txt), but a build invoking
  * cl.exe directly without it fails inside the header with a confusing
  * "cannot open source file" -- fail here instead, with a message that names
  * the actual requirement. */
@@ -253,20 +253,19 @@ static void *ph_batch_worker_pthread(void *arg) {
  *
  * The Windows branch reports only the processors of the *current processor group*, which
  * the OS caps at 64. So `threads = 0` on a machine with more than 64 logical processors
- * spawns at most 64 workers here, while the POSIX branch spawns one per online CPU.
+ * spawns at most 64 workers here, while the POSIX branch spawns one per CPU the process
+ * may use (the online count, narrowed by affinity and the cgroup quota on Linux).
  *
  * Swapping in GetActiveProcessorCount(ALL_PROCESSOR_GROUPS) would be a one-line change and
  * would make things worse, not better: a thread inherits the processor group of its creator,
  * so workers past the 64th would contend for the same 64 logical processors -- more threads,
  * more context switching, no extra parallelism. A correct fix has to place workers into
  * groups explicitly (SetThreadGroupAffinity, or InitializeProcThreadAttributeList with
- * PROC_THREAD_ATTRIBUTE_GROUP_AFFINITY), which is a design change that cannot be validated
- * anywhere in this project's current test matrix. Until such a machine is available for
- * testing, the limitation stays documented rather than half-fixed.
+ * PROC_THREAD_ATTRIBUTE_GROUP_AFFINITY), a design change that needs a >64-processor
+ * Windows machine to validate; the limitation is documented instead.
  *
- * Note this is not the cause of the MAXIMUM_WAIT_OBJECTS defect fixed previously: the wait
- * there is now batched, so it is correct for any worker count. The 64-processor cap merely kept
- * `threads = 0` from ever reaching that limit, which is why the defect went unnoticed. */
+ * Independent of this cap, the wait below is chunked by MAXIMUM_WAIT_OBJECTS, so it is
+ * correct for any worker count. */
 static int ph_detect_num_cores(void) { return ph_available_cpus(); }
 /* Runs the batch on `nthreads` workers. On return, *out_started is the number of items
  * that were started -- the prefix [0, *out_started) -- which is n unless the batch was
@@ -292,9 +291,8 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
     /* nthreads is clamped to n by ph_resolve_thread_count(), so on a 64-bit size_t this
      * product cannot wrap -- but on a 32-bit size_t with a huge n it can. Refuse instead
      * of allocating a wrapped-around, too-small handle array. */
-    /* Spelled out rather than via a helper: the macro previously used here was a
-     * tautology wherever SIZE_MAX == ULLONG_MAX, i.e. it checked nothing on every
-     * 64-bit build (removed later). */
+    /* Spelled out rather than via a SIZE_MAX-vs-ULLONG_MAX helper: such a helper is a
+     * tautology wherever the two are equal, i.e. on every 64-bit build. */
     if ((size_t)nthreads > SIZE_MAX / sizeof(HANDLE))
         return PH_ERR_ALLOCATION_FAILED;
     HANDLE *handles = malloc(sizeof(HANDLE) * (size_t)nthreads);
@@ -302,9 +300,9 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
         return PH_ERR_ALLOCATION_FAILED;
     /* Store only handles that were actually created, packed with no gaps.
      * WaitForMultipleObjects() fails immediately with WAIT_FAILED if *any* slot in
-     * the range it is given is NULL, so a single CreateThread() failure in the middle
-     * of the array used to make us stop waiting while other workers were still
-     * writing into items[] -- a data race and a use-after-free for the caller. */
+     * the range it is given is NULL, so a NULL slot from a failed CreateThread() would
+     * end the wait while other workers are still writing into items[] -- a data race
+     * and a use-after-free for the caller. */
     int spawned = 0;
     for (int i = 0; i < nthreads; i++) {
         HANDLE h = CreateThread(NULL, 0, ph_batch_worker_win, &shared, 0, NULL);
@@ -341,9 +339,8 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
     free(handles);
 #else
     /* Same overflow guard as the Windows branch above. */
-    /* Spelled out rather than via a helper: the macro previously used here was a
-     * tautology wherever SIZE_MAX == ULLONG_MAX, i.e. it checked nothing on every
-     * 64-bit build (removed later). */
+    /* Spelled out rather than via a SIZE_MAX-vs-ULLONG_MAX helper: such a helper is a
+     * tautology wherever the two are equal, i.e. on every 64-bit build. */
     if ((size_t)nthreads > SIZE_MAX / sizeof(pthread_t))
         return PH_ERR_ALLOCATION_FAILED;
     pthread_t *threads_arr = malloc(sizeof(pthread_t) * (size_t)nthreads);

@@ -1,17 +1,11 @@
 /* ph_load_from_file() and ph_load_from_memory() must produce the same image.
  *
- * They used not to. The two entry points reached the decoders by different
- * routes: the buffer path went through ph_decode_buffer(), while the file path
- * had its own sequence of stbi_info(path)/stbi_load(path) and its own separate
- * re-read of the file for the EXIF orientation scan. Anything that lived on one
- * route and not the other -- most visibly auto-orientation -- silently depended
- * on *how* the caller had loaded the image, which is exactly the kind of
- * difference a stored hash cannot survive.
- *
- * There is one decode path now, and this test pins the observable consequence:
- * the same bytes hash the same whether they arrived as a path or as a buffer,
- * for every combination of the two settings that used to differ between the
- * routes, and failures come back with the same error code on both. */
+ * Anything that differed between the two routes -- auto-orientation most visibly --
+ * would make a stored hash depend on *how* the caller loaded the image, which is
+ * exactly the kind of difference a stored hash cannot survive. This pins it: the
+ * same bytes hash the same whether they arrive as a path or as a buffer, for every
+ * combination of load_grayscale and auto_orient, and failures come back with the
+ * same error code on both. */
 
 #include "test_macros.h"
 #include <libphash.h>
@@ -177,8 +171,8 @@ static void expect_same(const load_result_t *a, const load_result_t *b, const ch
 #undef CHECK_U64
 }
 
-/* Runs one fixture through both entry points in all four combinations of the two
- * settings that the old split path handled differently. */
+/* Runs one fixture through both entry points in all four combinations of
+ * load_grayscale and auto_orient. */
 static void check_parity(const char *path, const char *what) {
     size_t len = 0;
     uint8_t *buf = read_file(path, &len);
@@ -245,9 +239,7 @@ static void test_exif_orientation_parity(void) {
     free(plain);
 }
 
-/* Failures have to match too: the file path used to classify some of them with
- * its own copy of the logic (stbi_failure_reason() on the file, a magic sniff for
- * WebP) while the buffer path used the decoder dispatcher's. */
+/* Failures have to match too. */
 static void test_failure_parity(void) {
     static const uint8_t garbage[] = "not an image at all, really";
     const char *tmp_path = "ph_parity_garbage.bin";
@@ -270,8 +262,7 @@ static void test_failure_parity(void) {
     expect_same(&f, &m, "corrupt JPEG");
     free(corrupt);
 
-    /* The pixel-count limit is one check now instead of two implementations of
-     * it (stbi_info(path) on one side, the backend's own on the other). */
+    /* The pixel-count limit gives the same answer on both paths. */
     size_t jlen = 0;
     uint8_t *jpeg = read_file(TEST_DATA_DIR "/photo.jpeg", &jlen);
     ph_context_set_max_pixels(ctx, 16);

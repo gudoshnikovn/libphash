@@ -3,7 +3,7 @@
  * zlib-ng -- the inflate under the native PNG backends -- picks its CPU-specific routines
  * lazily, on the first call, by writing a global function table that other threads read
  * without synchronisation: a data race under the C memory model, reported by
- * ThreadSanitizer with a stack through ph_hash_files(). The library now warms that
+ * ThreadSanitizer with a stack through ph_hash_files(). The library warms that
  * dispatch once, under a lock, before its first decode.
  *
  * What makes this test worth having is what it does NOT do: nothing is decoded before the

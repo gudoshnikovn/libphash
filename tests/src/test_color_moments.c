@@ -69,9 +69,8 @@ void test_color_moments_e2e() {
     PASS("test_color_moments_e2e");
 }
 
-/* With a grayscale image all three "color" moments used to come out of the same
- * byte -- three identical channels reported as PH_SUCCESS. Refuse, and leave the
- * caller's digest untouched. */
+/* With a grayscale image all three "color" moments would come out of the same byte.
+ * Refuse, and leave the caller's digest untouched. */
 void test_color_moments_requires_color() {
     ph_context_t *ctx = NULL;
     ph_digest_t digest;

@@ -114,10 +114,8 @@ void test_median_stability() {
 
 /* The boundaries of the colour quantiser, at the values where a nudge changes the bin.
  *
- * The HSV classifier this used to exercise went with the ImageHash port in 2.0.0. The
- * opponent-axis quantiser that replaced it has the same kind of edge, and the same reason
- * to be pinned: an off-by-one at an axis end silently moves every pixel of one colour into
- * the neighbouring bin. */
+ * The opponent-axis quantiser has an edge worth pinning: an off-by-one at an axis end silently
+ * moves every pixel of one colour into the neighbouring bin. */
 void test_colour_quantiser_singularities() {
     /* The extremes of each axis land in the extreme bins, not one past them. */
     ASSERT_INT_EQ(PH_COLOR_BINS_RG - 1,

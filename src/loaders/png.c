@@ -6,7 +6,7 @@
 // Two alternative implementations of one backend: the decoder below is selected
 // with #ifdef/#elif, so defining both would silently drop spng and still link it.
 // The CMake build refuses the combination up front; this catches the other build
-// paths (Makefile, python-libphash's _build.py, hand-rolled CFLAGS).
+// paths (Makefile, hand-rolled CFLAGS).
 #if defined(PH_USE_LIBPNG) && defined(PH_USE_SPNG)
 #error "PH_USE_LIBPNG and PH_USE_SPNG are mutually exclusive: define exactly one PNG backend."
 #endif
@@ -134,9 +134,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
         /* png_create_read_struct()'s only failure mode is its own allocation failing,
          * and it fails by returning NULL directly rather than through png_error_fn --
          * the error callbacks aren't registered on png_ptr yet at this point, since
-         * png_ptr doesn't exist. Leaving *out_err untouched here used to fall through
+         * png_ptr doesn't exist. Leaving *out_err untouched here would fall through
          * to ph_decode_buffer()'s PH_SUCCESS-turned-PH_ERR_CORRUPT_DATA fallback
-         * (src/loader.c), misreporting an OOM as corrupt image data. */
+         * (src/loader.c) and misreport an OOM as corrupt image data. */
         if (out_err)
             *out_err = PH_ERR_ALLOCATION_FAILED;
         ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
@@ -144,10 +144,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     }
 
     /* setjmp() must be armed before ANY other libpng call on png_ptr that CAN
-     * longjmp() through png_error_fn -- which, after the correction above,
-     * png_create_info_struct() itself turns out not to be (it deliberately
-     * allocates through libpng's non-erroring png_malloc_base(), see the OOM
-     * comment above), but every other libpng call below this point still can.
+     * longjmp() through png_error_fn. png_create_info_struct() cannot (it
+     * deliberately allocates through libpng's non-erroring png_malloc_base(), see
+     * below), but every other libpng call below this point can.
      *
      * info_for_cleanup is volatile because it is assigned after setjmp() and read in
      * the longjmp branch: a non-volatile local modified between setjmp and longjmp has
@@ -159,7 +158,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
      * png_read_image() below: it can still longjmp here (e.g. Z_MEM_ERROR from zlib
      * running out of memory mid-IDAT, translated to png_error() by
      * png_zstream_error()) after this function's own `data`/`row_ptrs` buffers are
-     * already allocated -- without these, that path leaked both, since the plain
+     * already allocated -- without these, that path would leak both, since the plain
      * `data`/`row_ptrs` locals below aren't in scope up here and can't be read from
      * the jump branch regardless (same indeterminate-value rule as info_for_cleanup).
      *
@@ -189,8 +188,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
 
     png_infop info_ptr = png_create_info_struct(png_ptr);
     if (!info_ptr) {
-        /* Despite the setjmp() comment above, png_create_info_struct() actually
-         * allocates via png_malloc_base() (vendor/libpng/png.c), libpng's
+        /* png_create_info_struct() allocates via png_malloc_base() (vendor/libpng/png.c), libpng's
          * deliberately non-erroring allocator variant, specifically so this call
          * "always returns ok" instead of going through png_error()/longjmp() --
          * an OOM here returns NULL directly, bypassing png_error_fn entirely. */
@@ -210,9 +208,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
         // Defense in depth: cap each dimension individually (in addition to the
         // width*height check below) and cap ancillary-chunk allocations, so a
         // malicious header can't force a huge allocation before we even see w/h.
-        /* Only ever LOWER libpng's own per-dimension default (1000000). Passing
-         * max_pixels straight through raised it -- with the default 256 MP that meant
-         * telling libpng a 268435456-pixel-wide image is acceptable. */
+        /* Only ever LOWER libpng's own per-dimension default (1000000): passing
+         * max_pixels (256 Mi by default) through would raise it, telling libpng a
+         * 268435456-pixel-wide image is acceptable. */
         png_uint_32 dim_limit = (max_pixels > PH_MAX_IMAGE_DIMENSION) ? PH_MAX_IMAGE_DIMENSION
                                                                       : (png_uint_32)max_pixels;
         png_set_user_limits(png_ptr, dim_limit, dim_limit);
@@ -286,11 +284,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     }
     data_for_cleanup = data;
 
-    /* The only allocation in this decoder that used to skip the overflow check while
-     * its neighbour above went through ph_safe_image_alloc_size(). `h` comes
-     * straight from the PNG header as a png_uint_32, so on a 32-bit target
-     * sizeof(png_bytep) * h wraps and produces a too-small array that png_read_image()
-     * then writes past. Refuse instead. */
+    /* Overflow-checked like its neighbour above. `h` comes straight from the PNG header as a
+     * png_uint_32, so on a 32-bit target sizeof(png_bytep) * h wraps and produces a too-small array
+     * that png_read_image() then writes past. Refuse instead. */
     size_t row_ptrs_size;
     if (!ph_safe_image_alloc_size(sizeof(png_bytep), h, 1, &row_ptrs_size)) {
         if (out_err)
@@ -336,7 +332,7 @@ PH_API int ph_can_use_png(void) { return 1; }
  * failed" value (vendor/spng/spng/spng.h), so this is a precise, non-string-guess
  * classification, the same idea as VP8_STATUS_OUT_OF_MEMORY for the WebP backend
  * (src/loaders/webp.c). Without this, every spng failure -- OOM or genuinely
- * corrupt data -- collapsed to PH_ERR_CORRUPT_DATA below. */
+ * corrupt data -- would collapse to PH_ERR_CORRUPT_DATA below. */
 static ph_error_t ph_spng_err(int ret) {
     return (ret == SPNG_EMEM) ? PH_ERR_ALLOCATION_FAILED : PH_ERR_CORRUPT_DATA;
 }
@@ -404,11 +400,8 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     /* spng accepts SPNG_FMT_G8 only for a genuinely grayscale PNG -- color type 0
      * with a bit depth of 8 or less (check_decode_fmt() in spng.c). For anything
      * else -- truecolor, palette, gray+alpha, 16-bit -- it rejects the request with
-     * SPNG_EFMT ("invalid format") and the whole decode fails. Asking for G8
-     * unconditionally therefore broke grayscale loading of every ordinary PNG in
-     * this backend: ph_context_set_load_grayscale(ctx, 1) reported
-     * PH_ERR_CORRUPT_DATA on a perfectly valid file, while the libpng backend
-     * converted it happily.
+     * SPNG_EFMT ("invalid format") and the whole decode fails, so G8 cannot be
+     * requested unconditionally.
      *
      * Take the same route libpng does: let spng deliver RGB8 whenever G8 is not
      * applicable, then fold the pixels down here with the exact weights the libpng

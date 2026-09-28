@@ -116,7 +116,7 @@ void test_radial_similarity_contract() {
 }
 
 /* The digest is not a bit vector, so the comparison has to be the source's own.
- * Measured on these fixtures (2.0.0): an identical copy 1.0000, the same photo with its
+ * Measured on these fixtures: an identical copy 1.0000, the same photo with its
  * colours changed 0.9980, an unrelated image 0.6908. */
 void test_radial_with_real_rotation() {
     ph_digest_t orig, copy, other;
@@ -150,7 +150,7 @@ void test_radial_with_real_rotation() {
 /* Rotation on real photographs, which is where the algorithm's claim has to hold.
  *
  * The source is credited with robustness to rotation, and this measures what that
- * amounts to. Measured on tests/data/photo.jpeg (2.0.0), against a 0.6924 baseline for an
+ * amounts to. Measured on tests/data/photo.jpeg, against a 0.6924 baseline for an
  * unrelated image: 1 degree 0.9932, 2 degrees 0.9745, 3 degrees 0.9444, 5 degrees 0.8703,
  * 10 degrees 0.6892, 15 degrees 0.4371, 90 degrees 0.2434, 180 degrees 0.9927. On the
  * smoother photo_complex.png the same sweep holds to 10 degrees (0.9385).
@@ -286,8 +286,9 @@ void test_radial_ignores_everything_outside_the_central_disc() {
             base[y * W + x] = (uint8_t)((x * 37 + y * 91 + x * y) % 256);
     memcpy(edited, base, sizeof(base));
 
-    /* The sampled disc is x in [100 - 15, 100 + 15]; the 3x3 blur can reach one pixel
-     * further. Everything left of column 60 is comfortably outside both. */
+    /* The sampled disc is x in [100 - 15, 100 + 15]; the sigma-3.5 blur reaches
+     * ceil(3 * 3.5) = 11 pixels further (to column 74). Everything left of column 60 is
+     * outside both. */
     for (int y = 0; y < H; y++)
         for (int x = 0; x < 60; x++)
             edited[y * W + x] = (uint8_t)(255 - base[y * W + x]);
@@ -331,13 +332,13 @@ void test_radial_ignores_everything_outside_the_central_disc() {
 
 /* The projection count at both ends of its accepted range.
  *
- * Since 2.0.0 the count is the number of angles only -- the digest is always
+ * The count is the number of angles only -- the digest is always
  * PH_RADIAL_COEFFS bytes of DCT coefficients -- so the two bounds mean different things
  * and both need checking. The lower one is hard: a DCT of an n-element vector has n
  * coefficients, so fewer angles than coefficients cannot produce the hash at all. The
  * upper one is a resolution limit, not a correctness one, and the test for it is
  * convergence: past the point where extra angles stop carrying information, the digest
- * has to stop moving. Measured on 2.0.0, 4096 angles against 131072 correlate at 0.99995,
+ * has to stop moving. Measured: 4096 angles against 131072 correlate at 0.99995,
  * while 180 against 4096 are still at 0.9908 -- so the ceiling is well past the point of
  * diminishing returns, which is what a ceiling should be. */
 void test_radial_projection_count_bounds() {
@@ -358,7 +359,7 @@ void test_radial_projection_count_bounds() {
         ASSERT_OK(ph_load_from_pixels(ctx, px, SIDE, SIDE, 1, 0));
         memset(&d[i], 0xAA, sizeof(d[i]));
         ASSERT_OK(ph_compute_radial_hash(ctx, &d[i]));
-        /* The digest width no longer follows the angle count, at either end. */
+        /* The digest width does not follow the angle count, at either end. */
         ASSERT_INT_EQ(PH_RADIAL_COEFFS, d[i].size);
         ph_free(ctx);
     }

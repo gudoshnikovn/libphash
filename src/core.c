@@ -54,9 +54,9 @@ typedef struct stat ph_file_stat_t;
  * cost one open() and no read() at all; the read-into-heap fallback in
  * ph_open_file_bytes() covers the platforms that have no mmap (Windows) and the
  * filesystems that refuse to map. Nothing outside these two helpers knows which
- * of the two produced the bytes -- in particular, the mmap block is no longer
- * tied to the PH_USE_* decoder macros, which used to make a Windows build with
- * any native decoder enabled fail to compile on <sys/mman.h>. */
+ * of the two produced the bytes. It does not depend on the PH_USE_* decoder
+ * macros: <sys/mman.h> must stay out of Windows builds whatever decoders are
+ * enabled. */
 #if !defined(_WIN32) && defined(_POSIX_MAPPED_FILES)
 #define PH_HAVE_MMAP 1
 #endif
@@ -158,13 +158,12 @@ PH_API const char *ph_get_last_error_message(const ph_context_t *ctx) {
     return ctx->last_error;
 }
 
-/* Every ph_context_set_* below returns ph_error_t. Contract, uniform across all
- * nine of them: valid input -> PH_SUCCESS; invalid input -> PH_ERR_INVALID_ARGUMENT with
- * the configuration left exactly as it was. No partial application, no clamping and no
+/* Every ph_context_set_* below returns ph_error_t. Contract, uniform across all of
+ * them: valid input -> PH_SUCCESS; invalid input -> PH_ERR_INVALID_ARGUMENT with the
+ * configuration left exactly as it was. No partial application, no clamping and no
  * silent fallback to defaults -- a caller that cannot see its argument was refused ends
- * up hashing with a configuration it did not ask for, which used to let out-of-range
- * parameters reach the hash computation and read from or write into memory the caller
- * never sized for them.
+ * up hashing with a configuration it did not ask for, and an out-of-range parameter
+ * would reach the hash computation and touch memory never sized for it.
  *
  * Deliberately NOT marked PH_NODISCARD, unlike the ph_compute_ and ph_load_ family. These
  * setters are routinely called for their effect in sequences where the arguments are
@@ -176,14 +175,12 @@ PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma) {
     if (!ctx)
         return PH_ERR_INVALID_ARGUMENT;
 
-    /* isfinite() has to come first. The previous guard was `gamma <= PH_GAMMA_EPSILON`,
-     * and every comparison against NaN is false, so NAN (and INFINITY, which is also
-     * greater than the epsilon) passed validation, which used to poison a precomputed
-     * LUT. There is no LUT here any more -- gamma is applied per-image, normalised
-     * by the buffer's own maximum, see ph_apply_gamma() in src/image/color.c -- but the
-     * bound stays: it is still what keeps the exponent applied to a pixel meaningful.
-     * The upper bound keeps that exponent inside a range symmetric about 1.0; see
-     * PH_GAMMA_MAX. */
+    /* isfinite() has to come first: every comparison against NaN is false, so
+     * `gamma <= PH_GAMMA_EPSILON` alone would accept NAN (and INFINITY, which is above
+     * the epsilon). The bounds keep the exponent applied to a pixel meaningful (gamma
+     * is applied per image, normalised by the buffer's own maximum; see ph_apply_gamma()
+     * in src/image/color.c). The upper bound keeps it inside a range symmetric about
+     * 1.0; see PH_GAMMA_MAX. */
     if (!isfinite((double)gamma) || gamma <= PH_GAMMA_EPSILON || gamma > PH_GAMMA_MAX)
         return PH_ERR_INVALID_ARGUMENT;
 
@@ -227,9 +224,8 @@ PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, i
         return PH_ERR_INVALID_ARGUMENT;
 
     long long sum = (long long)r + (long long)g + (long long)b;
-    /* sum == 0 used to reset the weights to the ITU-R BT.601 defaults and report nothing,
-     * so "0, 0, 0" silently changed the configuration to something the caller never
-     * asked for. It is an error now. */
+    /* sum == 0 is an error, not a silent reset to the BT.601 defaults: "0, 0, 0" must not
+     * install a configuration the caller never asked for. */
     if (sum <= 0 || sum > PH_GRAY_WEIGHT_MAX_SUM)
         return PH_ERR_INVALID_ARGUMENT;
 
@@ -322,9 +318,8 @@ PH_API ph_error_t ph_context_set_block_params(ph_context_t *ctx, int block_size)
 PH_API ph_error_t ph_context_set_load_grayscale(ph_context_t *ctx, int enable) {
     if (!ctx)
         return PH_ERR_INVALID_ARGUMENT;
-    /* A boolean flag: any int is a valid argument, normalized to 0/1 (it used to be
-     * stored verbatim). There is nothing to reject, so this never fails for a non-NULL
-     * context. */
+    /* A boolean flag: any int is a valid argument, normalized to 0/1. There is nothing to
+     * reject, so this never fails for a non-NULL context. */
     ctx->config.load_grayscale = enable ? 1 : 0;
     return PH_SUCCESS;
 }
@@ -680,13 +675,11 @@ static ph_error_t ph_read_open_file(int fd, const char *filepath, size_t size, p
 
 /* Opens the path exactly ONCE and hands back all of its bytes.
  *
- * This used to be spread over as many as six openings of the same path -- a
- * probe, a magic-byte sniff, an mmap attempt, stbi_info(), stbi_load() and a
- * final full re-read just to scan for an EXIF tag. Besides being pure I/O
- * overhead on the hottest path in the library, that meant every one of those
- * steps looked at a potentially different file (TOCTOU): the path could be
- * replaced between the probe that accepted it and the read that decoded it.
- * One open, one set of bytes, and everything downstream -- format dispatch,
+ * Opening the path more than once -- to probe it, sniff its magic bytes, map it,
+ * decode it, scan it for an EXIF tag -- would cost I/O on the hottest path in the
+ * library, and every step could see a different file (TOCTOU): the path can be
+ * replaced between a probe that accepts it and the read that decodes it.
+ * So there is one open, one set of bytes, and everything downstream -- format dispatch,
  * pixel-limit check, decode, orientation scan -- works on that one snapshot.
  *
  * Everything that makes a path unusable as an image source is classified here,
@@ -770,8 +763,7 @@ static void ph_reset_loaded_image(ph_context_t *ctx) {
 /* The one decode path. Both ph_load_from_file() and ph_load_from_memory() reach
  * the decoders through this, which is what makes backend dispatch, the
  * pixel-count limit, error classification and EXIF auto-orientation identical for
- * a file and for a buffer -- auto-orientation in particular used to be applied on
- * the file path only in some build configurations. */
+ * a file and for a buffer. */
 static ph_error_t ph_load_encoded_bytes(ph_context_t *ctx, const uint8_t *data, size_t length) {
     int req_comp = ctx->config.load_grayscale ? 1 : 0;
     int w = 0, h = 0, ch = 0;
@@ -855,10 +847,8 @@ PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels, 
     if (channels != 1 && channels != 3 && channels != 4)
         return PH_ERR_INVALID_ARGUMENT;
 
-    /* This used to be the one load path with no decompression-bomb protection,
-     * which is what made the int-overflow in the pixel-count arithmetic reachable
-     * with the default configuration. Same check and same error code as the file and
-     * buffer paths; max_pixels == 0 still means "unlimited". */
+    /* Decompression-bomb protection applies here too, with the same check and the same
+     * error code as the file and buffer paths; max_pixels == 0 means "no caller limit". */
     if (ph_exceeds_pixel_limit((uint64_t)width, (uint64_t)height, ctx->config.max_pixels))
         return PH_ERR_IMAGE_TOO_LARGE;
 

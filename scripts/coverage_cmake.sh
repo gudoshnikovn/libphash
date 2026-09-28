@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# R24: `make coverage` (Makefile) only ever measures the stb_image-only path -- the
+# `make coverage` (Makefile) measures only the stb_image-only path -- the
 # native decoders in src/loaders/{jpeg,png,webp}.c compile down to nothing but their
 # ph_can_use_*() stub there, so their max_pixels checks, error-callback plumbing
 # (png_error_fn/png_warning_fn + the longjmp that carries libpng's message out,
 # spng_strerror() branches) and the pitch/alloc_size overflow guards in jpeg.c are
-# never exercised or measured by that flow -- exactly the code R16-R18 lived in.
+# never exercised or measured by that flow.
 #
 # This script drives two separate CMake+ctest runs with PHASH_COVERAGE=ON:
 #   - "native": the default vendored decoder set (libjpeg-turbo + libpng + libwebp +

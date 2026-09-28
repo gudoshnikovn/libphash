@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* tests/data/decode_bomb.png is a 45-byte PNG whose IHDR declares a 100000x100000
+/* tests/data/decode_bomb.png is a 65-byte PNG whose IHDR declares a 100000x100000
  * (1e10 pixel) image with no real pixel data behind it — a classic decompression
  * bomb. Loading it must fail fast with PH_ERR_IMAGE_TOO_LARGE, never attempt the
  * multi-gigabyte allocation implied by the header. */
@@ -85,9 +85,9 @@ void test_custom_higher_limit_allows_normal_image() {
 
 /* max_pixels bounds the AREA, which on its own permits an absurd aspect
  * ratio. A 268435456 x 1 PNG hits the default 256 MP limit exactly -- w*h is not
- * greater than max_pixels -- yet implies a row buffer of ~800 MB. Worse, passing
- * max_pixels straight into png_set_user_limits() *raised* libpng's own per-dimension
- * default of 1000000 to 268435456, telling libpng such a width was acceptable.
+ * greater than max_pixels -- yet implies a row buffer of ~800 MB, and passing
+ * max_pixels into png_set_user_limits() would raise libpng's own per-dimension
+ * default of 1000000 to 268435456, telling libpng such a width is acceptable.
  *
  * The dimensions are read straight out of the IHDR, before the buffer reaches
  * libpng/spng, so the header below needs no valid CRC or pixel data: it must be
@@ -123,9 +123,7 @@ void test_extreme_aspect_ratio_rejected() {
 
     /* No branching on the compiled-in backend: the per-dimension cap is applied by the
      * dispatcher for PNG, so libpng, spng and stb_image builds all answer the same
-     * input with PH_ERR_IMAGE_TOO_LARGE. Before, the cap lived inside the native PNG
-     * decoder and a stb_image-only build had none, answering with its own complaint
-     * about the truncated stream instead. */
+     * input with PH_ERR_IMAGE_TOO_LARGE. */
 
     /* Exactly the default area limit, but 268435456 pixels wide. */
     build_png_header(hdr, 268435456u, 1u);
@@ -136,8 +134,8 @@ void test_extreme_aspect_ratio_rejected() {
     build_png_header(hdr, 1u, 268435456u);
     ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_memory(ctx, hdr, sizeof(hdr)));
 
-    /* Raising max_pixels must not raise the per-dimension limit either -- that was
-     * exactly the defect: the dimension cap is deliberate, not derived from area. */
+    /* Raising max_pixels must not raise the per-dimension limit either: the dimension
+     * cap is deliberate, not derived from area. */
     ph_context_set_max_pixels(ctx, 0);
     build_png_header(hdr, 268435456u, 1u);
     ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_memory(ctx, hdr, sizeof(hdr)));
@@ -152,9 +150,9 @@ void test_extreme_aspect_ratio_rejected() {
 }
 
 /* An encoded buffer longer than INT_MAX bytes. stb_image takes the length as an int, and
- * the library used to cast it straight through: at 2 GiB + 4 KiB a valid PNG became an
- * "unrecognized format", at 4 GiB + 4 KiB the length wrapped to 4 KiB and the prefix was
- * decoded as if it were the whole file. The buffers come from calloc(), so the untouched
+ * a straight cast would make a 2 GiB + 4 KiB PNG an "unrecognized format" and wrap
+ * 4 GiB + 4 KiB to 4 KiB, decoding the prefix as if it were the whole file. Such buffers
+ * must be refused. The buffers come from calloc(), so the untouched
  * tail costs address space, not memory; where even that is refused (a sanitizer's
  * allocator limit, a 32-bit build) the case is skipped. */
 static void check_long_buffer(const unsigned char *png, size_t png_len, size_t total,

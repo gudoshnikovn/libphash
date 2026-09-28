@@ -1,11 +1,10 @@
 /*
  * test_simd_equivalence.c
  *
- * Covers a gap where none of color.c's/filters.c's NEON paths, phash.c's NEON dot product, or
- * common.c's AVX2/SSE4.2/NEON Hamming distance were ever checked against their scalar
- * fallback for producing the same result. A mismatch here means two different hashes for
- * the same input depending on which architecture ran it -- exactly the class of bug that
- * would otherwise surface as an unexplained golden-hash mismatch.
+ * Checks color.c's/filters.c's NEON paths, phash.c's NEON dot product and common.c's
+ * AVX2/SSE4.2/NEON Hamming distance against their scalar fallbacks. A mismatch here means two
+ * different hashes for the same input depending on which architecture ran it -- exactly the class
+ * of bug that would otherwise surface as an unexplained golden-hash mismatch.
  *
  * Every function below exists in two forms: the production one (compiled with whatever
  * SIMD the target supports) and a `_scalar` twin that always takes the plain C path,
@@ -16,7 +15,7 @@
  * undefined) the production and `_scalar` entry points are literally the same code path,
  * so the comparisons below are tautological there -- the test still passes, it just isn't
  * exercising anything. The matrix this needs to run on to mean something is arm64 (NEON)
- * and x86_64 with AVX2/SSE4.2 (both gcc and clang), per the task's acceptance criteria.
+ * and x86_64 with AVX2/SSE4.2 (both gcc and clang).
  *
  * ph_dct2_partial() is the one function here with a floating-point SIMD path
  * (dot_product_f32_u8_neon in phash.c, used only at dct_size == 32). Floating-point

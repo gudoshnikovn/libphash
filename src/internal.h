@@ -11,7 +11,7 @@
  * the compiler defines __STRICT_ANSI__, glibc hides every non-ISO name behind it,
  * and the three call sites in phash.c/radial.c stop compiling; MSVC's <math.h>
  * never declares it at all without _USE_MATH_DEFINES. Darwin declares it
- * unconditionally, which is why this only ever showed up on Linux. Defining it here,
+ * unconditionally; glibc and MSVC do not. Defining it here,
  * after <math.h>, makes the constant a property of this codebase rather than of the
  * libc it happens to be built against -- the guard keeps the libc's own definition
  * when there is one. */
@@ -129,7 +129,7 @@ uint64_t ph_median_bitpack_from(const float *values, int n, int median_from);
 
 /* Structural validity of a caller-supplied ph_digest_t.
  *
- * ph_digest_t is a flat public struct that FFI bindings (Python, C#, Rust) fill in
+ * ph_digest_t is a flat public struct that FFI bindings fill in
  * by hand, and `size` is a uint8_t that can hold up to 255 while `data` is only
  * PH_DIGEST_MAX_BYTES long. Every public function that reads a digest must check
  * this first, or a size of 200 reads past the end of the array. */
@@ -231,12 +231,11 @@ ph_error_t ph_apply_exif_orientation(uint8_t **data, int *width, int *height, in
 #define PH_DCT_SIZE 32
 #define PH_DCT_REDUCTION_SIZE 8     // We use the top-left 8x8 coefficients
 #define PH_CORE_HASH_SIZE 8         // Standard 8x8 grid for ahash/dhash/phash
-#define PH_BLOCK_SIZE 16            // 16x16 grid for BMH (mHash uses a fixed 18x18)
+#define PH_BLOCK_SIZE 16            // 16x16 grid for BMH
 #define PH_HAAR_SCALE 1.41421356237 // sqrt(2) for Haar wavelet normalization
 /* Radial: 180 angles over [0, pi) -- the Radon transform is symmetric, so 180 covers the
  * whole circle -- reduced by a 1D DCT to 40 coefficients, which are the hash. Both
- * numbers come from the source (De Roover et al. via Zauner 3.1.3); before 2.0.0 the 40
- * sat on the angle count instead, which is a different algorithm. */
+ * numbers come from the source (De Roover et al. via Zauner 3.1.3). */
 /* Marr-Hildreth. The construction is pHash's ph_mh_imagehash(); the operator it applies
  * is the Laplacian of Gaussian of Marr & Hildreth 1980. Every number here is that
  * implementation's, taken as a fact about the algorithm:
@@ -276,9 +275,7 @@ ph_error_t ph_apply_exif_orientation(uint8_t **data, int *width, int *height, in
 /* Default Gaussian-blur sigma for Radial, aligned on pHash's own header default
  * (ph_compare_images(), aetilius/pHash), not on Zauner's Diplomarbeit, which reports "the
  * authors suggest 1 for both variables" (sigma and gamma) and is contradicted by pHash's
- * own default here. Before 2.0.0 (well, before this fix) Radial's blur was a fixed 3x3
- * kernel with no sigma at all (effective sigma about 0.707) -- see
- * docs/algorithm-provenance.md section 7 for the measured delta this moved. */
+ * own default here. See docs/algorithm-provenance.md section 7. */
 #define PH_RADIAL_DEFAULT_SIGMA 3.5f
 
 /* Upper bound on radial sigma: ph_gaussian_blur_sigma() (src/image/filters.c) derives its
@@ -293,9 +290,8 @@ ph_error_t ph_apply_exif_orientation(uint8_t **data, int *width, int *height, in
 /* Below this spread across the projection variances an image has no radial structure to
  * describe -- it is flat, or radially symmetric -- and the digest is all zeroes rather
  * than a standardisation of floating-point residue. No source specifies the value; it is
- * the one that was already in this code for the same job before 2.0.0, and it is one of
- * the constants left pinned to their pre-2.0.0 values rather than re-derived from a
- * source that does not specify them. */
+ * this library's choice: small enough that no real image's projection variance falls
+ * under it, large enough to catch the residue a flat image leaves. */
 #define PH_RADIAL_FLAT_VARIANCE 0.001
 
 /* Hard upper bounds for the pHash DCT: ph_dct2_partial() uses a fixed
@@ -304,7 +300,7 @@ ph_error_t ph_apply_exif_orientation(uint8_t **data, int *width, int *height, in
 #define PH_DCT_MAX_SIZE 32
 #define PH_DCT_MAX_REDUCTION_SIZE 8
 
-/* Hard lower bound for reduction_size. Since 2.0.0 the DC coefficient is
+/* Hard lower bound for reduction_size. The DC coefficient is
  * excluded from the hash: ph_median_bitpack_from(dct_out, n=reduction_size^2, median_from=1)
  * skips the first (DC) coefficient and thresholds only the AC ones. At
  * reduction_size == 1 there is exactly one coefficient (the DC one), all of it is
@@ -323,11 +319,10 @@ ph_error_t ph_apply_exif_orientation(uint8_t **data, int *width, int *height, in
  * error it could check. */
 
 /* BMH packs one bit per block, i.e. block_size^2 bits, into a ph_digest_t of at most
- * PH_DIGEST_MAX_BYTES bytes. At the 128 bytes of 2.0.0: 32*32 = 1024 bits = 128 bytes
+ * PH_DIGEST_MAX_BYTES bytes. At PH_DIGEST_MAX_BYTES = 128: 32*32 = 1024 bits = 128 bytes
  * fits exactly; 33*33 = 1089 bits = 137 bytes does not. The two _Static_asserts below
- * keep this tied to PH_DIGEST_MAX_BYTES rather than to the literal, which is how the
- * bound moved from 22 to 32 by itself when the digest grew.
- * block_size affects BMH only -- mHash has its own fixed geometry. */
+ * tie the bound to PH_DIGEST_MAX_BYTES rather than to a literal.
+ * block_size affects BMH only -- mHash has its own parameters. */
 #define PH_BLOCK_MAX_SIZE 32
 
 /* Hard lower bound for block_size. At block_size == 1 the grid is a single block
@@ -337,9 +332,8 @@ ph_error_t ph_apply_exif_orientation(uint8_t **data, int *width, int *height, in
  * produce blocks with different means and therefore a content-dependent bit pattern. */
 #define PH_BLOCK_MIN_SIZE 2
 
-/* Since 2.0.0 the projection count is the number of ANGLES, and the digest width no
- * longer follows it: the hash is always PH_RADIAL_COEFFS DCT coefficients. So the bound
- * is no longer the digest's capacity but the angular resolution beyond which more angles
+/* The projection count is the number of ANGLES; the digest is always PH_RADIAL_COEFFS
+ * DCT coefficients. So the bound is the angular resolution beyond which more angles
  * carry no new information -- two neighbouring projections have to differ by at least one
  * pixel at the far end of the longest one. The largest square image the library will
  * process is 46340 x 46340 (PH_MAX_SUPPORTED_PIXELS), whose projection radius is
@@ -407,8 +401,7 @@ _Static_assert(PH_RADIAL_PROJECTIONS >= PH_RADIAL_MIN_PROJECTIONS &&
  * +/-116.85 (two-point distributions are extremal for all three). 255 is therefore the
  * largest magnitude any moment can take, and 128 is the largest power of two with
  * 255 * scale <= INT16_MAX: the encoding covers the whole attainable range with nothing
- * to clamp, at a resolution of 1/128, where the old byte encoding both clamped at 255 and
- * truncated to whole units. */
+ * to clamp, at a resolution of 1/128. */
 #define PH_COLOR_MOMENT_SCALE 128
 #define PH_COLOR_MOMENT_BYTES 2
 #define PH_COLOR_MOMENTS_DIGEST_BYTES (PH_COLOR_CHANNELS * PH_COLOR_MOMENTS * PH_COLOR_MOMENT_BYTES)
@@ -423,10 +416,10 @@ _Static_assert(255 * PH_COLOR_MOMENT_SCALE <= 32767,
 #endif
 
 /* ColorHash: the opponent colour axes of Swain & Ballard, quantised. The resolution is
- * this library's, chosen by measurement over sixteen candidates rather than by citation --
- * the paper could not be obtained. See the header of src/hashes/color_histogram.c and
- * docs/algorithm-provenance.md for the table and for why two higher-scoring candidates
- * were rejected. */
+ * this library's, chosen by measurement over sixteen candidates: the paper is implemented
+ * from secondary descriptions and supplies none that fits a digest. See the header of
+ * src/hashes/color_histogram.c and docs/algorithm-provenance.md for the table and for why two
+ * higher-scoring candidates were rejected. */
 #define PH_COLOR_BINS_RG 6
 #define PH_COLOR_BINS_BY 6
 #define PH_COLOR_BINS_WB 3
@@ -438,24 +431,18 @@ _Static_assert(PH_COLOR_BINS <= PH_DIGEST_MAX_BYTES,
 #endif
 
 /* Aligned on pHash's own default (ph_compare_images(), aetilius/pHash), which is
- * an identity transform: pow(v, 1.0) == v. Before this fix the default was 2.2, an
- * independently-chosen sRGB display gamma with no connection to Radial's reference
- * implementation -- see docs/algorithm-provenance.md section 7 for the history and the
- * measured delta this moved (real photographs: mean PCC-distance 0.08-0.10 between the old and
- * new default, the same order of magnitude as the library's normal intra-class
- * variation). Gamma now also raises pixels to `gamma` directly, not `1.0/gamma` --
- * pHash's own convention -- and normalises the buffer by its own maximum before the
- * power step and rescales by the same maximum after, so a gamma of 1.0 is exactly a
- * no-op regardless of image content (see ph_apply_gamma(), src/image/color.c). */
+ * an identity transform: pow(v, 1.0) == v. Gamma raises pixels to `gamma` directly
+ * (pHash's convention, not `1.0/gamma`) and normalises the buffer by its own maximum
+ * before the power step and rescales by the same maximum after, so a gamma of 1.0 is
+ * exactly a no-op regardless of image content (see ph_apply_gamma(),
+ * src/image/color.c). docs/algorithm-provenance.md section 7 has the measurements. */
 #define PH_DEFAULT_GAMMA 1.0f
 #define PH_GAMMA_EPSILON 0.001f
 
-/* Upper bound on gamma. The exponent applied to a pixel is now `gamma` directly (see
- * PH_DEFAULT_GAMMA above), so this bound and PH_GAMMA_EPSILON together keep that
- * exponent inside [0.001, 1000], a range symmetric about 1.0 in log scale -- same
- * bounds as before this fix, when they bounded 1.0/gamma instead; the isfinite() check
- * in ph_context_set_gamma() and this bound together reject the values that used to
- * poison the whole LUT. */
+/* Upper bound on gamma, which is the exponent applied to a pixel (see PH_DEFAULT_GAMMA
+ * above). With PH_GAMMA_EPSILON it keeps the exponent inside [0.001, 1000], a range
+ * symmetric about 1.0 in log scale; ph_context_set_gamma()'s isfinite() check rejects
+ * NaN and infinity. */
 #define PH_GAMMA_MAX 1000.0f
 
 /* Upper bound on r + g + b in ph_context_set_gray_weights(). The weights are
@@ -481,9 +468,7 @@ _Static_assert(PH_COLOR_BINS <= PH_DIGEST_MAX_BYTES,
  * measured separability corpus (test_hash_properties.c) it is not an improvement: BMH
  * drops from 5.24 to 4.97 and wHash from 4.34 to 4.27, while aHash, dHash, pHash and
  * mHash move by less than the run-to-run noise floor. A closer decimal approximation
- * does not track discrimination on real content, so the existing triple is kept --
- * chosen and re-confirmed by measurement, not merely inherited from whoever wrote it
- * first. */
+ * does not track discrimination on real content, so the existing triple is kept. */
 #define PH_GRAY_R 38
 #define PH_GRAY_G 75
 #define PH_GRAY_B 15
@@ -534,9 +519,9 @@ static inline int ph_safe_image_alloc_size(uint64_t w, uint64_t h, uint64_t chan
 #define PH_MAX_SUPPORTED_PIXELS ((uint64_t)INT_MAX)
 
 /* Largest encoded (still compressed) input ph_decode_buffer() accepts, in bytes. stb_image
- * takes the length as an int, so a longer buffer reached it truncated: negative lengths
- * made a valid image "unrecognized", and a length past 4 GiB wrapped to a small positive
- * one and decoded the prefix as if it were the file. One limit for every build keeps the
+ * takes the length as an int, so a longer buffer would reach it truncated: a negative
+ * length makes a valid image "unrecognized", and a length past 4 GiB wraps to a small
+ * positive one and decodes the prefix as if it were the file. One limit for every build keeps the
  * answer independent of which decoder a format goes to. */
 #define PH_MAX_ENCODED_SIZE ((size_t)INT_MAX)
 
@@ -545,16 +530,12 @@ static inline int ph_safe_image_alloc_size(uint64_t w, uint64_t h, uint64_t chan
  * max_pixels bounds the *area*, which on its own permits an absurd aspect ratio: a
  * 268435456 x 1 image passes the default area limit exactly, yet makes a decoder size
  * a single row buffer of ~800 MB. libpng's own default per-dimension limit is 1000000,
- * so this matches it -- the point being that libphash must only ever *lower* that
- * limit, never raise it, which is what passing max_pixels straight into
- * png_set_user_limits() did.
+ * so this matches it: libphash must only ever *lower* that limit, never raise it.
  *
  * The cap is deliberately *not* derived from max_pixels: raising or disabling the area
  * limit must not raise the aspect-ratio ceiling with it. It lives here, next to the
  * area check, so that the verdict and the error code (PH_ERR_IMAGE_TOO_LARGE) are the
- * same for every format and in every build configuration -- before, it existed only
- * inside the native PNG backend, so a stb_image-only build had no dimension cap at all
- * and answered the same input with a different error. */
+ * same for every format and in every build configuration. */
 #define PH_MAX_IMAGE_DIMENSION 1000000u
 
 /* Returns 1 if either dimension is beyond what the library will decode. Same contract
@@ -646,9 +627,8 @@ struct ph_context {
     // User-defined configuration parameters. Plain values only, no pointers: the batch
     // API copies it by value from a caller's template context into each worker's.
     struct ph_context_config {
-        // gamma is applied per-image (normalised by the blurred buffer's own
-        // maximum, not by a context-wide precomputed LUT), so there is no gamma_lut
-        // field here any more -- see ph_apply_gamma(), src/image/color.c.
+        // gamma is applied per image, normalised by the blurred buffer's own maximum;
+        // see ph_apply_gamma(), src/image/color.c.
         float gamma;
         int gray_r, gray_g, gray_b;
         int load_grayscale;

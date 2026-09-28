@@ -20,7 +20,7 @@
 #
 # The second check matters as much as the first: "attribute ignored" is a warning,
 # not an error, so a header can compile while silently losing its nodiscard
-# contract. That was the original symptom here, one line above the first error.
+# contract.
 #
 # Usage: check_public_header.sh [std]     # std: 11 | 17 | 23 (or c11/c17/c23), default 17
 #        CC=gcc-14 ./scripts/check_public_header.sh 23

@@ -5,7 +5,7 @@ name: CI
 #  - push to main: the shipped default branch.
 #  - push to release/**: how a release branch gets validated. Feature branches
 #    merge into release/** via local rebase + `git merge --ff-only`, never a
-#    GitHub PR (see CLAUDE.md), so without this trigger nothing on a release
+#    GitHub PR, so without this trigger nothing on a release
 #    branch is ever built by CI. It does mean the full matrix runs on every
 #    feature merge, which is the point -- and the cost is runner time, not
 #    money: this repository is public and on standard runners, so every leg
@@ -14,9 +14,8 @@ name: CI
 #    takes the workflow from the merge ref, so a draft PR validates a branch
 #    whose workflow changes have not landed anywhere yet.
 #  - workflow_dispatch: registered by GitHub from the *default branch* copy of
-#    this file only. It does not work for a branch whose version of this file
-#    declares it and main's does not -- use one of the triggers above until
-#    this file reaches main.
+#    this file only. It works only when the default branch's copy of this file
+#    declares it; on any other branch, use one of the triggers above.
 on:
   push:
     branches: [ main, 'release/**' ]
@@ -29,7 +28,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  # R26: fast, no submodules/build needed -- catches an unformatted diff before
+  # Fast, no submodules/build needed -- catches an unformatted diff before
   # the much slower legs below spend minutes on it. scripts/format.sh is the same
   # script `make format` runs, so the perimeter and the clang-format major cannot
   # drift apart between the two.
@@ -57,11 +56,17 @@ jobs:
     - name: Check documentation coverage
       run: bash scripts/check_docs_coverage.sh
 
+    # Tracked text states what the library is and why, never how it got there: no
+    # tracker ids, no paths into local planning notes, no release-cycle wording.
+    # Advisory hits ("used to", "again", ...) are printed for review, not failed on.
+    - name: Check tracked text for process references
+      run: bash scripts/check_final_state_voice.sh
+
   # Full vendored build (all bundled decoders) across the platforms/arches we
   # actually ship for. PHASH_STRICT_DEPS=ON turns a silent decoder fallback
   # (e.g. libjpeg-turbo not found) into a hard configure failure, so a CI green
   # here means the vendored decoders were genuinely built and linked, not
-  # quietly swapped for stb_image (see tasks/PROGRESS.md known bugs, task 7).
+  # quietly swapped for stb_image.
   build-and-test:
     strategy:
       fail-fast: false
@@ -83,10 +88,8 @@ jobs:
             os: macos-latest
             needs_nasm: false
             cc: clang
-          # R26: spng is the other PNG backend (src/loaders/png.c compiles exactly
-          # one of libpng/spng), and until this leg it was never actually built
-          # in CI even though the R49 grayscale-decode fix specifically touched
-          # its path.
+          # spng is the other PNG backend (src/loaders/png.c compiles exactly
+          # one of libpng/spng); this leg builds and tests it.
           - name: ubuntu-x86_64-gcc-spng
             os: ubuntu-latest
             needs_nasm: true
@@ -120,13 +123,13 @@ jobs:
     - name: Run Tests
       run: cd build && ctest --output-on-failure
 
-  # R24: `make coverage` (Makefile) only measures the stb_image-only path -- none
+  # `make coverage` (Makefile) only measures the stb_image-only path -- none
   # of src/loaders/{jpeg,png,webp}.c's native decoding code (the #ifdef PH_USE_*
   # bodies) exists in that binary at all, just their ph_can_use_*() stub. This job
   # runs scripts/coverage_cmake.sh, which drives the vendored decoder build (plus
   # a separate spng pass) under -DPHASH_COVERAGE=ON and merges both lcov traces,
   # then publishes the merged HTML report as an artifact. See
-  # docs/development.md#two-coverage-targets-and-why-one-isnt-enough-r24.
+  # docs/development.md#two-coverage-targets-and-why-one-isnt-enough.
   coverage-cmake:
     runs-on: ubuntu-latest
     steps:
@@ -162,9 +165,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    # Nothing to install: cmake ships on all three runner images, and this job never
-    # did install anything. The submodules are still fetched, as they always were,
-    # although this stb-only build does not read vendor/.
+    # Nothing to install: cmake ships on all three runner images. The shared action
+    # still fetches the submodules, although this stb-only build does not read vendor/.
     - uses: ./.github/actions/setup-build
       with:
         apt-packages: ''
@@ -191,12 +193,12 @@ jobs:
   # the vendored decoders -- those are already exercised at C17 elsewhere, by
   # build-and-test, which is where the full vendored set meets glibc under the
   # strict -std=c17 dialect. Repeating that set here at three standards would
-  # triple a ten-job leg to prove a property of the vendored code, not of ours.
+  # triple the vendored builds to prove a property of the vendored code, not of ours.
   #
   # gcc-14, not the runner's default gcc: ubuntu-latest ships GCC 13, whose -std=c2x
-  # reports __STDC_VERSION__ 202000L rather than 202311L, so the "C23" job on it never
-  # compiled a single C23-only branch of the public header -- and a header that GCC
-  # 14+ rejects in C23 stayed green here. 14 is the first GCC that is actually C23.
+  # reports __STDC_VERSION__ 202000L rather than 202311L, so a "C23" job on it never
+  # compiles the public header's C23-only branches. 14 is the first GCC that is
+  # actually C23.
   c-standard-matrix:
     strategy:
       fail-fast: false
@@ -249,14 +251,13 @@ jobs:
     - name: Run Tests
       run: cd build && ctest --output-on-failure
 
-  # R26: most overflow findings from this review (e.g. pixel-count overflow, PNG
-  # row_ptrs overflow) trigger at much smaller inputs on a 32-bit size_t/int than on
-  # 64-bit -- the matrix above never exercised that width at all. Scoped to the
+  # Overflow bugs (e.g. pixel-count overflow, PNG row_ptrs overflow) trigger at much
+  # smaller inputs on a 32-bit size_t/int than on 64-bit, which no other leg
+  # exercises. Scoped to the
   # native PNG backend (libpng) plus system zlib, not the full vendored set: cross-
   # building libjpeg-turbo/zlib-ng's own NASM-based 32-bit SIMD and libwebp under -m32
   # is a much larger, separate lift, and this backend already links the one native
-  # decoder (src/loaders/png.c) that the overflow fixes this leg exists to guard
-  # (R03/R17) live in.
+  # decoder (src/loaders/png.c) whose overflow guards this leg exists to exercise.
   #
   # -Werror=incompatible-pointer-types belongs on this leg specifically: a decoder
   # declared with `unsigned long` where the backend table expects `size_t` is the same
@@ -290,13 +291,10 @@ jobs:
     - name: Run Tests
       run: cd build && ctest --output-on-failure
 
-  # Task 16: compares the PR (or, on a plain push -- this repo's internal
-  # feature/... -> release/vX.Y.Z flow never opens a GitHub PR, see R77 --
-  # the pushed commit) against its base commit built in this same job (not
-  # against hardcoded numbers) to keep GH-hosted-runner noise out of the
-  # comparison -- see tasks/16_benchmark_regression_gate.md. Warning-only for
-  # now (STRICT unset below): flip to STRICT=1 once the signal has proven
-  # stable across a handful of real runs, per tasks/PROGRESS.md.
+  # Compares the PR (or, on a plain push -- release branches are integrated by
+  # fast-forward, not via PRs -- the pushed commit) against its base commit built
+  # in this same job (not against hardcoded numbers) to keep GH-hosted-runner
+  # noise out of the comparison. Warning-only (STRICT unset below).
   benchmark:
     if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
@@ -370,7 +368,7 @@ jobs:
         echo '```' >> benchmark_report.md
         echo >> benchmark_report.md
         # 10% threshold: the harness's measured noise floor with min_ms is under
-        # 7% on an idle machine (see docs/development.md). Still STRICT=0.
+        # 7% on an idle machine (see docs/development.md). STRICT=0: warning-only.
         bash pr/scripts/bench_regression_gate.sh \
           pr/build/test_benchmark base/build/test_benchmark 5 10 regression.md
         cat regression.md >> benchmark_report.md
@@ -394,9 +392,9 @@ jobs:
         filePath: benchmark_report.md
         comment_tag: performance_report
 
-  # R34: LeakSanitizer is bundled into ASan by default on Linux (unlike macOS,
-  # where it doesn't exist), so it already ran here -- detect_leaks=1 makes that
-  # explicit instead of relying on an upstream default that could silently change.
+  # LeakSanitizer is part of ASan by default on Linux (not on macOS, where it
+  # doesn't exist); detect_leaks=1 states it explicitly instead of relying on an
+  # upstream default that could silently change.
   sanitizers:
     runs-on: ubuntu-latest
     env:
@@ -427,14 +425,14 @@ jobs:
     - name: Run Tests
       run: cd build && ctest --output-on-failure
 
-  # R25/R35: the threaded batch path (src/batch.c) and the "one context per thread"
+  # The threaded batch path (src/batch.c) and the "one context per thread"
   # contract (include/libphash.h) are the two places in this codebase whose whole point
   # is concurrent access -- exactly what ASan/UBSan above cannot see.
   #
   # Three configurations. stb-only is a shipped configuration (minimal-build). The two
   # native-PNG ones exist because the native decoders bring their own shared state:
-  # zlib-ng initialises its CPU dispatch table lazily and unsynchronised, which raced on
-  # the first parallel PNG decodes until the loader started warming it once
+  # zlib-ng initialises its CPU dispatch table lazily and unsynchronised, which would race
+  # on the first parallel PNG decodes if the loader did not warm it once
   # (test_cold_parallel_decode is the test that sees it -- the other thread tests decode
   # a sequential reference first and warm it by accident). The full-native leg adds the
   # JPEG decoder: libjpeg-turbo's libjpeg archive (jpeg-static). It is built out of band
@@ -496,14 +494,14 @@ jobs:
         ./build/test_batch_stress
         ./build/test_thread_safety
 
-  # R34: independent of ASan/LSan above (Valgrind and ASan don't mix -- ASan's own
+  # Independent of ASan/LSan above (Valgrind and ASan don't mix -- ASan's own
   # shadow memory looks like a leak to Valgrind and vice versa), and it catches a
   # different class of memory error (e.g. uninitialized-read) that neither
   # sanitizer nor test_alloc_failure's own shim-based leak accounting covers.
   # stb-only + a fixed subset, not the whole matrix: Valgrind's own instrumentation
-  # overhead makes a full run too slow for per-PR CI; this subset concentrates on
+  # overhead makes a full run too slow for every CI run; this subset concentrates on
   # the allocation-heavy paths (loader, core, batch, the alloc-failure-injection
-  # test itself) that R34 exists to guard.
+  # test itself).
   valgrind:
     runs-on: ubuntu-latest
     steps:
@@ -555,10 +553,9 @@ jobs:
     - name: Build
       run: cmake --build build --target fuzz_load
 
-    # R27: fuzz-corpus- (no run id) always misses on the save side and restores the
+    # fuzz-corpus- (no run id) always misses on the save side and restores the
     # most recently saved cache on the restore side -- the corpus only ever grows,
-    # so each run should pick up where the last one left off instead of starting
-    # from zero every time (90s was finding nothing new run after run before this).
+    # so each run picks up where the last one left off instead of starting from zero.
     - name: Restore fuzz corpus cache
       uses: actions/cache@v4
       with:
@@ -567,13 +564,13 @@ jobs:
         restore-keys: |
           fuzz-corpus-
 
-    - name: Run fuzz_load (short session on every PR)
+    - name: Run fuzz_load (90 s session)
       run: |
         mkdir -p /tmp/fuzz-artifacts tests/fuzz/corpus
         # tests/fuzz/corpus is the writable corpus libFuzzer saves new units into;
         # tests/data is passed second, as a read-only seed corpus -- swapping the
         # order would make libFuzzer write generated inputs straight into the
-        # fixture directory (R27).
+        # fixture directory.
         ./build/fuzz_load -max_total_time=90 -dict=tests/fuzz/magic.dict \
           -artifact_prefix=/tmp/fuzz-artifacts/ tests/fuzz/corpus tests/data
 
@@ -605,7 +602,7 @@ jobs:
         cmake --build vendor/libjpeg-turbo/build --target jpeg-static -j
 
     # cmake --install into a throwaway prefix + build a mini find_package(phash)
-    # consumer against it (task 4). Exercises both the static and shared build.
+    # consumer against it. Exercises both the static and shared build.
     - name: Smoke-test install()/pkg-config/find_package(phash)
       run: |
         ./scripts/smoke_install.sh static

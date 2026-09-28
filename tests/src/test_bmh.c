@@ -93,7 +93,7 @@ static void test_bmh_block_size_bounds() {
 
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, 0));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, -1));
-    /* 1 used to be accepted but collapsed every image to the same digest (0x01). */
+    /* 1 would collapse every image to the same digest (0x01). */
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, 1));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, 33));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, 46341));

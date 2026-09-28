@@ -60,9 +60,7 @@ void test_scratchpad_autotrim(void) {
     ctx->arena.offset = 0;
 
     // Call ph_get_scratchpad with a small size.
-    // Logic: if offset==0 and capacity > size * 4, it should trim.
-    // 10000 * 4 = 40000. Wait, our capacity is ~10240.
-    // If I request 100 bytes, 100 * 4 = 400. 10240 > 400 -> SHOULD TRIM.
+    // If offset == 0 and capacity > size * 4, it trims: capacity ~10240 > 100 * 4.
     ph_get_scratchpad(ctx, 100);
 
     if (ctx->arena.capacity >= large_capacity) {
@@ -136,14 +134,10 @@ void test_setter_error_contract(void) {
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_auto_orient(NULL, 1));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_max_pixels(NULL, 1024));
 
-    /* --- gamma: non-finite values used to pass validation --- */
-    /* Every comparison against NaN is false, so `gamma <= PH_GAMMA_EPSILON` let NAN
-     * through; before this fix this filled a context-wide LUT with NaN and every subsequent
-     * hash silently became garbage (measured: aHash = 00000000ffffffff, PH_SUCCESS).
-     * INFINITY got through the same guard. There is no LUT any more (gamma is applied
-     * per-image, see ph_apply_gamma() in src/image/color.c), but ctx->config.gamma
-     * itself must still be left untouched by a rejected call -- that is what the LUT
-     * check used to stand in for, and is checked directly here instead. */
+    /* --- gamma: non-finite values --- */
+    /* Every comparison against NaN is false, so a bare `gamma <= PH_GAMMA_EPSILON` would
+     * accept NAN, and INFINITY is above it. Both must be rejected with ctx->config.gamma
+     * left untouched. */
     float good_gamma = ctx->config.gamma;
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_gamma(ctx, (float)NAN));
     ASSERT_FLOAT_EQ((double)good_gamma, (double)ctx->config.gamma, 0.0001);
@@ -205,19 +199,13 @@ void test_setter_error_contract(void) {
     PASS("test_setter_error_contract");
 }
 
-/* The concrete consequence of the gamma defect, measured through the public API.
+/* What a non-finite gamma would do, measured through the public API.
  *
- * The Radial hash is the one algorithm that consumes the gamma LUT (ph_apply_gamma() is
- * called from src/hashes/radial.c only), so it is the algorithm that shows the damage.
- * Negative control run on this tree with the isfinite() check removed:
- *
- *   gamma=2.2  set=0 radial err=0 digest=bcb1bcb9d1e2e0ddddd6d5c3c9c0beb7bec5b4b5...
- *   gamma=NAN  set=0 radial err=0 digest=0000000000000000000000000000000000000000...
- *   gamma=INF  set=0 radial err=0 digest=0000000000000000000000000000000000000000...
- *
- * i.e. PH_SUCCESS from the setter, PH_SUCCESS from the hash, and an all-zero digest: the
- * NaN LUT flattens the image (and the uint8_t conversion of a NaN is undefined into the
- * bargain). A rejected setter call must leave the digest bit-for-bit identical. */
+ * Radial is the only algorithm that applies gamma (ph_apply_gamma() is called from
+ * src/hashes/radial.c only). Without the isfinite() check, a NaN or infinite gamma
+ * yields PH_SUCCESS from the setter and from the hash and an all-zero Radial digest
+ * (and the uint8_t conversion of a NaN is undefined into the bargain). A rejected setter
+ * call must leave the digest bit-for-bit identical. */
 static void assert_radial_digests_equal(const ph_digest_t *a, const ph_digest_t *b) {
     ASSERT_UINT8_EQ(a->size, b->size);
     for (int i = 0; i < a->size; i++)
@@ -245,7 +233,7 @@ void test_gamma_nan_cannot_corrupt_hash(void) {
     ASSERT_OK(ph_compute_radial_hash(ctx, &after));
     assert_radial_digests_equal(&before, &after);
 
-    /* aHash is unaffected either way -- it never reads the LUT -- but assert it too so
+    /* aHash is unaffected either way -- it never applies gamma -- but assert it too so
      * that a future change routing gamma into the grayscale path stays covered. */
     uint64_t a1 = 0, a2 = 0;
     ASSERT_OK(ph_compute_ahash(ctx, &a1));
@@ -286,9 +274,9 @@ void test_error_handling(void) {
     PASS("test_error_handling");
 }
 
-/* A failed file/memory load drops the previous image, and its dimensions with it: they
- * used to survive, so ph_context_get_dimensions() reported the size of an image that was
- * no longer there. A failed ph_load_from_pixels() is deliberately different -- it keeps
+/* A failed file/memory load drops the previous image and its dimensions with it, so
+ * ph_context_get_dimensions() reports 0/0/0, not the size of an image that is gone. A
+ * failed ph_load_from_pixels() is deliberately different -- it keeps
  * the previous image -- and that asymmetry is pinned here too. */
 void test_dimensions_follow_the_loaded_image(void) {
     ph_context_t *ctx = NULL;

@@ -116,9 +116,8 @@ void test_phash_params_setter_bounds() {
     ASSERT_INT_EQ(PH_DCT_SIZE, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(PH_DCT_REDUCTION_SIZE, ctx->config.phash_reduction_size);
 
-    /* reduction_size == 1 is the old documented minimum, but since the DC coefficient
-     * is excluded it leaves no AC coefficient at all -> the hash would be the fixed value 0 for
-     * every image. Rejected, config untouched. */
+    /* reduction_size == 1: the DC coefficient is excluded, so it leaves no AC coefficient -> the
+     * hash would be the fixed value 0 for every image. Rejected, config untouched. */
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, 32, 1));
     ASSERT_INT_EQ(PH_DCT_SIZE, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(PH_DCT_REDUCTION_SIZE, ctx->config.phash_reduction_size);
@@ -133,7 +132,7 @@ void test_phash_params_setter_bounds() {
     ASSERT_INT_EQ(16, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(4, ctx->config.phash_reduction_size);
 
-    /* The new minimum, 2, still succeeds. */
+    /* The minimum, 2, succeeds. */
     ASSERT_OK(ph_context_set_phash_params(ctx, 16, 2));
     ASSERT_INT_EQ(16, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(2, ctx->config.phash_reduction_size);
@@ -144,10 +143,9 @@ void test_phash_params_setter_bounds() {
 
 /* Defensive check inside ph_compute_phash(). The config is poisoned
  * directly (bypassing the setter) to emulate any other way an out-of-range
- * value could reach the hash path. Previously ph_dct2_partial() bailed out
- * silently, leaving the arena-backed dct_out buffer uninitialized, and
- * ph_compute_phash() returned PH_SUCCESS with a hash made of whatever the
- * previous algorithm left in the arena. */
+ * value could reach the hash path. ph_compute_phash() must report the error
+ * and leave the digest untouched, not hash whatever a previous algorithm left
+ * in the arena. */
 void test_phash_out_of_range_config_rejected() {
     ph_context_t *ctx = NULL;
     uint64_t hash = 0xdeadbeefcafebabeULL;
@@ -223,8 +221,8 @@ void test_phash_dirty_arena_determinism() {
 }
 
 /* Every scratchpad block must be aligned for any scalar type, whatever the sizes of the
- * blocks handed out before it. The arena used to advance by the raw request size, so an
- * odd-sized block left the next one misaligned. */
+ * blocks handed out before it: an arena that advanced by the raw request size would
+ * misalign the block after an odd-sized one. */
 void test_scratchpad_blocks_are_aligned() {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
@@ -242,9 +240,9 @@ void test_scratchpad_blocks_are_aligned() {
     PASS("test_scratchpad_blocks_are_aligned");
 }
 
-/* pHash over the whole accepted parameter range. Odd dct_size used to put the float
- * buffers behind a dct_size^2-byte one at an odd address -- undefined behaviour that
- * only UBSan (make debug) reports, so this is the case that must stay under it. */
+/* pHash over the whole accepted parameter range. Odd dct_size is the case that would put
+ * the float buffers behind a dct_size^2-byte one at an odd address -- undefined behaviour
+ * that only UBSan (make debug) reports, so it must stay covered. */
 void test_phash_every_dct_size() {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));

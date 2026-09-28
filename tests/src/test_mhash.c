@@ -180,9 +180,8 @@ void test_mhash_e2e() {
     ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo_color_changed.jpeg"));
     ASSERT_OK(ph_compute_mhash(ctx, &mod));
 
-    /* An edge descriptor should barely notice a colour shift. Measured at 2.0.0: 14 of
-     * 576 bits, i.e. 4.3%. The old 64-bit hash allowed 12 of 64, i.e. 19%, so the bound
-     * here is tighter in relative terms and is set from the measurement. */
+    /* An edge descriptor should barely notice a colour shift. Measured: 14 of 576 bits,
+     * i.e. 4.3%; the bound is set from that measurement. */
     int dist = ph_hamming_distance_digest(&orig, &mod);
     ASSERT(dist >= 0);
     if (dist > 58) { /* 10% of 576 */

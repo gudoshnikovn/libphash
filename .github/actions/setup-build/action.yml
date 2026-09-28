@@ -1,7 +1,7 @@
-# The prologue every build job in ci.yml used to repeat by hand: fetch the vendored
-# decoder submodules and install the job's build dependencies from the platform's
-# package manager. One definition, so a change to how that is done (a new package,
-# a retry, a mirror) is made once and not in ten places.
+# The prologue shared by every build job in ci.yml: fetch the vendored decoder
+# submodules and install the job's build dependencies from the platform's package
+# manager. One definition, so a change to how that is done (a new package, a retry,
+# a mirror) is made once.
 #
 # It cannot include the checkout itself: a local action is read from the working
 # copy, so `actions/checkout` has to run before `uses: ./.github/actions/setup-build`

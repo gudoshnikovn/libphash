@@ -27,7 +27,7 @@ void test_png_loading() {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
 
-    // Test loading valid PNG (newly created)
+    // Test loading valid PNG
     ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.png"));
     ASSERT_PTR_NOT_NULL(ctx);
 
@@ -168,7 +168,7 @@ void test_loader_edge_cases() {
     printf("test_loader_edge_cases: PASSED\n");
 }
 
-// Task 14: stb_image is now a registered last-resort backend in ph_decode_buffer
+// stb_image is the registered last-resort backend in ph_decode_buffer()
 // (src/loader.c), giving BMP/GIF/TGA/PSD/HDR/PIC/PNM support for free. These are
 // hand-crafted minimal fixtures (not committed binary files) so the test doesn't
 // depend on any external tool to regenerate them.
@@ -182,11 +182,10 @@ static const uint8_t bmp_bottomup[] = {
     0x00, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0x00, 0x00, 0xff, 0x00, 0x00, 0x00};
 
 // Same image, but with a negative height in the DIB header -- a legitimate
-// top-down BMP encoding. Regression fixture for a bug found while implementing
-// this task: ph_load_from_file()/ph_load_from_memory() cast stbi_info's signed
-// height straight to uint64_t for the max_pixels pre-check, so a negative
-// height wrapped to a huge value and every top-down BMP was rejected as
-// PH_ERR_IMAGE_TOO_LARGE regardless of its actual size.
+// top-down BMP encoding. The max_pixels pre-check must use the height's
+// magnitude: a straight cast of stbi_info's signed height to uint64_t would wrap
+// to a huge value and reject every top-down BMP as PH_ERR_IMAGE_TOO_LARGE
+// regardless of its actual size.
 static const uint8_t bmp_topdown[] = {
     0x42, 0x4d, 0x46, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x36, 0x00, 0x00, 0x00,
     0x28, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0xfe, 0xff, 0xff, 0xff, 0x01, 0x00,
@@ -224,12 +223,10 @@ void test_stb_fallback_formats() {
     printf("test_stb_fallback_formats: PASSED\n");
 }
 
-// The remaining formats CLAUDE.md, README.md and the ph_can_read_stb() comment claim
-// stb_image gives us "for free": TGA, PNM/PPM (P5 and P6), HDR, PSD, PIC. None of these
-// had any test coverage before -- each fixture below was hand-built against the exact
-// parsing stb_image.h does for that format (stbi__tga_info/stbi__tga_test,
-// stbi__hdr_load, stbi__psd_load, stbi__pic_load_core) and independently confirmed to
-// decode with the vendored stb_image.h before being pasted in here.
+// The remaining formats stb_image provides: TGA, PNM/PPM (P5 and P6), HDR, PSD, PIC.
+// Each fixture below is hand-built against the exact parsing stb_image.h does for that
+// format (stbi__tga_info/stbi__tga_test, stbi__hdr_load, stbi__psd_load,
+// stbi__pic_load_core).
 
 // Minimal 2x2 uncompressed 24bpp TGA (image type 2, no colormap, no RLE). BGR pixel
 // order, origin bottom-left (the TGA default -- image descriptor byte is 0).
@@ -333,8 +330,7 @@ void test_stb_extended_fallback_formats() {
 // cannot be configured away: BMP and GIF have no native backend in any build, so this
 // exercises `*ch = req_comp` in ph_decode_stb_mem() (src/loader.c) whatever the native
 // decoders are compiled in. The native JPEG/PNG grayscale paths are covered elsewhere in
-// this file; in a stb-only build those tests hit this code too, and in a full CMake build
-// nothing did before.
+// this file; in a stb-only build those tests hit this code too.
 //
 // Only the channel count is asserted against a reference: stb_image converts to gray with
 // its own coefficients, so its pixel values are deliberately not compared with
@@ -397,20 +393,16 @@ void test_grayscale_via_stb_fallback() {
     printf("test_grayscale_via_stb_fallback: PASSED\n");
 }
 
-// "Only the first frame is decoded" is an implicit contract this library has always
-// had for animated GIF (and for animated WebP, when PH_USE_WEBP is compiled in) --
-// documented on ph_load_from_memory() in include/libphash.h, but until now not backed
-// by a test. gif_two_frames below has two *visibly different* solid-color frames (red,
-// then blue); gif_frame1_only is a separately hand-built single-frame GIF holding just
-// the first one. If ph_load_from_memory() on the animated file ever started decoding
+// "Only the first frame is decoded" is the documented contract for animated GIF (see
+// ph_load_from_memory() in include/libphash.h). gif_two_frames below has two *visibly different*
+// solid-color frames (red, then blue); gif_frame1_only is a separately hand-built single-frame GIF
+// holding just the first one. If ph_load_from_memory() on the animated file ever started decoding
 // the wrong frame -- last frame instead of first, for instance -- the two would stop
 // matching while this test kept passing on either wrong answer alone, which is why the
 // comparison is against a real "frame 1 only" fixture and not just against a known RGBA
 // tuple.
 //
-// LZW-encoded with a minimal general-purpose GIF/LZW encoder (Python, not committed);
-// both fixtures were confirmed to decode with the vendored stb_image.h before being
-// pasted in.
+// LZW-encoded with a minimal general-purpose GIF/LZW encoder (Python, not committed).
 static const uint8_t gif_two_frames[] = {
     0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x02, 0x00, 0x02, 0x00, 0x80, 0x00, 0x00, 0xff,
     0x00, 0x00, 0x00, 0x00, 0xff, 0x21, 0xf9, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2c,
@@ -476,18 +468,16 @@ void test_animated_gif_first_frame_only() {
     printf("test_animated_gif_first_frame_only: PASSED\n");
 }
 
-// Animated WebP was assumed to follow the same "first frame only" contract as animated
-// GIF (both are what CLAUDE.md/README.md/ph_load_from_memory() document). It does not:
-// this backend calls WebPGetInfo() + WebPDecodeRGBInto(), libwebp's *simple* decode API,
+// Animated WebP is refused, as documented on ph_load_from_memory(): this backend calls
+// WebPGetInfo() + WebPDecodeRGBInto(), libwebp's *simple* decode API,
 // which has no bitstream to decode at the RIFF top level for a VP8X+ANIM container --
 // the actual pixels are one level down, in per-frame ANMF chunks, reachable only through
 // the demux API (WebPAnimDecoder / WebPDemuxer), which this backend does not link. The
 // dimension query still succeeds (VP8X carries the canvas size), but the decode call
 // itself fails, so an animated WebP is refused outright rather than decoding its first
-// frame. Confirmed against a real two-frame file built with `img2webp` (libwebp 1.6.0).
-// This contradicts the documented contract; flagged as a real gap rather than silently
-// worked around -- fixing it means linking libwebp's demux library and decoding through
-// WebPAnimDecoder, which is a decoder-behavior change of its own, not a test-coverage one.
+// frame. The fixture is a real two-frame file built with `img2webp` (libwebp 1.6.0).
+// Decoding the first frame would mean linking libwebp's demux library and decoding
+// through WebPAnimDecoder.
 void test_webp_animated_first_frame_only_or_skip() {
     if (!ph_can_use_webp()) {
         printf("test_webp_animated_first_frame_only_or_skip: SKIPPED (no WebP decoder in "
@@ -512,9 +502,8 @@ void test_webp_animated_first_frame_only_or_skip() {
            "animated WebP is rejected, not decoded to its first frame -- see comment)\n");
 }
 
-// TIFF is claimed nowhere as supported (CLAUDE.md and README.md explicitly call it
-// out as NOT covered, since stb_image has zero TIFF support), but that claim was never
-// pinned by a test. Both byte orders reach ph_can_read_stb() -- which accepts every
+// TIFF is not supported (README.md says so: stb_image has no TIFF support). Both byte
+// orders reach ph_can_read_stb() -- which accepts every
 // magic except WebP's -- so they fall through to stb_image, which recognizes neither
 // signature and fails with its generic "unknown image type", landing on
 // PH_ERR_UNSUPPORTED_FORMAT and not some other/generic error.
@@ -545,8 +534,8 @@ void test_bmp_negative_height_not_too_large() {
     ph_error_t err = ph_load_from_memory(ctx, bmp_topdown, sizeof(bmp_topdown));
     ASSERT_INT_EQ(PH_SUCCESS, err);
 
-    // Same fixture via ph_load_from_file(), which since 2.0.0 reaches the very
-    // same pre-check through the shared decode path.
+    // Same fixture via ph_load_from_file(), which reaches the same pre-check
+    // through the shared decode path.
     const char *tmp_path = "/tmp/libphash_test_topdown.bmp";
     FILE *f = fopen(tmp_path, "wb");
     if (f) {
@@ -564,8 +553,7 @@ void test_bmp_negative_height_not_too_large() {
 // The per-dimension cap is not a PNG matter: any format can declare an absurd aspect
 // ratio that slips under the area limit and still asks the decoder for a single
 // enormous row. BMP is the case reachable in every build -- it has no native backend,
-// so it always goes through stb_image, which is exactly the path that used to have no
-// dimension cap at all.
+// so it always goes through stb_image.
 static void patch_bmp_dimensions(uint8_t *hdr, int32_t w, int32_t h) {
     for (int i = 0; i < 4; i++) {
         hdr[18 + i] = (uint8_t)(((uint32_t)w >> (8 * i)) & 0xff);
@@ -676,11 +664,10 @@ static unsigned char *read_whole_file(const char *path, size_t *out_size) {
 // them equal to each other by construction. The reference is the library's own
 // ph_to_grayscale() applied to the RGB decode of the same file.
 //
-// The regression this guards: the spng backend asked spng for SPNG_FMT_G8
-// unconditionally, but spng only accepts that format for a color-type-0 PNG. For
-// an ordinary truecolor file it answered SPNG_EFMT and the decode failed outright,
-// so ph_context_set_load_grayscale(ctx, 1) turned every valid PNG into
-// PH_ERR_CORRUPT_DATA -- while the libpng backend decoded the very same file.
+// Guards against requesting SPNG_FMT_G8 for a non-grayscale PNG: spng accepts that
+// format only for color type 0 and fails any other file with SPNG_EFMT, which would
+// turn every valid PNG into PH_ERR_CORRUPT_DATA under ph_context_set_load_grayscale(ctx,
+// 1) while the libpng backend decodes the very same file.
 static void check_png_backend_parity(const char *path) {
     size_t size = 0;
     unsigned char *buf = read_whole_file(path, &size);
@@ -770,9 +757,8 @@ void test_png_grayscale_backend_parity() {
     printf("test_png_grayscale_backend_parity: PASSED\n");
 }
 
-// A broken PNG must be reported with the decoder's own reason, not swallowed.
-// The spng backend used to discard its return code entirely, which is what made
-// the grayscale failure above so hard to read: every cause came out as a bare -8.
+// A broken PNG must be reported with the decoder's own reason, not swallowed: a
+// discarded return code would turn every cause into a bare -8.
 void test_png_decode_error_is_reported() {
     size_t size = 0;
     unsigned char *buf = read_whole_file(TEST_DATA_DIR "/photo.png", &size);
@@ -795,9 +781,10 @@ void test_png_decode_error_is_reported() {
 }
 
 /* A truncated file gets the same answer in every build. stb_image (the only JPEG/PNG
- * decoder of a minimal build) used to decode whatever it could read of a half-downloaded
- * file and report success -- a pHash 30 bits away from the real one at 5 % of the bytes
- * -- while the native decoders called the same bytes corrupt. */
+ * decoder of a minimal build) on its own decodes what it can of a half-downloaded file
+ * and reports success -- a pHash 30 bits away from the real one at 5 % of the bytes --
+ * while the native decoders call the same bytes corrupt; the container-completeness
+ * check gives it the native decoders' answer. */
 static void check_truncations(const char *path, int format_available) {
     size_t size = 0;
     unsigned char *full = read_whole_file(path, &size);
@@ -884,11 +871,10 @@ static void put_be32(uint8_t *p, uint32_t v) {
 }
 
 /* A header that stb_image refuses for its size is too large, not corrupt, and every
- * build says so. stb checks the size inside stbi_info() already, so the header never
- * reached the library's own pixel-limit check and the refusal arrived as the reason
- * "too large", which used to fall through to PH_ERR_CORRUPT_DATA. The native PNG
- * decoders answer the same header with PH_ERR_IMAGE_TOO_LARGE; the stb build pins the
- * literal (a vendor bump that rewords it fails here). */
+ * build says so. stb checks the size inside stbi_info(), so the header never reaches the
+ * library's own pixel-limit check and the refusal arrives as the reason "too large",
+ * which must map to PH_ERR_IMAGE_TOO_LARGE, as the native PNG decoders answer the same
+ * header; the stb build pins the literal (a vendor bump that rewords it fails here). */
 void test_stb_too_large_is_image_too_large() {
     static const uint32_t sides[] = {20000, 46341, 65536};
     ph_context_t *ctx = NULL;

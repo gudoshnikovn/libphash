@@ -8,7 +8,8 @@
  * stands out. */
 #define STATUS_UNWRITTEN ((ph_error_t)0x5EED)
 
-/* Every combination of the 6 ph_hash_flags_t bits, including the empty and full sets. */
+/* Every combination of the PH_HASH_FLAGS_COUNT ph_hash_flags_t bits, including the empty and
+ * full sets. */
 #define ALL_FLAGS_MASK (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH)
 
 static void reference_multi(const char *path, uint32_t flags, uint64_t out[PH_HASH_FLAGS_COUNT]) {
@@ -155,7 +156,7 @@ static void test_batch_validation_precedes_empty_shortcut() {
     ph_batch_item_t items[1] = {{.path = TEST_DATA_DIR "/photo.jpeg"}};
     ph_batch_buffer_item_t bitems[1] = {{.buffer = (const uint8_t *)"x", .length = 1}};
 
-    /* The exact call from the review: every argument is junk, n == 0. */
+    /* Every argument is junk and n == 0. */
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_files(NULL, 0, 0, -5));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_hash_buffers(NULL, 0, 0, -5));
 
@@ -224,9 +225,8 @@ static uint8_t *read_whole_file(const char *path, size_t *out_size) {
     return buf;
 }
 
-/* ph_hash_files() has test_hash_files_partial_failure(); the buffer version had nothing
- * equivalent, so its per-item failure path -- the one the batch is supposed to survive --
- * was never taken with real broken input.
+/* The buffer counterpart of test_hash_files_partial_failure(): the per-item failure path,
+ * the one the batch is supposed to survive, taken with real broken input.
  *
  * The malformed entries are deliberately of different kinds, because the contract is that
  * every one of them lands in `status` and none of them reaches the return value: a NULL

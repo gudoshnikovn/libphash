@@ -20,8 +20,8 @@ void test_version_string_and_number_agree() {
 }
 
 /* The header's compile-time macros must agree with the runtime accessors, and
- * the numbering scheme must leave room for a minor/patch above 99 -- the
- * pre-2.0.0 scheme (major*10000 + minor*100 + patch) collided there. */
+ * the numbering scheme must leave room for a minor/patch above 99, where a
+ * major*10000 + minor*100 + patch scheme would collide. */
 void test_version_macros_agree_with_runtime() {
     ASSERT_INT_EQ(PH_VERSION_NUMBER, ph_version_number());
     ASSERT_STR_EQ(PH_VERSION_STRING, ph_version());
@@ -29,8 +29,9 @@ void test_version_macros_agree_with_runtime() {
                   PH_VERSION_NUMBER);
 }
 
-/* Distinct versions must map to distinct numbers where the old scheme aliased
- * them: 1.100.0 and 2.0.0 both came out as 20000 before. */
+/* Distinct versions must map to distinct numbers, including where a
+ * major*10000 + minor*100 + patch scheme would alias them (1.100.0 and 2.0.0 would
+ * both be 20000). */
 void test_version_number_scheme_has_no_collisions() {
 #define PH_TEST_VERSION_NUMBER(maj, min, pat) ((maj) * 1000000 + (min) * 1000 + (pat))
     ASSERT(PH_TEST_VERSION_NUMBER(1, 100, 0) != PH_TEST_VERSION_NUMBER(2, 0, 0));

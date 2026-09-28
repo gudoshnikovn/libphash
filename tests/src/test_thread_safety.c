@@ -1,18 +1,14 @@
-/* R35: the header documents a "one context per thread" contract (see the @note on
+/* The header documents a "one context per thread" contract (see the @note on
  * ph_get_last_error_message() and the file-level comment in include/libphash.h) --
  * every function is thread-safe as long as distinct threads operate on distinct
- * ph_context_t instances. Nothing exercised that claim directly: the batch API
- * (tests/src/test_batch.c, test_batch_stress.c) spawns real threads, but they always
- * share one internal pool and each worker still gets its own ph_context_t from
- * ph_create() inside ph_batch_worker_run() -- so "many contexts, many OS threads,
- * driven by application code rather than the library's own pool" had no test at all.
- *
- * This file is that test: N threads, each creating and owning its own context,
+ * ph_context_t instances. The batch API's workers come from the library's own pool
+ * (tests/src/test_batch.c, test_batch_stress.c); this file tests application-driven
+ * threads, each owning its own context: N threads, each creating and owning its own context,
  * running concurrently (synchronized to start together, not just interleaved by
  * scheduling luck), each computing the same set of algorithms on the same fixtures a
  * single-threaded reference already computed. Any global or file-scope mutable state
  * accidentally shared between contexts -- the bug class this guards against -- would
- * show up either as a wrong result here or, under the `tsan` CI job (see R25), as a
+ * show up either as a wrong result here or, under the `tsan` CI job, as a
  * reported data race even if the result happened to still be right.
  *
  * Two contexts sharing state from two threads at once is deliberately not tested:

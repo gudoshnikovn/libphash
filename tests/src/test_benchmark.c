@@ -102,10 +102,9 @@ double get_time_sec() {
  *
  * A single mean over the whole loop is not a usable benchmark number: one
  * scheduler preemption or page fault inside the loop shifts it by tens of
- * percent, and the caller can't tell that it happened. Measured on an idle
- * arm64 macOS box, comparing this binary against *itself* through
- * scripts/bench_regression_gate.sh produced false 40-45% "regressions"
- * because of exactly that. So: warm up first, then time every iteration
+ * percent, and the caller can't tell that it happened: compared against
+ * itself through scripts/bench_regression_gate.sh on an idle machine, a
+ * mean-based number shows false 40-45% "regressions". So: warm up first, then time every iteration
  * separately and report robust statistics (min/median/p90) alongside the mean.
  *
  * min_ms is the number to compare across builds -- it's the closest estimate
@@ -433,8 +432,8 @@ void benchmark_loading(const char *img, int iterations, int grayscale) {
 
     /* The warmup pass matters most here: it pulls the file into the page cache,
      * so what's measured afterwards is decode cost and not disk. That's the
-     * intent -- the profile this project optimizes against (see tasks/README.md)
-     * is decode-bound, and disk latency would only add variance. */
+     * intent -- loading is decode-bound, and disk latency would only add
+     * variance. */
     for (int i = 0; i < warmup + iterations; i++) {
         double start = get_time_sec();
         ph_context_t *ctx;

@@ -6,7 +6,7 @@ void test_color_difference() {
     ph_context_t *ctx_orig = NULL;
     ph_context_t *ctx_color = NULL;
 
-    // CHANGE: Allocate digests on the stack. Initialize to 0 for safety.
+    // Digests on the stack, zero-initialised.
     ph_digest_t digest_orig = {0};
     ph_digest_t digest_color = {0};
 
@@ -15,7 +15,7 @@ void test_color_difference() {
     ASSERT_OK(ph_create(&ctx_orig));
     ASSERT_OK(ph_create(&ctx_color));
 
-    // CHANGE: Disable grayscale loading to ensure we get color data for ColorHash
+    // Grayscale loading off, so the colour algorithm gets colour data.
     ph_context_set_load_grayscale(ctx_orig, 0);
     ph_context_set_load_grayscale(ctx_color, 0);
 
@@ -28,7 +28,6 @@ void test_color_difference() {
     ASSERT_OK(ph_compute_phash(ctx_color, &phash_color));
 
     /* 3. Compute Color Moment Hash (Color distribution) */
-    // CHANGE: Pass the address of the stack-allocated structs
     ASSERT_OK(ph_compute_color_moments_hash(ctx_orig, &digest_orig));
     ASSERT_OK(ph_compute_color_moments_hash(ctx_color, &digest_color));
 
@@ -37,11 +36,11 @@ void test_color_difference() {
     double c_dist = ph_l2_distance(&digest_orig, &digest_color);
 
     printf("[pHash] Structural distance: %d bits\n", p_dist);
-    printf("[ColorHash] L2 Color distance: %.2f\n", c_dist);
+    printf("[ColorMoments] L2 Color distance: %.2f\n", c_dist);
 
     /*
      * In this scenario, pHash distance should be low (same shapes),
-     * but ColorHash distance should be significant (different colors).
+     * but ColorMoments distance should be significant (different colors).
      */
     if (p_dist < 5 && c_dist > 10.0) {
         printf("Test Logic: Images are structurally similar but color-distinct. "

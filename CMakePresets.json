@@ -5,7 +5,7 @@
     {
       "name": "clang",
       "displayName": "Clang/LLVM (recommended default)",
-      "description": "Priority toolchain: LLVM is the more actively developed of the two compilers this project tests, and several sanitizer/architecture checks in CMakeLists.txt are already Clang-specific. Not forced anywhere else -- override with -DCMAKE_C_COMPILER=gcc or the 'gcc' preset below.",
+      "description": "Priority toolchain: LLVM is the more actively developed of the two compilers this project tests, and the libFuzzer build (PHASH_BUILD_FUZZERS) requires it. Not forced anywhere else -- override with -DCMAKE_C_COMPILER=gcc or the 'gcc' preset below.",
       "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_C_COMPILER": "clang",

@@ -6,9 +6,8 @@
 /* The build-introspection answers are checked against the same PH_USE_* / PH_ENABLE_*
  * macros that selected the code: the tests are compiled with the library's own
  * definitions (the Makefile shares CFLAGS; CMake copies phash's COMPILE_DEFINITIONS), so
- * a mismatch here means the library reports a backend it does not have. The point of the
- * test is the spng build, where ph_can_use_libpng() used to answer 1 with no libpng
- * linked at all. */
+ * a mismatch here means the library reports a backend it does not have. The spng build
+ * matters most: png=spng there, with no libpng linked at all. */
 
 #if defined(PH_USE_LIBPNG)
 #define EXPECT_PNG "libpng"

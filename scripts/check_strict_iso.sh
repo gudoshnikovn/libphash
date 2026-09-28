@@ -7,9 +7,8 @@
 # invisible on the machine most of this project is written on. A strict dialect makes
 # the compiler define __STRICT_ANSI__; glibc hides every non-ISO declaration behind
 # that macro, while Darwin's libc hides nothing. So a file that reaches for M_PI,
-# clock_gettime() or openat() compiles clean on macOS and fails to compile on Linux --
-# which is exactly how the library spent nine commits unbuildable on glibc without
-# anyone noticing. A TU that genuinely needs POSIX asks for it with an explicit
+# clock_gettime() or openat() compiles clean on macOS and fails to compile on Linux,
+# and nothing on the author's machine would notice. A TU that genuinely needs POSIX asks for it with an explicit
 # _POSIX_C_SOURCE (see tests/src/test_benchmark.c); this script is what notices when
 # a new one forgets.
 #
@@ -46,7 +45,7 @@ LIB_FLAGS=(-I "$ROOT_DIR/include" -I "$ROOT_DIR/src" -I "$WORK_DIR/generated")
 TEST_FLAGS=("${LIB_FLAGS[@]}" -I "$ROOT_DIR/tests/src"
             "-DTEST_DATA_DIR=\"$ROOT_DIR/tests/data\"" -DPH_TESTING)
 
-# GCC only learned the -std=c23 spelling in 14; 13 and earlier call the same
+# GCC accepts the -std=c23 spelling from 14; 13 and earlier call the same
 # dialect -std=c2x. Probe rather than version-sniff, so the check keeps working on
 # whatever compiler a runner happens to ship.
 printf 'int main(void){return 0;}\n' > "$WORK_DIR/probe.c"

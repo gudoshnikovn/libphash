@@ -1,8 +1,7 @@
 /* Pixel counts must never be computed in `int`.
  *
- * Every case below used to trip UBSan (signed integer overflow) or slip past the old
- * PH_SAFE_ALLOC_SIZE guard straight into a wrapped malloc(). They now have to end in a
- * clean error code instead. Run under `make debug` to get the UBSan check as well;
+ * Every case below must end in a clean error code, never in signed integer overflow
+ * (UBSan) or a wrapped malloc(). Run under `make debug` to get the UBSan check as well;
  * a plain Release run only verifies the returned error codes.
  */
 
@@ -64,15 +63,14 @@ static ph_context_t *make_ctx_with_tiny_image(int w, int h, int channels) {
     return ctx;
 }
 
-/* The exact repro from the original review: 46341 * 46341 overflows int.
- * The product is now size_t, so the request is simply too big for the arena.
+/* 46341 * 46341 overflows int; computed in size_t it is simply too big for the arena.
  *
- * These values can no longer reach ph_compute_bmh() through the public API --
+ * These values cannot reach ph_compute_bmh() through the public API --
  * ph_context_set_block_params() rejects anything above PH_BLOCK_MAX_SIZE. The config field
  * is therefore poisoned directly here, exactly as test_phash.c does for the pHash guard:
  * the point of this file is that the *arithmetic* is well-defined whatever the field
- * holds, which is defence in depth behind the setter and outlives it. That the setter now
- * closes the door is asserted separately, in test_setter_bounds_reject_out_of_range(). */
+ * holds, which is defence in depth behind the setter. The setter's refusal is asserted
+ * separately, in test_setter_bounds_reject_out_of_range(). */
 void test_bmh_block_size_overflows_int(void) {
     /* Squares that no allocator will ever serve (2^60 and ~2^62 bytes), so the
      * expected outcome is identical in every build configuration. */
@@ -90,7 +88,7 @@ void test_bmh_block_size_overflows_int(void) {
     }
 
 #if defined(PH_TEST_ASAN)
-    /* The review's exact repro: 46341 * 46341 == 2147488281 overflows int32 by 4633.
+    /* 46341 * 46341 == 2147488281 overflows int32 by 4633.
      * Only run where max_allocation_size_mb above makes it cheap -- in a plain Release
      * build this really does allocate 2 GB and box-resize 2.1 gigapixels. */
     {
@@ -105,24 +103,24 @@ void test_bmh_block_size_overflows_int(void) {
     PASS("test_bmh_block_size_overflows_int");
 }
 
-/* The values above are unreachable through the public API now. The setter refuses
+/* The values above are unreachable through the public API. The setter refuses
  * them and leaves the configuration exactly as it was -- no clamping to the ceiling. */
 void test_setter_bounds_reject_out_of_range(void) {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
 
-    /* block_size == 1 is the old documented minimum, but a single block's mean is
-     * its own median, the ">=" threshold is then always true, and the digest is the fixed
-     * 0x01 for every image -- as invalid as the overflow-sized values above it. */
+    /* block_size == 1: a single block's mean is its own median, the ">=" threshold is then always
+     * true, and the digest is the fixed 0x01 for every image -- as invalid as the overflow-sized
+     * values above it. */
     const int bad_blocks[] = {1, 1 << 30, INT_MAX, 46341, PH_BLOCK_MAX_SIZE + 1};
     for (size_t i = 0; i < sizeof(bad_blocks) / sizeof(bad_blocks[0]); i++) {
         ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_block_params(ctx, bad_blocks[i]));
         ASSERT_INT_EQ(PH_BLOCK_SIZE, ctx->config.block_size);
     }
-    /* And the ceiling itself is accepted: (22*22 + 7) / 8 == 61 bytes still fits. */
+    /* And the ceiling itself is accepted: (32*32 + 7) / 8 == 128 bytes exactly fits. */
     ASSERT_OK(ph_context_set_block_params(ctx, PH_BLOCK_MAX_SIZE));
     ASSERT_INT_EQ(PH_BLOCK_MAX_SIZE, ctx->config.block_size);
-    /* The new minimum, 2, still succeeds -- blocks can differ from each other again. */
+    /* The minimum, 2, succeeds -- the blocks can differ from each other. */
     ASSERT_OK(ph_context_set_block_params(ctx, PH_BLOCK_MIN_SIZE));
     ASSERT_INT_EQ(PH_BLOCK_MIN_SIZE, ctx->config.block_size);
 
@@ -140,7 +138,7 @@ void test_setter_bounds_reject_out_of_range(void) {
         PH_ERR_INVALID_ARGUMENT,
         ph_context_set_radial_params(ctx, 180, PH_RADIAL_MAX_SAMPLES + 1, PH_RADIAL_DEFAULT_SIGMA));
     ASSERT_INT_EQ(PH_RADIAL_SAMPLES, ctx->config.radial_samples);
-    /* samples == 1 is the old documented minimum, but the variance of one observation
+    /* samples == 1: the variance of one observation
      * is zero by definition, so every projection is flat and the digest is all-zero for
      * every image -- rejected, config untouched. */
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT,
@@ -151,7 +149,7 @@ void test_setter_bounds_reject_out_of_range(void) {
                                            PH_RADIAL_DEFAULT_SIGMA));
     ASSERT_INT_EQ(PH_RADIAL_MAX_PROJECTIONS, ctx->config.radial_projections);
     ASSERT_INT_EQ(PH_RADIAL_MAX_SAMPLES, ctx->config.radial_samples);
-    /* The new minimum, 2, still succeeds. */
+    /* The minimum, 2, succeeds. */
     ASSERT_OK(
         ph_context_set_radial_params(ctx, 180, PH_RADIAL_MIN_SAMPLES, PH_RADIAL_DEFAULT_SIGMA));
     ASSERT_INT_EQ(180, ctx->config.radial_projections);
@@ -186,8 +184,8 @@ void test_bmh_normal_block_size_still_works(void) {
  * and this test is about the arithmetic behind it. */
 void test_radial_huge_projections(void) {
     /* Far more projections than the digest could ever hold: the byte count must be
-     * computed in size_t (it is `projections * sizeof(double)`) and must not wrap. Since
-     * 2.0.0 the digest is the DCT coefficients, so its size is PH_RADIAL_COEFFS whatever
+     * computed in size_t (it is `projections * sizeof(double)`) and must not wrap. The
+     * digest is the DCT coefficients, so its size is PH_RADIAL_COEFFS whatever
      * the angle count -- no truncation, nothing to wrap through the uint8_t cast. */
     const int projections[] = {257, 4096, 200000};
 
@@ -236,7 +234,7 @@ void test_radial_huge_projections(void) {
     PASS("test_radial_huge_projections");
 }
 
-/* ph_load_from_pixels() was the only load path without bomb protection. */
+/* ph_load_from_pixels() has the same bomb protection as the decode paths. */
 void test_load_from_pixels_respects_max_pixels(void) {
     uint8_t px[32 * 32 * 3];
     memset(px, 0x5A, sizeof(px));
@@ -258,9 +256,7 @@ void test_load_from_pixels_respects_max_pixels(void) {
     PASS("test_load_from_pixels_respects_max_pixels");
 }
 
-/* The default limit applies too, without the caller configuring anything --
- * this is the path that made the pixel-count overflow reachable with the default
- * configuration. */
+/* The default limit applies too, without the caller configuring anything. */
 void test_load_from_pixels_default_limit(void) {
     uint8_t probe = 0;
     ph_context_t *ctx = NULL;
@@ -287,9 +283,9 @@ void test_load_from_pixels_unlimited(void) {
 
     /* max_pixels = 0 means "no limit of MY own", not "no limit at all":
      * the implementation ceiling of INT_MAX pixels still applies, and an image above
-     * it is refused as too large rather than attempted. Before this ceiling existed this
-     * reached the allocator (PH_ERR_ALLOCATION_FAILED) -- or, on a host that served the request,
-     * overflowed int index arithmetic. */
+     * it is refused as too large rather than attempted. Without the ceiling this would reach
+     * the allocator (PH_ERR_ALLOCATION_FAILED) -- or, on a host that served the request,
+     * overflow int index arithmetic. */
     ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_pixels(ctx, &probe, INT_MAX, INT_MAX, 1, 0));
     ASSERT_INT_EQ(0, ph_is_loaded(ctx));
 
@@ -373,7 +369,7 @@ void test_ceiling_is_on_area_not_dimension(void) {
     PASS("test_ceiling_is_on_area_not_dimension");
 }
 
-/* The size_t rewrite of ph_to_grayscale() must not let the SIMD tail condition
+/* ph_to_grayscale()'s size_t arithmetic must not let the SIMD tail condition
  * (`i <= n - 8`) wrap for images with fewer than 8 pixels. */
 void test_tiny_images_grayscale(void) {
     for (int channels = 1; channels <= 4; channels++) {

@@ -4,8 +4,8 @@
  * a single solid colour and never one pixel wide. Those inputs still reach the library:
  * a thumbnail, a spacer image, a scanner producing a blank page, a caller feeding a video
  * frame that has not started yet. What they must not do is return a value that *looks*
- * like a hash while being a readout of uninitialised memory or of floating-point residue
- * -- that is exactly how a defect (pHash reading an unwritten buffer) reached a release.
+ * like a hash while being a readout of uninitialised memory or of floating-point
+ * residue.
  *
  * So this file states the answer for each degenerate class rather than leaving it to be
  * discovered later:
@@ -19,9 +19,9 @@
  *   - the balance and contrast properties the algorithms are built on hold at maximum
  *     contrast, where they are easiest to check by hand.
  *
- * Two tests here are characterisation tests: they assert behaviour that is wrong, because
- * fixing it changes hash values and belongs in its own task. Each says so at the top and
- * names what its assertion should become once the defect is fixed.
+ * One test here is a characterisation test (pHash of a uniform image): it asserts
+ * behaviour that is wrong, because changing it changes hash values. It says so at the
+ * top and names what its assertion should become.
  */
 #include "internal.h"
 #include "libphash.h"
@@ -171,9 +171,8 @@ static int popcount_digest(const ph_digest_t *d) {
  * times, with a digest of the width and kind it declares and no stale bytes behind it.
  *
  * Run under ASan/UBSan (`make debug`) this also covers the "reads memory nobody wrote"
- * half of the question, which is the half that pHash defect was: a buffer left unwritten by an
- * early-returning resize would show up here as two runs disagreeing even without a
- * sanitizer, since the stack garbage differs between calls. */
+ * half of the question: a buffer left unwritten by an early-returning resize would show up here as
+ * two runs disagreeing even without a sanitizer, since the stack garbage differs between calls. */
 void test_every_algorithm_is_defined_on_degenerate_geometry(void) {
     uint8_t px[MAX_PIXELS * 4];
 
@@ -217,14 +216,11 @@ void test_every_algorithm_is_defined_on_degenerate_geometry(void) {
  * Every one of these follows from the algorithm's own threshold, and each is pinned here
  * so that a change of resampler or of threshold cannot alter it unnoticed:
  *
- *   aHash    every sample equals the mean and the test is `>=` (unified with BMH's
- *            tie convention since aHash's own source leaves it unstated), so every bit
- *            is set;
+ *   aHash    every sample equals the mean and the test is `>=` (the source leaves ties
+ *            unstated; this matches BMH), so every bit is set;
  *   dHash    every horizontal difference is zero and the test is `<`, so no bit is set;
- *   wHash    every LL coefficient equals the median, and the test stays `>` (pinned to
- *            ImageHash's own reference implementation, not moved by the aHash/BMH tie-break
- *            unification above), so no bit is
- *            set;
+ *   wHash    every LL coefficient equals the median, and the test is `>` (ImageHash's
+ *            reference implementation), so no bit is set;
  *   mHash    the Laplacian-of-Gaussian response is flat, so every block equals its
  *            window's mean and no bit is set;
  *   Radial   the projection variances are all zero, which is the flat case the algorithm
@@ -232,7 +228,7 @@ void test_every_algorithm_is_defined_on_degenerate_geometry(void) {
  *   BMH      the threshold is `>=` the median and every block *is* the median, so every
  *            bit is set. It is a direct consequence of the >= in the source's equation
  *            3.9 -- the same >= that gives BMH its balanced bit distribution everywhere
- *            else, and the same convention aHash now follows too;
+ *            else, and the convention aHash follows too;
  *   ColorHash    one bin holds every pixel and bins are scaled against the largest, so
  *            that bin is 255 and the other 107 are 0;
  *   ColorMoments the mean is the fill value; the second and third central moments are 0.
@@ -305,7 +301,7 @@ void test_uniform_images_have_documented_digests(void) {
  * rounding error went.
  *
  * The consequence is that two flat greys a human cannot tell apart hash to nothing like
- * each other: measured on 2.0.0, levels 136, 137 and 138 give three unrelated hashes, and
+ * each other: measured, levels 136, 137 and 138 give three unrelated hashes, and
  * 254 of the 255 steps from 0 to 255 change the hash. Only 0 is stable, and only because
  * zero times anything is zero.
  *
@@ -362,23 +358,20 @@ void test_phash_of_a_uniform_image_is_rounding_noise(void) {
     PASS("test_phash_of_a_uniform_image_is_rounding_noise");
 }
 
-/* Was a CHARACTERISATION TEST FOR A DEFECT. Three parameter values the
- * setters used to accept collapsed their algorithm to a constant, reporting PH_SUCCESS
- * while doing it:
+/* Three degenerate minima collapse their algorithm to a constant:
  *
  *   ph_context_set_phash_params(ctx, n, 1)  -- the hash is 1x1 = one coefficient, the DC
  *       term, and pHash thresholds against the median of the AC coefficients only. With
  *       one coefficient there are no AC terms, ph_median_bitpack_from() sees
- *       median_from >= n and returns 0. Every image hashed to 0.
+ *       median_from >= n and returns 0. Every image would hash to 0.
  *   ph_context_set_block_params(ctx, 1)     -- one block, whose value is its own median,
- *       and the threshold is `>=`. Every image hashed to 0x01.
+ *       and the threshold is `>=`. Every image would hash to 0x01.
  *   ph_context_set_radial_params(ctx, p, 1) -- one sample per projection, and the variance
- *       of one sample is zero. Every projection was flat, so every image got the all-zero
- *       digest that means "no radial structure".
+ *       of one sample is zero. Every projection would be flat, so every image would get
+ *       the all-zero digest that means "no radial structure".
  *
- * The fix: the setters themselves reject the
- * degenerate minimum with PH_ERR_INVALID_ARGUMENT and raise the documented lower bound to
- * 2, which is the smallest value for which each algorithm can still depend on content. */
+ * The setters reject each of them with PH_ERR_INVALID_ARGUMENT; 2 is the smallest value
+ * for which each algorithm depends on content. */
 void test_parameter_values_that_collapse_the_hash_to_a_constant(void) {
     enum { SIDE = 32 };
     uint8_t a[SIDE * SIDE], b[SIDE * SIDE];
@@ -388,8 +381,8 @@ void test_parameter_values_that_collapse_the_hash_to_a_constant(void) {
             b[y * SIDE + x] = (uint8_t)((x * x + y * 13) % 256);
         }
 
-    /* pHash: reduction_size == 1 is rejected; reduction_size == 2 (the new minimum) gives
-     * content-dependent hashes again. */
+    /* pHash: reduction_size == 1 is rejected; reduction_size == 2 (the minimum) gives
+     * content-dependent hashes. */
     {
         ph_context_t *ctx = NULL;
         ASSERT_OK(ph_create(&ctx));
@@ -408,8 +401,8 @@ void test_parameter_values_that_collapse_the_hash_to_a_constant(void) {
         ph_free(ctx);
     }
 
-    /* BMH: block_size == 1 is rejected; block_size == 2 (the new minimum) gives
-     * content-dependent digests again. */
+    /* BMH: block_size == 1 is rejected; block_size == 2 (the minimum) gives
+     * content-dependent digests. */
     {
         ph_context_t *ctx = NULL;
         ASSERT_OK(ph_create(&ctx));
@@ -430,8 +423,8 @@ void test_parameter_values_that_collapse_the_hash_to_a_constant(void) {
         ph_free(ctx);
     }
 
-    /* Radial: samples == 1 is rejected; samples == 2 (the new minimum) gives
-     * content-dependent digests again. */
+    /* Radial: samples == 1 is rejected; samples == 2 (the minimum) gives
+     * content-dependent digests. */
     {
         ph_context_t *ctx = NULL;
         ASSERT_OK(ph_create(&ctx));

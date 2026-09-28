@@ -153,8 +153,7 @@ static void test_gamma_identity_lut(void) {
 static void test_gamma_2_2_midpoint(void) {
     /* gamma raises pixels to `gamma` directly (not `1.0/gamma`) and normalises
      * by the buffer's own maximum rather than assuming a fixed 0..255 span. With 255
-     * present in the buffer, max=255 and the formula collapses to the same shape the
-     * old fixed-table LUT had, just with the exponent the other way round:
+     * present in the buffer, max=255 and the formula reduces to
      * expected = round(pow(128/255, 2.2) * 255) */
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
@@ -410,9 +409,7 @@ void test_resize_zero_negative_dims(void) {
 }
 
 void test_box_resize_count_zero(void) {
-    // This triggers the 'if (count == 0)' branch in ph_resize_box
-    // sw=1, dw=10 -> x_ratio = (1 << 16) / 10 = 6553.
-    // dx=0: sx_start=0, sx_end=0. -> count=0.
+    // 1x1 upsampled to 10x10 must not crash or leave the output unwritten.
     uint8_t src[1] = {255};
     uint8_t dst[100]; // Correct size for 10x10
     ph_resize_box(src, 1, 1, dst, 10, 10);

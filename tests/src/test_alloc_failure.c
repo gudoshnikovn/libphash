@@ -344,9 +344,9 @@ static void scen_batch(int recording) {
 
 /* A photo stored in sensor orientation with an EXIF tag saying "rotate 90°" (6), loaded
  * with auto-orientation on (the default). The rotation takes a second full-size buffer;
- * when that allocation failed, the load used to report success and leave the image
- * unrotated, so every hash described an orientation the caller never asked for. Rule:
- * a load that reports success hashes exactly like the un-injected one. */
+ * if that allocation fails, the load must fail, not succeed with an unrotated image whose
+ * every hash describes an orientation the caller never asked for. Rule: a load that
+ * reports success hashes exactly like the un-injected one. */
 static blob_t g_oriented;
 static uint64_t g_oriented_ahash, g_oriented_phash;
 
@@ -454,17 +454,17 @@ static int shim_is_effective(void) {
 
 /* ---- stb "outofmem" pinning --------------------------------------------
  *
- * The scenarios above already cover this defect end to end: once src/loader.c maps
- * stb_image's "outofmem" failure reason to PH_ERR_ALLOCATION_FAILED, every one of
+ * The scenarios above cover stb_image's out-of-memory path end to end: src/loader.c maps
+ * stb_image's "outofmem" failure reason to PH_ERR_ALLOCATION_FAILED, so every one of
  * their failure points that lands inside stb_image's decode is accepted by check()'s
- * ALLOW_ALLOC and stops being counted as a defect.
+ * ALLOW_ALLOC.
  *
- * That end-to-end result is not proof the fix is doing what it says, though: a
+ * That end-to-end result is not proof that the "outofmem" mapping itself works: a
  * differently-worded stb reason falling through to the PH_ERR_CORRUPT_DATA branch
  * would look identical from here if some *other* allocation on the same call path
  * happened to fail with PH_ERR_ALLOCATION_FAILED instead -- the scenario would still
  * pass, for the wrong reason, and a real regression in ph_stb_reason_is_oom() would
- * go unnoticed. This test closes that gap by checking the diagnostic message itself:
+ * go unnoticed. This test checks the diagnostic message itself:
  * it sweeps every allocation ordinal a clean JPEG decode makes and requires that at
  * least one of the resulting failures leaves the literal reason "outofmem" behind
  * (not merely a non-empty message), pinned via ph_get_last_error_message(). If a

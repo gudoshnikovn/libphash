@@ -1,6 +1,5 @@
-# Clang/LLVM is the priority default (more actively developed; several other
-# checks in this tree already special-case it), but this stays overridable --
-# `CC=gcc make` or any environment CC keeps working exactly as before. Plain
+# Clang/LLVM is the default (the libFuzzer build requires it), but `CC=gcc make` or
+# any environment CC still overrides it. Plain
 # `CC ?= clang` would NOT do that: GNU Make ships a built-in default of
 # `CC = cc`, so by the time this line runs CC already looks "defined" and
 # `?=` becomes a no-op. `origin` distinguishes that built-in default from an
@@ -10,9 +9,8 @@ CC = clang
 endif
 GENERATED_DIR = generated
 # The same dialect CMakeLists.txt pins (CMAKE_C_STANDARD 17, extensions OFF).
-# Left unset, the dialect is whatever the compiler defaults to, and that default
-# moves: GCC 15 switched to gnu23, so this build silently changed standard under
-# anyone who upgraded.
+# Left unset, the dialect would follow the compiler's default, which moves (GCC 15
+# defaults to gnu23), so the build would change standard under anyone who upgrades.
 #
 # -ffp-contract=off: the same explicit no-FMA-fusion policy CMakeLists.txt sets, and
 # for the same reason -- left to the compiler it follows the dialect (GCC fuses under
@@ -28,7 +26,7 @@ endif
 ifeq ($(UNAME_M),arm64)
     CFLAGS += -march=armv8-a+simd
 endif
-# R86/R88/R89: 32-bit x86 has no fixed float ABI of its own -- GCC/Clang default to
+# 32-bit x86 has no fixed float ABI of its own -- GCC/Clang default to
 # x87 FPU extended-precision intermediates for scalar double/float math there, not
 # SSE2, unless told otherwise. That default silently changes this library's own
 # floating-point output (e.g. ph_compute_phash()'s rounding noise on solid-colour
@@ -52,14 +50,11 @@ ifeq ($(USE_WEBP),1)
     LDFLAGS += -lwebp -lwebpdecoder
 endif
 
-# --- Batch-hashing thread pool (task 9) ---
-# ON by default, matching the CMake option PHASH_ENABLE_THREADS (also ON).
-# R15/L13: the two build systems used to disagree here (Makefile 0, CMake ON).
-# The cost of that divergence was not "one build is leaner": it was that the
-# threaded batch path never ran in the local Makefile flow at all -- neither in
-# `make test` nor in `make coverage` -- which is exactly how the Windows thread-pool
-# defect H1 stayed hidden. `-pthread` is now a dependency of the portable build;
-# that is a deliberate trade. Opt out with `make PHASH_ENABLE_THREADS=0`.
+# --- Batch-hashing thread pool ---
+# ON by default, matching the CMake option PHASH_ENABLE_THREADS, so `make test` and
+# `make coverage` exercise the threaded batch path too. That makes `-pthread` a
+# dependency of the portable build, deliberately. Opt out with
+# `make PHASH_ENABLE_THREADS=0`.
 PHASH_ENABLE_THREADS ?= 1
 ifeq ($(PHASH_ENABLE_THREADS),1)
     CFLAGS += -DPH_ENABLE_THREADS -pthread
@@ -93,22 +88,22 @@ CFLAGS += -DPH_ENABLE_MOCK_BACKEND
 endif
 
 # --- Instrumented build modes ---
-# These are switches rather than target-specific variables on purpose (R15/R23):
-# the old `debug: clean all` / `coverage: clean test` shape let `clean` run in
-# parallel with compilation under `-jN` and deleted objects out from under the
-# compiler. The `debug`/`coverage` targets below now recurse (`$(MAKE) clean`,
-# then `$(MAKE) all PHASH_SANITIZE=1`), which is ordered at any -j level, and
-# the flags are picked up here instead of being attached to the target.
+# These are switches rather than target-specific variables on purpose: a
+# `debug: clean all` prerequisite shape lets `clean` run in parallel with
+# compilation under `-jN` and delete objects out from under the compiler. The
+# `debug`/`coverage` targets below recurse instead (`$(MAKE) clean`, then
+# `$(MAKE) all PHASH_SANITIZE=1`), which is ordered at any -j level, and the flags
+# are picked up here instead of being attached to the target.
 PHASH_SANITIZE ?= 0
 ifeq ($(PHASH_SANITIZE),1)
 CFLAGS += -g -O0 -fsanitize=address,undefined
 LDFLAGS += -fsanitize=address,undefined
-# R46: the vendored stb_image_resize2 packs filter coefficients with deliberately
+# The vendored stb_image_resize2 packs filter coefficients with deliberately
 # unaligned 64-bit moves (STBIR_MOVE_2 casts float* -> stbir_uint64*), which UBSan
 # reports as `load/store of misaligned address ... for type 'stbir_uint64'`. The
 # misaligned buffer is stb's own internal coefficient array (16-byte aligned at the
 # base; the odd stride is stb's), not anything we pass in, and the pattern is
-# unchanged in current upstream master (v2.18) -- so it cannot be fixed by a bump.
+# unchanged upstream as of the vendored v2.18 -- so it cannot be fixed by a bump.
 # We exempt ONLY the TU that instantiates stb (src/image/stb_resize_impl.c, which
 # contains no code of ours) from the alignment check, so our own findings still fire.
 STB_NOSAN_CFLAGS = -fno-sanitize=alignment
@@ -121,9 +116,8 @@ ifeq ($(PHASH_COVERAGE),1)
 # (e.g. ph_safe_image_alloc_size() in internal.h) gets its own counter instance per
 # translation unit -- default (non-atomic) counter increments race there and corrupt
 # the merged .gcda, surfacing as `geninfo: ERROR: Unexpected negative count` (a known
-# GCC/gcov limitation, https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68080, confirmed
-# on real CI via the CMake coverage flow -- see the matching comment in
-# CMakeLists.txt). Applied here too since this Makefile flow builds the same
+# GCC/gcov limitation, https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68080 -- see the
+# matching comment in CMakeLists.txt). Applied here too since this Makefile flow builds the same
 # multi-threaded test binaries.
 CFLAGS += -g -O0 --coverage -fprofile-update=atomic
 LDFLAGS += --coverage
@@ -170,7 +164,7 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-# R46: stb_image_resize2 implementation TU — see the PHASH_SANITIZE block above.
+# stb_image_resize2 implementation TU — see the PHASH_SANITIZE block above.
 # Empty outside sanitizer builds, so release builds are unaffected.
 STB_NOSAN_CFLAGS ?=
 $(OBJ_DIR)/image/stb_resize_impl.o: $(SRC_DIR)/image/stb_resize_impl.c
@@ -178,7 +172,7 @@ $(OBJ_DIR)/image/stb_resize_impl.o: $(SRC_DIR)/image/stb_resize_impl.c
 	$(CC) $(CFLAGS) $(STB_NOSAN_CFLAGS) -c $< -o $@
 
 # Test compilation
-# test_abi.c built again under -fshort-enums, which shrinks any public enum that lost its
+# test_abi.c built again under -fshort-enums, which shrinks any public enum without its
 # width spacer. Header-only by design, so it is not linked against the library.
 test_abi_short_enums: $(TEST_DIR)/test_abi.c $(GENERATED_DIR)/phash_version.h
 	$(CC) $(CFLAGS) -fshort-enums $< -o $@ $(LDFLAGS)
@@ -196,7 +190,7 @@ test: $(TEST_BINS)
 
 # Coverage build. Recursive for the same reason as `debug` above.
 # Note this inherits PHASH_ENABLE_THREADS=1, so the threaded batch path in
-# src/batch.c is instrumented and executed here (it was dead before R15).
+# src/batch.c is instrumented and executed here.
 coverage:
 	@$(MAKE) clean
 	@$(MAKE) test PHASH_COVERAGE=1
@@ -207,17 +201,17 @@ coverage:
 	@genhtml docs/coverage/coverage.info --output-directory docs/coverage/html
 	@echo "Coverage report generated at docs/coverage/html/index.html"
 
-# R24: coverage for the CMake build's native decoders (libjpeg-turbo/libpng-or-spng/
+# Coverage for the CMake build's native decoders (libjpeg-turbo/libpng-or-spng/
 # libwebp/zlib-ng) -- `coverage` above only ever measures the stb_image-only
 # Makefile flow. See scripts/coverage_cmake.sh for what this actually runs.
 coverage-cmake:
 	@./scripts/coverage_cmake.sh
 
-# Legacy/Standalone benchmark target (internal use)
+# Standalone benchmark target (internal use)
 benchmark: test_benchmark
 	./test_benchmark hash tests/data/photo.jpeg 100
 
-# Smoke-test install()/pkg-config/find_package(phash) packaging (task 4).
+# Smoke-test install()/pkg-config/find_package(phash) packaging.
 # Builds+installs into a throwaway prefix, then builds a consumer against it.
 install-test:
 	./scripts/smoke_install.sh static
@@ -230,10 +224,9 @@ clean:
 	find . -name "*.gcov" -delete
 	rm -f tests/output_*.jpeg
 
-# Native linux/arm64 dev container (task 17, tasks/17_docker_dev_environment.md).
-# Functional Linux/GCC sanity check only — NOT a substitute for the CI matrix (task 7),
-# and NEVER use this image with --platform linux/amd64 for perf numbers (QEMU-emulated
-# x86_64 invalidates the zlib-ng benchmark from task 6).
+# Native linux/arm64 dev container. Functional Linux/GCC sanity check only — NOT a
+# substitute for the CI matrix, and NEVER use this image with --platform linux/amd64
+# for perf numbers (QEMU emulation invalidates any benchmark).
 DOCKER_IMAGE = libphash-dev-arm64
 
 docker-build:

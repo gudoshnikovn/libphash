@@ -4,7 +4,8 @@
 #include <stdio.h>
 #include <string.h>
 
-/* Every combination of the 6 ph_hash_flags_t bits, including the empty and full sets. */
+/* Every combination of the PH_HASH_FLAGS_COUNT ph_hash_flags_t bits, including the empty and
+ * full sets. */
 #define ALL_FLAGS_MASK (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH)
 
 static uint64_t reference_hash(ph_context_t *ctx, uint32_t flag) {
@@ -142,8 +143,8 @@ static void test_multi_writes_exactly_one_slot_per_flag(void) {
  * comes out as the return value, and the slots of the algorithms that had already run
  * keep their (correct) values while the rest stay untouched.
  *
- * Reaching a failing algorithm at all takes some doing in 2.0.0: the four hashes the
- * bitfield can still express cannot fail on a loaded image, and the setters now reject
+ * Reaching a failing algorithm takes some doing: the four hashes the bitfield expresses
+ * cannot fail on a loaded image, and the setters reject
  * every out-of-range configuration. pHash's own guard against an invalid dct_size is
  * therefore driven the only way it is reachable -- by writing the config field directly,
  * the same "config written by some other route" case bmh.c documents. What is being
@@ -193,11 +194,11 @@ static void test_multi_propagates_algorithm_failure(void) {
     PASS("test_multi_propagates_algorithm_failure");
 }
 
-/* The four algorithms the bitfield still holds are all grayscale ones, so a context
+/* The four algorithms the bitfield holds are all grayscale ones, so a context
  * loaded with load_grayscale enabled must serve every one of them -- and give the same
  * answers as the individual entry points do on that same context. (The colour algorithms,
- * which are what fails under grayscale, left the bitfield in 2.0.0; they are called
- * directly and tested with their own algorithms.) */
+ * which are what fails under grayscale, are not in the bitfield; they are called directly
+ * and tested with their own algorithms.) */
 static void test_multi_on_grayscale_loaded_image(void) {
     ph_context_t *ctx = NULL;
     ph_context_t *ref = NULL;
@@ -224,11 +225,11 @@ static void test_multi_on_grayscale_loaded_image(void) {
     PASS("test_multi_on_grayscale_loaded_image");
 }
 
-/* The retired bits (1 << 4 was PH_HASH_MHASH, 1 << 5 was PH_HASH_COLOR_HASH) must be
- * refused rather than quietly ignored: a caller compiled against 1.x that still passes
- * them is asking for a hash this function cannot produce, and silently returning the
- * remaining three would hand it a differently-packed out[] under a PH_SUCCESS. */
-static void test_multi_rejects_retired_flag_bits(void) {
+/* Bits that are not ph_hash_flags_t values (1 << 4 and up) must be refused rather than
+ * quietly ignored: the caller is asking for a hash this function cannot produce, and
+ * silently returning the valid subset would hand it a differently-packed out[] under a
+ * PH_SUCCESS. */
+static void test_multi_rejects_unknown_flag_bits(void) {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
     ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
@@ -243,7 +244,7 @@ static void test_multi_rejects_retired_flag_bits(void) {
     ASSERT_UINT64_EQ(0, out[0]);
 
     ph_free(ctx);
-    PASS("test_multi_rejects_retired_flag_bits");
+    PASS("test_multi_rejects_unknown_flag_bits");
 }
 
 int main() {
@@ -253,6 +254,6 @@ int main() {
     test_multi_writes_exactly_one_slot_per_flag();
     test_multi_propagates_algorithm_failure();
     test_multi_on_grayscale_loaded_image();
-    test_multi_rejects_retired_flag_bits();
+    test_multi_rejects_unknown_flag_bits();
     return 0;
 }

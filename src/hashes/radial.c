@@ -20,16 +20,15 @@
  *      omits redundant components of the radial variance vector and efficiently
  *      decorrelates it."
  *
- * Before 2.0.0 step 2 was missing and the 40 sat on the angle count instead: 40 angles,
- * no transform. That is a different algorithm -- 4.5x coarser angularly, and correlated
- * across neighbouring elements, which is the redundancy the DCT exists to remove.
+ * Skipping step 2 and taking 40 angles directly would be a different algorithm: 4.5x
+ * coarser angularly, and correlated across neighbouring elements, which is the
+ * redundancy the DCT exists to remove.
  *
  * Quantisation follows pHash's own ph_dct(): the 40 coefficients are mapped affinely
  * onto 0..255 by their own minimum and maximum. That is what keeps the sign -- the most
  * negative coefficient is 0, not a wrapped byte -- and it makes the digest invariant to
  * a positive rescaling of the whole variance vector, which is what a contrast change
- * mostly does to it. The pre-DCT "divide by the maximum variance, then take the square
- * root" of earlier versions is gone: it existed only to fit variances into bytes, it is
+ * mostly does to it. No square root or max-normalisation is applied before the DCT: it is
  * not in the source, and a square root before a transform is not a scaling but a
  * different signal.
  *
@@ -47,16 +46,11 @@
  * the invariance lives in the variance vector, and the DCT does not survive a shift. The
  * measured profile is in docs/algorithm-provenance.md section 7.
  *
- * Gamma and blur sigma now follow pHash's own header defaults (ph_compare_images(),
- * aetilius/pHash): gamma 1.0 (identity), sigma 3.5, applied through ph_gaussian_blur_sigma()
- * rather than a fixed 3x3 kernel. Before this fix gamma defaulted to 2.2, an independently
- * chosen sRGB display value with no connection to this algorithm's reference, and the blur
- * was that fixed kernel (effective sigma about 0.707), not parameterised at all -- so the
- * reference and this code saw different pixels before the variance was ever computed. The
- * history, the trust placed in pHash's own code as the source for these two parameters
- * (Zauner's Diplomarbeit reports the authors merely "suggest 1 for both", which pHash's own
- * header itself does not follow for sigma), and the measured delta this moved are in
- * docs/algorithm-provenance.md section 7.
+ * Gamma and blur sigma follow pHash's own header defaults (ph_compare_images(),
+ * aetilius/pHash): gamma 1.0 (identity) and sigma 3.5, applied through
+ * ph_gaussian_blur_sigma(). Why pHash's code rather than Zauner's Diplomarbeit (which
+ * reports the authors "suggest 1 for both") is the reference for these two parameters is
+ * in docs/algorithm-provenance.md section 7.
  *
  * Deliberate differences: a fixed sample count per projection with bilinear
  * interpolation, rather than summing the pixels of a one-pixel-wide strip whose length
@@ -160,13 +154,12 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     int samples = ctx->config.radial_samples;
     /* Fewer angles than coefficients is not a coarser hash, it is no hash: a DCT of an
      * n-element vector has n coefficients. The setter rejects it; refuse here too rather
-     * than hand back a digest quietly shorter than the caller configured, which is what
-     * the old clamp against PH_DIGEST_MAX_BYTES did. */
+     * than hand back a digest quietly shorter than the caller configured. */
     if (projections < PH_RADIAL_COEFFS || samples <= 0)
         return PH_ERR_INVALID_ARGUMENT;
 
     /* projections * sizeof(double) does not overflow size_t on a 64-bit target, but it
-     * does on a 32-bit one. Since 2.0.0 ph_context_set_radial_params() caps projections
+     * does on a 32-bit one. ph_context_set_radial_params() caps projections
      * at PH_RADIAL_MAX_PROJECTIONS, so this cannot trigger through the public API either;
      * kept as defence in depth. Refuse rather than wrap. */
     if ((size_t)projections > SIZE_MAX / sizeof(double))
@@ -238,7 +231,7 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
      *
      * A vector with no spread at all -- a flat image, or one radially symmetric enough
      * that every angle sees the same variance -- has nothing to standardise and nothing
-     * for this descriptor to say. It yields an all-zero digest, again as pHash does. */
+     * for this descriptor to say. It yields an all-zero digest, as pHash does. */
     double sum_v = 0.0, sum_v_sq = 0.0;
     for (int i = 0; i < projections; i++) {
         sum_v += projection_variances[i];

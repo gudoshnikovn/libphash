@@ -74,12 +74,11 @@ static int ph_stb_reason_is_unsupported(const char *reason) {
 }
 
 /* Same coupling as ph_stb_unsupported_reasons above, for the other reason worth telling
- * apart: stb_image's own malloc()/realloc() calls failing mid-decode. Left unrecognized,
- * this used to fall into PH_ERR_CORRUPT_DATA -- telling the caller the file is bad when
- * the truth is the process ran out of memory, while the native decoder backends (jpeg.c,
- * png.c, webp.c) already report their own malloc failures as PH_ERR_ALLOCATION_FAILED.
- * Recognizing it here closes that gap between the stb-only build and native-decoder
- * builds. test_stb_oom_reason_pinned() in tests/src/test_alloc_failure.c pins this
+ * apart: stb_image's own malloc()/realloc() calls failing mid-decode. Unrecognized, it
+ * would fall into PH_ERR_CORRUPT_DATA and call the file bad when the process ran out of
+ * memory; the native decoder backends (jpeg.c, png.c, webp.c) report their own malloc
+ * failures as PH_ERR_ALLOCATION_FAILED, and this keeps the stb-only build consistent
+ * with them. test_stb_oom_reason_pinned() in tests/src/test_alloc_failure.c pins this
  * literal against a real forced allocation failure (not just a mocked reason string);
  * if a vendor bump reworks the wording, that test breaks and this array is where to fix
  * it -- do not relax the assertion instead.
@@ -191,8 +190,8 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
  *
  * Guarded by its own opt-in flag (CMake: PHASH_ENABLE_MOCK_BACKEND, Makefile:
  * PHASH_ENABLE_MOCK_BACKEND=1), deliberately NOT by PH_TESTING/PHASH_BUILD_TESTS:
- * those are ON in the recommended Release build, which used to ship a library
- * that "decodes" any buffer starting with DE AD into a 1x1 image. This backend
+ * those are ON in the recommended Release build, and a shipped library must not
+ * "decode" any buffer starting with DE AD into a 1x1 image. This backend
  * is registered ahead of the stb catch-all, so it really does intercept input --
  * it must never end up in a shipped artifact. */
 static int ph_mock_can_read(const uint8_t *magic, size_t len) {
@@ -278,11 +277,11 @@ static void ph_warm_decoder_dispatch(void) {
 /* --- Container completeness -------------------------------------------------
  *
  * stb_image decodes whatever part of a truncated JPEG or PNG it could read, fills the
- * rest, and reports success; the native decoders reject the same bytes as corrupt. So a
- * half-downloaded file got an error in one build and a plausible hash of half a picture
- * in another. These checks give every build the same answer: after a successful decode,
- * the container must reach its own end -- EOI for JPEG, IEND for PNG, the RIFF size for
- * WebP. Bytes after that end are allowed (camera trailers, appended data); a missing end
+ * rest, and reports success; the native decoders reject the same bytes as corrupt.
+ * Without these checks a half-downloaded file would get an error in one build and a
+ * plausible hash of half a picture in another. They give every build the same answer: after a
+ * successful decode, the container must reach its own end -- EOI for JPEG, IEND for PNG, the RIFF
+ * size for WebP. Bytes after that end are allowed (camera trailers, appended data); a missing end
  * is PH_ERR_CORRUPT_DATA. They run after the decoder, not before, so a decoder's own and
  * more specific verdict (too large, out of memory, its own corruption message) wins. */
 

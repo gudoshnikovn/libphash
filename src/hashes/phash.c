@@ -15,10 +15,10 @@
  * what pHash's ph_dct_imagehash() does: it crops the 8x8 block at (0,0), then takes the
  * median of that block's elements 1 through 63 and thresholds all 64 against it.
  *
- * DC is the image mean and runs 10-100x larger than any AC term, so leaving it in the
- * median drags the threshold that decides the other 63 bits -- which is what this code
- * used to do, and what ImageHash still does, which is why comparing against ImageHash
- * could never have caught it.
+ * DC is the image mean and runs 10-100x larger than any AC term. ImageHash leaves it in
+ * the median, so it cannot serve as a reference for this detail; a median is not dragged
+ * by one outlier, and the two thresholds differ only on an exact tie between the two
+ * central coefficients.
  *
  * The written descriptions of pHash go further than its code and disagree with each
  * other about how far. Zauner 3.2.1 reads the block as starting at DCT(1,1) -- "64

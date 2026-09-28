@@ -132,9 +132,8 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
  * radial digest does, rather than treating every buffer as if it already spanned the
  * full 0..255 range. This is what makes gamma == 1.0 an exact identity for any image,
  * not only ones that happen to touch 255: (v/max)^1 * max == v algebraically, for any
- * max > 0. It also means the LUT can no longer be precomputed once per context -- it
- * depends on this call's own buffer, not only on gamma -- so it is rebuilt here, once
- * per call over at most 256 entries, not once per pixel. */
+ * max > 0. The LUT therefore depends on this call's own buffer, not only on gamma, so
+ * it is built here, once per call over at most 256 entries, not once per pixel. */
 void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h) {
     if (!ctx || !data || w <= 0 || h <= 0)
         return;

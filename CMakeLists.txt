@@ -4,22 +4,21 @@ cmake_minimum_required(VERSION 3.21)
 project(libphash VERSION 2.0.0 LANGUAGES C)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Explicit C standard (previously unset -- silently fell back to whatever the
-# compiler defaults to, e.g. gnu17 on modern gcc/clang, gnu11 or lower on old
-# ones). C17 is the widest-supported non-legacy standard across the full CI
-# matrix, including windows-latest/MSVC, whose C23 support is still immature.
+# Explicit C standard. Left unset, the dialect is whatever the compiler defaults to
+# (gnu17 on modern gcc/clang, gnu23 on GCC 15, gnu11 or lower on old ones). C17 is
+# the widest-supported non-legacy standard across the full CI matrix, including
+# windows-latest/MSVC, whose C23 support is still immature.
 # CMAKE_C_EXTENSIONS is OFF because nothing in this codebase uses GNU dialect
 # features (typeof, statement expressions, VLAs) -- plain -std=c17, not gnu17.
 #
 # That switch costs more than the GNU dialect, though, and the cost is invisible
 # on Darwin: a strict dialect makes the compiler define __STRICT_ANSI__, and glibc
-# hides *every* non-ISO declaration behind it -- POSIX included. The whole tree was
-# audited for such names; the three that were in use are M_PI (defined in
-# src/internal.h and tests/src/test_macros.h now, so no libc has to provide it) and
-# clock_gettime()/openat(), which have no ISO equivalent and are requested with a
-# _POSIX_C_SOURCE in the two test translation units that need them. Anything new
-# that reaches for a non-ISO libc name has to do the same; scripts/check_strict_iso.sh
-# is what notices when it doesn't.
+# hides *every* non-ISO declaration behind it -- POSIX included. M_PI is defined by
+# src/internal.h and tests/src/test_macros.h, so no libc has to provide it. A
+# translation unit that needs a POSIX or GNU declaration (clock_gettime(), openat(),
+# mkstemp(), sched_getaffinity(), ...) requests it with a feature-test macro before its
+# first #include. Anything new that reaches for a non-ISO libc name has to do the same;
+# scripts/check_strict_iso.sh is what notices when it doesn't.
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
@@ -35,10 +34,9 @@ endif()
 # The optimisation level belongs to CMAKE_BUILD_TYPE, so a standalone configure that
 # names none must not silently produce an unoptimised library. Release when nothing
 # was asked for; never under a multi-config generator (the type is picked at build
-# time there) and never inside a parent project, whose choice this is. Until this
-# line existed, the default came from two unrelated places: an -O3 hard-coded over
-# every build type, and libwebp/zlib-ng writing Release into the cache as a side
-# effect of add_subdirectory() -- which the minimal (stb-only) build never reaches.
+# time there) and never inside a parent project, whose choice this is. Without it, the
+# effective default would be whatever libwebp/zlib-ng write into the cache as a side
+# effect of add_subdirectory(), which the minimal (stb-only) build never reaches.
 if(PHASH_IS_TOP_LEVEL AND NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING
         "Build type: Debug, Release, RelWithDebInfo or MinSizeRel" FORCE)
@@ -46,9 +44,9 @@ endif()
 
 # BUILD_SHARED_LIBS and BUILD_TESTING are global CMake variables, not options of the
 # vendored subprojects -- but those subprojects have to see them OFF while they
-# configure. Forcing them into the cache and walking away silently reconfigured any
-# parent project that pulled libphash in via add_subdirectory() (R11/H3), turning off
-# its shared build and its ctest. So: force them, then put the parent's values back.
+# configure. Forcing them into the cache and walking away would silently reconfigure
+# any parent project that pulls libphash in via add_subdirectory(), turning off its
+# shared build and its ctest. So: force them, then put the parent's values back.
 #
 # Macros, not functions: cache edits are global, but these also read and write plain
 # variables in the caller's scope, which a function() would not see.
@@ -88,8 +86,8 @@ endmacro()
 # (see the comment above target_link_libraries(phash PRIVATE
 # $<BUILD_INTERFACE:png_static> ...) below), so by the time a consumer's
 # CMake evaluates that generator expression, the target it names doesn't
-# exist in that project at all -- confirmed by running scripts/smoke_install.sh
-# after first trying that approach: "No target png_static".
+# exist in that project at all, and the consumer's configure fails with
+# "No target png_static" (scripts/smoke_install.sh covers this).
 #
 # So this reads each of PREFIX/OUTPUT_NAME/SUFFIX back from the target right
 # now, while it still exists in this configure, falling back to CMake's
@@ -107,11 +105,8 @@ endmacro()
 # here is back to MSVC's own default ("") the moment add_subdirectory()
 # returns. get_directory_property(... DEFINITION ...) against that
 # subdirectory is the one way to read the variable's value as it stood
-# during that directory's own processing. Found on a real windows-x86_64
-# runner while validating R42's release workflow -- two prior versions of
-# this fix (CMAKE_STATIC_LIBRARY_PREFIX hardcoded, then read via
-# get_target_property(PREFIX) with no src_dir fallback) both missed this and
-# shipped a broken INSTALL_INTERFACE path for libwebp specifically.
+# during that directory's own processing. Without the src_dir fallback,
+# libwebp's INSTALL_INTERFACE path gets the wrong file name under MSVC.
 function(phash_static_lib_filename out_var target)
     set(_phash_src_dir "")
     if(ARGC GREATER 2)
@@ -161,11 +156,10 @@ option(PHASH_BUILD_FUZZERS "Build libFuzzer harnesses (requires Clang)" OFF)
 option(PHASH_ENABLE_MOCK_BACKEND "Register the DE AD mock decoder in the loader's backend table (test-only; must never be ON in a shipped build)" OFF)
 option(PHASH_STRICT_DEPS "Fail the configure step instead of silently falling back when a bundled decoder dependency (e.g. vendored libjpeg-turbo/zlib-ng) can't be found" OFF)
 option(PHASH_ENABLE_THREADS "Let ph_hash_files()/ph_hash_buffers() spawn a pool of OS threads (pthreads/Win32) instead of always running sequentially" ON)
-# R24: `make coverage` (Makefile) only ever measures the stb_image-only path -- the
-# native decoders (src/loaders/{jpeg,png,webp}.c) compile to nothing but their
+# `make coverage` (Makefile) measures only the stb_image-only path: the native
+# decoders (src/loaders/{jpeg,png,webp}.c) compile to nothing but their
 # ph_can_use_*() stub under that flow, so their max_pixels checks, error-callback
-# plumbing, and overflow guards (the exact code R16-R18 lived in) are invisible to
-# every coverage number this project has produced. This option instruments *this*
+# plumbing and overflow guards are invisible to it. This option instruments *this*
 # CMake build instead, so a Release-equivalent config with the vendored decoders on
 # can be measured; scripts/coverage_cmake.sh drives it (also for the spng variant)
 # and merges both into one report.
@@ -173,8 +167,8 @@ option(PHASH_COVERAGE "Instrument phash and its tests with --coverage (gcov/lcov
 
 # libpng and spng are two alternative implementations of the *same* PNG backend:
 # src/loaders/png.c compiles exactly one of them (#ifdef PH_USE_LIBPNG / #elif
-# PH_USE_SPNG). Enabling both used to build and link both libraries while
-# silently using libpng only -- an unused dependency baked into the artifact.
+# PH_USE_SPNG). Enabling both would build and link both libraries while using
+# libpng only -- an unused dependency baked into the artifact.
 # Refuse the configuration instead of picking a winner behind the user's back.
 if(PHASH_USE_LIBPNG AND PHASH_USE_SPNG)
     message(FATAL_ERROR
@@ -223,32 +217,27 @@ endif()
 include(CheckCCompilerFlag)
 
 if(MSVC)
-    # src/batch.c includes <stdatomic.h> unconditionally when
-    # PHASH_ENABLE_THREADS is on, and MSVC only ships that header under
+    # src/batch.c and src/loader.c include <stdatomic.h> unconditionally, and
+    # MSVC only ships that header under
     # /std:c11 or later (VS 17.5+). CMAKE_C_STANDARD (set above, project-wide)
     # already emits the /std:c1x flag matching it -- not repeated here as an
     # explicit /std:c11, which would just be a second, possibly conflicting
     # /std: flag on the same command line.
     #
-    # /std:c1x alone isn't enough, though -- found on a real windows-x86_64 GH
-    # Actions runner while validating R42's release workflow (the first actual
-    # Windows compile of this project; see the PH_API fix earlier in this file
-    # for the rest of that story). <stdatomic.h>'s vcruntime_c11_stdatomic.h
+    # /std:c1x alone isn't enough, though: <stdatomic.h>'s vcruntime_c11_stdatomic.h
     # additionally requires /experimental:c11atomics; without it MSVC's own
     # header self-errors with "C atomic support is not enabled" even under
     # /std:c11.
     #
-    # There used to be an _USE_MATH_DEFINES here as well, because MSVC's
-    # <math.h> declares no M_PI without it. It is gone: M_PI is not ISO C on
-    # any platform, and glibc hides it too once CMAKE_C_EXTENSIONS OFF turns
-    # __STRICT_ANSI__ on, so the constant is now defined by src/internal.h and
-    # tests/src/test_macros.h and no longer depends on the libc at all.
+    # No _USE_MATH_DEFINES: M_PI is not ISO C on any platform (glibc hides it too
+    # once CMAKE_C_EXTENSIONS OFF turns __STRICT_ANSI__ on), so src/internal.h and
+    # tests/src/test_macros.h define it themselves.
     add_compile_options(/experimental:c11atomics)
 
     # /utf-8: the sources are UTF-8 and carry non-ASCII text (em dashes, in comments
     # only). Without the flag MSVC reads them in the machine's ANSI code page. On a
     # single-byte page such as the CI runners' 1252 every byte decodes to something,
-    # so nothing is reported (confirmed on windows-latest without the flag). On a
+    # so nothing is reported. On a
     # double-byte page (932/936/949, CJK locales) the same bytes draw C4819, and a
     # multi-byte lead byte at the end of a // comment can swallow the newline and
     # comment out the next line of code.
@@ -261,22 +250,22 @@ else()
     set(PHASH_OWN_COMPILE_OPTIONS -Wall -Wextra)
 
     # Floating-point contraction (fusing a*b+c into one FMA with a single rounding) is
-    # off, explicitly. Left to the compiler, it depended on things that have nothing to
+    # off, explicitly. Left to the compiler, it depends on things that have nothing to
     # do with the hash: GCC fuses freely under -std=gnuNN and not at all under a strict
     # -std=cNN, Clang fuses within an expression either way, and only targets with
     # hardware FMA (arm64 always; x86-64 only with -mfma) are affected at all. pHash's
-    # median threshold turns that last-bit difference into flipped bits -- switching
-    # this project from gnu17 to strict c17 alone moved photo.png's pHash on Linux
-    # arm64 GCC by 10 bits. Off is the source-as-written semantics, which x86-64's
-    # baseline and MSVC (whose default /fp:precise does not contract) already have, so
-    # a hash no longer depends on the dialect or compiler it was built with.
+    # median threshold turns that last-bit difference into flipped bits: on Linux arm64
+    # GCC, gnu17 against strict c17 alone moves photo.png's pHash by 10 bits. Off is the
+    # source-as-written semantics, which x86-64's baseline and MSVC (whose default
+    # /fp:precise does not contract) have anyway, so a hash does not depend on the
+    # dialect or compiler it was built with.
     check_c_compiler_flag("-ffp-contract=off" PHASH_HAS_FP_CONTRACT_OFF)
     if(PHASH_HAS_FP_CONTRACT_OFF)
         list(APPEND PHASH_OWN_COMPILE_OPTIONS -ffp-contract=off)
     endif()
 
-    # Warnings the library's own sources are clean under, on both GCC and Clang. They
-    # cost nothing today and catch regressions from here on. Applied to `phash` only:
+    # Warnings the library's own sources are clean under, on both GCC and Clang, so any
+    # new warning is a real regression. Applied to `phash` only:
     # tests and the fuzzer keep the -Wall -Wextra baseline (the test sources were
     # never written to this set -- e.g. `void test_x()` trips -Wstrict-prototypes).
     # Each flag is probed, since GCC rejects an unknown -W option outright.
@@ -303,9 +292,8 @@ else()
         # set), CMake reports the *host*'s uname -- so build-and-test-32bit's
         # -DCMAKE_C_FLAGS=-m32 -DCMAKE_SYSTEM_PROCESSOR=i686 in ci.yml is silently
         # overridden back to the runner's real "x86_64" during project(), and this
-        # branch matched "x86_64|amd64" for that leg too (that's how -mavx2 ever
-        # reached src/hashes/common.c on a 32-bit build in the first place -- see
-        # R82). CMAKE_SIZEOF_VOID_P, by contrast, is derived from an actual compiled
+        # branch would match "x86_64|amd64" for that leg too (and hand -mavx2 to
+        # src/hashes/common.c on a 32-bit build). CMAKE_SIZEOF_VOID_P, by contrast, is derived from an actual compiled
         # test binary and correctly reflects -m32, so it's what distinguishes the two
         # x86 widths below.
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|i[3-6]86|^x86$")
@@ -317,7 +305,7 @@ else()
                     set_source_files_properties(src/hashes/common.c PROPERTIES COMPILE_OPTIONS "-mavx2")
                 endif()
             else()
-                # R86/R88/R89: 32-bit x86 has no fixed float ABI of its own -- GCC/Clang
+                # 32-bit x86 has no fixed float ABI of its own -- GCC/Clang
                 # default to x87 FPU extended-precision intermediates for scalar
                 # double/float math there, not SSE2, unless told otherwise. That default
                 # silently changes this library's own floating-point output (e.g.
@@ -340,13 +328,12 @@ endif()
 # --- Library ---
 file(GLOB_RECURSE SOURCES "src/*.c")
 
-# R46: the vendored stb_image_resize2 packs filter coefficients with deliberately
+# The vendored stb_image_resize2 packs filter coefficients with deliberately
 # unaligned 64-bit moves (STBIR_MOVE_2 casts float* -> stbir_uint64*) on its own
 # internal, 16-byte-aligned coefficient array — nothing we pass in is misaligned,
-# and the pattern is unchanged in current upstream master (v2.18). Exempt ONLY the
+# and the pattern is unchanged upstream as of the vendored v2.18. Exempt ONLY the
 # TU that instantiates stb (it contains no code of ours) from UBSan's alignment
-# check, so the `sanitizers` CI job stops drowning our own findings in 5 reports
-# per run. A runtime UBSAN_OPTIONS suppression file does not work here: it is
+# check, so the `sanitizers` CI job reports only our own findings. A runtime UBSAN_OPTIONS suppression file does not work here: it is
 # ignored under -fno-sanitize-recover=all, which that job uses.
 check_c_compiler_flag("-fno-sanitize=alignment" PHASH_HAS_FNO_SANITIZE_ALIGNMENT)
 if(PHASH_HAS_FNO_SANITIZE_ALIGNMENT)
@@ -359,17 +346,12 @@ if(PHASH_BUILD_SHARED)
     target_compile_definitions(phash PRIVATE LIBPHASH_EXPORTS)
 else()
     add_library(phash STATIC ${SOURCES})
-    # include/libphash.h's PH_API only knew two Windows cases: building the DLL
-    # itself (LIBPHASH_EXPORTS -> dllexport) or consuming one (the fallback,
-    # dllimport). A static build is neither -- PH_API needs to be a no-op --
-    # and without this, MSVC refuses to even compile the static library itself
-    # (C2491, "definition of dllimport function not allowed", since every
-    # PH_API function's own .c file defines a function its own header just
-    # declared dllimport). Found on a real windows-x86_64 runner while
-    # validating R42's release workflow, which was the first thing to actually
-    # attempt a native-toolchain Windows build of this project (the existing
-    # ci.yml minimal-build (windows-latest) leg hits the identical bug -- same
-    # static default, never yet run on a live GH runner either).
+    # include/libphash.h's PH_API has three Windows cases: building the DLL
+    # (LIBPHASH_EXPORTS -> dllexport), consuming it (dllimport), and a static build
+    # (PHASH_STATIC_DEFINE -> no-op). Without this define MSVC refuses to compile the
+    # static library itself (C2491, "definition of dllimport function not allowed",
+    # since every PH_API function's own .c file defines a function its own header
+    # declared dllimport).
     #
     # PUBLIC, not PRIVATE: a consumer linking this exported target must see
     # the same PH_API expansion this library itself was compiled with, or its
@@ -388,16 +370,15 @@ target_include_directories(phash PUBLIC
 # Not on Windows: there is no libm there (or an "m.lib" of any kind) --
 # math.h's functions are part of the CRT already. A STATIC build never
 # actually invokes a linker to resolve this (ar/lib.exe just bundles object
-# files), so this went unnoticed until R42's release workflow linked a SHARED
-# libphash on a real windows-x86_64 runner: LNK1181 "cannot open input file
-# 'm.lib'".
+# files), so only a SHARED Windows build exposes it: LNK1181 "cannot open input
+# file 'm.lib'".
 if(NOT WIN32)
     target_link_libraries(phash PRIVATE m)
 endif()
 
 # Warnings are a property of this project's code, not of the directory: set with
-# add_compile_options() they also reached every vendored decoder added below, which
-# made -Werror impossible (it would fail on their code, not ours).
+# add_compile_options() they would also reach every vendored decoder added below,
+# which would make -Werror impossible (it would fail on their code, not ours).
 target_compile_options(phash PRIVATE ${PHASH_OWN_COMPILE_OPTIONS} ${PHASH_LIBRARY_WARNINGS})
 
 if(PHASH_COVERAGE)
@@ -411,7 +392,7 @@ if(PHASH_COVERAGE)
     # gets its own counter instance per translation unit -- default (non-atomic)
     # counter increments race there and corrupt the merged .gcda, surfacing as
     # `geninfo: ERROR: Unexpected negative count` when scripts/coverage_cmake.sh
-    # runs lcov --capture (confirmed on real CI). This is a known GCC/gcov
+    # runs lcov --capture. This is a known GCC/gcov
     # limitation (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68080), not a libphash
     # bug; the fix is atomic counter updates, not suppressing/ignoring the error,
     # since that would silently under-report coverage on whatever counters actually
@@ -424,7 +405,7 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(phash PRIVATE dl)
 endif()
 
-# --- Optional batch-hashing thread pool (task 9) ---
+# --- Optional batch-hashing thread pool ---
 # PHASH_NEEDS_THREADS_DEP records whether the installed package has to
 # find_dependency(Threads) on the consumer's side; it's substituted into
 # cmake/phashConfig.cmake.in. Kept in lockstep with the link below so the two
@@ -527,16 +508,15 @@ endif()
 # --- Bundled zlib-ng (zlib-compat inflate/deflate used by libpng/spng) ---
 set(PHASH_ZLIB_TARGET z)
 # When libphash is pulled in via add_subdirectory(), the parent project owns its own
-# build settings and its own zlib. Forcing ours into the cache silently reconfigured
+# build settings and its own zlib. Forcing ours into the cache would silently reconfigure
 # the parent: BUILD_SHARED_LIBS and BUILD_TESTING are global CMake variables, and
 # ZLIB::ZLIB / ZLIB_INCLUDE_DIR / ZLIB_LIBRARY are how the parent's find_package(ZLIB)
-# reports its result (R11/H3). So: if the parent already brought its own zlib, step
+# reports its result. So: if the parent already brought its own zlib, step
 # aside and use it; otherwise configure zlib-ng but leave the parent's cache intact.
 if(NOT PHASH_IS_TOP_LEVEL AND PHASH_USE_ZLIB_NG)
-    # A cache entry pointing inside our own build tree is not the parent's zlib:
-    # it is a pin left behind by a libphash older than R51, which used to force
-    # ZLIB_LIBRARY into the cache. Standing down for it would drop the zlib-ng
-    # target while that path stays on libpng's link line, so ignore it.
+    # A ZLIB_LIBRARY cache entry that points inside this build tree is libphash's
+    # own, not the parent's zlib. Standing down for it would drop the zlib-ng target
+    # while that path stays on libpng's link line, so ignore it.
     set(PHASH_PARENT_HAS_ZLIB OFF)
     if(DEFINED CACHE{ZLIB_LIBRARY})
         string(FIND "$CACHE{ZLIB_LIBRARY}" "${CMAKE_CURRENT_BINARY_DIR}/vendor/zlib-ng" PHASH_STALE_ZLIB_PIN)
@@ -586,21 +566,15 @@ if(PHASH_USE_ZLIB_NG AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/zlib-ng/CMak
     # zlib's ZLIB_VERNUM while the actual compile picks up zlib-ng's zlib.h
     # through the include path, and the two disagree at compile time.
     #
-    # R51: these are deliberately NORMAL (directory-scope) variables, not cache
+    # These are deliberately NORMAL (directory-scope) variables, not cache
     # entries. vendor/libpng is configured from a child scope and inherits them,
     # which is all its find_package(ZLIB) needs -- while nothing of ours is left
-    # behind in the parent project's cache (R11/H3), and nothing survives into
-    # the *next* configure run of the same build tree. That last part is what
-    # actually broke: as forced cache entries, our own pin made the stand-down
-    # check above ("DEFINED CACHE{ZLIB_LIBRARY}" => the parent brought its own
-    # zlib) fire on every re-configure. libphash then stood aside, the zlib-ng
-    # target was never created, and the still-cached path to its archive stayed
-    # baked into libpng's link interface -- so the parent's own link line grew a
-    # file dependency nothing produced:
+    # behind in the parent project's cache, and nothing survives into the *next*
+    # configure run of the same build tree. As cache entries they would trip the
+    # stand-down check above ("DEFINED CACHE{ZLIB_LIBRARY}" => the parent brought
+    # its own zlib) on every re-configure: the zlib-ng target would never be
+    # created while libpng kept its archive on its link interface --
     #   "No rule to make target 'phash_build/vendor/zlib-ng/libz.a'".
-    # Both parent configurations (BUILD_SHARED_LIBS ON and OFF) failed this way
-    # on the second configure; being normal variables, the pins now cannot
-    # poison the stand-down heuristic they precede.
     #
     # ZLIB_LIBRARY holds the zlib-ng TARGET NAME, not a path to libz.a: the
     # archive's file name is a guess (wrong on MSVC, and wrong for any build in
@@ -706,8 +680,8 @@ if(PHASH_USE_WEBP)
     set(WEBP_BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
     set(WEBP_LINK_STATIC ON CACHE BOOL "" FORCE)
 
-    # Same global-flag hazard as the zlib-ng block above; the review only named that
-    # one, but libwebp forced BUILD_SHARED_LIBS just as unconditionally.
+    # Same global-flag hazard as the zlib-ng block above: libwebp's configure also
+    # forces BUILD_SHARED_LIBS.
     phash_push_global_build_flags()
     add_subdirectory(vendor/libwebp EXCLUDE_FROM_ALL)
     phash_pop_global_build_flags()
@@ -722,10 +696,9 @@ if(PHASH_USE_WEBP)
         # its archive installed (phash's own libphash.h is the public surface).
         set_target_properties(webpdecoder PROPERTIES PUBLIC_HEADER "")
         install(TARGETS webpdecoder ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-        # libwebp is in fact why phash_static_lib_filename() reads PREFIX back
-        # too, not just OUTPUT_NAME+SUFFIX: it forces a literal "lib" prefix
-        # via its own PREFIX target property even on Windows (installed file
-        # is "libwebpdecoder.lib", not "webpdecoder.lib").
+        # libwebp is why phash_static_lib_filename() takes a src_dir: under MSVC it
+        # sets CMAKE_STATIC_LIBRARY_PREFIX to "lib" inside its own directory scope
+        # (installed file is "libwebpdecoder.lib", not "webpdecoder.lib").
         phash_static_lib_filename(PHASH_WEBP_LIB_FILENAME webpdecoder
             "${CMAKE_CURRENT_SOURCE_DIR}/vendor/libwebp")
         list(APPEND PHASH_INSTALL_LINK_LIBS
@@ -819,10 +792,10 @@ if(PHASH_IS_TOP_LEVEL)
         set(PHASH_PC_CFLAGS_EXTRA "-DPHASH_STATIC_DEFINE")
     endif()
 
-    # R15/L11: keep libphash.pc relocatable. Substituting CMAKE_INSTALL_FULL_LIBDIR
-    # bakes the configure-time absolute path into the file, so moving (or packaging
-    # and unpacking elsewhere) the install tree yields -L/-I pointing at a directory
-    # that no longer exists. Expressing libdir/includedir relative to ${prefix}
+    # Keep libphash.pc relocatable. Substituting CMAKE_INSTALL_FULL_LIBDIR would bake
+    # the configure-time absolute path into the file, so moving (or packaging and
+    # unpacking elsewhere) the install tree would yield -L/-I pointing at a directory
+    # that is not there. Expressing libdir/includedir relative to ${prefix}
     # means pkg-config's own --define-prefix (and the redefinition of prefix that
     # relocatable distributions do) reaches them.
     #
@@ -853,8 +826,8 @@ endif()
 
 # --- Mock decoder backend (test-only) ---
 # Deliberately independent of PHASH_BUILD_TESTS: that option is ON by default, so
-# tying the mock to it shipped a Release library whose loader "decodes" any buffer
-# starting with DE AD into a 1x1 image.
+# tying the mock to it would put a loader that "decodes" any buffer starting with
+# DE AD into a 1x1 image into every default Release build.
 if(PHASH_ENABLE_MOCK_BACKEND)
     message(WARNING "PHASH_ENABLE_MOCK_BACKEND=ON: the DE AD mock decoder is compiled "
                     "into libphash. Never ship this build.")
@@ -865,7 +838,7 @@ endif()
 # Configured before the tests below on purpose: when fuzzers and tests are enabled
 # together, the ctest binaries link a sanitizer-instrumented libphash and therefore
 # need the very same sanitizer flags at link time. Without them the link fails on
-# undefined __asan_*/__ubsan_* symbols, which is why CI used to disable tests here.
+# undefined __asan_*/__ubsan_* symbols.
 if(PHASH_BUILD_FUZZERS)
     if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
         message(FATAL_ERROR "PHASH_BUILD_FUZZERS requires Clang (libFuzzer is a Clang/compiler-rt feature).")
@@ -918,7 +891,7 @@ if(PHASH_BUILD_TESTS)
         add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
     endforeach()
 
-    # test_abi.c built again under -fshort-enums, which shrinks any public enum that lost
+    # test_abi.c built again under -fshort-enums, which shrinks any public enum without
     # its width spacer. Header-only by design, so it is not linked against phash. MSVC has
     # no such flag (nor clang-cl, which MSVC also covers), and its enums are always int-sized.
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang" AND NOT MSVC)

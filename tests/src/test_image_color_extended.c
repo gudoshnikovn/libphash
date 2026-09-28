@@ -4,9 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* The HSV classifier and the 3-bit packer that used to live here went with the ImageHash
- * port in 2.0.0; ColorHash is a colour histogram now, and its quantisation is checked in
- * tests/src/test_color_hash.c. What is left in this file is the colour moments. */
+/* Colour moments. ColorHash's quantisation is checked in tests/src/test_color_hash.c. */
 
 void test_color_moments_edges(void) {
     // Test with stride and different channel counts

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke test for task 4 (install()/pkg-config/find_package packaging):
+# Smoke test for install()/pkg-config/find_package packaging:
 # builds libphash, installs it into a throwaway prefix, then builds and runs
 # a tiny consumer against the installed tree via both find_package(phash)
 # and pkg-config, to catch anything cmake --install alone wouldn't (missing
@@ -25,12 +25,12 @@ cmake --install "$BUILD_DIR"
 
 # Structural check on the generated .pc. This is the check with actual teeth:
 # `libdir`/`includedir` must be written relative to ${prefix}, because that is the only
-# form every pkg-config implementation can relocate. It used to substitute
-# @CMAKE_INSTALL_FULL_LIBDIR@ -- a configure-time absolute path.
+# form every pkg-config implementation can relocate; an absolute
+# @CMAKE_INSTALL_FULL_LIBDIR@ would bake in the configure-time path.
 #
-# The behavioural check further down is kept, but on its own it does NOT catch the
-# regression everywhere: pkgconf's --define-prefix also string-replaces the old prefix
-# inside absolute variable values, so pkgconf >= 3 papers over the broken form.
+# The behavioural check further down is kept, but on its own it does NOT catch an
+# absolute libdir everywhere: pkgconf's --define-prefix also string-replaces the old
+# prefix inside absolute variable values, so pkgconf >= 3 hides it.
 # freedesktop pkg-config only redefines the `prefix` variable and does not.
 PC_FILE="$PREFIX_DIR/lib/pkgconfig/libphash.pc"
 echo "==> Checking generated $PC_FILE is prefix-relative"

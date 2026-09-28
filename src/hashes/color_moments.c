@@ -18,10 +18,9 @@
  * so that a negative third moment is handled correctly.
  *
  * The digest keeps all three as signed 16-bit big-endian fixed point in units of
- * 1/PH_COLOR_MOMENT_SCALE. It used to store one unsigned byte each, which threw
- * away the sign of the skewness -- the direction of the asymmetry, half of what the third
- * moment says -- so that two images with mirrored channel distributions produced
- * identical bytes. It also clamped at 255 and truncated to whole units; at this scale
+ * 1/PH_COLOR_MOMENT_SCALE. Two signed bytes per moment, because the skewness carries a
+ * sign -- the direction of the asymmetry, half of what the third moment says -- and a
+ * single unsigned byte would make mirrored channel distributions identical. At this scale
  * nothing clamps and the resolution is 1/128 of a channel level.
  *
  * One divergence remains, recorded in docs/algorithm-provenance.md: the source computes

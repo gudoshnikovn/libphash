@@ -226,7 +226,7 @@ and on any pull request targeting either:
 
 | Job | What it checks |
 |---|---|
-| `format-check` | `scripts/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`. Fast, no build, catches a formatting diff before the slower jobs run. |
+| `format-check` | `scripts/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`; `scripts/check_docs_coverage.sh`; and `scripts/check_final_state_voice.sh`, which fails on tracker ids, paths into local planning notes and release-cycle wording (a feature "since" a version) in tracked text. Fast, no build, catches these before the slower jobs run. |
 | `build-and-test` | Full vendored build (libjpeg-turbo + libpng/spng + libwebp + zlib-ng) across linux-x86_64 (gcc, clang, and a spng variant), linux-arm64, macos-arm64. `PHASH_STRICT_DEPS=ON`, so a decoder silently falling back to stb_image is a hard configure failure, not a quiet pass. |
 | `coverage-cmake` | `scripts/coverage_cmake.sh` — merged lcov report across the vendored and spng decoder sets; published as a downloadable artifact. |
 | `minimal-build` | Zero-dependency build (every `PHASH_USE_*` off, stb_image only) on ubuntu-latest, macos-latest, windows-latest. |

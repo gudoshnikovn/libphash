@@ -1,9 +1,9 @@
 name: Fuzz (nightly)
 
-# R27: the per-PR fuzz job in ci.yml only gets a 90s budget, which is there to
+# The fuzz job in ci.yml only gets a 90s budget, which is there to
 # catch a regression fast, not to actually explore the input space. This is the
 # long run that does that -- it shares the same growing corpus cache, so each
-# night builds on every previous night's (and every PR's) findings instead of
+# night builds on every previous night's (and every CI run's) findings instead of
 # starting cold.
 on:
   schedule:
@@ -41,7 +41,7 @@ jobs:
     - name: Build
       run: cmake --build build --target fuzz_load
 
-    # Same cache lineage as the PR job's (ci.yml) -- both read and write
+    # Same cache lineage as the fuzz job in ci.yml -- both read and write
     # fuzz-corpus-*, so a corpus entry either job finds benefits the other.
     - name: Restore fuzz corpus cache
       uses: actions/cache@v4

@@ -39,35 +39,31 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* As of 2026-09-18: 160x160, deliberately not equal to any normalisation preset in the
- * library (8 for aHash/dHash, 16 for BMH's default block_size, 32 for pHash's default
- * dct_size, 512 for mHash) and not a power of two like every one of them, so no
- * algorithm's resize from this corpus is ever a no-op or a suspiciously round ratio.
- * Bigger than the 128x128 this measured at before this date, which narrows (without
- * eliminating) mHash's bias toward algorithms that normalise larger than the corpus --
- * mHash upsamples this corpus 3.2x to reach its 512 default, against 4x at 128 -- see the
- * note on BASE_RES below for why the absolute resolution matters.
+/* 160x160, deliberately not equal to any normalisation preset in the library (8 for
+ * aHash/dHash, 16 for BMH's default block_size, 32 for pHash's default dct_size, 512 for
+ * mHash) and not a power of two like every one of them, so no algorithm's resize from
+ * this corpus is ever a no-op or a suspiciously round ratio. mHash upsamples it 3.2x to
+ * reach its 512 default, which understates algorithms that normalise larger than the
+ * corpus -- see the note on BASE_RES below for why the absolute resolution matters.
  *
  * 160 is also close to the largest this corpus can be raised without retuning anything
  * else: test_radial_rotation_profile()'s pinned half-turn floor (PH_RADIAL_PCC_THRESHOLD,
- * asserted independently of this task) is a fixed-sample-count property of
+ * an independent threshold) is a fixed-sample-count property of
  * ph_compute_radial_hash() (PH_RADIAL_SAMPLES = 128 samples per projection, not scaled to
  * image size), so a bigger corpus radius means coarser sampling relative to its own
  * content and a noisier half-turn match: measured mean peak correlation at a half turn
  * across the corpus, same generator, only IMG_W varied -- 144: 0.984, 160: 0.965, 176:
  * 0.928, 192: 0.867 (fails the 0.90 floor), 200: 0.849 (fails). 160 keeps a real margin
- * (0.965) without changing that unrelated threshold to accommodate this task. */
+ * (0.965) without changing that threshold. */
 #define IMG_W 160
 #define IMG_H 160
 #define NUM_BASE 24
 
-/* The resolution every make_base() feature size below was originally tuned at, and the
- * reference every one of them is now expressed as a fraction of, via (IMG_W / BASE_RES).
- * Before this existed, checkerboard cells, stripe widths, ring periods, disc radii and
- * sinusoid frequencies were hardcoded in pixels: fine at 128x128, but wrong at any other
- * resolution, because the feature size in fraction-of-frame terms silently changed with
- * it. That is exactly the bug this task exists to fix -- it is also why raising IMG_W
- * above, on its own, is safe: every family's structure now scales with it. */
+/* The reference resolution for make_base() feature sizes: checkerboard cells, stripe
+ * widths, ring periods, disc radii and sinusoid frequencies are all expressed as
+ * fractions of the frame via (IMG_W / BASE_RES), so every family's structure scales with
+ * IMG_W and changing IMG_W on its own is safe. Sizes hardcoded in pixels would make the
+ * feature size in fraction-of-frame terms change silently with the resolution. */
 #define BASE_RES 128.0
 
 typedef struct {
@@ -115,11 +111,9 @@ static void put(image_t *im, int x, int y, int r, int g, int b) {
  * should not be able to score well by accident. Each image is a different family, and
  * within a family the parameters differ, so neighbouring indices are not near-duplicates.
  *
- * Every family is also coloured, and differently. An earlier version of this corpus was
- * mostly grayscale, on which ColorHash scored a separability of 0.98 -- not because the
- * algorithm is weak but because a grayscale corpus puts every pixel in its black and
- * grey buckets, so it was being measured on input it cannot see. A colour algorithm
- * needs colour in the corpus or the measurement means nothing.
+ * Every family is also coloured, and differently. A mostly grayscale corpus would put
+ * every pixel in ColorHash's black and grey buckets and measure it on input it cannot
+ * see; a colour algorithm needs colour in the corpus or the measurement means nothing.
  * ------------------------------------------------------------------------ */
 static image_t make_base(int index) {
     image_t im = image_new(IMG_W, IMG_H);
@@ -217,10 +211,10 @@ static image_t make_base(int index) {
 /* ---------------------------------------------------------------------------
  * Benign transformations
  *
- * Deliberately no rotation: only pHash and Radial tolerate one at all, and Radial's is
- * partial until the comparison from its source lands (see the dedicated test at the
- * end). Mixing a rotation into the "benign" set would make every algorithm look bad for
- * a reason that has nothing to do with the property being measured.
+ * Deliberately no rotation: only pHash and Radial tolerate one at all, and Radial only a
+ * few degrees and a half turn (see the dedicated test at the end). Mixing a rotation into the
+ * "benign" set would make every algorithm look bad for a reason that has nothing to do with the
+ * property being measured.
  * ------------------------------------------------------------------------ */
 
 static image_t xf_identity(const image_t *s) {
@@ -365,15 +359,11 @@ static void hash_image(const image_t *im, hash_set_t out[A_COUNT]) {
 }
 
 static double distance(algo_t a, const hash_set_t *x, const hash_set_t *y) {
-    /* Radial is the one algorithm here whose digest is not a bit vector: its bytes are
-     * quantised DCT coefficients, so Hamming distance over them means nothing and the
-     * comparison is L2, normalised by the largest L2 two 40-byte digests can be apart. */
     /* Radial is compared the way its source specifies -- the peak of the
      * cross-correlation -- mapped from [-1, 1] onto a distance in [0, 1] so that it sits
      * on the same scale as every other row here. There is deliberately no L2 row for it:
      * the digest is tagged PH_DIGEST_KIND_COEFFICIENTS and ph_l2_distance() refuses it,
-     * which is the point of the tag. The pre-2.0.0 L2 numbers are recorded in
-     * docs/algorithm-provenance.md section 7 instead. */
+     * which is the point of the tag. */
     /* ColorHash is a histogram: the measure is its intersection, turned into a distance
      * so that it sits on the same scale as the rest. */
     if (a == A_COLOR) {
@@ -442,7 +432,7 @@ static double separability(const stats_t *intra, const stats_t *inter) {
  * Thresholds
  *
  * Measured on this corpus (24 bases x 7 transforms = 168 intra-pairs, 276 inter-pairs) at
- * IMG_W=160 with the numbers printed by this test (2026-09-18), then floored well below
+ * IMG_W=160 with the numbers printed by this test, then floored well below
  * the observation so a genuine regression trips it and ordinary noise does not. Observed
  * values are in the comment beside each entry; re-measure rather than relax.
  * ------------------------------------------------------------------------ */
@@ -453,8 +443,7 @@ typedef struct {
 } bounds_t;
 
 static const bounds_t BOUNDS[A_COUNT] = {
-    /*             sep.  intra  inter        measured 2026-09-18 @ 160x160: sep / mean intra / mean
-       inter */
+    /*             sep.  intra  inter        measured @ 160x160: sep / mean intra / mean inter */
     [A_AHASH] = {2.90, 0.060, 0.360},  /* 4.15 / 0.029 / 0.444 */
     [A_DHASH] = {2.40, 0.115, 0.370},  /* 3.49 / 0.063 / 0.460 */
     [A_PHASH] = {1.80, 0.250, 0.390},  /* 2.65 / 0.170 / 0.489 */
@@ -466,23 +455,13 @@ static const bounds_t BOUNDS[A_COUNT] = {
 };
 
 /* This corpus still understates any algorithm that normalises to a fixed size larger than
- * IMG_W, but as of 2026-09-18 that is a narrower gap, not a structural blind spot.
- * Before that date, every make_base() family's feature sizes (checkerboard cell, stripe width,
- * ring period, disc radius, sinusoid frequency) were hardcoded in pixels, tuned to look
- * right at the then-fixed IMG_W=128; raising IMG_W on its own changed the *relative*
- * fineness of the corpus's structure along with its resolution, which is why the earlier
- * version of this file could only compare two corpus sizes by regenerating the whole
- * thing and re-reading every number, and why mHash (which normalises to 512) measured
- * worse the smaller the corpus was -- not because it is weaker, but because the corpus was
- * relatively coarser structure stretched further to reach it. Every feature size below is
- * now expressed as a fraction of IMG_W/IMG_H (via BASE_RES), so this bias is now purely
- * about how far a resize has to travel, not also about what it is resizing. mHash still
- * upsamples this 160x160 corpus 3.2x to reach its 512 default (down from 4x at the old
- * 128x128), and it separates at 2.62 here -- ahead of pHash (2.65 is close enough that the
- * two are not meaningfully ordered) and Radial, behind everything else. Absolute numbers
- * are only comparable within one run of this file with one corpus resolution, which is
- * what the thresholds above are for; docs/algorithm-provenance.md's per-algorithm notes
- * cite this same run's numbers where they describe current behaviour.
+ * IMG_W. Feature sizes scale with IMG_W (via BASE_RES), so the bias is only about how far
+ * a resize has to travel, not also about what it is resizing. mHash upsamples this
+ * 160x160 corpus 3.2x to reach its 512 default, and it separates at 2.62 here -- ahead of pHash
+ * (2.65 is close enough that the two are not meaningfully ordered) and Radial, behind everything
+ * else. Absolute numbers are only comparable within one run of this file with one corpus
+ * resolution, which is what the thresholds above are for; docs/algorithm-provenance.md's
+ * per-algorithm notes cite this same run's numbers where they describe current behaviour.
  *
  * Three things the measurement says that are worth reading off it rather than assuming.
  *
@@ -491,28 +470,18 @@ static const bounds_t BOUNDS[A_COUNT] = {
  * unrelated pictures share little colour. That is a different scale from a normalised
  * Hamming distance, whose expectation between unrelated hashes is 0.5 by construction.
  * Compare its separability with the others; do not compare its raw distances with
- * theirs. Until 2.0.0 it read 1.89 / 0.031 / 0.123 on the corpus of the time, when it was
- * the 42-bit ImageHash port -- most of whose bins were empty for most images, so unrelated
- * pictures agreed on a great many zeroes.
+ * theirs.
  *
- * Radial's distances are not bits but quantised DCT coefficients compared by L2, so its
- * row is on a different footing from the rest even after normalisation; read its
- * separability, and do not compare its absolute distances with anyone else's. Its inter
- * mean is low for the same reason ColorHash's is -- one byte of its digest (coefficient
- * 0) is 255 for every image, and the affine quantisation squeezes the rest of the
- * coefficients into whatever range is left under it. Applying the DCT of the source in
- * 2.0.0 moved it, on the corpus of the time, from 0.021 / 0.344 / 2.80 to 0.007 / 0.188 /
- * 2.12: three times more robust, less well discriminated, and measured under a comparison
- * the source does not use -- see docs/algorithm-provenance.md section 7.
+ * Radial is compared by peak cross-correlation mapped onto [0, 1], so its row is on a
+ * different footing from the rest; read its separability, and do not compare its
+ * absolute distances with anyone else's. See docs/algorithm-provenance.md section 7.
  *
  * pHash has the worst robustness of the structural hashes here -- mean intra-distance
  * 0.170 against 0.03-0.06 for the others -- and separability ahead of only Radial and
- * mHash (2.65 against their 2.31 and 2.62). The DC coefficient was the suspect and was
- * ruled out on the 128x128 corpus this test used before the corpus was enlarged: taking it out of
- * the median left the intra-distance at 0.177 to three decimals there, and taking it out of the
- * hash entirely (the 8x8 block at DCT(1,1)) made it worse, 0.190 with separability 2.27. A median
- * is not dragged by an outlier, whatever the received explanation says. The cause is elsewhere and
- * has not been found; docs/algorithm-provenance.md section 3 has that measurement. */
+ * mHash (2.65 against their 2.31 and 2.62). The DC coefficient does not explain it:
+ * removing DC from the median does not change the intra-distance, and removing it from the
+ * hash (the 8x8 block at DCT(1,1)) makes it worse; docs/algorithm-provenance.md section 3
+ * has the measurement. */
 
 static void test_robustness_discrimination_separability(void) {
     image_t base[NUM_BASE];
@@ -777,14 +746,14 @@ static void test_radial_rotation_profile(void) {
 
     /* A half turn is the identity on the projections -- the line at alpha and at
      * alpha+180 is the same line -- so it must match on every image, whatever the
-     * content. Measured 2026-09-18 @ 160x160: mean 0.965, worst 0.913. */
+     * content. Measured @ 160x160: mean 0.965, worst 0.913. */
     if (mean_at[NA - 1] < PH_RADIAL_PCC_THRESHOLD) {
         fprintf(stderr, "[FAIL] a half turn averages %.3f, below the threshold %.2f\n",
                 mean_at[NA - 1], PH_RADIAL_PCC_THRESHOLD);
         exit(1);
     }
     /* And a small rotation still has to beat an unrelated image even here. Measured
-     * 2026-09-18 @ 160x160: 0.765 at one degree against 0.557 for an unrelated pair. */
+     * @ 160x160: 0.765 at one degree against 0.557 for an unrelated pair. */
     if (mean_at[0] <= stats_mean(&unrel)) {
         fprintf(stderr,
                 "[FAIL] a one-degree rotation averages %.3f, no better than the %.3f an "
@@ -873,7 +842,7 @@ static void test_radial_rotation_survives_the_projections_not_the_transform(void
     /* And the quarter turns do not. Measured 0.19 and 0.13 against 0.34 for an unrelated
      * image (the "other" comparison image comes from the corpus, so this one number
      * moves with it; the rest of this function's fixed 128x128 stripe pattern does not).
-     * Asserted as the current, defective behaviour: if a representation that survives a
+     * Asserted as a known limit: if a representation that survives a
      * shift is ever adopted, this has to be replaced by a test of invariance. */
     if (p90 >= PH_RADIAL_PCC_THRESHOLD || p270 >= PH_RADIAL_PCC_THRESHOLD) {
         fprintf(stderr,

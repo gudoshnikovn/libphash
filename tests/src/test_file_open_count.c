@@ -1,21 +1,13 @@
 /* How many times does one ph_load_from_file() open the file?
  *
- * It used to be up to six times for a single load: a probe open() to classify
- * PH_ERR_IO, an fopen() to sniff the WebP magic, an open()+mmap() for the native
- * decoders, stbi_info(path) for the pixel-count pre-check, stbi_load(path) for
- * the decode itself, and finally an fopen() plus a full read of the file into the
- * heap just to scan for an EXIF orientation tag. Besides the pure I/O cost on the
- * hottest path in the library, that meant the bytes that were checked and the
- * bytes that were decoded came from different reads of a path that another
- * process is free to replace in between.
- *
- * The load path opens the file exactly once now, and this test holds it to that
- * number. It counts by defining open() and fopen() in the test binary itself: the
- * static linker resolves the library's calls to the definitions below rather than
- * to libc, which makes the count a property of the library under test and not of
- * a tracing tool that may or may not exist on the machine (dtruss needs to
- * disable SIP on macOS; strace is Linux-only). The real work is delegated to
- * openat(), which nothing here intercepts.
+ * Exactly once. Each extra open is I/O on the hottest path in the library, and
+ * lets the bytes that are checked and the bytes that are decoded come from
+ * different reads of a path that another process is free to replace in between.
+ * This test holds the load path to one open. It counts by defining open() and fopen() in the test
+ * binary itself: the static linker resolves the library's calls to the definitions below rather
+ * than to libc, which makes the count a property of the library under test and not of a tracing
+ * tool that may or may not exist on the machine (dtruss needs to disable SIP on macOS; strace is
+ * Linux-only). The real work is delegated to openat(), which nothing here intercepts.
  *
  * Windows has no such interposition, so there the test reports itself skipped
  * rather than pretending to check something. */
@@ -70,8 +62,7 @@ int open(const char *path, int flags, ...) {
     return openat(AT_FDCWD, path, flags, mode);
 }
 
-/* stdio has to be counted too: three of the six openings this test exists to
- * prevent were fopen()s, and an fopen() inside libc would not go through the
+/* stdio has to be counted too: an fopen() inside libc would not go through the
  * open() above. */
 FILE *fopen(const char *path, const char *mode) {
     note_open(path);
@@ -145,9 +136,7 @@ int main(void) {
     printf("test_file_open_count:\n");
     test_interposition_is_live();
 
-    /* Both loading modes and both auto-orientation settings: the EXIF scan used
-     * to be a separate full re-read of the file, and the grayscale request used
-     * to pick a different decoder entry point. */
+    /* Both loading modes and both auto-orientation settings must stay at one open. */
     expect_one_open(ctx, TEST_DATA_DIR "/photo.jpeg", PH_SUCCESS, "jpeg, defaults");
     expect_one_open(ctx, TEST_DATA_DIR "/photo_complex.png", PH_SUCCESS, "png, defaults");
 
@@ -161,9 +150,7 @@ int main(void) {
     ph_context_set_auto_orient(ctx, 1);
     expect_one_open(ctx, TEST_DATA_DIR "/photo_rotated_90.jpeg", PH_SUCCESS, "jpeg, auto-orient");
 
-    /* A failing load must not open the file more than once either -- the WebP
-     * magic sniff and the pixel-limit pre-check were both extra openings that
-     * only existed on the way to an error. */
+    /* A failing load must not open the file more than once either. */
     expect_one_open(ctx, TEST_DATA_DIR "/corrupted.jpg", PH_ERR_CORRUPT_DATA, "corrupt file");
     if (!ph_can_use_webp())
         expect_one_open(ctx, TEST_DATA_DIR "/photo.webp", PH_ERR_DECODER_UNAVAILABLE,

@@ -6,7 +6,7 @@
  * size and kind ph_digest_info() predicted, and is exactly what the algorithm's own
  * ph_compute_* function returns. Both answers come from one function in the library
  * (ph_digest_shape()); this test is what keeps it that way if someone sets a size by
- * hand again. */
+ * hand. */
 
 #include "libphash.h"
 #include "test_macros.h"

@@ -11,12 +11,10 @@
  * indexing (`coeffs += coefficient_width` / `pc += 7` with an odd stride), not
  * from any buffer we hand it — our `src`/`dst` are plain malloc'd and always
  * 16-byte aligned. So this is UB by design inside the vendored code, present
- * verbatim in current upstream master (v2.18) and not fixable by a version bump.
+ * verbatim upstream as of the vendored v2.18, so not fixable by a version bump.
  *
- * Under `-fsanitize=undefined` it produced 5 `runtime error: load/store of
- * misaligned address ... for type 'stbir_uint64'` per test run, which drowned
- * out our own findings (that noise is exactly why an unrelated pixel-count overflow
- * defect elsewhere in the library went unnoticed for a while).
+ * Under `-fsanitize=undefined` it reports misaligned `stbir_uint64` loads/stores
+ * on every run, noise that would hide real findings in our own code.
  *
  * The build therefore compiles THIS FILE ONLY with `-fno-sanitize=alignment`
  * (see the `STB_NOSAN_CFLAGS` rule in the Makefile and the
@@ -24,9 +22,9 @@
  * implementation in a file that contains zero lines of our own code means the
  * exemption cannot possibly mask an alignment bug of ours.
  *
- * A runtime `UBSAN_OPTIONS=suppressions=...` file was evaluated and rejected:
- * it is silently ignored under `-fno-sanitize-recover=all` (which the CI
- * `sanitizers` job uses), so the job would still abort.
+ * A runtime `UBSAN_OPTIONS=suppressions=...` file does not work here: it is
+ * silently ignored under `-fno-sanitize-recover=all` (which the CI `sanitizers`
+ * job uses), so the job would still abort.
  */
 
 #define STB_IMAGE_RESIZE_IMPLEMENTATION

@@ -27,10 +27,9 @@ void test_context_reuse_clears_gray_data() {
     uint8_t *gray2 = ph_get_gray(ctx);
     ASSERT_PTR_NOT_NULL(gray2);
 
-    // 4. Verify content
-    // If bug exists, gray2 == gray1 and content is 0xAB.
-    // If fixed, content should be overwritten by actual grayscale data.
-    // We check if at least one byte is NOT 0xAB (highly likely for a real image).
+    // 4. Verify content: the reload must invalidate the cached gray buffer, so its
+    // content must not still be the 0xAB marker. At least one byte must differ
+    // (certain for a real image).
 
     int is_stale = 1;
     size_t len2 = ctx->image.width * ctx->image.height;

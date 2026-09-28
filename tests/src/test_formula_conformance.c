@@ -15,9 +15,8 @@
  *   [SO95] Stricker & Orengo, "Similarity of color images", SPIE 2420, 1995 -- the three
  *         colour moments, via the restatement named in docs/references.md.
  *
- * Where the code contradicts a source, the test says so with a KNOWN DIVERGENCE comment
- * naming the defect, and pins today's behaviour. That is deliberate: the fix must then
- * change a test, which makes it a visible decision instead of a silent drift.
+ * Where the code deliberately departs from a source, the test says so in a comment and
+ * pins the implemented behaviour, so a change is a visible decision, not a silent drift.
  *
  * These tests exercise the real functions. tests/src/test_dct.c and test_haar.c check
  * properties of hand-copied replicas of the same maths, which cannot catch a change in
@@ -161,10 +160,10 @@ static void test_dct_dc_coefficient_dominates_and_its_bit_is_constant(void) {
      * bits carries no information, and the hash is effectively 63 bits wide.
      *
      * That is pHash's behaviour too -- it crops the block at (0,0) and thresholds all 64
-     * values -- so it is a property of the algorithm rather than a divergence, and the
-     * two ways of removing the dead bit were both measured before this was left alone.
-     * See test_dct_median_ignores_dc_without_changing_the_hash() below and
-     * docs/algorithm-provenance.md section 3.
+     * values -- so it is a property of the algorithm rather than a divergence, and
+     * removing the dead bit either way measurably hurts. See
+     * test_dct_median_ignores_dc_without_changing_the_hash() below and docs/algorithm-provenance.md
+     * section 3.
      *
      * Asserted over three unrelated synthetic images. */
     const int N = 32, R = 8;
@@ -210,8 +209,8 @@ static void test_dct_dc_coefficient_dominates_and_its_bit_is_constant(void) {
 }
 
 static void test_dct_median_ignores_dc_without_changing_the_hash(void) {
-    /* pHash takes the median over the 63 AC coefficients, not over all 64, and this code
-     * now does the same. This pins how little that changes, because the usual argument
+    /* pHash takes the median over the 63 AC coefficients, not over all 64, and so does
+     * this code. This pins how little that changes, because the usual argument
      * for it -- that including DC "drags the median" -- is false. A median is not dragged
      * by an outlier.
      *
@@ -468,8 +467,7 @@ static void test_block_means_on_an_exact_multiple(void) {
  * invariant on deliberately awkward sizes, because it is what licenses skipping the
  * normalisation step -- and it is the better end of the trade: going through a 256x256
  * intermediate adds a resampling stage, and measured on the corpus it costs separability
- * (5.11 against 5.24). It also constrains the grid to divisors of the preset, which the
- * 22x22 maximum is not. */
+ * (5.11 against 5.24). It also constrains the grid to divisors of the preset. */
 static double exact_fractional_block_mean(const uint8_t *img, int w, int h, int bx, int by,
                                           int grid) {
     double x0 = (double)bx * w / grid, x1 = (double)(bx + 1) * w / grid;
@@ -540,10 +538,10 @@ static int bmh_bits_set(const uint8_t *pixels, int w, int h, int block_size) {
 
 static void test_bmh_thresholds_on_the_median(void) {
     /* [Z10] equation 3.9 thresholds each block against the MEDIAN of the block means,
-     * which is what makes the bit distribution balanced by construction. Until 2.0.0 this
-     * library used the arithmetic mean; so does OpenCV's BlockMeanHash, in a variable it
-     * calls `median`. Two inputs, because the balance holds exactly on one and not on the
-     * other, and the difference is worth pinning rather than discovering later. */
+     * which is what makes the bit distribution balanced by construction. OpenCV's
+     * BlockMeanHash uses the arithmetic mean, in a variable it calls `median`. Two inputs, because
+     * the balance holds exactly on one and not on the other, and the difference is worth pinning
+     * rather than discovering later. */
     const int W = 64, H = 64;
     uint8_t *pixels = (uint8_t *)malloc((size_t)W * H * 3);
     ASSERT_PTR_NOT_NULL(pixels);
@@ -565,7 +563,7 @@ static void test_bmh_thresholds_on_the_median(void) {
         exit(1);
     }
 
-    /* 2. The input that used to pin the mean: the top 8 rows white, the rest near-black.
+    /* 2. An input where mean and median differ: the top 8 rows white, the rest near-black.
      * The mean is dragged to about 40 by the 8 bright blocks and only those 8 clear it.
      * The median is 10, and every block is >= 10, so all 64 bits are set. Both hashes are
      * degenerate on this image -- the point is which rule produced it, and that ties are
@@ -615,11 +613,9 @@ static void test_colour_moments_match_the_definitions(void) {
     printf("test_colour_moments_match_the_definitions: PASSED\n");
 }
 
-/* This used to be test_colour_moments_digest_discards_the_skew_sign, pinning the
- * defect: the digest stored fabs() of a correctly signed third moment, so two images whose
- * channel distributions are mirror images produced byte-identical skew bytes. The digest
- * now keeps the sign, in signed 16-bit big-endian fixed point, and this is the same pair
- * of images asserting the opposite. */
+/* Mirrored channel distributions have third moments of equal magnitude and opposite
+ * sign; the digest keeps that sign (signed 16-bit big-endian fixed point), so the two
+ * digests must differ. */
 static void test_colour_moments_digest_keeps_the_skew_sign(void) {
     /* Two 2x2 images differing only in that mirroring: one is 3/4 black with a bright
      * pixel, the other 3/4 bright with a black one. Their third moments are equal in
@@ -651,7 +647,7 @@ static void test_colour_moments_digest_keeps_the_skew_sign(void) {
         assert_close(sb, -cbrt(93750.0), 0.01, "skewness of the mirrored image");
     }
 
-    /* The whole point: mirrored distributions are no longer the same digest. */
+    /* The whole point: mirrored distributions are different digests. */
     ASSERT(memcmp(da.data, db.data, da.size) != 0);
 
     ph_free(ctx);

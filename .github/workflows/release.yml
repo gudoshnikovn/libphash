@@ -1,22 +1,19 @@
 name: Release
 
-# R42: publishes prebuilt release artifacts (static + shared libs, headers,
-# LICENSE, THIRD-PARTY-NOTICES.md) so a consumer -- most concretely
-# python-libphash, but any FFI binding is in the same position -- doesn't have
-# to build the vendored decoder stack itself. See tasks/review/R42_release_artifacts.md.
+# Publishes prebuilt release artifacts (static + shared libs, headers, LICENSE,
+# THIRD-PARTY-NOTICES.md) so a consumer, in particular any FFI binding, doesn't
+# have to build the vendored decoder stack itself.
 #
 # Two trigger shapes:
 #  - push of a `v*` tag: builds, packages, smoke-tests, then publishes a GitHub
-#    Release. A tag containing `-` (e.g. v2.0.0-rc1) is published as a
-#    pre-release -- this is the "test run on a pre-release tag" the task's
-#    acceptance criteria asks for, exercising the exact same path production
-#    tags use.
+#    Release. A tag containing `-` (e.g. v2.0.0-rc1) is published as a GitHub
+#    pre-release, through exactly the same path production tags use.
 #  - workflow_dispatch: same build+package+smoke pipeline, uploaded as
 #    ordinary workflow artifacts, no GitHub Release created. Note that GitHub
 #    registers workflow_dispatch from the *default branch* copy of this file,
-#    so it is unavailable until this file reaches main; until then, validating
-#    the pipeline on a branch means pushing a throwaway pre-release tag (a tag
-#    containing `-` publishes as a pre-release, see above).
+#    so it works only when the default branch's copy declares it. To validate
+#    the pipeline from a branch, push a throwaway tag containing `-` (published
+#    as a GitHub pre-release, see above).
 on:
   push:
     tags:
@@ -31,14 +28,10 @@ jobs:
   # "native" leg: libjpeg-turbo + libpng + libwebp + zlib-ng, PHASH_STRICT_DEPS=ON so a
   # silently-missing backend fails the build instead of shipping a quietly
   # degraded artifact.
-  # macos-x86_64 (the macos-13 runner label) is deliberately not in this matrix.
-  # It was in the originally agreed platform list, but every validation run of
-  # this workflow (R42) sat queued for 20+ minutes with no runner ever assigned,
-  # while every other platform (including macos-arm64, the same build recipe)
-  # started within seconds. GitHub has been shrinking its Intel-Mac hosted
-  # runner pool in favor of Apple Silicon for a while; this isn't something in
-  # our control or specific to this workflow. macos-arm64 still ships. See
-  # tasks/review/PROGRESS.md for the decision to drop it.
+  # macos-x86_64 (the macos-13 runner label) is deliberately not in this matrix:
+  # GitHub's Intel-Mac hosted runner pool is small enough that jobs sit queued
+  # for 20+ minutes with no runner assigned. macos-arm64 builds from the same
+  # recipe and ships instead.
   build:
     strategy:
       fail-fast: false
@@ -141,8 +134,7 @@ jobs:
     # printing the match for the other -- and under bash's default -e (GH
     # Actions run steps), that kills the step before $archive is even used.
     # Same bug class as scripts/smoke_release_artifact.sh's own internal
-    # `find` call, fixed there via `|| true`; found here the same way, on this
-    # workflow's own first real run across the whole matrix.
+    # `find` call; both end in `|| true`.
     - name: Smoke test static archive
       shell: bash
       run: |

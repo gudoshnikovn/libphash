@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# R42: smoke test for a packaged release archive (scripts/package_release.sh
+# Smoke test for a packaged release archive (scripts/package_release.sh
 # output). Extracts the archive in isolation and builds a minimal consumer
 # against it via find_package(phash) -- the same mechanism scripts/smoke_install.sh
 # already exercises against a fresh `cmake --install` tree, just pointed at an
@@ -37,7 +37,7 @@ for f in "$STAGE_DIR/include/libphash.h" "$STAGE_DIR/include/phash_version.h" "$
 done
 
 if [ "$KIND" = "shared" ]; then
-    # The FFI-consumer case R42 exists for: no compiler involved at all, just a
+    # The FFI-consumer case: no compiler involved at all, just a
     # loadable object present in the archive under a predictable name.
     SEARCH_DIRS=()
     for d in "$STAGE_DIR/bin" "$STAGE_DIR/lib"; do

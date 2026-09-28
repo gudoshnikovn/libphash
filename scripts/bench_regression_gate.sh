@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Task 16: compare a PR build's benchmark numbers against a baseline build
-# (normally main, built in the same CI run to keep runner noise out of the
-# comparison) and render a Markdown regression report.
+# Compare a build's benchmark numbers against a baseline build (the PR's base
+# commit, or the previous commit of a push, built in the same CI run to keep
+# runner noise out of the comparison) and render a Markdown regression report.
 #
 # Usage:
 #   bench_regression_gate.sh <pr_test_benchmark_bin> <base_test_benchmark_bin> \
@@ -12,24 +12,22 @@
 # iteration within a run).
 #
 # Why min_ms and not avg_ms: avg_ms is a mean over the whole iteration loop, so
-# one scheduler preemption inside a run shifts it by tens of percent. Measured
-# locally on an idle machine, comparing a binary against *itself* with the old
-# avg_ms comparison produced false 40-45% "regressions" (three metrics in one
-# of five gate runs). min_ms is the best available estimate of "how fast this
+# one scheduler preemption inside a run shifts it by tens of percent: comparing
+# a binary against *itself* on avg_ms, on an idle machine, produces false 40-45%
+# "regressions" (three metrics in one of five gate runs). min_ms is the best available estimate of "how fast this
 # code can run" with OS noise removed, and taking the median of those across
 # runs removes the remaining outliers. Rationale and the measured noise floor:
 # docs/development.md.
 #
-# Exit code is always 0: this is a warning-only gate for now (see
-# tasks/16_benchmark_regression_gate.md) -- flip STRICT=1 to make it fail the
-# job once the signal has been observed to be stable across a few real PRs.
+# Exit code is 0 unless STRICT=1: the gate is warning-only by default, because
+# CI-runner noise exceeds the idle-machine floor (docs/development.md).
 set -euo pipefail
 
 PR_BIN="$1"
 BASE_BIN="$2"
 RUNS="${3:-5}"
-# 10%: the measured noise floor of this harness on an idle machine is under 3%
-# per metric with min_ms (it was above 45% with avg_ms), and CI runners are
+# 10%: the measured noise floor of this harness on an idle machine is under 7%
+# per metric with min_ms (above 45% with avg_ms), and CI runners are
 # noisier than that. 10% leaves headroom over the noise while still catching
 # the kind of regression this gate exists for -- an accidental extra decode
 # pass or a lost fast path costs far more than 10%.
@@ -55,8 +53,8 @@ collect_runs() {
 
 # Reduces N `--json smoke` docs (fixed schema: loading_grayscale/loading_rgb
 # objects + a hashing array) to one object of medians, keyed by metric name.
-# Falls back to avg_ms so the gate still runs against a baseline binary built
-# from a commit that predates min_ms (e.g. main during the 2.0.0 cycle).
+# Falls back to avg_ms so the gate still runs against a baseline binary whose
+# --json output has no min_ms (any 1.x release).
 MEDIAN_JQ='
 def median: sort | .[(length - 1) / 2 | floor];
 def metric: (.min_ms // .avg_ms);

@@ -88,7 +88,7 @@ void test_config_radial_params() {
     ph_digest_t d1, d2;
     ASSERT_OK(ph_compute_radial_hash(ctx, &d1));
 
-    // Fewer angles. Since 2.0.0 the digest is always the 40 DCT coefficients, so the
+    // Fewer angles. The digest is always the 40 DCT coefficients, so the
     // width does not follow the projection count -- but the hash still has to react to
     // it, or the setting would be doing nothing.
     ASSERT_OK(ph_context_set_radial_params(ctx, 60, 128, 3.5f));

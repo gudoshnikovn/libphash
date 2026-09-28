@@ -2,8 +2,8 @@
  * C, and the tests build as strict ISO (-std=c17), under which glibc hides every
  * non-ISO declaration. Unlike a missing constant, a missing *function* only warns
  * on GCC <= 13 -- it becomes an implicit declaration and the test still links to
- * the real symbol -- so this one stayed invisible until scripts/check_strict_iso.sh
- * started rejecting implicit declarations outright. GCC >= 14 makes it a hard error.
+ * the real symbol -- and is a hard error on GCC >= 14 and under
+ * scripts/check_strict_iso.sh.
  * Darwin declares both regardless. Must precede every #include. */
 #if !defined(__APPLE__) && !defined(_WIN32)
 #define _POSIX_C_SOURCE 200809L
@@ -545,10 +545,9 @@ void test_jpeg_marker_resync(void) {
 }
 
 /* --- WebP chunk-chain walk -------------------------------------------------
- * Every prior WebP test placed the EXIF chunk immediately after the RIFF
- * header, so the scan loop's body -- the part that skips a non-EXIF chunk and
- * advances to the next one -- never actually ran. Real encoders put VP8X
- * first, then optional chunks like ICCP/ANIM/ALPH, with EXIF near the end. */
+ * Real encoders put VP8X first, then optional chunks like ICCP/ANIM/ALPH, with
+ * EXIF near the end, so the scan must skip non-EXIF chunks and advance to the
+ * next one; an EXIF chunk right after the RIFF header would never exercise that. */
 void test_webp_exif_not_first_chunk(void) {
     uint8_t buf[256];
     size_t off = 0;
@@ -792,7 +791,7 @@ static uint8_t *reference_orient(const uint8_t *src, int W, int H, int channels,
     return out;
 }
 
-/* Every orientation, over sizes that straddle the 32x32 tile edge of the
+/* Every orientation, over sizes that straddle the PH_ORIENT_TILE tile edge of the
  * transposing path (1xN, Nx1, odd, exactly one tile, one tile plus a remainder)
  * and over every channel count the loaders can hand in. */
 void test_apply_orientation_matches_reference(void) {
@@ -902,10 +901,8 @@ void test_apply_orientation_alloc_failure(void) {
 
 /* --- Load-path parity: ph_load_from_memory() vs. ph_load_from_file() ------
  * Both public entry points are documented to apply EXIF auto-orientation
- * identically; both now funnel through the same ph_load_encoded_bytes() in
- * core.c. This pins that as an explicit regression test (auto-orientation
- * used to be applied on the file path only in some build configurations)
- * rather than relying on the shared code path staying that way by accident. */
+ * identically and share ph_load_encoded_bytes() in core.c. This pins the
+ * behaviour rather than relying on the shared code path staying shared. */
 void test_auto_orient_load_path_parity(void) {
     FILE *f = fopen(TEST_DATA_DIR "/photo.jpeg", "rb");
     ASSERT_PTR_NOT_NULL(f);

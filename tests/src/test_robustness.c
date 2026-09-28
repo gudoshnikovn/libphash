@@ -1,17 +1,15 @@
-// Task 13: the 28+ existing test_*.c files check *mechanics* (correct return
-// codes, DCT/Haar math) but nothing checks the one property that actually
-// makes a perceptual hash useful: similar images hash close together, and
-// different images hash far apart. This file is that contract.
+// The other tests check *mechanics* (correct return codes, DCT/Haar math); this
+// file checks the one property that actually makes a perceptual hash useful:
+// similar images hash close together, and different images hash far apart.
 //
 // Base pixels are decoded once (via stb_image, declared here but already
-// linked in via libphash.a -- see src/core.c's STB_IMAGE_IMPLEMENTATION) and
+// linked in via libphash.a -- see src/loaders/stb_image_impl.c) and
 // then perturbed with plain, dependency-free C: resize (nearest-neighbor),
 // crop, gamma, box blur, a synthetic watermark overlay. No Python, no
 // external image tools, no new vendored dependency -- deliberately simpler
 // transforms than a real JPEG re-encode at multiple quality levels, which
 // would need vendoring an encoder or wiring one test binary to link
-// libjpeg-turbo directly; not worth it for what this test needs to prove (see
-// tasks/PROGRESS.md, task 13 notes).
+// libjpeg-turbo directly; not worth it for what this test needs to prove.
 #include "libphash.h"
 #include "test_macros.h"
 #include <math.h>
@@ -153,19 +151,16 @@ static void hashes_of(const rgb_image_t *img, uint64_t out[PH_HASH_FLAGS_COUNT])
 }
 
 // out[] layout matches PH_HASH_FLAGS_COUNT / ph_compute_multi's ascending-bit
-// order: [aHash, dHash, pHash, wHash]. mHash and ColorHash were retired from this
-// bitfield in 2.0.0 (see libphash.h), so PH_HASH_FLAGS_COUNT is 4, not 6 -- these
-// arrays used to carry their thresholds too, which made them silently-truncated
-// excess initializers once the flag count dropped (tolerated by GCC/Clang, a hard
-// error on MSVC).
+// order: [aHash, dHash, pHash, wHash]. The arrays below are sized by
+// PH_HASH_FLAGS_COUNT, so an extra initializer is a compile error on MSVC and a
+// warning elsewhere.
 static const char *ALGO_NAMES[PH_HASH_FLAGS_COUNT] = {"aHash", "dHash", "pHash", "wHash"};
 
 // Contract thresholds (out of 64 bits), per algorithm: a same-scene transform
 // must stay at or under MAX_SIMILAR_DIST[algo], distinct images must clear
 // MIN_DIFFERENT_DIST. Not uniform on purpose -- algorithms genuinely differ
-// in robustness. Each threshold has headroom over what was actually measured
-// against these fixtures + transforms during development (see tasks/PROGRESS.md,
-// task 13 notes for the measured baseline); MIN_DIFFERENT_DIST is comfortably
+// in robustness. Each threshold has headroom over the distances measured on
+// these fixtures and transforms; MIN_DIFFERENT_DIST is comfortably
 // below the weakest observed different-image separation.
 static const int MAX_SIMILAR_DIST[PH_HASH_FLAGS_COUNT] = {
     10, // aHash

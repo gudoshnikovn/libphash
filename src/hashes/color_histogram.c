@@ -20,11 +20,10 @@
  *     by = 2B - R - G     blue against yellow
  *     wb = R + G + B      light against dark
  *
- * at 6 x 6 x 3 = 108 bins. On the property corpus that separates at 3.95 against 1.89 for
- * the ImageHash port it replaces, and the number holds on a second corpus at a different
- * resolution (3.87). Fifteen other quantisations were measured -- RGB cubes from 3x3x3 to
- * 5x5x5, HSV at 8x4x4 and 12x3x3, and the opponent axes at nine resolutions; the full
- * table is in docs/algorithm-provenance.md.
+ * at 6 x 6 x 3 = 108 bins. On the property corpus that separates at 3.95, and the number
+ * holds on a second corpus at a different resolution (3.87). Fifteen other quantisations were
+ * measured -- RGB cubes from 3x3x3 to 5x5x5, HSV at 8x4x4 and 12x3x3, and the opponent axes at nine
+ * resolutions; the full table is in docs/algorithm-provenance.md.
  *
  * Two of those scored higher and were rejected on evidence the corpus cannot show. Both
  * 6x6x1 (4.28) and 9x9x1 (3.94) drop the intensity axis, which makes them invariant to
@@ -38,10 +37,6 @@
  * light grey against white. Three intensity bins is what fits beside 6x6 chroma inside
  * PH_DIGEST_MAX_BYTES, and chroma resolution is worth more here than intensity resolution
  * (5x5x5 has no such collisions and separates at 2.77).
- *
- * Before 2.0.0 this was a port of ImageHash's `colorhash`, for which ImageHash cites
- * nothing at all: 14 fractions of PIL's HSV categories quantised to 3 bits each, 42 bits
- * inside a uint64_t, with thresholds of 32, 85 and 170 that appear in no source.
  */
 #include "internal.h"
 #include <math.h>

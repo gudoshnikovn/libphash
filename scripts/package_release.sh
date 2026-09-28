@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# R42: builds and installs the release configuration (the same vendored decoder
+# Builds and installs the release configuration (the same vendored decoder
 # set as CI's build-and-test job -- libjpeg-turbo + libpng + libwebp + zlib-ng, see
 # scripts/coverage_cmake.sh's "native" leg for the same claim) into a throwaway
 # prefix, then packs that prefix plus LICENSE/THIRD-PARTY-NOTICES.md into a
@@ -7,10 +7,9 @@
 #
 # Both linkage kinds are packaged (two separate configure+build+install passes --
 # PHASH_BUILD_SHARED is an either/or CMake option, not a knob two targets can
-# share in one configure) because the two audiences this task exists for want
-# different things: a C/C++ consumer linking in-tree wants the static archive,
-# an FFI/ctypes-style consumer (the motivating case in R42's problem statement)
-# needs a loadable shared object/dylib/DLL.
+# share in one configure) because the two audiences want different things: a
+# C/C++ consumer linking in-tree wants the static archive, an FFI/ctypes-style
+# consumer needs a loadable shared object/dylib/DLL.
 #
 # Usage: scripts/package_release.sh <platform-name> <out-dir> [static|shared|both]
 #   platform-name: e.g. linux-x86_64, macos-arm64, windows-x86_64 -- caller's
@@ -27,10 +26,8 @@ VERSION=$(sed -nE 's/.*project\([^)]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+)
 
 # Canonicalize to an absolute path: package_one() below cd's into a temporary
 # stage directory before invoking 7z/zip (Windows branch), so a relative
-# OUT_DIR would otherwise resolve against that temp dir instead of the
-# caller's original working directory -- the archives got built, just into
-# the wrong place, and the workflow's own upload step then found nothing at
-# the path it expected. Found on a real windows-x86_64 GH Actions run.
+# OUT_DIR would otherwise resolve against that temp dir, and the archives
+# would land where the workflow's upload step doesn't look.
 mkdir -p "$OUT_DIR"
 OUT_DIR="$(cd "$OUT_DIR" && pwd)"
 WORK_DIR="$(mktemp -d)"

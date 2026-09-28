@@ -32,10 +32,7 @@
  * ZERO-CROSSINGS of the filtered image, and neither pHash nor this code looks for one.
  * The response is block-summed and thresholded against a local mean. The operator is
  * theirs; the edge detector is not being implemented.
- *
- * Before 2.0.0 this function computed something else entirely -- the sign of a
- * four-neighbour discrete Laplacian on a stride-2 grid of an 18x18 image, 64 bits, no
- * Gaussian, no scale, no zero-crossings -- under the same name.
+
  *
  * Bit order: MSB first within each byte, windows in raster order (see the packing loop
  * below) -- matching "the source packs them" as pHash's own page states it, per neither
@@ -183,8 +180,8 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
 
     /* The blur runs at full resolution, before the resize, as in the source. Both the
      * blurred copy and the float scratch it needs are plain heap allocations rather than
-     * arena ones: the image can be far larger than 512x512, and the arena is about to be
-     * used for the fixed-size buffers below. */
+     * arena ones: the image can be far larger than the normalisation size, and the arena is
+     * about to be used for the normalised buffers below. */
     size_t src_pixels = (size_t)ctx->image.width * (size_t)ctx->image.height;
     uint8_t *blurred = (uint8_t *)malloc(src_pixels);
     float *blur_scratch = (float *)malloc(src_pixels * sizeof(float));
@@ -221,8 +218,8 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
     free(blurred);
     ph_equalize_histogram(norm, npix, PH_MH_EQUALIZE_LEVELS);
 
-    /* 17x17 at the fixed alpha and level; the bound is generous so that a future
-     * parameterisation cannot overrun it silently. */
+    /* 17x17 at the default alpha and level; ph_context_set_mhash_params() keeps the side
+     * within PH_MH_MAX_KERNEL_SIDE, and ph_mh_kernel() refuses anything larger. */
     float kernel[PH_MH_MAX_KERNEL_SIDE * PH_MH_MAX_KERNEL_SIDE];
     int side = ph_mh_kernel(ctx->config.mhash_alpha, ctx->config.mhash_level, kernel,
                             PH_MH_MAX_KERNEL_SIDE);

@@ -2,11 +2,10 @@
  *
  * The defect class this file targets: ph_hash_files()/ph_hash_buffers() reporting the
  * batch as finished while worker threads are still writing into items[]. On Windows
- * that used to happen two ways -- a NULL hole in the handle array making
+ * this can happen two ways -- a NULL hole in the handle array making
  * WaitForMultipleObjects() return WAIT_FAILED at once, and more than
- * MAXIMUM_WAIT_OBJECTS (64) handles being passed in a single call. Both bugs are
- * Windows-only, so this test cannot reproduce them here; what it *can* do is pin the
- * observable contract the fix restores, on every platform:
+ * MAXIMUM_WAIT_OBJECTS (64) handles being passed in a single call. This test pins the
+ * observable contract on every platform:
  *
  *   1. results are byte-for-byte identical to a sequential run, for thread counts
  *      below, equal to and far above both the item count and MAXIMUM_WAIT_OBJECTS;
@@ -14,7 +13,7 @@
  *      successfully (i.e. every item really was processed before we got control back);
  *   3. after the call returns, the items array can be freed immediately -- under ASan
  *      a straggler worker writing into the freed block is reported as a
- *      use-after-write, which is exactly the caller-visible symptom of the bug.
+ *      use-after-write, which is what a late worker write looks like to the caller.
  */
 
 #include "libphash.h"
@@ -189,7 +188,7 @@ static void test_stress_more_threads_than_items(void) {
     PASS("test_stress_more_threads_than_items");
 }
 
-/* The caller-visible symptom of the bug: it owns items[] and is entitled to free it the
+/* What a late worker write looks like to the caller: it owns items[] and may free it the
  * instant the call returns. Snapshot the results, release the block right away, then
  * churn the allocator so any late worker write lands in freed/reused memory -- ASan
  * turns that into a use-after-free report, plain builds usually into a wrong-value

@@ -77,7 +77,7 @@ void test_digest_hex_roundtrip() {
     ASSERT(memcmp(d.data, d2.data, d.size) == 0);
     ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_UNSPECIFIED, d2.kind);
 
-    // Full 64-byte digest round-trips too.
+    // A full PH_DIGEST_MAX_BYTES digest round-trips too.
     ph_digest_t big;
     memset(&big, 0, sizeof(big));
     big.size = PH_DIGEST_MAX_BYTES;
@@ -122,8 +122,8 @@ void test_digest_hex_errors() {
     ASSERT(ph_digest_from_hex(NULL, &out) == PH_ERR_INVALID_ARGUMENT);
     ASSERT(ph_digest_from_hex("bits:ab", NULL) == PH_ERR_INVALID_ARGUMENT);
 
-    /* The kind prefix is required, exact and lowercase: a bare hex string (the 2.0
-     * pre-release format) must not silently come back untagged. */
+    /* The kind prefix is required, exact and lowercase: a bare hex string must not
+     * silently come back untagged. */
     ASSERT(ph_digest_from_hex("abcd", &out) == PH_ERR_INVALID_ARGUMENT);
     ASSERT(ph_digest_from_hex("", &out) == PH_ERR_INVALID_ARGUMENT);
     ASSERT(ph_digest_from_hex(":abcd", &out) == PH_ERR_INVALID_ARGUMENT);
@@ -179,14 +179,14 @@ void test_similarity() {
 /* ph_digest_t is a flat public struct that callers (notably FFI bindings)
  * fill in by hand. `size` is a uint8_t, so it can hold 200 while `data` is only
  * PH_DIGEST_MAX_BYTES long -- every public function reading a digest must reject
- * that instead of reading past the end of the array. Run this under ASan: before
- * the fix the oversized cases read out of bounds. */
+ * that instead of reading past the end of the array. Run this under ASan, which
+ * catches an out-of-bounds read. */
 void test_digest_oversized_size_rejected() {
     ph_digest_t big = {0};
     ph_digest_t ok = {0};
     char hex[PH_DIGEST_MAX_BYTES * 4 + 1];
 
-    big.size = 200; /* > PH_DIGEST_MAX_BYTES (64), representable in uint8_t */
+    big.size = 200; /* > PH_DIGEST_MAX_BYTES (128), representable in uint8_t */
     ok.size = PH_DIGEST_MAX_BYTES;
 
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_digest_to_hex(&big, hex, sizeof(hex)));
@@ -237,8 +237,8 @@ void test_digest_zero_size_not_comparable() {
     PASS("test_digest_zero_size_not_comparable");
 }
 
-/* Mismatched sizes were untested -- both comparison helpers must say -1
- * rather than comparing the shorter prefix. */
+/* Mismatched sizes: both comparison helpers must say -1 rather than comparing
+ * the shorter prefix. */
 void test_digest_size_mismatch() {
     ph_digest_t a = {0}, b = {0};
     a.size = 8;
@@ -254,8 +254,8 @@ void test_digest_size_mismatch() {
     PASS("test_digest_size_mismatch");
 }
 
-/* ph_digest_from_hex documents uppercase support (common.c:174) but it was never
- * tested; and the round trip was only checked on a couple of fixed values. */
+/* ph_digest_from_hex() accepts uppercase hex digits; round-trip random digests in both
+ * cases. */
 void test_digest_hex_roundtrip_random_and_uppercase() {
     unsigned seed = 12345u; /* fixed: a failure must be reproducible */
     for (int iter = 0; iter < 1000; iter++) {
@@ -296,8 +296,8 @@ void test_digest_hex_roundtrip_random_and_uppercase() {
 
 /* The kind tag: it refuses a metric, it never picks one.
  *
- * Added in 2.0.0 because five of the nine algorithms now return digests and three
- * different metrics apply to them. Comparing quantised DCT coefficients by Hamming
+ * Five of the nine algorithms return digests and three different metrics apply to
+ * them. Comparing quantised DCT coefficients by Hamming
  * distance, or a histogram by L2, gives a plausible number that means nothing; this makes
  * the call fail instead. */
 static void test_digest_kind_refuses_the_wrong_metric(void) {
@@ -336,7 +336,7 @@ static void test_digest_kind_refuses_the_wrong_metric(void) {
     ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&bits, &coeffs));
 
     /* Unspecified -- the zero a hand-filled struct holds -- is accepted everywhere, so a
-     * binding that never learned about the field behaves exactly as it did before. */
+     * binding that does not set the field keeps working unchanged. */
     ph_digest_t plain;
     memset(&plain, 0, sizeof(plain));
     plain.size = 8;
@@ -384,10 +384,9 @@ static void test_computed_digests_carry_their_kind(void) {
 }
 
 /* The buffer-size contracts are stated to the byte ("the kind name's length + 1 +
- * d->size * 2 + 1", "at least 17"), and both were only ever tested well inside the bound. An
- * off-by-one either way is the difference between a rejected call and a one-byte overflow in the
- * caller's buffer, so both sides of both bounds are pinned here -- with a guard byte after the
- * buffer to catch the overflow if the check is ever loosened. */
+ * d->size * 2 + 1", "at least 17"). An off-by-one either way is the difference between a rejected
+ * call and a one-byte overflow in the caller's buffer, so both sides of both bounds are pinned here
+ * -- with a guard byte after the buffer to catch the overflow if the check is ever loosened. */
 static void test_hex_output_buffer_bounds() {
     ph_digest_t d;
     memset(&d, 0, sizeof(d));
@@ -507,8 +506,8 @@ static void test_digest_from_hex_clears_the_whole_struct() {
 /* Whatever ph_digest_to_hex() emits, ph_digest_from_hex() must take back -- including for
  * digests that came out of the algorithms rather than out of a test's byte pattern. This
  * is the round trip a caller actually performs (hash, store as text, read back, compare),
- * and it is checked against the digest's own `size` rather than any hardcoded width,
- * because those widths are still moving in 2.0.0. */
+ * and it is checked against the digest's own `size` rather than any hardcoded width, so
+ * the test does not hardcode them. */
 static void test_digest_hex_roundtrip_on_computed_digests() {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
@@ -551,11 +550,9 @@ static void test_digest_hex_roundtrip_on_computed_digests() {
     PASS("test_digest_hex_roundtrip_on_computed_digests");
 }
 
-/* The case the kind tag was lost in before: both sides of a comparison read back from
- * storage. Two radial digests stored as text and decoded again must still be refused by
- * the bit metrics -- it used to come back as a plausible Hamming distance of 206 and a
- * similarity of 0.356, next to a correct radial correlation of 0.357 -- and still be
- * accepted by the radial metric. */
+/* Both sides of a comparison read back from storage: two radial digests stored as text
+ * and decoded again must still be refused by the bit metrics (which would otherwise
+ * return a plausible-looking number) and accepted by the radial one. */
 static void test_stored_digests_keep_their_protection() {
     const char *paths[2] = {TEST_DATA_DIR "/photo.jpeg", TEST_DATA_DIR "/photo_rotated_90.jpeg"};
     ph_digest_t stored[2];
@@ -581,8 +578,7 @@ static void test_stored_digests_keep_their_protection() {
     PASS("test_stored_digests_keep_their_protection");
 }
 
-/* ph_l2_distance() had no negative-path coverage of its own: it was only reached through
- * the shared oversized/zero-size cases. NULL on either side, and the metric's own
+/* ph_l2_distance()'s own negative paths: NULL on either side, and the metric's own
  * properties (zero to itself, symmetric, the value it is defined to compute). */
 static void test_l2_distance_contract() {
     ph_digest_t a, b;

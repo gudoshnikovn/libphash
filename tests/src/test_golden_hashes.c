@@ -1,6 +1,6 @@
-// Task 13: golden-hash regression test. Computes every algorithm's hash for
-// every valid fixture in tests/data/ and compares against a committed golden
-// file (tests/data/golden_hashes.<backend-set>.<arch>.txt) -- any unintentional
+// Golden-hash regression test. Computes every algorithm's hash for every valid
+// fixture in tests/data/ and compares against a committed golden file
+// (tests/data/golden_hashes.<backend-set>.<arch>-<compiler>.txt) -- any unintentional
 // change to hash output (e.g. an optimization that subtly changes results)
 // shows up as a failing test here, instead of silently shipping.
 //
@@ -17,19 +17,17 @@
 // construction, so switching PHASH_USE_LIBJPEG_TURBO/PHASH_USE_LIBPNG/
 // PHASH_USE_SPNG/PHASH_USE_WEBP can never compare against the wrong one.
 //
-// What tolerance is still for, once decoder identity is no longer the
-// variable: the *same* decoder can still round its last couple of bits
-// differently across CPU architectures (NEON vs. SSE4.2 in resize.c), and
-// two 2.0.0 algorithms quantise a continuous value into a byte -- Radial
-// (PH_DIGEST_KIND_COEFFICIENTS) rescales its 40 coefficients by their own
-// per-image min/max before quantising to 0..255, so a one-ULP perturbation in
-// any single coefficient can shift where every other one lands; ColorMoments
+// What tolerance is for, given a fixed decoder: the *same* decoder can still round its last couple
+// of bits differently across CPU architectures (NEON vs. SSE4.2 in resize.c), and two algorithms
+// quantise a continuous value into a byte -- Radial (PH_DIGEST_KIND_COEFFICIENTS) rescales its 40
+// coefficients by their own per-image min/max before quantising to 0..255, so a one-ULP
+// perturbation in any single coefficient can shift where every other one lands; ColorMoments
 // (PH_DIGEST_KIND_VECTOR16) has a fixed 1/128-per-level scale, so the same
 // perturbation moves a bounded, small number of levels. Both get a wider
 // per-algorithm tolerance than the generic byte-vector default; see
 // GOLDEN_TOLERANCE_LEVELS_FOR() below for the reasoning per algorithm.
 //
-// pHash (R78) does NOT get folded into that tolerance: its median-of-63-AC-
+// pHash does NOT get folded into that tolerance: its median-of-63-AC-
 // coefficients threshold (strict >, see src/hashes/phash.c) turns a sub-
 // tolerance cross-arch DCT rounding difference into a Hamming distance as
 // large as ~half the hash on ordinary photos -- no fixed bit tolerance both
@@ -99,7 +97,7 @@ static int golden_tolerance_levels(const char *algo) {
 
 #define PH_GOLDEN_BACKEND_SET PH_GOLDEN_JPEG_TAG "-" PH_GOLDEN_PNG_TAG "-" PH_GOLDEN_WEBP_TAG
 
-/* R78: pHash's row-DCT dot product (src/hashes/phash.c) has a NEON-vectorized fast
+/* pHash's row-DCT dot product (src/hashes/phash.c) has a NEON-vectorized fast
  * path (4-lane tree reduction) that only exists for __ARM_NEON and only activates at
  * the library's default dct_size (32); x86_64 has no equivalent SIMD path for this
  * function at all, so it always takes the plain sequential scalar loop instead.
@@ -110,7 +108,7 @@ static int golden_tolerance_levels(const char *algo) {
  * coefficients tightly around that median, so a sub-tolerance perturbation can shift
  * the median itself and flip every coefficient sitting close to it at once. This is
  * decoder-identity-independent (reproduces on both stb and libjpeg-turbo+libpng) and
- * reproduces on every 2.0.0 build regardless of PH_USE_* backend selection, unlike
+ * reproduces on every build regardless of PH_USE_* backend selection, unlike
  * the JPEG-IDCT-rounding split PH_GOLDEN_BACKEND_SET exists for above -- it is
  * purely a function of which architecture's DCT summation order produced the pixels'
  * hash, so it gets its own, orthogonal namespace dimension instead of folding into
@@ -121,12 +119,10 @@ static int golden_tolerance_levels(const char *algo) {
  * Architecture alone isn't the whole story, though: arm64 always has FMA in
  * hardware (unlike x86-64's SSE2 baseline, which doesn't), so GCC and Clang's
  * differing default floating-point-contraction policy (whether a*b+c fuses into one
- * rounding step or stays two) changes pHash's answer on arm64 between compilers,
- * confirmed on real CI -- ubuntu-arm64-gcc produced a third value, distinct from
- * both macos-arm64-clang's and every x86_64 job's, at exactly the same fixture and
- * dct_size that identifies this whole class of drift. On x86-64 baseline (no FMA
- * available at all) GCC and Clang happened to agree in the same CI run, but the
- * compiler tag is still included unconditionally rather than only for arm64, so a
+ * rounding step or stays two) can change pHash's answer on arm64 between compilers.
+ * The build pins -ffp-contract=off, and on x86-64 baseline (no FMA available at all)
+ * GCC and Clang agree, but the compiler tag is included unconditionally rather than
+ * only for arm64, so a
  * future x86-64 divergence (a different -march baseline, a compiler version that
  * changes its default) fails loudly with a missing-file #error instead of silently
  * comparing against numbers from a compiler that was never shown to agree. */
@@ -134,7 +130,7 @@ static int golden_tolerance_levels(const char *algo) {
 #define PH_GOLDEN_ARCH_TAG "arm64"
 #elif defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64)
 #define PH_GOLDEN_ARCH_TAG "x86_64"
-/* R86: 32-bit x86 (-m32, no explicit -mfpmath=sse) defaults to x87 FPU intermediates for
+/* 32-bit x86 (-m32, no explicit -mfpmath=sse) defaults to x87 FPU intermediates for
  * float math instead of x86-64's SSE2 doubles, which is a second, orthogonal source of the
  * same class of drift arm64-vs-x86_64 FMA contraction causes above. It surfaces starkest on
  * photo.png's pHash: that fixture is a solid, uniform-colour image, so every AC coefficient
@@ -143,7 +139,7 @@ static int golden_tolerance_levels(const char *algo) {
  * bits; on i686 it lands on exactly 0.0f, and pHash thresholds with strict '>' against a
  * median of 0.0f (see the note above PH_GOLDEN_ARCH_TAG's definition), so every AC bit reads
  * as 0 -- not a bug, the exact "degenerate input such as a solid colour" case that note
- * already documents, just newly reachable via bit width instead of a NEON/scalar split. */
+ * already documents, reached here through x87 precision rather than a NEON/scalar split. */
 #elif defined(__i386__) || defined(_M_IX86)
 #define PH_GOLDEN_ARCH_TAG "i686"
 #else
@@ -199,16 +195,13 @@ static const char *golden_path(void) {
                          "-" PH_GOLDEN_COMPILER_TAG ".txt";
 }
 
-/* The hex field width has to track PH_DIGEST_MAX_BYTES, not sit at a literal that
- * quietly stops matching it: mHash and ColorHash grew past 64 bytes (128 hex chars) in
- * 2.0.0, and a fixed "%128s" here silently truncated their lines mid-digest, which
- * desynced every fscanf() call after it in the file -- not a crash, just wrong data
- * read into unrelated fields. Stringify the same constant the buffer itself is sized
- * from (2 hex chars per byte), so the two cannot drift apart again. */
+/* The hex field width has to track PH_DIGEST_MAX_BYTES: a shorter literal would
+ * truncate long digests (mHash, ColorHash) mid-line and desynchronise every fscanf()
+ * after it in the file -- not a crash, just wrong data read into unrelated fields. */
 /* A literal, not `PH_DIGEST_MAX_BYTES * 2`: the preprocessor stringifies tokens, not
  * evaluated arithmetic, so `#(PH_DIGEST_MAX_BYTES * 2)` would paste the expression
- * itself into the format string, not a number. The _Static_assert below is what keeps
- * this literal from drifting out of sync instead. */
+ * itself into the format string, not a number. The _Static_assert below keeps this
+ * literal in sync with PH_DIGEST_MAX_BYTES (2 hex chars per byte). */
 #define PH_GOLDEN_HEX_DIGITS 256
 _Static_assert(PH_GOLDEN_HEX_DIGITS == PH_DIGEST_MAX_BYTES * 2,
                "PH_GOLDEN_HEX_DIGITS must track PH_DIGEST_MAX_BYTES");
@@ -270,8 +263,7 @@ static void check_digest(const char *filename, const char *algo, const ph_digest
                          FILE *update_out) {
     /* The golden files store the bytes alone, without the "<kind>:" prefix of the public
      * text form: the kind is not what they pin (it comes from the algorithm, and
-     * test_digest_helpers checks it), and keeping the bytes bare leaves every existing
-     * golden file valid. */
+     * test_digest_helpers checks it). */
     char text[PH_DIGEST_HEX_BUFFER_SIZE];
     ASSERT_OK(ph_digest_to_hex(value, text, sizeof(text)));
     const char *hex = strchr(text, ':') + 1;
@@ -306,8 +298,7 @@ static void check_digest(const char *filename, const char *algo, const ph_digest
      * numbers -- the radial coefficients, the colour moments -- the analogue of "a couple
      * of bits of decoder noise" is a couple of levels per byte, and asking for a Hamming
      * distance instead gets the comparison refused and -1 returned, which a
-     * `dist > tolerance` test reads as "unchanged". That is how this file passed while
-     * every radial hash in it was wrong. */
+     * `dist > tolerance` test reads as "unchanged". */
     if (value->kind == (uint8_t)PH_DIGEST_KIND_BITS ||
         value->kind == (uint8_t)PH_DIGEST_KIND_UNSPECIFIED) {
         int dist = ph_hamming_distance_digest(&expected, value);

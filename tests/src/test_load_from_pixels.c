@@ -159,7 +159,7 @@ void test_load_from_pixels_single_channel() {
     printf("test_load_from_pixels_single_channel: PASSED\n");
 }
 
-/* The acceptance criterion for stride: a padded buffer must hash exactly like the dense
+/* The stride contract: a padded buffer must hash exactly like the dense
  * one it was built from -- every algorithm, not just the raw pixel copy. The padding is
  * filled with a value that would be impossible to miss if a row copy ever read it,
  * and the same comparison is run for 1, 3 and 4 channels because the row length (and so
@@ -228,8 +228,7 @@ static void check_stride_matches_dense(int ch, int stride_pad, uint8_t pad_byte)
     }
 
     /* The colour algorithms only exist for a colour buffer; their digest widths are
-     * deliberately read from the digest rather than hardcoded, since ColorMoments'
-     * width is still moving. */
+     * read from the digest rather than hardcoded. */
     if (ch >= 3) {
         ph_digest_t cm[3], chist[3];
         for (int i = 0; i < 3; i++) {
@@ -264,8 +263,8 @@ void test_load_from_pixels_stride_equals_dense() {
 }
 
 /* A one-row image is the case where stride is never actually stepped over, and a
- * one-column one is where the padding outweighs the data. Both used to be the kind of
- * thing a row-copy loop gets wrong at the last iteration (reading a full stride past the
+ * one-column one is where the padding outweighs the data. Both are where a row-copy
+ * loop typically goes wrong at the last iteration (reading a full stride past the
  * end of the buffer) -- run under ASan, this is what would catch it. */
 void test_load_from_pixels_stride_degenerate_shapes() {
     struct {

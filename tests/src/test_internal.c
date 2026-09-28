@@ -1,7 +1,7 @@
 /*
  * test_internal.c
  *
- * Strengthened version of the original test_internal.c:
+ * Checks:
  * - Exact expected values for grayscale conversion (pure R, G, B)
  * - Extended Hamming tests: self-distance=0, full-flip=64
  */
@@ -66,7 +66,7 @@ static void test_grayscale_1ch_passthrough(void) {
  * ========================================================= */
 
 static void test_digest_hamming_known(void) {
-    /* Original test: 0x01 vs 0x03 → 1 bit difference */
+    /* 0x01 vs 0x03 → 1 bit difference */
     ph_digest_t d1, d2;
     memset(&d1, 0, sizeof(d1));
     memset(&d2, 0, sizeof(d2));

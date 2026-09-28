@@ -1,11 +1,10 @@
 /* PH_ERR_IO must mean the same thing on every platform.
  *
  * ph_load_from_file() decides "this path cannot serve as an image source" before
- * any decoder sees the bytes. That verdict used to exist only on POSIX, so on
- * Windows a missing file surfaced as PH_ERR_UNSUPPORTED_FORMAT/PH_ERR_CORRUPT_DATA
+ * any decoder sees the bytes, and the verdict must be the same on every platform: a
+ * missing file must be PH_ERR_IO, never PH_ERR_UNSUPPORTED_FORMAT/PH_ERR_CORRUPT_DATA
  * -- an error code that means "your image is broken" for a file that was never
- * read at all. Bindings map PH_ERR_IO to their own I/O exception, so the code has
- * to be the same everywhere.
+ * read at all. Bindings map PH_ERR_IO to their own I/O exception.
  *
  * The table below is therefore written to be meaningful on Windows too: every
  * fixture is created by the test itself, and the one case with no portable
@@ -72,8 +71,8 @@ static void test_missing_file(ph_context_t *ctx) {
 }
 
 /* A directory opens fine on POSIX -- open(2) succeeds on it -- so without an
- * explicit regular-file check it used to sail past the probe and be reported as
- * an unrecognized image format. */
+ * explicit regular-file check it would be reported as an unrecognized image
+ * format. */
 static void test_directory(ph_context_t *ctx) {
     ph_test_rmdir(TMP_DIR);
     ASSERT_INT_EQ(0, ph_test_mkdir(TMP_DIR));

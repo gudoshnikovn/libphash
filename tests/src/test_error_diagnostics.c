@@ -1,13 +1,9 @@
 /* The public error vocabulary, pinned end to end.
  *
  * `ph_error_t` and `ph_get_error_string()` are ABI: FFI bindings map the numbers to
- * their own exception types and show the strings to users. Until now most of the
- * vocabulary was only exercised incidentally -- a code was returned somewhere in a
- * test about something else, and several codes were never produced by any test at
- * all, so a code that silently stopped being reachable, or one added without a
- * string, would not have broken anything.
- *
- * This file is the table that closes that gap, in three parts:
+ * their own exception types and show the strings to users. Every code must be reachable
+ * and described: a code that silently stopped being reachable, or one added without a
+ * string, must break a test. This file pins that, in three parts:
  *
  *   1. Every enumerator has a string, and the strings are distinct, printable and
  *      not the "Unknown error" fallback (test_error_string_covers_every_code).
@@ -24,9 +20,8 @@
  *
  * Every code has a row in part 3. PH_ERR_ALLOCATION_FAILED is exercised with the same
  * allocation-failure shim as tests/src/test_alloc_failure.c (row_allocation_failed).
- * Two codes used to be declared without any input reaching them; one was removed
- * (-4, PH_ERR_NOT_IMPLEMENTED) and the other, PH_ERR_EMPTY_IMAGE, is what every hash
- * function now returns on a context with no image (row_empty_image).
+ * PH_ERR_EMPTY_IMAGE is what every hash function returns on a context with no image
+ * (row_empty_image).
  */
 
 #include "alloc_shim.h"
@@ -186,8 +181,8 @@ static int is_assigned_code(int value) {
 }
 
 /* Everything that is not an enumerator must land on the fallback string -- including
- * -2 and -4, which are retired (they were PH_ERR_DECODE_FAILED and PH_ERR_NOT_IMPLEMENTED)
- * and must never be handed out again, and every value past the last code.
+ * -2 and -4, which are reserved (1.x's PH_ERR_DECODE_FAILED and PH_ERR_NOT_IMPLEMENTED)
+ * and must never be handed out, and every value past the last code.
  *
  * This is what keeps the table in part 1 complete: the day someone appends
  * PH_ERR_SOMETHING = -12 with a description, the sweep below sees a real string at
@@ -233,13 +228,7 @@ typedef enum {
      *   - the WebP-decoder-present row is a PH_SUCCESS case, where there is no
      *     failure to describe;
      *   - the two PH_ERR_REQUIRES_COLOR rows fire after a load that already
-     *     succeeded, so last_error legitimately carries nothing of its own.
-     * (The max_pixels rejections used to be in this class too -- jpeg.c, png.c and
-     * webp.c set *out_err without calling ph_set_err_msg() on every one of their
-     * failure sites, so the message existed in a Makefile/stb_image build and
-     * silently vanished in a CMake build with native decoders. Fixed: every native
-     * backend now sets a message on every failure path, so those two rows moved to
-     * MSG_REQUIRED below.) */
+     *     succeeded, so last_error legitimately carries nothing of its own. */
     MSG_BACKEND_DEPENDENT,
 } msg_expectation_t;
 
@@ -324,13 +313,8 @@ static void row_io_errors(ph_context_t *ctx) {
 
 /* --- PH_ERR_INVALID_ARGUMENT: the call itself is malformed ---
  *
- * These rows are MSG_BACKEND_DEPENDENT for a reason worth writing down: an argument
- * check fires before ph_reset_loaded_image() clears last_error, so after one of them
- * ph_get_last_error_message() still returns whatever the *previous* failing call
- * left there. The message is stale, not absent, and it reads as if it described this
- * call. Nothing here asserts that -- pinning the current behaviour would cement it --
- * but nor can a non-empty message be required, since which text appears depends
- * entirely on what ran before. */
+ * An argument rejection clears last_error and sets no message of its own, so no message
+ * is required here (row_message_is_about_this_call() pins the clearing). */
 
 static void row_invalid_arguments(ph_context_t *ctx) {
     uint64_t hash = 0;
@@ -356,8 +340,8 @@ static void row_invalid_arguments(ph_context_t *ctx) {
 
 /* --- PH_ERR_EMPTY_IMAGE: a well-formed call on a context that holds no image ---
  *
- * It used to come back as PH_ERR_INVALID_ARGUMENT, indistinguishable from a NULL
- * pointer. Every hash entry point is covered, on a fresh context and on one whose
+ * Distinct from PH_ERR_INVALID_ARGUMENT, so a caller can tell an empty context from a
+ * NULL pointer. Every hash entry point is covered, on a fresh context and on one whose
  * image was dropped by a failed load after a successful one. */
 static void expect_every_hash_is_empty(ph_context_t *ctx, const char *state) {
     uint64_t hash = 0;
@@ -445,19 +429,15 @@ static void row_image_too_large(ph_context_t *ctx) {
            PH_ERR_IMAGE_TOO_LARGE, MSG_REQUIRED);
 
     /* The configured limit, as opposed to the hard implementation ceiling above.
-     * Every native backend now sets a message on this path (previously only
-     * stb_image did), so both rows require one. */
+     * Every backend sets a message on this path, so both rows require one. */
     ASSERT_OK(ph_context_set_max_pixels(ctx, 16));
     expect(ctx, "over max_pixels (PNG)", ph_load_from_file(ctx, TEST_DATA_DIR "/photo.png"),
            PH_ERR_IMAGE_TOO_LARGE, MSG_REQUIRED);
     expect(ctx, "over max_pixels (JPEG)", ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"),
            PH_ERR_IMAGE_TOO_LARGE, MSG_REQUIRED);
 
-    /* ph_load_from_pixels() bypasses every decoder, so it needs its own row: this is
-     * the path that had no bomb protection at all before that was fixed. It never calls
-     * ph_set_err_msg() on this rejection (src/core.c), which is a real gap of the
-     * same shape as the one just fixed above -- out of scope here since it is not a
-     * decoder backend, so not asserted. */
+    /* ph_load_from_pixels() bypasses every decoder, so it needs its own row. It sets
+     * no message on this rejection (src/core.c), so none is asserted. */
     static const uint8_t probe = 0;
     expect(ctx, "raw pixels over max_pixels", ph_load_from_pixels(ctx, &probe, 16, 16, 1, 0),
            PH_ERR_IMAGE_TOO_LARGE, MSG_BACKEND_DEPENDENT);
@@ -504,12 +484,9 @@ static void row_requires_color(ph_context_t *ctx) {
 }
 
 /* The diagnostic message is documented as describing "the most recent failure on this
- * context". It used to describe an earlier one: every load entry point validated its
- * arguments and returned before reaching the code that clears last_error, and
- * ph_load_from_pixels() cleared the loaded image without ever clearing the message -- it
- * open-coded ph_reset_loaded_image() minus that one line. So a rejected argument left the
- * previous call's text standing, and a caller that logged the message after a failure got
- * a sentence about something else entirely. */
+ * context". Every load entry point must clear it on the way in, including when it
+ * rejects its arguments and in ph_load_from_pixels(), or a caller that logs the message
+ * after a failure gets a sentence about an earlier call. */
 static void row_message_is_about_this_call(ph_context_t *ctx) {
     /* Produce a real, detailed message first: a load that fails inside the decoder. */
     const uint8_t junk[16] = {'n', 'o', 't', ' ', 'a', 'n', ' ', 'i',
@@ -551,9 +528,8 @@ static void row_message_is_about_this_call(ph_context_t *ctx) {
 
 /* --- PH_ERR_ALLOCATION_FAILED: the decoder itself could not get memory ---
  *
- * Used to be listed as unreachable by construction below, because reaching it needs
- * a real malloc() failure and this file had no hook to force one. It shares
- * tests/src/alloc_shim.h with test_alloc_failure.c for that: the shim replaces
+ * Reaching it needs a real malloc() failure, so this file shares tests/src/alloc_shim.h
+ * with test_alloc_failure.c: the shim replaces
  * malloc()/calloc()/realloc()/posix_memalign() for this whole statically-linked
  * binary, so arming it for the length of one load reproduces the code without
  * disturbing anything else in this file.
@@ -562,7 +538,7 @@ static void row_message_is_about_this_call(ph_context_t *ctx) {
  * allocation ordinal fails (a header buffer, a scanline row, stb_image's own
  * malloc()) depends on which decoder backend the build compiled in, so the loop
  * below sweeps every ordinal a clean load makes and only requires that *some* of
- * them reproduce the code. The stb-specific half of this defect -- that stb_image's
+ * them reproduce the code. The stb-specific mapping -- that stb_image's
  * own OOM path must report exactly PH_ERR_ALLOCATION_FAILED, pinned against the
  * literal "outofmem" string stb_image itself uses -- is exercised separately and
  * more precisely in tests/src/test_alloc_failure.c; a coincidental pass here would
@@ -678,10 +654,10 @@ static int utf8_truncated_sequence(const char *s) {
     return 0;
 }
 
-/* A diagnostic that quotes a caller's path is cut to PH_LAST_ERROR_MAX - 1 bytes. The cut
- * used to fall wherever it fell, so a path of about 75 Cyrillic characters produced a
- * message ending in a lone lead byte -- a UnicodeDecodeError in any binding that decodes
- * the message as UTF-8, in place of "file not found". Every length around the buffer
+/* A diagnostic that quotes a caller's path is cut to PH_LAST_ERROR_MAX - 1 bytes, and the
+ * cut must not split a UTF-8 character: about 75 Cyrillic characters reach the buffer end,
+ * and a lone lead byte is a decode error in any binding that reads the message as UTF-8,
+ * in place of "file not found". Every length around the buffer
  * size, for two-, three- and four-byte characters. */
 static void test_long_path_message_stays_utf8(ph_context_t *ctx) {
     static const char *const chars[] = {"\xD1\x84", "\xE4\xB8\xAD", "\xF0\x9F\x98\x80"};

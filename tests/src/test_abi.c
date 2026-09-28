@@ -7,8 +7,7 @@
  * libphash.h and linked with another shared library of the same soname reads these
  * fields at the offsets it was compiled with. This file pins them, so that a layout
  * change shows up as a failing test in the diff that makes it rather than as a
- * consumer reading garbage. Until the 2.0.0 tag a deliberate change updates the
- * expected values here; after it, a change here is a new major version. */
+ * consumer reading garbage. A change here is a new major version. */
 
 /* This file is also built a second time with -fshort-enums (test_abi_short_enums in the
  * Makefile and in CMake), which is the flag that shrinks an enum without a spacer. It

@@ -13,16 +13,16 @@ void test_core_lifecycle_and_errors(void) {
     // 2. ph_get_error_string
     ASSERT_STR_EQ("Success", ph_get_error_string(PH_SUCCESS));
     ASSERT_STR_EQ("Memory allocation failed", ph_get_error_string(PH_ERR_ALLOCATION_FAILED));
-    /* -2 was PH_ERR_DECODE_FAILED, removed in 2.0.0 and deliberately not reused.
-     * If a later change hands -2 to a new code, this assertion fails and the ABI
+    /* -2 (1.x's PH_ERR_DECODE_FAILED) is reserved and never reused. If a change
+     * hands -2 to a new code, this assertion fails and the ABI
      * rule in libphash.h gets enforced instead of just documented. */
     ASSERT_STR_EQ("Unknown error", ph_get_error_string((ph_error_t)-2));
     ASSERT_STR_EQ("Invalid argument", ph_get_error_string(PH_ERR_INVALID_ARGUMENT));
-    /* -4 was PH_ERR_NOT_IMPLEMENTED, removed in 2.0.0 and retired the same way. */
+    /* -4 (1.x's PH_ERR_NOT_IMPLEMENTED) is reserved the same way. */
     ASSERT_STR_EQ("Unknown error", ph_get_error_string((ph_error_t)-4));
     ASSERT_STR_EQ("Empty image (no image loaded)", ph_get_error_string(PH_ERR_EMPTY_IMAGE));
     ASSERT_STR_EQ("Unknown error", ph_get_error_string((ph_error_t)999));
-    /* The codes that replaced the removed catch-all must all have real strings. */
+    /* The specific decode-failure codes must all have real strings. */
     ASSERT_STR_EQ("Image exceeds the configured maximum pixel count",
                   ph_get_error_string(PH_ERR_IMAGE_TOO_LARGE));
     ASSERT_PTR_NOT_NULL((void *)ph_get_error_string(PH_ERR_UNSUPPORTED_FORMAT));
@@ -50,9 +50,8 @@ void test_core_setters_happy_and_edge(void) {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
 
-    /* Happy paths. Every setter returns ph_error_t since 2.0.0, so the expected
-     * outcome is asserted rather than discarded -- `ph_context_set_phash_params(ctx, 64,
-     * 16)` sat in this list as a "happy path" while actually being rejected. */
+    /* Happy paths. Every setter returns ph_error_t, so each expected outcome is
+     * asserted, not discarded. */
     ASSERT_OK(ph_context_set_gamma(ctx, 1.0f));              // The identity fast path
     ASSERT_OK(ph_context_set_gamma(ctx, 2.2f));              // An active transform
     ASSERT_OK(ph_context_set_gray_weights(ctx, 30, 60, 10)); // Hits normalization
@@ -95,7 +94,7 @@ void test_core_loading_mock_success(void) {
      * which is every shipped build, since the mock backend is opt-in and never part
      * of a release build -- nothing claims this buffer and the
      * loader must report it as an unknown format. Asserting both directions keeps
-     * the mock from silently leaking into a release artifact again. */
+     * the mock from silently leaking into a release artifact. */
     uint8_t mock_data[4] = {0xDE, 0xAD, 0xBE, 0xEF};
 #ifdef PH_ENABLE_MOCK_BACKEND
     ASSERT_OK(ph_load_from_memory(ctx, mock_data, 4));
@@ -135,7 +134,7 @@ void test_scratchpad_stress(void) {
 
     // 2. Auto-trim logic
     ctx->arena.offset = 0; // Simulate end of complex operation
-    // capacity is now > 2560. Requesting 100 bytes should trigger trim
+    // capacity is > 2560 here. Requesting 100 bytes should trigger trim
     ph_get_scratchpad(ctx, 100);
 
     // 3. NULL/Zero paths
@@ -177,7 +176,7 @@ void test_hashes_extra_coverage(void) {
     ASSERT_OK(ph_compute_phash(ctx, &hash));
 
     // --- Radial Extra ---
-    // Hits max_variance <= 0.001 path (uniform image)
+    // Flat image: variance spread below PH_RADIAL_FLAT_VARIANCE
     ASSERT_OK(ph_compute_radial_hash(ctx, &digest));
     // Hits ph_get_pixel_bilinear OOB
     ASSERT_FLOAT_EQ(-1.0f, ph_get_pixel_bilinear(ctx->image.raw_rgb, 32, 32, -1.0f, 0), 0.001);

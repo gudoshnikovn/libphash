@@ -13,8 +13,8 @@
  *
  * The threshold is the median, which is what makes the bit distribution balanced by
  * construction -- half ones, whatever the image -- and that balance is the property the
- * paper relies on. Until 2.0.0 this code used the arithmetic mean, under which a dark
- * image with a few bright blocks yields a lopsided hash.
+ * paper relies on. Thresholding at the arithmetic mean instead would give a lopsided hash
+ * for a dark image with a few bright blocks.
  *
  * Note that this puts the library at odds with OpenCV's BlockMeanHash, the other
  * implementation of this paper in wide use. It resizes to 256x256 and then thresholds
@@ -48,22 +48,18 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     int block_size = ctx->config.block_size;
     if (block_size <= 0)
         return PH_ERR_INVALID_ARGUMENT;
-    /* R87: casting to size_t before multiplying only guards against overflow where
-     * size_t is wider than int -- on a 32-bit target (size_t == 32-bit int), the product
-     * wraps exactly like the plain int product this comment used to say it fixed:
-     * block_size = 1<<30 wraps to 0 and INT_MAX wraps to 1, both far below any real
-     * block count. That let ph_get_scratchpad() below hand back a tiny (or NULL, in the
-     * 0 case) buffer that ph_resize_box() then addressed as if it were block_size^2
-     * bytes -- a huge out-of-bounds write, not a clean allocation failure. Route through
-     * the same width-independent overflow check ph_safe_image_alloc_size() already
-     * provides (uint64_t arithmetic, checked against SIZE_MAX) instead of repeating the
-     * unsafe pattern locally. */
+    /* Casting to size_t before multiplying does not help where size_t is 32 bits: the
+     * product wraps like a plain int product (block_size = 1<<30 wraps to 0 and INT_MAX
+     * to 1), ph_get_scratchpad() below would hand back a tiny (or NULL) buffer, and
+     * ph_resize_box() would address it as block_size^2 bytes -- a huge out-of-bounds
+     * write, not a clean allocation failure. ph_safe_image_alloc_size() does the check
+     * width-independently (uint64_t arithmetic, checked against SIZE_MAX). */
     size_t total_pixels;
     if (!ph_safe_image_alloc_size((uint64_t)block_size, (uint64_t)block_size, 1, &total_pixels))
         return PH_ERR_ALLOCATION_FAILED;
 
     /* One bit per block. The size is capped at PH_DIGEST_MAX_BYTES inside
-     * ph_digest_shape(): unreachable through the public API since 2.0.0, because
+     * ph_digest_shape(): unreachable through the public API, because
      * ph_context_set_block_params() rejects block_size > PH_BLOCK_MAX_SIZE (32, whose
      * 32*32 bits = 128 bytes exactly fill a digest). Kept as defence in depth for a
      * config field written by some other route (tests do exactly that). Note what the cap
@@ -88,7 +84,7 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     }
 
     /* The median of the block values, by counting sort: they are bytes, so 256 buckets
-     * settle it in one pass over the data instead of sorting up to 484 values.
+     * settle it in one pass over the data instead of sorting up to 1024 values.
      *
      * "The median" for an even count is the n/2-th order statistic, zero-indexed -- the
      * upper of the two central values. The paper does not say which to take, and this is
