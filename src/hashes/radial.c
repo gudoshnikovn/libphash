@@ -177,11 +177,9 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     if (!gray)
         return PH_ERR_ALLOCATION_FAILED;
 
-    // `blurred` and `blur_scratch` are plain heap allocations, not arena ones: the
-    // arena is about to be used for projection_variances further down, and (for
-    // blurred specifically) it has to survive past that nested request regardless --
-    // see ph_gaussian_blur_sigma()'s contract, the same pattern mhash.c uses for its
-    // own sigma blur.
+    /* `blurred` and `blur_scratch` -- five bytes per source pixel -- are plain heap
+     * allocations, not arena blocks, for the reason given in mhash.c: the arena would keep
+     * them for the life of the context and the call would be no faster. */
     uint8_t *blurred = (uint8_t *)malloc(img_size);
     float *blur_scratch = (float *)malloc(img_size * sizeof(float));
     if (!blurred || !blur_scratch) {
