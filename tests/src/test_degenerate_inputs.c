@@ -23,7 +23,8 @@
  * behaviour that is wrong, because changing it changes hash values. It says so at the
  * top and names what its assertion should become.
  */
-#include "internal.h"
+#include "digest.h"
+#include "hashes/hashes.h"
 #include "libphash.h"
 #include "test_macros.h"
 #include <stdio.h>

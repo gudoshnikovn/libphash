@@ -10,7 +10,7 @@
 #endif
 
 #include "alloc_shim.h"
-#include "internal.h"
+#include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
 #include <stdint.h>

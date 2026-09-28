@@ -76,7 +76,7 @@ leave the tie-break and the bit layout unstated too. Where a source is silent, t
 library still has to pick *something*. Each choice below is deliberate and is repeated in
 the delta table of the algorithm(s) it touches in `docs/algorithm-provenance.md`.
 
-**Grayscale coefficients.** `PH_GRAY_R/G/B` = 38/75/15 over 128 (`src/internal.h`), an
+**Grayscale coefficients.** `PH_GRAY_R/G/B` = 38/75/15 over 128 (`src/image/image.h`), an
 integer approximation of the **ITU-R BT.601** luma coefficients (0.299/0.587/0.114) —
 cited as an external standard, not because any source here asks for it. The closer
 77/150/29-over-256 approximation measures worse (it regresses BMH and wHash separability

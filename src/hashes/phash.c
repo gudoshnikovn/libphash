@@ -38,7 +38,9 @@
  * source (neither Zauner nor Krawetz's post says how to lay out the 64 bits); this is
  * simply what this library's implementation does, unverified against pHash's own code.
  */
-#include "internal.h"
+#include "context.h"
+#include "hashes/hashes.h"
+#include "image/image.h"
 #include <math.h>
 #include <stdatomic.h>
 #include <stdbool.h>

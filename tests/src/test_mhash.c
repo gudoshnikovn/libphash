@@ -1,4 +1,6 @@
-#include "internal.h"
+#include "context.h"
+#include "hashes/hashes.h"
+#include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
 #include <math.h>

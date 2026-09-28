@@ -1,5 +1,8 @@
-#include "internal.h"
+#include "context.h"
+#include "hashes/hashes.h"
+#include "image/image.h"
 #include "libphash.h"
+#include "safety.h"
 #include "test_macros.h"
 #include <limits.h>
 #include <math.h>

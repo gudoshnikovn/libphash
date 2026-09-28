@@ -5,9 +5,12 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 
-#include "internal.h"
+#include "context.h"
+#include "hashes/hashes.h"
+#include "image/image.h"
 #include "loader.h"
 #include "phash_version.h"
+#include "safety.h"
 #include <errno.h>
 #include <math.h>
 #include <stdarg.h>

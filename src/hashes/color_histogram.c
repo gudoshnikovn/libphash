@@ -38,7 +38,9 @@
  * PH_DIGEST_MAX_BYTES, and chroma resolution is worth more here than intensity resolution
  * (5x5x5 has no such collisions and separates at 2.77).
  */
-#include "internal.h"
+#include "context.h"
+#include "digest.h"
+#include "hashes/hashes.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>

@@ -1,4 +1,5 @@
-#include "internal.h"
+#include "context.h"
+#include "hashes/hashes.h"
 
 PH_API ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flags, uint64_t out[]) {
     if (!ctx || !out || flags == 0 || (flags & ~(uint32_t)PH_HASH_FLAGS_ALL)) {

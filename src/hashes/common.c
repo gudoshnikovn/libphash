@@ -1,4 +1,4 @@
-#include "internal.h"
+#include "digest.h"
 #include <math.h>
 #include <stddef.h> // For size_t
 #include <stdint.h>

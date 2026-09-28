@@ -5,7 +5,8 @@
  * ph_digest_begin()), and ph_digest_info() reports it, so the answer to "what will this
  * algorithm return" and what it actually returns come from the same lines. */
 
-#include "internal.h"
+#include "context.h"
+#include "hashes/hashes.h"
 #include <string.h>
 
 /* The ph_hash_flags_t bit of a uint64_t algorithm is 1 << its ph_algorithm_t value; the

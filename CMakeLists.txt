@@ -14,7 +14,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # That switch costs more than the GNU dialect, though, and the cost is invisible
 # on Darwin: a strict dialect makes the compiler define __STRICT_ANSI__, and glibc
 # hides *every* non-ISO declaration behind it -- POSIX included. M_PI is defined by
-# src/internal.h and tests/src/test_macros.h, so no libc has to provide it. A
+# src/hashes/hashes.h and tests/src/test_macros.h, so no libc has to provide it. A
 # translation unit that needs a POSIX or GNU declaration (clock_gettime(), openat(),
 # mkstemp(), sched_getaffinity(), ...) requests it with a feature-test macro before its
 # first #include. Anything new that reaches for a non-ISO libc name has to do the same;
@@ -230,7 +230,7 @@ if(MSVC)
     # /std:c11.
     #
     # No _USE_MATH_DEFINES: M_PI is not ISO C on any platform (glibc hides it too
-    # once CMAKE_C_EXTENSIONS OFF turns __STRICT_ANSI__ on), so src/internal.h and
+    # once CMAKE_C_EXTENSIONS OFF turns __STRICT_ANSI__ on), so src/hashes/hashes.h and
     # tests/src/test_macros.h define it themselves.
     add_compile_options(/experimental:c11atomics)
 
@@ -415,7 +415,7 @@ if(PHASH_COVERAGE)
     #
     # -fprofile-update=atomic: this project's tests run gcov-instrumented code from
     # multiple threads (test_batch_stress, test_thread_safety), and a static inline
-    # function defined in a header (e.g. ph_safe_image_alloc_size() in internal.h)
+    # function defined in a header (e.g. ph_safe_image_alloc_size() in safety.h)
     # gets its own counter instance per translation unit -- default (non-atomic)
     # counter increments race there and corrupt the merged .gcda, surfacing as
     # `geninfo: ERROR: Unexpected negative count` when scripts/coverage_cmake.sh

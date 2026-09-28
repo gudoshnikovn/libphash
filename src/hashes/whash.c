@@ -35,7 +35,9 @@
  * verified against ImageHash's own layout, and not specifiable against a primary
  * source that does not exist; a choice, not a conformance claim.
  */
-#include "internal.h"
+#include "context.h"
+#include "hashes/hashes.h"
+#include "image/image.h"
 #include <stdlib.h>
 
 void ph_haar_1d_float(float *data, int n, float *temp) {

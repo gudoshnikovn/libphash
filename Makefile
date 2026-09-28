@@ -117,7 +117,7 @@ PHASH_COVERAGE ?= 0
 ifeq ($(PHASH_COVERAGE),1)
 # -fprofile-update=atomic: test_batch_stress/test_thread_safety run gcov-instrumented
 # code from multiple threads, and a static inline function defined in a header
-# (e.g. ph_safe_image_alloc_size() in internal.h) gets its own counter instance per
+# (e.g. ph_safe_image_alloc_size() in safety.h) gets its own counter instance per
 # translation unit -- default (non-atomic) counter increments race there and corrupt
 # the merged .gcda, surfacing as `geninfo: ERROR: Unexpected negative count` (a known
 # GCC/gcov limitation, https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68080 -- see the

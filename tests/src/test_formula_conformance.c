@@ -23,7 +23,9 @@
  * the shipped code; this file complements them, it does not replace them.
  */
 
-#include "internal.h"
+#include "digest.h"
+#include "hashes/hashes.h"
+#include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
 #include <math.h>

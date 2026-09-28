@@ -57,7 +57,9 @@
  * varies with angle and resolution; and a radius capped at min(w,h)/2 to keep every
  * projection inside the image.
  */
-#include "internal.h"
+#include "context.h"
+#include "hashes/hashes.h"
+#include "image/image.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>

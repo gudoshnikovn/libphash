@@ -1,4 +1,5 @@
-#include "internal.h"
+#include "context.h"
+#include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
 #include <stdlib.h>

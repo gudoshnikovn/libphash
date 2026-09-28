@@ -9,7 +9,7 @@
  * All tests use hand-crafted pixel arrays — no image files needed.
  */
 
-#include "internal.h"
+#include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
 #include <math.h>

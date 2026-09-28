@@ -8,7 +8,7 @@
 #if defined(__linux__) && !defined(_GNU_SOURCE)
 #define _GNU_SOURCE
 #endif
-#include "internal.h"
+#include "batch.h"
 #include "libphash.h"
 #include "test_macros.h"
 #include <stdio.h>

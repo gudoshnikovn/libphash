@@ -1,4 +1,4 @@
-#include "internal.h"
+#include "image/image.h"
 #include <stdint.h>
 #include <string.h>
 

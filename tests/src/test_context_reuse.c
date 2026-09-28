@@ -1,4 +1,5 @@
-#include "internal.h" // For access to internal fields (gray_data)
+#include "context.h"
+#include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
 #include <string.h>

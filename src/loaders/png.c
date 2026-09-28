@@ -1,4 +1,7 @@
-#include "internal.h"
+#include "image/image.h"
+#include "loader.h"
+#include "loaders/backends.h"
+#include "safety.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

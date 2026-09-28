@@ -5,7 +5,9 @@
  * a plain Release run only verifies the returned error codes.
  */
 
-#include "internal.h"
+#include "context.h"
+#include "hashes/hashes.h"
+#include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
 #include <limits.h>

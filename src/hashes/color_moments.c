@@ -28,7 +28,8 @@
  * separate -- the source's formulas are known here only through a rank-4 restatement, so
  * the colour space is not changed on the strength of it.
  */
-#include "internal.h"
+#include "context.h"
+#include "hashes/hashes.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -61,7 +62,7 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
             ph_compute_moments(ctx->image.raw_rgb, num_pixels, ctx->image.channels, c);
 
         /* Signed fixed point, big-endian. The skewness keeps its sign; the static assert
-         * on the scale in internal.h is what guarantees the clamp below never fires for
+         * on the scale in hashes/hashes.h is what guarantees the clamp below never fires for
          * an 8-bit image, so it is a bound on programmer error rather than on the data. */
         const double moments[PH_COLOR_MOMENTS] = {m.mean, m.std_dev, m.skew};
         for (int k = 0; k < PH_COLOR_MOMENTS; k++) {

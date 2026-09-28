@@ -14,7 +14,9 @@
  *
  * See docs/algorithm-provenance.md and docs/references.md.
  */
-#include "internal.h"
+#include "context.h"
+#include "hashes/hashes.h"
+#include "image/image.h"
 #include <stdlib.h>
 
 PH_API ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out_hash) {

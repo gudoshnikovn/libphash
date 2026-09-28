@@ -1,4 +1,6 @@
-#include "internal.h"
+#include "context.h"
+#include "image/image.h"
+#include "safety.h"
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>

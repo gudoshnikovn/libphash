@@ -8,8 +8,8 @@
  *
  * Every function below exists in two forms: the production one (compiled with whatever
  * SIMD the target supports) and a `_scalar` twin that always takes the plain C path,
- * declared in internal.h for this purpose only. This test calls both on the same inputs
- * and diffs the outputs.
+ * declared in the src/ header next to it for this purpose only. This test calls both on the same
+ * inputs and diffs the outputs.
  *
  * On a build with no SIMD available at all (__ARM_NEON/__AVX2__/__SSE4_2__ all
  * undefined) the production and `_scalar` entry points are literally the same code path,
@@ -27,7 +27,9 @@
  * down (see the note before main()) still catches a real divergence.
  */
 
-#include "internal.h"
+#include "digest.h"
+#include "hashes/hashes.h"
+#include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
 #include <math.h>

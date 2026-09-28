@@ -1,6 +1,7 @@
 #include "loader.h"
 #include "../vendor/stb_image.h"
-#include "loaders/internal.h"
+#include "loaders/backends.h"
+#include "safety.h"
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stddef.h>

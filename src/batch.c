@@ -4,7 +4,9 @@
 #define _GNU_SOURCE
 #endif
 
-#include "internal.h"
+#include "batch.h"
+#include "context.h"
+#include "hashes/hashes.h"
 
 /* MSVC only ships <stdatomic.h> under /std:c11 or later (VS 17.5+); the CMake
  * build gets that flag from CMAKE_C_STANDARD (see CMakeLists.txt), but a build invoking

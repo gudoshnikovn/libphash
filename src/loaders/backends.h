@@ -1,8 +1,13 @@
-#ifndef PH_LOADERS_INTERNAL_H
-#define PH_LOADERS_INTERNAL_H
+#ifndef PH_LOADERS_BACKENDS_H
+#define PH_LOADERS_BACKENDS_H
 
-#include "../internal.h" // ph_exceeds_pixel_limit / ph_safe_image_alloc_size / struct ph_context
+/* The interface between the dispatcher (src/loader.c) and the native decoder backends
+ * in src/loaders/: format probes and each backend's can_read(). */
+
 #include "loader.h"
+#include "safety.h"
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h> // memcmp, for the PNG signature check
 
 /* PNG magic bytes. Available regardless of which backend (if any) is compiled in:
@@ -50,4 +55,4 @@ int ph_can_read_png(const uint8_t *magic, size_t len);
 int ph_can_read_webp(const uint8_t *magic, size_t len);
 #endif
 
-#endif // PH_LOADERS_INTERNAL_H
+#endif // PH_LOADERS_BACKENDS_H

@@ -30,7 +30,7 @@
  * distributions instead of spot-checking them.
  */
 
-#include "internal.h"
+#include "hashes/hashes.h"
 #include "libphash.h"
 #include "test_macros.h"
 #include <math.h>

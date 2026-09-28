@@ -33,7 +33,10 @@
  * order. The paper defines a bit sequence (equation 3.9), not a byte layout, so there
  * is nothing to conform to here either -- a choice, recorded rather than left silent.
  */
-#include "internal.h"
+#include "context.h"
+#include "hashes/hashes.h"
+#include "image/image.h"
+#include "safety.h"
 #include <stdlib.h>
 #include <string.h>
 

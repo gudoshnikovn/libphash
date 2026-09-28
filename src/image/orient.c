@@ -9,8 +9,9 @@
  * transform) rather than failing the load — EXIF data is optional annotation,
  * not something a decode should fail over.
  */
-#include "../internal.h"
-#include "../loader.h"
+#include "image/image.h"
+#include "loader.h"
+#include "safety.h"
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>

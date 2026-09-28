@@ -1,4 +1,4 @@
-#include "internal.h"
+#include "image/image.h"
 #include <math.h>
 #include <stdint.h>
 

@@ -1,10 +1,10 @@
-/* The scratch arena's mark/release contract (src/internal.h): every entry point that takes
+/* The scratch arena's mark/release contract (src/context.h): every entry point that takes
  * blocks from the arena gives them back on every return path. A missed release is silent --
  * the hash is right and nothing leaks -- so the only place it can show is the arena's own
  * offset, which is what this test watches: after each call it must be exactly where it was
  * before, on success and on failure alike. */
 #include "alloc_shim.h"
-#include "internal.h"
+#include "context.h"
 #include "libphash.h"
 #include "test_macros.h"
 #include <stdio.h>

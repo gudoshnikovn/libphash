@@ -38,7 +38,9 @@
  * below) -- matching "the source packs them" as pHash's own page states it, per neither
  * paper specifying a byte layout of its own.
  */
-#include "internal.h"
+#include "context.h"
+#include "hashes/hashes.h"
+#include "image/image.h"
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
