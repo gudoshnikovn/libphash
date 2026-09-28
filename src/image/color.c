@@ -6,8 +6,6 @@
 
 #if defined(__ARM_NEON)
 #include <arm_neon.h>
-#elif defined(__SSE4_1__)
-#include <smmintrin.h>
 #endif
 
 uint8_t *ph_get_gray(ph_context_t *ctx) {

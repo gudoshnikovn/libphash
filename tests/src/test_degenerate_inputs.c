@@ -38,7 +38,7 @@ typedef struct {
 } geometry_t;
 
 /* 1x1 is the smallest image there is; 1xN and Nx1 have a dimension in which the
- * resamplers and the 3x3 filters cannot form a neighbourhood; 3x3 and 7x7 are below the
+ * resamplers and the blur cannot form a neighbourhood; 3x3 and 7x7 are below the
  * 8x8 grid every uint64 hash reduces to; 9x8 and 5x13 are non-square and not powers of
  * two, which is where the wHash level cascade has to pick a scale. */
 static const geometry_t GEOMS[] = {

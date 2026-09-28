@@ -96,20 +96,6 @@ static void test_error_paths(void) {
     PASS("test_error_paths");
 }
 
-/* The internal blur is an arena consumer too. */
-static void test_internal_consumers(void) {
-    ph_context_t *ctx = NULL;
-    ASSERT_OK(ph_create(&ctx));
-    uint8_t src[16 * 16], dst[16 * 16];
-    for (int i = 0; i < 16 * 16; i++)
-        src[i] = (uint8_t)(i * 13);
-    size_t before = ctx->arena.offset;
-    ASSERT_INT_EQ(1, ph_apply_gaussian_blur(ctx, src, 16, 16, dst));
-    check_balanced(ctx, before, "ph_apply_gaussian_blur", PH_SUCCESS);
-    ph_free(ctx);
-    PASS("test_internal_consumers");
-}
-
 /* Every allocation an algorithm makes, failed one at a time. Each failure point hits a
  * different early return; the arena must come back to where it was on all of them. A
  * fresh context per point, so that the arena's own growth is among the failures. wHash
@@ -170,7 +156,6 @@ static void test_allocation_failure_paths(void) {
 int main(void) {
     test_success_paths();
     test_error_paths();
-    test_internal_consumers();
     test_allocation_failure_paths();
     if (g_failures) {
         fprintf(stderr, "%d unbalanced arena use(s)\n", g_failures);

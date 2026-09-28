@@ -58,11 +58,11 @@ entirely for algorithms that only need luma.
 Optimized low-level primitives for image manipulation, split into dedicated modules:
 - **`resize.c`**: box-filter area sampling for downscaling, Mitchell/bilinear filters
   (via the vendored `stb_image_resize2`, `stb_resize_impl.c`) for the rest.
-- **`color.c`**: SIMD-accelerated (NEON/SSE) color conversion and grayscale
+- **`color.c`**: color conversion (NEON-accelerated on Arm) and grayscale
   transformation using configurable weights (`PH_GRAY_R/G/B`, BT.601-derived — see
   `docs/algorithm-provenance.md`).
-- **`filters.c`**: Gaussian blur (σ-parameterised; see `docs/algorithms.md`'s Radial
-  section) and Laplacian sharpening.
+- **`filters.c`**: Gaussian blur (σ-parameterised; mHash and Radial, see
+  `docs/algorithms.md`) and histogram equalisation (mHash).
 - **`orient.c`**: the EXIF/WebP auto-orientation layer described above.
 - **Gamma Correction**: `(v/max)^γ · max` per image, default γ = 1.0 (identity), Radial
   only; see `docs/algorithm-provenance.md` §7.

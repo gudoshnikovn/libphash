@@ -41,23 +41,9 @@ int ph_resize_box(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int 
 /* Same contract as ph_resize_box(): returns 1 on success, 0 (dst untouched) otherwise. */
 int ph_resize_mitchell(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw, int dh);
 
-/* Applies a 3x3 Gaussian Blur to reduce noise. Returns 1 on success -- including the
- * legitimate memcpy passthrough for images smaller than the kernel -- and 0 only when
- * the scratchpad allocation needed for images >= 3x3 fails, in which case `dst` is left
- * untouched. */
-int ph_apply_gaussian_blur(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst);
-
-/* Same contract as ph_apply_gaussian_blur(), but always the scalar path, even on a build
- * with a SIMD-capable target. Exists only so tests/src/test_simd_equivalence.c can compare
- * the two against each other; production code should call ph_apply_gaussian_blur(). */
-int ph_apply_gaussian_blur_scalar(ph_context_t *ctx, uint8_t *src, int w, int h, uint8_t *dst);
-
 /* Applies gamma correction, normalised by the buffer's own maximum, default gamma=1.0
  * (identity). See the implementation in src/image/color.c for the exact formula. */
 void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h);
-
-/* Applies 3x3 Laplacian sharpening for edge preservation */
-void ph_apply_laplacian_3x3(const uint8_t *src, int w, int h, uint8_t *dst);
 
 /* Separable Gaussian blur at an arbitrary sigma, truncated at three standard deviations.
  * `scratch` is w*h floats supplied by the caller; this allocates nothing. */
@@ -472,18 +458,6 @@ _Static_assert(PH_COLOR_BINS <= PH_DIGEST_MAX_BYTES,
 #define PH_GRAY_R 38
 #define PH_GRAY_G 75
 #define PH_GRAY_B 15
-
-/* Gaussian Blur 3x3 Kernel Weights */
-#define PH_GAUSS_K00 1
-#define PH_GAUSS_K01 2
-#define PH_GAUSS_K02 1
-#define PH_GAUSS_K10 2
-#define PH_GAUSS_K11 4
-#define PH_GAUSS_K12 2
-#define PH_GAUSS_K20 1
-#define PH_GAUSS_K21 2
-#define PH_GAUSS_K22 1
-#define PH_GAUSS_SHIFT 4 // Divide by 16 (sum of weights)
 
 /*
  * Safety Helpers

@@ -1,7 +1,7 @@
 /*
  * test_simd_equivalence.c
  *
- * Checks color.c's/filters.c's NEON paths, phash.c's NEON dot product and common.c's
+ * Checks color.c's NEON grayscale path, phash.c's NEON dot product and common.c's
  * AVX2/SSE4.2/NEON Hamming distance against their scalar fallbacks. A mismatch here means two
  * different hashes for the same input depending on which architecture ran it -- exactly the class
  * of bug that would otherwise surface as an unexplained golden-hash mismatch.
@@ -145,92 +145,6 @@ static void test_grayscale_equivalence(void) {
 }
 
 /* =========================================================
- * ph_apply_gaussian_blur vs ph_apply_gaussian_blur_scalar
- * ========================================================= */
-
-static void run_blur_case(const char *label, int w, int h, void (*fill)(uint8_t *, size_t)) {
-    size_t n = (size_t)w * (size_t)h;
-
-    uint8_t *src = malloc(n);
-    uint8_t *dst_simd = malloc(n);
-    uint8_t *dst_scalar = malloc(n);
-    ASSERT_PTR_NOT_NULL(src);
-    ASSERT_PTR_NOT_NULL(dst_simd);
-    ASSERT_PTR_NOT_NULL(dst_scalar);
-
-    fill(src, n);
-    memset(dst_simd, 0xAA, n);
-    memset(dst_scalar, 0x55, n);
-
-    ph_context_t *ctx_simd = NULL;
-    ph_context_t *ctx_scalar = NULL;
-    ASSERT_OK(ph_create(&ctx_simd));
-    ASSERT_OK(ph_create(&ctx_scalar));
-
-    int ok_simd = ph_apply_gaussian_blur(ctx_simd, src, w, h, dst_simd);
-    int ok_scalar = ph_apply_gaussian_blur_scalar(ctx_scalar, src, w, h, dst_scalar);
-    ASSERT(ok_simd == ok_scalar);
-
-    if (ok_simd && memcmp(dst_simd, dst_scalar, n) != 0) {
-        for (size_t i = 0; i < n; i++) {
-            if (dst_simd[i] != dst_scalar[i]) {
-                fprintf(stderr,
-                        "[FAIL] ph_apply_gaussian_blur/%s (%dx%d): byte %zu differs: "
-                        "simd=%u scalar=%u\n",
-                        label, w, h, i, dst_simd[i], dst_scalar[i]);
-                exit(1);
-            }
-        }
-    }
-
-    ph_free(ctx_simd);
-    ph_free(ctx_scalar);
-    free(src);
-    free(dst_simd);
-    free(dst_scalar);
-}
-
-static void test_gaussian_blur_equivalence(void) {
-    static const struct {
-        int w, h;
-    } shapes[] = {
-        {1, 1},   {2, 2},   {3, 3},   {3, 1},   {1, 3},   {4, 3},   {3, 4},   {15, 15},
-        {16, 16}, {17, 17}, {31, 31}, {32, 32}, {33, 33}, {1, 200}, {200, 1},
-    };
-    size_t n_shapes = sizeof(shapes) / sizeof(shapes[0]);
-
-    for (size_t s = 0; s < n_shapes; s++) {
-        rng_seed(0x5678u + (uint32_t)s * 13u);
-        run_blur_case("random", shapes[s].w, shapes[s].h, fill_random);
-        run_blur_case("gradient", shapes[s].w, shapes[s].h, fill_gradient);
-    }
-
-    /* Uniform image per shape: every pixel must stay the same value under both paths. */
-    for (size_t s = 0; s < n_shapes; s++) {
-        int w = shapes[s].w, h = shapes[s].h;
-        size_t n = (size_t)w * (size_t)h;
-        uint8_t *src = malloc(n);
-        uint8_t *dst_simd = malloc(n);
-        uint8_t *dst_scalar = malloc(n);
-        memset(src, 77, n);
-
-        ph_context_t *ctx_simd = NULL, *ctx_scalar = NULL;
-        ASSERT_OK(ph_create(&ctx_simd));
-        ASSERT_OK(ph_create(&ctx_scalar));
-        ph_apply_gaussian_blur(ctx_simd, src, w, h, dst_simd);
-        ph_apply_gaussian_blur_scalar(ctx_scalar, src, w, h, dst_scalar);
-        ASSERT(memcmp(dst_simd, dst_scalar, n) == 0);
-        ph_free(ctx_simd);
-        ph_free(ctx_scalar);
-        free(src);
-        free(dst_simd);
-        free(dst_scalar);
-    }
-
-    PASS("test_gaussian_blur_equivalence");
-}
-
-/* =========================================================
  * ph_dct2_partial vs ph_dct2_partial_scalar
  * ========================================================= */
 
@@ -345,7 +259,6 @@ static void test_hamming_distance_equivalence(void) {
 
 int main(void) {
     test_grayscale_equivalence();
-    test_gaussian_blur_equivalence();
     test_dct2_partial_equivalence();
     test_hamming_distance_equivalence();
 

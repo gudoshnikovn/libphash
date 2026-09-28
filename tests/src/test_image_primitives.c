@@ -5,8 +5,6 @@
  *   - ph_to_grayscale
  *   - ph_apply_gamma (per-image normalisation, see src/image/color.c)
  *   - ph_resize_box
- *   - ph_apply_gaussian_blur
- *   - ph_apply_laplacian_3x3
  *
  * All tests use hand-crafted pixel arrays — no image files needed.
  */
@@ -265,136 +263,6 @@ static void test_box_black_white_halves(void) {
     PASS("test_box_black_white_halves");
 }
 
-/* =========================================================
- * ph_apply_gaussian_blur tests
- * ========================================================= */
-
-static void test_gaussian_uniform(void) {
-    /* Blurring a constant image must keep every pixel the same value */
-    ph_context_t *ctx = NULL;
-    ASSERT_OK(ph_create(&ctx));
-    uint8_t src[25], dst[25];
-    memset(src, 120, 25);
-    ph_apply_gaussian_blur(ctx, src, 5, 5, dst);
-    for (int i = 0; i < 25; i++)
-        ASSERT_UINT8_EQ(120, dst[i]);
-    ph_free(ctx);
-    PASS("test_gaussian_uniform");
-}
-
-static void test_gaussian_impulse_spreads(void) {
-    /* Single bright pixel in the center of a 5×5 black image.
-     * After blur the center must be dimmer, and its 4 direct neighbors
-     * must be brighter than the corners. */
-    ph_context_t *ctx = NULL;
-    ASSERT_OK(ph_create(&ctx));
-    uint8_t src[25] = {0};
-    src[2 * 5 + 2] = 255; /* center pixel */
-    uint8_t dst[25] = {0};
-    ph_apply_gaussian_blur(ctx, src, 5, 5, dst);
-
-    /* Center must have been dimmed (from 255) */
-    if (dst[2 * 5 + 2] >= 255) {
-        fprintf(stderr, "[FAIL] test_gaussian_impulse_spreads: center not reduced (got %u)\n",
-                dst[2 * 5 + 2]);
-        exit(1);
-    }
-    /* At least one direct neighbor must be non-zero */
-    int neighbor_sum = dst[1 * 5 + 2] + dst[3 * 5 + 2] + dst[2 * 5 + 1] + dst[2 * 5 + 3];
-    if (neighbor_sum == 0) {
-        fprintf(stderr, "[FAIL] test_gaussian_impulse_spreads: energy did not spread\n");
-        exit(1);
-    }
-    ph_free(ctx);
-    PASS("test_gaussian_impulse_spreads");
-}
-
-static void test_gaussian_horizontal_kernel(void) {
-    /* 1×3 image [0, 255, 0]: after horizontal pass centre → (0+510+0)/4 = 127.
-     * Too small for full 2D blur (h<3), so blur copies src→dst. Just confirm no crash. */
-    ph_context_t *ctx = NULL;
-    ASSERT_OK(ph_create(&ctx));
-    uint8_t src[] = {0, 255, 0};
-    uint8_t dst[3];
-    ph_apply_gaussian_blur(ctx, src, 3, 1, dst);
-    /* w=3 but h=1 < 3 → copies verbatim */
-    ASSERT_UINT8_EQ(0, dst[0]);
-    ASSERT_UINT8_EQ(255, dst[1]);
-    ASSERT_UINT8_EQ(0, dst[2]);
-    ph_free(ctx);
-    PASS("test_gaussian_horizontal_kernel");
-}
-
-static void test_gaussian_alias_safe(void) {
-    /* Calling blur with src == dst must not corrupt the image
-     * (the implementation uses a temp scratchpad). */
-    ph_context_t *ctx = NULL;
-    ASSERT_OK(ph_create(&ctx));
-    uint8_t img[25];
-    memset(img, 80, 25);
-    /* Pass img as both src and dst */
-    ph_apply_gaussian_blur(ctx, img, 5, 5, img);
-    /* Uniform image → should still be 80 */
-    for (int i = 0; i < 25; i++)
-        ASSERT_UINT8_EQ(80, img[i]);
-    ph_free(ctx);
-    PASS("test_gaussian_alias_safe");
-}
-
-/* =========================================================
- * ph_apply_laplacian_3x3 tests
- * ========================================================= */
-
-static void test_laplacian_uniform(void) {
-    /* Uniform image: interior = 5*v - 4*v = v; borders = v (copied).
-     * All pixels should stay at the same value. */
-    uint8_t src[25], dst[25];
-    memset(src, 50, 25);
-    ph_apply_laplacian_3x3(src, 5, 5, dst);
-    for (int i = 0; i < 25; i++)
-        ASSERT_UINT8_EQ(50, dst[i]);
-    PASS("test_laplacian_uniform");
-}
-
-static void test_laplacian_center_amplified(void) {
-    /* 5×5 uniform=10 except center=200.
-     * center Laplacian = 5*200 - 4*10 = 960, clamped to 255. */
-    uint8_t src[25], dst[25];
-    memset(src, 10, 25);
-    src[2 * 5 + 2] = 200;
-    ph_apply_laplacian_3x3(src, 5, 5, dst);
-    ASSERT_UINT8_EQ(255, dst[2 * 5 + 2]);
-    PASS("test_laplacian_center_amplified");
-}
-
-static void test_laplacian_negative_clamped(void) {
-    /* Surround brighter than center: center = 5*0 - 4*200 = -800, clamp to 0. */
-    uint8_t src[25], dst[25];
-    memset(src, 200, 25);
-    src[2 * 5 + 2] = 0;
-    ph_apply_laplacian_3x3(src, 5, 5, dst);
-    ASSERT_UINT8_EQ(0, dst[2 * 5 + 2]);
-    PASS("test_laplacian_negative_clamped");
-}
-
-static void test_laplacian_borders_copied(void) {
-    /* Border pixels must equal source border pixels verbatim */
-    uint8_t src[25], dst[25];
-    for (int i = 0; i < 25; i++)
-        src[i] = (uint8_t)i;
-    ph_apply_laplacian_3x3(src, 5, 5, dst);
-    /* Top and bottom rows, left and right columns */
-    for (int x = 0; x < 5; x++) {
-        ASSERT_UINT8_EQ(src[0 * 5 + x], dst[0 * 5 + x]); /* top row */
-        ASSERT_UINT8_EQ(src[4 * 5 + x], dst[4 * 5 + x]); /* bottom row */
-    }
-    for (int y = 0; y < 5; y++) {
-        ASSERT_UINT8_EQ(src[y * 5 + 0], dst[y * 5 + 0]); /* left col */
-        ASSERT_UINT8_EQ(src[y * 5 + 4], dst[y * 5 + 4]); /* right col */
-    }
-    PASS("test_laplacian_borders_copied");
-}
-
 void test_resize_zero_negative_dims(void) {
     uint8_t src[4] = {1, 2, 3, 4};
     uint8_t dst[4] = {0};
@@ -414,38 +282,6 @@ void test_box_resize_count_zero(void) {
     uint8_t dst[100]; // Correct size for 10x10
     ph_resize_box(src, 1, 1, dst, 10, 10);
     PASS("test_box_resize_count_zero");
-}
-
-void test_gaussian_blur_edge_cases(void) {
-    ph_context_t *ctx = NULL;
-    ASSERT_OK(ph_create(&ctx));
-    uint8_t src[100], dst[100];
-
-    // 1. NULL/Zero args
-    ph_apply_gaussian_blur(NULL, src, 10, 10, dst);
-    ph_apply_gaussian_blur(ctx, NULL, 10, 10, dst);
-    ph_apply_gaussian_blur(ctx, src, 10, 10, NULL);
-    ph_apply_gaussian_blur(ctx, src, 0, 10, dst);
-    ph_apply_gaussian_blur(ctx, src, 10, 0, dst);
-
-    // 2. Small image (w < 3)
-    ph_apply_gaussian_blur(ctx, src, 2, 10, dst);
-    ph_apply_gaussian_blur(ctx, src, 10, 2, dst);
-
-    ph_free(ctx);
-    PASS("test_gaussian_blur_edge_cases");
-}
-
-void test_laplacian_edge_cases(void) {
-    uint8_t src[100], dst[100];
-
-    // 1. NULL/Zero args
-    ph_apply_laplacian_3x3(NULL, 10, 10, dst);
-    ph_apply_laplacian_3x3(src, 10, 10, NULL);
-    ph_apply_laplacian_3x3(src, 0, 10, dst);
-    ph_apply_laplacian_3x3(src, 10, 0, dst);
-
-    PASS("test_laplacian_edge_cases");
 }
 
 int main(void) {
@@ -477,20 +313,6 @@ int main(void) {
 
     /* General Resize Edges */
     test_resize_zero_negative_dims();
-
-    /* Gaussian blur */
-    test_gaussian_uniform();
-    test_gaussian_impulse_spreads();
-    test_gaussian_horizontal_kernel();
-    test_gaussian_alias_safe();
-    test_gaussian_blur_edge_cases();
-
-    /* Laplacian */
-    test_laplacian_uniform();
-    test_laplacian_center_amplified();
-    test_laplacian_negative_clamped();
-    test_laplacian_borders_copied();
-    test_laplacian_edge_cases();
 
     printf("\nAll image primitive tests passed.\n");
     return 0;
