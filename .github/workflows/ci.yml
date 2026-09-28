@@ -62,6 +62,12 @@ jobs:
     - name: Check tracked text for process references
       run: bash scripts/check_final_state_voice.sh
 
+    # The runner image ships shellcheck. Warnings and errors fail the step; its
+    # info-level notes (an unquoted $PKG_FLAGS that is split on purpose, a literal
+    # '${prefix}') do not.
+    - name: shellcheck scripts/
+      run: shellcheck --severity=warning scripts/*.sh
+
   # Full vendored build (all bundled decoders) across the platforms/arches we
   # actually ship for. PHASH_STRICT_DEPS=ON turns a silent decoder fallback
   # (e.g. libjpeg-turbo not found) into a hard configure failure, so a CI green

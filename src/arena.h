@@ -27,6 +27,13 @@ static inline size_t ph_arena_align_up(size_t n) {
     return (n + (PH_ARENA_ALIGNMENT - 1)) & ~(size_t)(PH_ARENA_ALIGNMENT - 1);
 }
 
+/* The address `offset` bytes into a scratchpad block, for a typed buffer carved out of it:
+ * `float *f = ph_arena_at(block, off)`. The block starts on PH_ARENA_ALIGNMENT, and the
+ * caller keeps each offset a multiple of its buffer's alignment -- ph_arena_align_up()
+ * where the types differ. Returning void * rather than casting uint8_t * states that
+ * promise once, here, where -Wcast-align cannot see it at every call site. */
+static inline void *ph_arena_at(uint8_t *block, size_t offset) { return block + offset; }
+
 /* ph_get_scratchpad() hands out a block of at least `size` bytes, aligned to
  * PH_ARENA_ALIGNMENT, or NULL on failure (the arena is then unchanged). A block stays
  * valid only until the next ph_get_scratchpad() on the same context: growing the arena

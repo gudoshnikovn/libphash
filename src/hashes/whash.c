@@ -200,8 +200,8 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
         return PH_ERR_ALLOCATION_FAILED;
 
     uint8_t *scaled_img = scratch_mem;
-    float *d = (float *)(scratch_mem + sz_scaled);
-    float *temp_a = (float *)((uint8_t *)d + sz_d);
+    float *d = ph_arena_at(scratch_mem, sz_scaled);
+    float *temp_a = ph_arena_at(scratch_mem, sz_scaled + sz_d);
     float *temp_b = temp_a + image_scale;
 
     if (!ph_resize_box(full_gray, ctx->image.width, ctx->image.height, scaled_img, image_scale,

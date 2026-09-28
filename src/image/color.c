@@ -146,9 +146,17 @@ void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h) {
     size_t num_pixels = (size_t)w * (size_t)h;
 
     // gamma == 1.0 (the default) is an identity transform regardless of the buffer's
-    // content -- skip the scan and the LUT build entirely, the common case by far.
+    // content -- skip the scan and the LUT build entirely, the common case by far. The
+    // comparison is exact on purpose: only 1.0 itself is the identity.
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wfloat-equal"
+#endif
     if (ctx->config.gamma == 1.0f)
         return;
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
     uint8_t max_val = 0;
     for (size_t i = 0; i < num_pixels; i++)

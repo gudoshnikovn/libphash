@@ -271,7 +271,8 @@ else()
     set(PHASH_LIBRARY_WARNING_CANDIDATES
         -Wshadow -Wmissing-prototypes -Wstrict-prototypes -Wold-style-definition
         -Wmissing-variable-declarations -Wundef -Wwrite-strings -Wswitch-enum
-        -Wvla -Wformat=2 -Wredundant-decls)
+        -Wvla -Wformat=2 -Wredundant-decls -Wcast-qual -Wfloat-equal -Wcast-align
+        -Wdouble-promotion)
     set(PHASH_LIBRARY_WARNINGS "")
     foreach(flag ${PHASH_LIBRARY_WARNING_CANDIDATES})
         string(MAKE_C_IDENTIFIER "PHASH_HAS${flag}" flag_var)

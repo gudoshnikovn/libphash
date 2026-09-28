@@ -1,11 +1,11 @@
 /*
  * Sole translation unit that instantiates the vendored stb_image implementation.
  * Its only content is the #define/#include pair and the thread-local
- * guard that depends on it -- everything else stays in src/core.c.
+ * guard that depends on it -- the code that calls stb_image is in src/loader.c.
  *
- * Keeping the decoder (PNG inflate, JPEG, GIF, ...) out of core.c's translation
- * unit keeps core.c's code layout independent of the decoder's. In one TU, a
- * core.c change that never touches decoding can shift the decoder's alignment and
+ * Keeping the decoder (PNG inflate, JPEG, GIF, ...) out of loader.c's translation
+ * unit keeps loader.c's code layout independent of the decoder's. In one TU, a
+ * loader.c change that never touches decoding can shift the decoder's alignment and
  * move loading benchmarks past the 10% regression-gate threshold
  * (loading_grayscale/loading_rgb move by up to ~15% across -falign-functions
  * variants of byte-identical source).
@@ -25,6 +25,16 @@
  * before the include), so this checks its choice instead of making one. */
 #if defined(STBI_NO_THREAD_LOCALS)
 #error "libphash decodes from several threads; stb_image's failure reason must stay thread-local"
+#endif
+
+/* stb's own code, not ours: the stricter warnings the library is built with
+ * (CMakeLists.txt, PHASH_LIBRARY_WARNING_CANDIDATES) are silenced for this file, which
+ * holds nothing else. */
+#if defined(__GNUC__)
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#pragma GCC diagnostic ignored "-Wfloat-equal"
+#pragma GCC diagnostic ignored "-Wcast-align"
+#pragma GCC diagnostic ignored "-Wdouble-promotion"
 #endif
 
 #define STB_IMAGE_IMPLEMENTATION

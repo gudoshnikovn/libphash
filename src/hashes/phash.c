@@ -54,7 +54,7 @@ static void compute_dct_coefficients(float *matrix, int n) {
     c = (float)sqrt(2.0 / (double)n);
     for (int i = 1; i < n; i++) {
         for (int j = 0; j < n; j++) {
-            matrix[i * n + j] = (float)(c * cos(M_PI * i * (j + 0.5) / (double)n));
+            matrix[i * n + j] = (float)((double)c * cos(M_PI * i * (j + 0.5) / (double)n));
         }
     }
 }
@@ -180,10 +180,10 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     if (use_cache) {
         ph_init_dct_matrix();
         dct_mat = s_dct_matrix_32;
-        dct_out = (float *)(scratch + sz1);
+        dct_out = ph_arena_at(scratch, sz1);
     } else {
-        dct_mat = (float *)(scratch + sz1);
-        dct_out = (float *)((uint8_t *)dct_mat + sz2);
+        dct_mat = ph_arena_at(scratch, sz1);
+        dct_out = ph_arena_at(scratch, sz1 + sz2);
         compute_dct_coefficients(dct_mat, dct_size);
     }
 

@@ -27,5 +27,15 @@
  * job uses), so the job would still abort.
  */
 
+/* stb's own code, not ours: the stricter warnings the library is built with
+ * (CMakeLists.txt, PHASH_LIBRARY_WARNING_CANDIDATES) are silenced for this file, which
+ * holds nothing else. */
+#if defined(__GNUC__)
+#pragma GCC diagnostic ignored "-Wcast-qual"
+#pragma GCC diagnostic ignored "-Wfloat-equal"
+#pragma GCC diagnostic ignored "-Wcast-align"
+#pragma GCC diagnostic ignored "-Wdouble-promotion"
+#endif
+
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include "../../vendor/stb_image_resize2.h"

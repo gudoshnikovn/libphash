@@ -193,12 +193,12 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     ph_apply_gamma(ctx, blurred, ctx->image.width, ctx->image.height);
 
     ph_arena_mark_t arena_mark = ph_arena_mark(ctx);
-    double *projection_variances =
-        (double *)ph_get_scratchpad(ctx, (size_t)projections * sizeof(double));
-    if (!projection_variances) {
+    uint8_t *block = ph_get_scratchpad(ctx, (size_t)projections * sizeof(double));
+    if (!block) {
         free(blurred);
         return PH_ERR_ALLOCATION_FAILED;
     }
+    double *projection_variances = ph_arena_at(block, 0);
 
     double centerX = (double)ctx->image.width / 2.0;
     double centerY = (double)ctx->image.height / 2.0;

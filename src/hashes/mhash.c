@@ -105,7 +105,7 @@ void ph_mh_block_sums(const uint8_t *img, int n, int block, const float *kernel,
     /* The int64_t array goes first: the scratchpad is suitably aligned, and putting the
      * byte buffer first would leave it aligned only when pad_n * pad_n happens to be a
      * multiple of eight. */
-    int64_t *integral = (int64_t *)scratch;
+    int64_t *integral = ph_arena_at(scratch, 0);
     uint8_t *padded = scratch + (size_t)(pad_n + 1) * (size_t)(pad_n + 1) * sizeof(int64_t);
 
     for (int y = 0; y < pad_n; y++) {
