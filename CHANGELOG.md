@@ -376,6 +376,12 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   build type. A standalone configure that names no build type defaults to `Release`; under
   `add_subdirectory()` the parent's build type applies. The project's warning flags are not
   applied to the vendored decoders.
+- **The shared library exports only the functions of `libphash.h`.** 1.x exported every
+  internal helper, the bundled `stb_image`, and all of the libjpeg-turbo, libpng and
+  libwebp linked into it, so an application with its own copy of any of those got
+  whichever the dynamic linker found first. Both build systems compile with
+  `-fvisibility=hidden`, which also keeps the internals out of a shared library a consumer
+  builds from the static archive. See `MIGRATION.md`.
 - Clang is the default compiler in both build systems (`CMakePresets.json`'s `clang`
   preset; the Makefile's `CC`; 1.x: `gcc`) — still fully overridable
   (`-DCMAKE_C_COMPILER=gcc`, `CC=gcc make`, or the `gcc` preset).

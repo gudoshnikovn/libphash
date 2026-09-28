@@ -357,6 +357,12 @@ Shared builds carry a versioned soname, `SOVERSION = 2` (`libphash.so.2` /
 `libphash.2.dylib`). A binary linked against an unversioned 1.x shared library will not
 pick up 2.0 at runtime — relink against the installed 2.x library.
 
+The shared library exports exactly the functions of `libphash.h`. A 1.x shared build
+also exported libphash's internal helpers, the `stbi_*` functions of its bundled
+`stb_image`, and the libjpeg-turbo, libpng and libwebp symbols of the decoders linked into
+it. Code that called any of those through libphash fails to link against 2.0; link the
+library that provides them instead.
+
 ## `find_package(phash)` and pkg-config
 
 If your 1.x integration linked libphash by hand (raw `-lphash` plus manually-tracked
