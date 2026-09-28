@@ -211,6 +211,10 @@ We use `clang-format` with a custom style (based on LLVM with minor tweaks).
   `examples/`. `scripts/format.sh` holds both the scope and the version; `make format`
   and the CI `format-check` job both run it (`scripts/format.sh --check` for the CI
   check).
+- **Line endings and whitespace**: `.gitattributes` keeps every text file LF on every
+  platform and marks image fixtures and fuzz inputs binary; `.editorconfig` gives an
+  editor the same indentation, final newline and no trailing whitespace before
+  clang-format runs.
 
 ## Naming Conventions
 

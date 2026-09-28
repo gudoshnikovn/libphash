@@ -1,0 +1,23 @@
+# The whitespace settings an editor can apply before clang-format runs; .clang-format
+# remains the authority on C sources (scripts/format.sh).
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.{c,h}]
+indent_style = space
+indent_size = 4
+max_line_length = 100
+
+[*.{sh,yml,json}]
+indent_style = space
+
+[Makefile]
+indent_style = tab
+
+[*.md]
+trim_trailing_whitespace = false

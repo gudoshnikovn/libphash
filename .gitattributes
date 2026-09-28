@@ -1,0 +1,11 @@
+# Text is stored and checked out with LF on every platform: the formatting gate
+# (scripts/format.sh) and the shell scripts both depend on it.
+* text=auto eol=lf
+
+# Byte-exact inputs. Auto-detection would usually get these right, but a small crafted
+# fuzz input can look like text, and a converted line ending would silently change it.
+*.jpg  binary
+*.jpeg binary
+*.png  binary
+*.webp binary
+tests/fuzz/corpus/** binary
