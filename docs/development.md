@@ -200,9 +200,26 @@ guarded by `if(NOT ZLIB_LIBRARY)` and only feeds
 `find_package_handle_standard_args()`; libpng links `ZLIB::ZLIB`, i.e. the target.
 
 ### Formatting
-We use `clang-format` with a custom style (based on LLVM with minor tweaks).
-- **Indentation**: 4 spaces.
-- **Rule**: Run `make format` before every commit.
+`.clang-format` starts from the LLVM style and sets the rest explicitly, so that a practice
+the code follows is held by the gate rather than by habit.
+- **Rule**: Run `make format` before every commit; the CI `format-check` job fails on any
+  file that differs from what clang-format would print.
+- **Layout**: 4-space indent, 100 columns (80 would rewrap a third of the tree for no gain
+  in a C API with `ph_` prefixes), `{` on the same line, one statement per line --
+  no single-line `if`/loop/`case` bodies.
+- **Braces everywhere** (`InsertBraces`): every `if`/`for`/`while` body is a block, so a
+  second statement added under an unbraced `if` cannot silently run unconditionally.
+- **Preprocessor nesting is visible** (`IndentPPDirectives: AfterHash`): `#    include`
+  inside `#if` shows the level of the conditional it belongs to.
+- **Tables stay tables**: consecutive `#define`s, trailing comments, short `case` lines
+  and the `\` of a multi-line macro are aligned.
+- **Includes are ordered by machine** (`IncludeBlocks: Regroup`): the file's own header,
+  then the library's headers, then third-party, then system, each group sorted.
+- **One spelling**: `const` on the left (`const char *`), `*` next to the name, upper-case
+  hex digits (`0xFF`), a trailing comma after the last enumerator (adding one is then a
+  one-line diff), `return x;` without parentheses, LF line endings, a newline at the end.
+- **Left alone on purpose**: string literals are never split (a message stays greppable),
+  and macro bodies are formatted like the rest of the code.
 - **Version**: clang-format **23**, pinned (`pip install clang-format==23.1.1`).
   Different major versions format the same code differently, so `make format` refuses
   to run with any other major. The pin is raised only in a commit of its own, together

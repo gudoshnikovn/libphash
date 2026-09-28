@@ -1,18 +1,80 @@
 ---
+# Pinned to clang-format 23 (scripts/format.sh). The reasons behind the choices are in
+# docs/development.md, "Formatting".
 BasedOnStyle: LLVM
+Language: Cpp
+Standard: Latest
+
+# Layout
 IndentWidth: 4
-ColumnLimit: 100
 UseTab: Never
+ColumnLimit: 100
 BreakBeforeBraces: Attach
-AllowShortIfStatementsOnASingleLine: false
 IndentCaseLabels: true
+IndentGotoLabels: false
+IndentWrappedFunctionNames: true
+IndentPPDirectives: AfterHash
+BracedInitializerIndentWidth: 4
 AlignAfterOpenBracket: Align
 AlwaysBreakAfterReturnType: None
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+BreakStringLiterals: false
+BreakBeforeInlineASMColon: Always
+LineEnding: LF
+InsertNewlineAtEOF: true
+MaxEmptyLinesToKeep: 1
+KeepEmptyLines:
+  AtEndOfFile: false
+  AtStartOfBlock: false
+  AtStartOfFile: false
+KeepFormFeed: false
+RemoveEmptyLinesInUnwrappedLines: true
+SeparateDefinitionBlocks: Always
+
+# Spacing and qualifiers
 PointerAlignment: Right
+DerivePointerAlignment: false
+QualifierAlignment: Left
 SpaceAfterCStyleCast: false
 SpaceBeforeParens: ControlStatements
+SpaceInEmptyBraces: Never
+SpacesInLineCommentPrefix:
+  Minimum: 1
+  Maximum: 1
 Cpp11BracedListStyle: true
-SortIncludes: true
-MaxEmptyLinesToKeep: 1
----
 
+# Alignment
+AlignConsecutiveMacros:
+  Enabled: true
+  AcrossComments: true
+AlignConsecutiveShortCaseStatements:
+  Enabled: true
+AlignEscapedNewlines: Left
+AlignTrailingComments:
+  Kind: Always
+  OverEmptyLines: 0
+ReflowComments: true
+
+# Code the formatter adds or removes
+InsertBraces: true
+RemoveSemicolon: true
+RemoveParentheses: ReturnStatement
+EnumTrailingComma: Insert
+NumericLiteralCase:
+  HexDigit: Upper
+
+# Includes: this file's own header, then ours, then third-party, then system
+SortIncludes: CaseInsensitive
+MainIncludeChar: Quote
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^"(libphash|phash_version|context|arena|safety|digest|batch|fileio|loader|image/|hashes/|loaders/|test_macros|alloc_shim)'
+    Priority: 1
+  - Regex: '^"'
+    Priority: 2
+  - Regex: '^<'
+    Priority: 3
+...
