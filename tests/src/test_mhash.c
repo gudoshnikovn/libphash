@@ -87,6 +87,86 @@ void test_gaussian_blur_sigma_unit() {
     PASS("test_gaussian_blur_sigma_unit");
 }
 
+/* The blur against its direct form: every output is the clamped sum of kernel taps taken
+ * left to right, computed here one sample at a time with the same float arithmetic. The
+ * library computes the same sums in a different loop order and must match bit for bit --
+ * a different summation order would move the last bit of some samples and, after
+ * rounding to 8 bits, the mHash and Radial values. The sizes cover images narrower and
+ * shorter than the kernel, exactly one kernel wide, and wider than one internal strip. */
+static void reference_blur_sigma(const uint8_t *src, int w, int h, float sigma, float *scratch,
+                                 uint8_t *dst) {
+    int radius = (int)ceilf(3.0f * sigma);
+    if (radius < 1)
+        radius = 1;
+    if (radius > 64)
+        radius = 64;
+    float kernel[129];
+    float sum = 0.0f;
+    for (int i = -radius; i <= radius; i++) {
+        float v = expf(-(float)(i * i) / (2.0f * sigma * sigma));
+        kernel[i + radius] = v;
+        sum += v;
+    }
+    for (int i = 0; i <= 2 * radius; i++)
+        kernel[i] /= sum;
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            float acc = 0.0f;
+            for (int k = -radius; k <= radius; k++) {
+                int sx = x + k < 0 ? 0 : x + k >= w ? w - 1 : x + k;
+                acc += kernel[k + radius] * (float)src[(size_t)y * w + sx];
+            }
+            scratch[(size_t)y * w + x] = acc;
+        }
+    }
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            float acc = 0.0f;
+            for (int k = -radius; k <= radius; k++) {
+                int sy = y + k < 0 ? 0 : y + k >= h ? h - 1 : y + k;
+                acc += kernel[k + radius] * scratch[(size_t)sy * w + x];
+            }
+            int v = (int)(acc + 0.5f);
+            dst[(size_t)y * w + x] = (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v);
+        }
+    }
+}
+
+void test_gaussian_blur_sigma_matches_direct_form() {
+    const int sizes[] = {1, 2, 7, 22, 23, 24, 64, 257, 300, 531};
+    const float sigmas[] = {0.2f, 1.0f, 3.5f, 11.0f, 21.3f};
+    const int nsizes = (int)(sizeof(sizes) / sizeof(sizes[0]));
+    const int nsigmas = (int)(sizeof(sigmas) / sizeof(sigmas[0]));
+    uint32_t state = 12345u;
+    for (int a = 0; a < nsizes; a++) {
+        for (int b = 0; b < nsizes; b += 3) {
+            for (int c = 0; c < nsigmas; c++) {
+                int w = sizes[a], h = sizes[b];
+                size_t n = (size_t)w * (size_t)h;
+                uint8_t *src = malloc(n), *want = malloc(n), *got = malloc(n);
+                float *scratch = malloc(n * sizeof(float));
+                ASSERT(src && want && got && scratch);
+                for (size_t i = 0; i < n; i++) {
+                    state = state * 1664525u + 1013904223u;
+                    src[i] = (uint8_t)(state >> 24);
+                }
+                reference_blur_sigma(src, w, h, sigmas[c], scratch, want);
+                ph_gaussian_blur_sigma(src, w, h, sigmas[c], scratch, got);
+                if (memcmp(want, got, n) != 0) {
+                    printf("blur differs from the direct form at %dx%d, sigma %g\n", w, h,
+                           (double)sigmas[c]);
+                    ASSERT(0);
+                }
+                free(src);
+                free(want);
+                free(got);
+                free(scratch);
+            }
+        }
+    }
+    PASS("test_gaussian_blur_sigma_matches_direct_form");
+}
+
 /* The fast block sums against the definition they stand for.
  *
  * ph_mh_block_sums() folds the 16x16 block sum into the kernel and evaluates it through an
@@ -293,6 +373,7 @@ int main() {
     test_mh_kernel_matches_the_definition();
     test_equalize_histogram_unit();
     test_gaussian_blur_sigma_unit();
+    test_gaussian_blur_sigma_matches_direct_form();
     test_mh_block_sums_match_the_direct_definition();
     test_mhash_e2e();
     test_mhash_on_a_flat_image();
