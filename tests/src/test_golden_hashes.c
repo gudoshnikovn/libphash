@@ -4,17 +4,17 @@
 // change to hash output (e.g. an optimization that subtly changes results)
 // shows up as a failing test here, instead of silently shipping.
 //
-// One golden file used to cover every build. It could not: TurboJPEG and the
-// stb_image JPEG fallback round their IDCT differently, so the *same* pixels
-// never reach the hash functions in a TurboJPEG build and a stb-only build --
-// this is not decoder noise absorbable by a tolerance, it is a different
-// input. On darwin-arm64 that alone put 12/72 checks (every mHash/ColorHash/
+// One golden file cannot cover every build: libjpeg-turbo and the stb_image
+// JPEG fallback round their IDCT differently, so the *same* pixels never reach
+// the hash functions in a libjpeg-turbo build and a stb-only build -- this is
+// not decoder noise absorbable by a tolerance, it is a different input. On
+// darwin-arm64 that alone puts 12/72 checks (every mHash/ColorHash/
 // ColorMoments entry on a JPEG fixture) outside a tolerance of 2. So instead
 // of one file, the golden path is namespaced by the backend set the binary
 // was actually built with -- see PH_GOLDEN_BACKEND_SET below, computed from
 // the same PH_USE_* macros the loader dispatches on, never set by hand in CI.
 // Each backend set gets its own committed file; a build picks its file by
-// construction, so switching PHASH_USE_TURBOJPEG/PHASH_USE_LIBPNG/
+// construction, so switching PHASH_USE_LIBJPEG_TURBO/PHASH_USE_LIBPNG/
 // PHASH_USE_SPNG/PHASH_USE_WEBP can never compare against the wrong one.
 //
 // What tolerance is still for, once decoder identity is no longer the
@@ -77,8 +77,8 @@ static int golden_tolerance_levels(const char *algo) {
 /* The backend set a build actually decodes with, computed from the same PH_USE_*
  * macros src/loader.c dispatches on -- never set by hand, so it cannot drift out of
  * sync with what the binary was actually built with. */
-#if defined(PH_USE_TURBOJPEG)
-#define PH_GOLDEN_JPEG_TAG "turbojpeg"
+#if defined(PH_USE_LIBJPEG_TURBO)
+#define PH_GOLDEN_JPEG_TAG "libjpegturbo"
 #else
 #define PH_GOLDEN_JPEG_TAG "stbjpeg"
 #endif
@@ -109,7 +109,7 @@ static int golden_tolerance_levels(const char *algo) {
  * strict >, and natural photos commonly cluster many near-zero high-frequency
  * coefficients tightly around that median, so a sub-tolerance perturbation can shift
  * the median itself and flip every coefficient sitting close to it at once. This is
- * decoder-identity-independent (reproduces on both stb and TurboJPEG+libpng) and
+ * decoder-identity-independent (reproduces on both stb and libjpeg-turbo+libpng) and
  * reproduces on every 2.0.0 build regardless of PH_USE_* backend selection, unlike
  * the JPEG-IDCT-rounding split PH_GOLDEN_BACKEND_SET exists for above -- it is
  * purely a function of which architecture's DCT summation order produced the pixels'

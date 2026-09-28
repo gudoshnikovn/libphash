@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # R42: builds and installs the release configuration (the same vendored decoder
-# set as CI's build-and-test job -- TurboJPEG + libpng + libwebp + zlib-ng, see
+# set as CI's build-and-test job -- libjpeg-turbo + libpng + libwebp + zlib-ng, see
 # scripts/coverage_cmake.sh's "native" leg for the same claim) into a throwaway
 # prefix, then packs that prefix plus LICENSE/THIRD-PARTY-NOTICES.md into a
 # release archive named libphash-<version>-<platform>[-shared].{tar.gz,zip}.
@@ -43,7 +43,7 @@ package_one() {
     local build_dir="$WORK_DIR/build-$kind"
     local stage_dir="$WORK_DIR/stage-$kind/$name"
 
-    echo "==> [$kind] configuring (release decoder set: TurboJPEG+libpng+webp+zlib-ng)"
+    echo "==> [$kind] configuring (release decoder set: libjpeg-turbo+libpng+webp+zlib-ng)"
     cmake -S "$ROOT_DIR" -B "$build_dir" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_INSTALL_PREFIX="$stage_dir" \

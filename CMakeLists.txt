@@ -151,7 +151,7 @@ configure_file(
 # --- Options ---
 option(PHASH_BUILD_TESTS "Build tests" ON)
 option(PHASH_BUILD_SHARED "Build shared library" OFF)
-option(PHASH_USE_TURBOJPEG "Use bundled libjpeg-turbo for fast JPEG decoding" ON)
+option(PHASH_USE_LIBJPEG_TURBO "Use bundled libjpeg-turbo for fast JPEG decoding" ON)
 option(PHASH_USE_LIBPNG "Use bundled libpng for fast PNG decoding" ON)
 option(PHASH_USE_SPNG "Use bundled spng (single-file, low-level) instead of libpng for PNG decoding" OFF)
 option(PHASH_USE_WEBP "Use external libwebp for WebP decoding" ON)
@@ -159,7 +159,7 @@ option(PHASH_USE_ZLIB_NG "Use bundled zlib-ng (zlib-compat) instead of system zl
 option(PHASH_OPTIMIZE_NATIVE "Optimize for host CPU architecture (-march=native)" OFF)
 option(PHASH_BUILD_FUZZERS "Build libFuzzer harnesses (requires Clang)" OFF)
 option(PHASH_ENABLE_MOCK_BACKEND "Register the DE AD mock decoder in the loader's backend table (test-only; must never be ON in a shipped build)" OFF)
-option(PHASH_STRICT_DEPS "Fail the configure step instead of silently falling back when a bundled decoder dependency (e.g. vendored TurboJPEG/zlib-ng) can't be found" OFF)
+option(PHASH_STRICT_DEPS "Fail the configure step instead of silently falling back when a bundled decoder dependency (e.g. vendored libjpeg-turbo/zlib-ng) can't be found" OFF)
 option(PHASH_ENABLE_THREADS "Let ph_hash_files()/ph_hash_buffers() spawn a pool of OS threads (pthreads/Win32) instead of always running sequentially" ON)
 # R24: `make coverage` (Makefile) only ever measures the stb_image-only path -- the
 # native decoders (src/loaders/{jpeg,png,webp}.c) compile to nothing but their
@@ -183,6 +183,18 @@ if(PHASH_USE_LIBPNG AND PHASH_USE_SPNG)
         "compiled in. PHASH_USE_LIBPNG defaults to ON, so selecting spng means turning "
         "libpng off explicitly:\n"
         "  cmake -S . -B build -DPHASH_USE_SPNG=ON -DPHASH_USE_LIBPNG=OFF")
+endif()
+
+# The JPEG option is named after the codec, libjpeg-turbo. CMake silently ignores an
+# unknown -D, and PHASH_USE_TURBOJPEG is the name a build script is likely to pass for
+# it; ignoring that would quietly build the default backend set instead of the one the
+# script asks for, so it is refused with the right name.
+if(DEFINED PHASH_USE_TURBOJPEG)
+    message(FATAL_ERROR
+        "PHASH_USE_TURBOJPEG is not an option of this project; the JPEG backend is "
+        "selected with PHASH_USE_LIBJPEG_TURBO. Pass that instead, and remove the old "
+        "entry from an existing build directory's cache:\n"
+        "  cmake -S . -B build -UPHASH_USE_TURBOJPEG -DPHASH_USE_LIBJPEG_TURBO=${PHASH_USE_TURBOJPEG}")
 endif()
 
 if(PHASH_IS_TOP_LEVEL)
@@ -428,23 +440,21 @@ if(PHASH_ENABLE_THREADS)
 endif()
 
 # --- Bundled libjpeg-turbo (libjpeg API, jpeg-static) ---
-if(PHASH_USE_TURBOJPEG)
+if(PHASH_USE_LIBJPEG_TURBO)
     # The libjpeg API archive (jpeg-static), not the TurboJPEG one (turbojpeg-static):
     # libjpeg-turbo 3.x compiles its own zlib and spng into the TurboJPEG archive, with
     # global symbols, for image-file I/O this library never uses -- and on macOS libpng
-    # and spng then bound to those copies instead of the vendored zlib-ng and spng.
-    # jpeg-static is the codec alone. src/loaders/jpeg.c decodes exactly as TurboJPEG did.
+    # and spng would then bind to those copies instead of the vendored zlib-ng and spng.
+    # jpeg-static is the codec alone.
     #
     # libjpeg-turbo doesn't like add_subdirectory, so we point to the pre-built lib.
     # NO_DEFAULT_PATH: otherwise a system copy (e.g. Homebrew's jpeg-turbo) found on the
-    # default search path wins over the vendored static build here, even when both exist
-    # -- see tasks/PROGRESS.md known bugs (task 7).
+    # default search path wins over the vendored static build here, even when both exist.
     #
     # The extra PATHS entries below are multi-config generator output dirs (Visual Studio
     # on Windows): a single-config generator (Makefiles, Ninja) writes the archive
     # straight into .../build, but a multi-config one writes .../build/<config> instead,
-    # and never both -- found on a real Windows runner while validating R42's release
-    # workflow. The archive is named libjpeg.a on Unix and jpeg-static.lib with MSVC.
+    # and never both. The archive is named libjpeg.a on Unix and jpeg-static.lib with MSVC.
     set(_phash_libjpeg_find_library_args
         NAMES jpeg jpeg-static
         PATHS ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/build
@@ -455,9 +465,9 @@ if(PHASH_USE_TURBOJPEG)
         NO_DEFAULT_PATH)
     find_library(PHASH_LIBJPEG_LIB ${_phash_libjpeg_find_library_args})
 
-    # R90: a plain `cmake -B build` used to silently fall back to stb_image here, because
-    # CI was the only place that ran this sub-build. Do it ourselves at configure time
-    # (once -- cached by PHASH_LIBJPEG_LIB like the pre-built case above).
+    # Not built yet: build it here at configure time, so a plain `cmake -B build` gets
+    # the native JPEG backend instead of silently falling back to stb_image (once --
+    # cached by PHASH_LIBJPEG_LIB like the pre-built case above).
     if(NOT PHASH_LIBJPEG_LIB AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/CMakeLists.txt)
         message(STATUS "Vendored libjpeg-turbo not built yet -- building it now (one-time; cd vendor/libjpeg-turbo to rebuild manually if this ever needs to change).")
         execute_process(
@@ -484,7 +494,7 @@ if(PHASH_USE_TURBOJPEG)
     endif()
 
     if(PHASH_LIBJPEG_LIB)
-        target_compile_definitions(phash PRIVATE PH_USE_TURBOJPEG)
+        target_compile_definitions(phash PRIVATE PH_USE_LIBJPEG_TURBO)
         # BUILD_INTERFACE: link the build-tree archive directly. INSTALL_INTERFACE: link
         # the copy installed below instead -- the build-tree path won't exist for an
         # installed consumer.

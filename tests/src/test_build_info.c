@@ -24,8 +24,8 @@
 #define EXPECT_NATIVE_PNG 0
 #endif
 
-#if defined(PH_USE_TURBOJPEG)
-#define EXPECT_JPEG "turbojpeg"
+#if defined(PH_USE_LIBJPEG_TURBO)
+#define EXPECT_JPEG "libjpeg-turbo"
 #define EXPECT_NATIVE_JPEG 1
 #else
 #define EXPECT_JPEG "stb"

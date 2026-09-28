@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   # Same release decoder set as CI's build-and-test job and scripts/coverage_cmake.sh's
-  # "native" leg: TurboJPEG + libpng + libwebp + zlib-ng, PHASH_STRICT_DEPS=ON so a
+  # "native" leg: libjpeg-turbo + libpng + libwebp + zlib-ng, PHASH_STRICT_DEPS=ON so a
   # silently-missing backend fails the build instead of shipping a quietly
   # degraded artifact.
   # macos-x86_64 (the macos-13 runner label) is deliberately not in this matrix.
@@ -87,13 +87,11 @@ jobs:
     # submodule is configured+built standalone; scripts/package_release.sh's
     # main configure then finds the resulting static lib in this build dir.
     # -DCMAKE_POSITION_INDEPENDENT_CODE=ON: this build packages both a static and
-    # a shared libphash from the same TurboJPEG archive, and unlike libpng/webp/
+    # a shared libphash from the same libjpeg archive, and unlike libpng/webp/
     # zlib-ng (pulled in via add_subdirectory(), which inherits this project's own
-    # -fPIC from CMakeLists.txt), TurboJPEG is built as a fully separate CMake
+    # -fPIC from CMakeLists.txt), libjpeg-turbo is built as a fully separate CMake
     # invocation that never sees that flag. Without it, linking libphash.so
-    # against libjpeg.a fails on Linux with "recompile with -fPIC" -- found
-    # by this workflow's own pre-release-tag validation run (R42), see
-    # tasks/review/PROGRESS.md.
+    # against libjpeg.a fails on Linux with "recompile with -fPIC".
     - name: Build vendored libjpeg-turbo
       run: |
         cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON

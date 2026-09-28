@@ -80,13 +80,9 @@ static void guard_check(const uint8_t *front, const uint8_t *back, const char *t
 #define ALLOW_DECODE 0x2 /* PH_ERR_DECODER_UNAVAILABLE: e.g. WebP with no decoder built in */
 #define ALLOW_EMPTY 0x4  /* PH_ERR_EMPTY_IMAGE: the load before the hash failed */
 /* PH_ERR_CORRUPT_DATA, but ONLY for the decode checks below that opt into this
- * flag -- NOT a blanket allowance. Each vendored decoder has at least one specific
- * internal allocation whose failure it cannot cleanly distinguish from a
- * genuinely broken bitstream, with no way for this wrapper to tell them apart:
- *   - TurboJPEG: a malloc failing inside jpeg_read_header()'s marker tables can
- *     leave libjpeg with stale state it then misreports with wording that carries
- *     no indication the root cause was an allocation failure at all (see
- *     ph_tj_message_is_oom()'s doc comment in src/loaders/jpeg.c).
+ * flag -- NOT a blanket allowance. Two vendored decoders have a specific internal
+ * allocation whose failure they cannot cleanly distinguish from a genuinely broken
+ * bitstream, with no way for this wrapper to tell them apart:
  *   - libwebp: one specific decode-time allocation failure surfaces as
  *     VP8_STATUS_BITSTREAM_ERROR, a status WebPDecode() also uses for real
  *     corruption -- its status code doesn't distinguish the two here either.
@@ -101,7 +97,9 @@ static void guard_check(const uint8_t *front, const uint8_t *back, const char *t
  * in src/loaders/png.c covers every OOM wording it can produce precisely -- so on a
  * libpng build this flag never actually triggers on scen_load_file()/
  * scen_hash_all(), and a real future libpng misclassification regression still
- * fails loudly there; it only matters for a PHASH_USE_SPNG build. */
+ * fails loudly there; it only matters for a PHASH_USE_SPNG build. Nor does the
+ * libjpeg-turbo JPEG backend: libjpeg reports every failed allocation as
+ * JERR_OUT_OF_MEMORY, so scen_load_memory() never takes this allowance either. */
 #define ALLOW_CORRUPT 0x8
 
 static int check(const char *tag, ph_error_t err, int allowed) {
@@ -479,15 +477,15 @@ static void test_stb_oom_reason_pinned(void) {
 
     /* This pins ph_stb_reason_is_oom(), which only matters on the stb_image decode
      * path -- but JPEG only takes that path when no native JPEG backend is compiled
-     * in. On a TurboJPEG build (ph_can_use_jpeg() == 1) g_jpeg decodes through
-     * ph_decode_jpeg_tj() instead, which never produces stb's "outofmem" reason at
-     * all -- every injected allocation failure there surfaces libjpeg-turbo's own
-     * "Insufficient memory (case N)" message (or, if unmapped, PH_ERR_CORRUPT_DATA),
+     * in. On a libjpeg-turbo build (ph_can_use_jpeg() == 1) g_jpeg decodes through
+     * ph_decode_jpeg_mem() instead, which never produces stb's "outofmem" reason at
+     * all -- every injected allocation failure there surfaces libjpeg's own
+     * "Insufficient memory (case N)" message with PH_ERR_ALLOCATION_FAILED,
      * so the sweep below would legitimately never see "outofmem" and this assertion
      * would fail for a reason that has nothing to do with ph_stb_reason_is_oom()
      * being stale. Skip rather than assert something this build cannot exercise. */
     if (ph_can_use_jpeg()) {
-        printf("  %-24s SKIPPED (TurboJPEG compiled in -- JPEG doesn't take the stb "
+        printf("  %-24s SKIPPED (libjpeg-turbo compiled in -- JPEG doesn't take the stb "
                "decode path this pins)\n",
                "stb oom pinning");
         return;

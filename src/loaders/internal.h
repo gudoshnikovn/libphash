@@ -38,7 +38,7 @@ static inline int ph_png_dimensions_within_limit(const unsigned char *buffer, si
     return !ph_exceeds_dimension_limit(w, h);
 }
 
-#ifdef PH_USE_TURBOJPEG
+#ifdef PH_USE_LIBJPEG_TURBO
 int ph_can_read_jpeg(const uint8_t *magic, size_t len);
 #endif
 

@@ -10,7 +10,7 @@
 // external image tools, no new vendored dependency -- deliberately simpler
 // transforms than a real JPEG re-encode at multiple quality levels, which
 // would need vendoring an encoder or wiring one test binary to link
-// TurboJPEG directly; not worth it for what this test needs to prove (see
+// libjpeg-turbo directly; not worth it for what this test needs to prove (see
 // tasks/PROGRESS.md, task 13 notes).
 #include "libphash.h"
 #include "test_macros.h"

@@ -7,16 +7,15 @@
 #include <stdio.h>
 
 // =====================================================================
-// Build Configuration Flags (set by CMake or _build.py):
+// Build configuration flags, set by CMakeLists.txt from the PHASH_USE_* options:
 //
-//   PH_USE_TURBOJPEG  — Static libjpeg-turbo (TurboJPEG API)
-//   PH_USE_LIBPNG     — Static libpng (ARM NEON optimized)
-//   PH_USE_SPNG       — Static spng + zlib (x86 optimized, 43% faster on Linux)
+//   PH_USE_LIBJPEG_TURBO — vendored libjpeg-turbo, through its libjpeg API
+//   PH_USE_LIBPNG        — vendored libpng
+//   PH_USE_SPNG          — vendored spng
+//   PH_USE_WEBP          — vendored libwebp
 //
 // PH_USE_LIBPNG and PH_USE_SPNG are mutually exclusive.
 // When none are defined: stb_image handles everything (zero dependencies).
-// Default: PH_USE_TURBOJPEG + PH_USE_LIBPNG on ARM, PH_USE_SPNG on x86.
-// Override: LIBPHASH_MINIMAL=1 disables all at pip install time.
 // =====================================================================
 
 // Magic-byte check that stays available regardless of whether a WebP decoder is
@@ -43,7 +42,7 @@ static inline int ph_magic_is_webp(const uint8_t *magic, size_t len) {
 // defect in its own right, since a caller sees a different answer to the same input
 // depending on how the library was compiled. ph_set_err_msg() never allocates.
 
-#ifdef PH_USE_TURBOJPEG
+#ifdef PH_USE_LIBJPEG_TURBO
 // --- JPEG: vendored libjpeg-turbo through its libjpeg API (jpeg-static) ---
 // The only backend that honors decode_scale -- see ph_context_set_decode_scale().
 unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int *width, int *height,

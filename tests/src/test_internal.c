@@ -119,7 +119,7 @@ static void test_hamming_uint64_full_flip(void) {
  * main
  * ========================================================= */
 
-/* ph_set_err_msg() carries decoder messages (TurboJPEG, libpng, stb) into the context's
+/* ph_set_err_msg() carries decoder messages (libjpeg, libpng, stb) into the context's
  * buffer. A truncation must not split a UTF-8 character; what was not UTF-8 to begin with
  * is passed through untouched. */
 static void test_err_msg_truncation_keeps_utf8(void) {

@@ -302,6 +302,17 @@ nowhere near it.
 Recompute any compile-time `#if PH_VERSION_NUMBER >= ...` check against the new
 scheme — there is no way to keep both.
 
+### `PHASH_USE_TURBOJPEG` is `PHASH_USE_LIBJPEG_TURBO`
+
+The CMake option that selects the native JPEG decoder is named after the codec,
+libjpeg-turbo. Configuring with the 1.x name stops with an error that gives the new one:
+
+```bash
+cmake -S . -B build -DPHASH_USE_LIBJPEG_TURBO=OFF   # 1.x: -DPHASH_USE_TURBOJPEG=OFF
+```
+
+In an existing build directory, also drop the old cache entry with `-UPHASH_USE_TURBOJPEG`.
+
 ### Shared library consumers must relink
 
 Shared builds now carry a versioned soname, `SOVERSION = 2` (`libphash.so.2` /

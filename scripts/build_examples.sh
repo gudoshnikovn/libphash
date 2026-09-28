@@ -17,7 +17,7 @@ PREFIX_DIR="$WORK_DIR/prefix"
 echo "==> Configuring + installing libphash (minimal, stb_image only -- examples don't need the vendored decoders)"
 cmake -S "$ROOT_DIR" -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$PREFIX_DIR" -DPHASH_BUILD_TESTS=OFF \
-    -DPHASH_USE_TURBOJPEG=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
+    -DPHASH_USE_LIBJPEG_TURBO=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
 cmake --build "$BUILD_DIR" --target phash -j
 cmake --install "$BUILD_DIR"
 

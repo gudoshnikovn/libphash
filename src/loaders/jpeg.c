@@ -3,19 +3,18 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#ifdef PH_USE_TURBOJPEG
+#ifdef PH_USE_LIBJPEG_TURBO
 
-/* The vendored libjpeg-turbo, through its libjpeg API (the jpeg-static archive), not the
- * TurboJPEG API. libjpeg-turbo 3.x compiles its own copies of zlib and spng into the
- * TurboJPEG archive -- for tj3LoadImage()/tj3SaveImage(), which this library never calls --
- * with global symbols, and on macOS libpng and spng bound to those copies instead of the
- * vendored zlib-ng and spng. jpeg-static has neither.
+/* The vendored libjpeg-turbo, through its libjpeg API (the jpeg-static archive). The
+ * TurboJPEG archive would bring its own copies of zlib and spng with global symbols -- for
+ * tj3LoadImage()/tj3SaveImage(), which this library never calls -- and on macOS libpng and
+ * spng would bind to those copies instead of the vendored zlib-ng and spng. jpeg-static is
+ * the codec alone.
  *
- * The decode reproduces what TurboJPEG's tjDecompress2() did with the flags this backend
- * passed (TJFLAG_FASTDCT), so the pixels -- and every hash -- are unchanged: the fast
- * integer IDCT, fancy (smooth) chroma upsampling, DCT-domain scaling for decode_scale, and
- * any libjpeg warning (a truncated stream, stray bytes before a marker) turned into a
- * failure, as TurboJPEG turns it into a -1 return. */
+ * Decode settings: the fast integer IDCT, fancy (smooth) chroma upsampling, DCT-domain
+ * scaling for decode_scale, and any libjpeg warning (a truncated stream, stray bytes
+ * before a marker) treated as a failure. These settings fix the decoded pixels, so
+ * changing any of them changes hash values. */
 #include <setjmp.h>
 #include <string.h>
 
@@ -49,8 +48,8 @@ static void ph_jpeg_error_exit(j_common_ptr cinfo) {
 }
 
 /* msg_level < 0 is a warning: libjpeg recovered from damaged data and would carry on,
- * handing back an image with made-up content. A warning is a failure here, as it is for
- * TurboJPEG, and the first one ends the decode -- nothing after it is worth decoding.
+ * handing back an image with made-up content. A warning is a failure here, and the first
+ * one ends the decode -- nothing after it is worth decoding.
  * Trace messages (msg_level >= 0) are ignored; nothing is ever printed to stderr. */
 static void ph_jpeg_emit_message(j_common_ptr cinfo, int msg_level) {
     if (msg_level < 0)
@@ -60,8 +59,8 @@ static void ph_jpeg_emit_message(j_common_ptr cinfo, int msg_level) {
 static void ph_jpeg_output_message(j_common_ptr cinfo) { (void)cinfo; }
 
 /* decode_scale -> libjpeg's scale_num/scale_denom. libjpeg then picks the output size
- * itself (jpeg_calc_output_dimensions(): ceil(dimension * num / denom)), which is the same
- * rounding TurboJPEG's TJSCALED() applied, so a scaled decode keeps its dimensions. */
+ * itself (jpeg_calc_output_dimensions(): ceil(dimension * num / denom)), so an image with
+ * a side that is not a multiple of the denominator rounds up, never down to zero. */
 static unsigned int ph_jpeg_scale_denom(ph_decode_scale_t decode_scale) {
     switch (decode_scale) {
         case PH_DECODE_SCALE_HALF:
@@ -185,8 +184,8 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
     for (JDIMENSION y = 0; y < h; y++)
         rows[y] = output + (size_t)y * stride;
 
-    /* Every row pointer at once, as TurboJPEG passed them: libjpeg writes straight into
-     * the output instead of staging rows in a buffer of its own. */
+    /* Every row pointer at once: libjpeg writes straight into the output instead of
+     * staging rows in a buffer of its own. */
     while (cinfo.output_scanline < h)
         jpeg_read_scanlines(&cinfo, rows + cinfo.output_scanline, h - cinfo.output_scanline);
     jpeg_finish_decompress(&cinfo);
@@ -202,4 +201,4 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
 #else
 // No native JPEG decoder -- stb_image will handle JPEG
 PH_API int ph_can_use_jpeg(void) { return 0; }
-#endif // PH_USE_TURBOJPEG
+#endif // PH_USE_LIBJPEG_TURBO

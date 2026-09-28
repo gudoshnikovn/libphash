@@ -24,7 +24,7 @@ issue. Please include:
   `ph_load_from_memory()`, `ph_load_from_pixels()`, or a hash/comparison function).
 - What you observed (crash, sanitizer report, hang, wrong output with a security
   implication) versus what you expected.
-- Which decoder backend(s) it reproduces under, if known (native TurboJPEG/libpng/
+- Which decoder backend(s) it reproduces under, if known (native libjpeg-turbo/libpng/
   spng/libwebp, or the `stb_image` fallback) — see `docs/development.md` for how to
   build each configuration.
 

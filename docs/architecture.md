@@ -12,7 +12,7 @@ dispatches across a small table of `{can_read, decode}` pairs (`backends[]`), tr
 order:
 
 1. **Native backends**, each compiled in only when its `PH_USE_*` flag is set:
-   `jpeg.c` (libjpeg-turbo/TurboJPEG), `png.c` (libpng *or* spng — mutually exclusive,
+   `jpeg.c` (libjpeg-turbo, libjpeg API), `png.c` (libpng *or* spng — mutually exclusive,
    selected at compile time), `webp.c` (libwebp).
 2. **`stb_image`** (`src/loaders/stb_image_impl.c`, wrapping the vendored
    `vendor/stb_image.h`) — always registered last, **unconditionally**, not behind any

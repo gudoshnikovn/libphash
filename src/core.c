@@ -72,8 +72,8 @@ PH_API int ph_version_number(void) { return PH_VERSION_NUMBER; }
  * nothing to allocate, nothing to get wrong at run time. The PH_USE_* and
  * PH_ENABLE_* macros are the same ones that select the code, so the line cannot claim
  * a backend that was not compiled in. */
-#if defined(PH_USE_TURBOJPEG)
-#define PH_BUILD_JPEG "turbojpeg"
+#if defined(PH_USE_LIBJPEG_TURBO)
+#define PH_BUILD_JPEG "libjpeg-turbo"
 #else
 #define PH_BUILD_JPEG "stb"
 #endif

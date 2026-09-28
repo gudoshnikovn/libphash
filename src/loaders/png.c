@@ -62,8 +62,8 @@ typedef struct {
  *     unrelated wording, since it never goes through libpng's own allocator at
  *     all.
  * All three are otherwise ordinary fatal errors indistinguishable from a
- * malformed bitstream unless checked for here. Same idea as
- * ph_tj_message_is_oom() in src/loaders/jpeg.c for the TurboJPEG backend. */
+ * malformed bitstream unless checked for here. (The JPEG backend needs no such
+ * table: libjpeg reports every failed allocation as JERR_OUT_OF_MEMORY.) */
 static int ph_png_message_is_oom(const char *msg) {
     /* Substring, not exact match: a chunk-level failure (e.g. reading IDAT itself
      * running out of memory) reaches here via png_chunk_error()/png_chunk_benign_error(),

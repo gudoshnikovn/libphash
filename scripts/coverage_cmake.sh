@@ -7,7 +7,7 @@
 # never exercised or measured by that flow -- exactly the code R16-R18 lived in.
 #
 # This script drives two separate CMake+ctest runs with PHASH_COVERAGE=ON:
-#   - "native": the default vendored decoder set (TurboJPEG + libpng + libwebp +
+#   - "native": the default vendored decoder set (libjpeg-turbo + libpng + libwebp +
 #     zlib-ng), i.e. the config CI's build-and-test job and releases actually ship.
 #   - "spng": the alternative PNG backend (PHASH_USE_SPNG=ON, PHASH_USE_LIBPNG=OFF)
 #     -- a separate run because the two PNG backends are mutually exclusive within
@@ -58,11 +58,11 @@ capture_run() {
 }
 
 capture_run "$OUT_DIR/build-native" native \
-    -DPHASH_USE_TURBOJPEG=ON -DPHASH_USE_LIBPNG=ON -DPHASH_USE_SPNG=OFF \
+    -DPHASH_USE_LIBJPEG_TURBO=ON -DPHASH_USE_LIBPNG=ON -DPHASH_USE_SPNG=OFF \
     -DPHASH_USE_WEBP=ON -DPHASH_USE_ZLIB_NG=ON
 
 capture_run "$OUT_DIR/build-spng" spng \
-    -DPHASH_USE_TURBOJPEG=ON -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_SPNG=ON \
+    -DPHASH_USE_LIBJPEG_TURBO=ON -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_SPNG=ON \
     -DPHASH_USE_WEBP=ON -DPHASH_USE_ZLIB_NG=ON
 
 lcov -a "$OUT_DIR/native.info" -a "$OUT_DIR/spng.info" -o "$OUT_DIR/merged.info" \

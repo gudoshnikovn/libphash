@@ -59,7 +59,7 @@ jobs:
 
   # Full vendored build (all bundled decoders) across the platforms/arches we
   # actually ship for. PHASH_STRICT_DEPS=ON turns a silent decoder fallback
-  # (e.g. TurboJPEG not found) into a hard configure failure, so a CI green
+  # (e.g. libjpeg-turbo not found) into a hard configure failure, so a CI green
   # here means the vendored decoders were genuinely built and linked, not
   # quietly swapped for stb_image (see tasks/PROGRESS.md known bugs, task 7).
   build-and-test:
@@ -173,7 +173,7 @@ jobs:
     - name: Configure CMake (minimal, stb_image only)
       run: >
         cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
-        -DPHASH_USE_TURBOJPEG=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
+        -DPHASH_USE_LIBJPEG_TURBO=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
 
     - name: Build
       run: cmake --build build --config Release
@@ -241,7 +241,7 @@ jobs:
       run: >
         cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
         -DCMAKE_C_STANDARD=${{ matrix.std }} -DCMAKE_C_STANDARD_REQUIRED=ON
-        -DPHASH_USE_TURBOJPEG=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
+        -DPHASH_USE_LIBJPEG_TURBO=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
 
     - name: Build
       run: cmake --build build --config Release
@@ -253,7 +253,7 @@ jobs:
   # row_ptrs overflow) trigger at much smaller inputs on a 32-bit size_t/int than on
   # 64-bit -- the matrix above never exercised that width at all. Scoped to the
   # native PNG backend (libpng) plus system zlib, not the full vendored set: cross-
-  # building TurboJPEG/zlib-ng's own NASM-based 32-bit SIMD and libwebp under -m32
+  # building libjpeg-turbo/zlib-ng's own NASM-based 32-bit SIMD and libwebp under -m32
   # is a much larger, separate lift, and this backend already links the one native
   # decoder (src/loaders/png.c) that the overflow fixes this leg exists to guard
   # (R03/R17) live in.
@@ -277,7 +277,7 @@ jobs:
     - name: Configure CMake (32-bit, libpng)
       run: >
         cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
-        -DPHASH_USE_TURBOJPEG=OFF -DPHASH_USE_LIBPNG=ON -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
+        -DPHASH_USE_LIBJPEG_TURBO=OFF -DPHASH_USE_LIBPNG=ON -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
         -DCMAKE_C_FLAGS="-m32 -Werror=incompatible-pointer-types"
         -DCMAKE_EXE_LINKER_FLAGS=-m32 -DCMAKE_SYSTEM_PROCESSOR=i686
 
@@ -449,22 +449,22 @@ jobs:
           - name: stb-only
             submodules: 'false'
             cmake_args: >-
-              -DPHASH_USE_TURBOJPEG=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF
+              -DPHASH_USE_LIBJPEG_TURBO=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF
               -DPHASH_USE_ZLIB_NG=OFF
           - name: libpng-zlibng-webp
             submodules: 'true'
             cmake_args: >-
-              -DPHASH_USE_TURBOJPEG=OFF -DPHASH_USE_LIBPNG=ON -DPHASH_USE_WEBP=ON
+              -DPHASH_USE_LIBJPEG_TURBO=OFF -DPHASH_USE_LIBPNG=ON -DPHASH_USE_WEBP=ON
               -DPHASH_USE_ZLIB_NG=ON -DPHASH_STRICT_DEPS=ON
           - name: full-native
             submodules: 'true'
             cmake_args: >-
-              -DPHASH_USE_TURBOJPEG=ON -DPHASH_USE_LIBPNG=ON -DPHASH_USE_WEBP=ON
+              -DPHASH_USE_LIBJPEG_TURBO=ON -DPHASH_USE_LIBPNG=ON -DPHASH_USE_WEBP=ON
               -DPHASH_USE_ZLIB_NG=ON -DPHASH_STRICT_DEPS=ON
           - name: spng-zlibng
             submodules: 'true'
             cmake_args: >-
-              -DPHASH_USE_TURBOJPEG=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_SPNG=ON
+              -DPHASH_USE_LIBJPEG_TURBO=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_SPNG=ON
               -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=ON -DPHASH_STRICT_DEPS=ON
     name: tsan (${{ matrix.name }})
     env:
@@ -517,7 +517,7 @@ jobs:
     - name: Configure CMake (stb_image only, no sanitizers)
       run: >
         cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
-        -DPHASH_USE_TURBOJPEG=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
+        -DPHASH_USE_LIBJPEG_TURBO=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
 
     - name: Build
       run: >
@@ -596,11 +596,9 @@ jobs:
     # -DCMAKE_POSITION_INDEPENDENT_CODE=ON: the smoke test below also builds a
     # SHARED libphash against this same archive. Unlike libpng/webp/zlib-ng
     # (pulled in via add_subdirectory(), which inherits this project's own -fPIC
-    # from CMakeLists.txt), TurboJPEG is built as a fully separate CMake
+    # from CMakeLists.txt), libjpeg-turbo is built as a fully separate CMake
     # invocation that never sees that flag -- without it, linking libphash.so
-    # against libjpeg.a fails on Linux with "recompile with -fPIC". Found
-    # during a release-workflow validation run (same TurboJPEG-then-shared-link
-    # shape as here).
+    # against libjpeg.a fails on Linux with "recompile with -fPIC".
     - name: Build vendored libjpeg-turbo
       run: |
         cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON

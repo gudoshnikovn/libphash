@@ -1483,9 +1483,10 @@ PH_API int ph_can_use_webp(void);
  * bug reports.
  *
  * Space-separated `key=value` pairs, for example:
- * `version=2.0.0 jpeg=turbojpeg png=spng webp=libwebp zlib=zlib-ng threads=on simd=neon mock=off`
+ * `version=2.0.0 jpeg=libjpeg-turbo png=spng webp=libwebp zlib=zlib-ng threads=on simd=neon
+ * mock=off`
  *
- * - `jpeg`: `turbojpeg` or `stb`; `png`: `libpng`, `spng` or `stb`; `webp`: `libwebp` or
+ * - `jpeg`: `libjpeg-turbo` or `stb`; `png`: `libpng`, `spng` or `stb`; `webp`: `libwebp` or
  *   `none`; `zlib`: `zlib-ng`, `zlib` or `none` (stb_image inflates PNG itself);
  * - `threads`: `on` if the batch functions can use worker threads, `off` if they always
  *   run sequentially;

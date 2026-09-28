@@ -4,7 +4,7 @@
 # against it via find_package(phash) -- the same mechanism scripts/smoke_install.sh
 # already exercises against a fresh `cmake --install` tree, just pointed at an
 # archive instead. Reusing find_package (rather than hand-listing -l flags for
-# TurboJPEG/libpng/webp/zlib-ng) is deliberate: getting the static archive's
+# libjpeg-turbo/libpng/webp/zlib-ng) is deliberate: getting the static archive's
 # transitive link set right by hand here would just re-derive, and could easily
 # drift from, the INTERFACE_LINK_LIBRARIES the installed phashConfig.cmake
 # already carries (see CMakeLists.txt's install(EXPORT phashTargets ...) block).

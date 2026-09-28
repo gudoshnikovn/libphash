@@ -219,7 +219,7 @@ static uint8_t *ph_mock_decode(const uint8_t *data, size_t len, int *w, int *h, 
 #endif
 
 static const ph_image_backend_t backends[] = {
-#ifdef PH_USE_TURBOJPEG
+#ifdef PH_USE_LIBJPEG_TURBO
     {ph_can_read_jpeg, ph_decode_jpeg_mem},
 #endif
 #if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)

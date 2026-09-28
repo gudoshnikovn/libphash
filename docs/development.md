@@ -44,7 +44,7 @@ sync when you add or flip a switch.**
 
 | Knob | CMake default | Makefile default | Notes |
 |---|---|---|---|
-| Bundled TurboJPEG | `PHASH_USE_TURBOJPEG=ON` | *n/a* (stb only) | Makefile has no native JPEG path |
+| Bundled libjpeg-turbo | `PHASH_USE_LIBJPEG_TURBO=ON` | *n/a* (stb only) | Makefile has no native JPEG path |
 | Bundled libpng | `PHASH_USE_LIBPNG=ON` | *n/a* (stb only) | mutually exclusive with `PHASH_USE_SPNG` |
 | spng instead of libpng | `PHASH_USE_SPNG=OFF` | *n/a* | raw `-D` flag, not an `option()` |
 | libwebp | `PHASH_USE_WEBP=ON` | `USE_WEBP=0` | Makefile path expects a system libwebp |
@@ -89,14 +89,14 @@ jobs were compiling them. Prefer the same shape for any future instrumented mode
 `make coverage` and `make coverage-cmake` measure disjoint code:
 
 - **`make coverage`** runs the Makefile's stb_image-only build. Every line inside
-  `#ifdef PH_USE_TURBOJPEG` / `PH_USE_LIBPNG` / `PH_USE_SPNG` / `PH_USE_WEBP` in
+  `#ifdef PH_USE_LIBJPEG_TURBO` / `PH_USE_LIBPNG` / `PH_USE_SPNG` / `PH_USE_WEBP` in
   `src/loaders/{jpeg,png,webp}.c` doesn't exist in that binary at all — those
   backends compile down to nothing but their `ph_can_use_*()` stub. The overall
   percentage this target reports (currently ~95% lines) does **not** include the
   native decoders, no matter how high it reads.
 - **`make coverage-cmake`** (`scripts/coverage_cmake.sh`) runs two separate CMake
   `-DPHASH_COVERAGE=ON` + `ctest` passes — one with the default vendored decoder
-  set (TurboJPEG + libpng + libwebp + zlib-ng, i.e. what CI's `build-and-test` job
+  set (libjpeg-turbo + libpng + libwebp + zlib-ng, i.e. what CI's `build-and-test` job
   and releases ship), one with `PHASH_USE_SPNG=ON`/`PHASH_USE_LIBPNG=OFF` (the
   alternative PNG backend, mutually exclusive with libpng so it needs its own
   configure) — then merges both `lcov` traces into one report under
@@ -236,7 +236,7 @@ and on any pull request targeting either:
 | Job | What it checks |
 |---|---|
 | `format-check` | `scripts/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`. Fast, no build, catches a formatting diff before the slower jobs run. |
-| `build-and-test` | Full vendored build (TurboJPEG + libpng/spng + libwebp + zlib-ng) across linux-x86_64 (gcc, clang, and a spng variant), linux-arm64, macos-arm64. `PHASH_STRICT_DEPS=ON`, so a decoder silently falling back to stb_image is a hard configure failure, not a quiet pass. |
+| `build-and-test` | Full vendored build (libjpeg-turbo + libpng/spng + libwebp + zlib-ng) across linux-x86_64 (gcc, clang, and a spng variant), linux-arm64, macos-arm64. `PHASH_STRICT_DEPS=ON`, so a decoder silently falling back to stb_image is a hard configure failure, not a quiet pass. |
 | `coverage-cmake` | `scripts/coverage_cmake.sh` — merged lcov report across the vendored and spng decoder sets; published as a downloadable artifact. |
 | `minimal-build` | Zero-dependency build (every `PHASH_USE_*` off, stb_image only) on ubuntu-latest, macos-latest, windows-latest. |
 | `c-standard-matrix` | Full test suite under `-DCMAKE_C_STANDARD=11/17/23`, gcc+clang, Linux+macOS (no Windows — see the Toolchains section above for why). |
