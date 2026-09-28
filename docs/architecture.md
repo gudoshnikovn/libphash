@@ -35,17 +35,16 @@ recognizing the data at all is `PH_ERR_UNSUPPORTED_FORMAT`. A recognized format 
 compiled-in decoder is `PH_ERR_DECODER_UNAVAILABLE`. Everything about whether the path
 itself could be read — missing, unreadable, not a regular file, empty — is decided
 before any decoder sees a byte, and is `PH_ERR_IO`. See `include/libphash.h`'s
-`ph_error_t` for the full list and `MIGRATION.md` for how these replaced the single,
-now-removed `PH_ERR_DECODE_FAILED`.
+`ph_error_t` for the full list (and `MIGRATION.md` when upgrading from 1.x).
 
 **EXIF/WebP auto-orientation** (`src/image/orient.c`) runs after a successful decode,
 before the pixels reach any hash algorithm, when `ph_context_set_auto_orient()` is
-enabled — the default since 2.0.0. It is a narrowly-scoped reader for exactly one TIFF
+enabled — on by default. It is a narrowly-scoped reader for exactly one TIFF
 tag (Orientation, 0x0112) inside IFD0, not a general EXIF/TIFF library, and every read
 is bounds-checked since it operates on untrusted file bytes: malformed or absent
 metadata degrades silently to orientation 1 ("normal", no transform) rather than
-failing the load. See `MIGRATION.md` for why this defaulting to on is a breaking change
-for anyone with stored hash values.
+failing the load. An image with a rotating tag therefore hashes as displayed, not as
+stored; see `MIGRATION.md` for what that means for stored hash values.
 
 **Zero-copy pipeline**: `ph_load_from_file()` memory-maps the file where the platform
 allows it, handing decoders direct access to the encoded bytes without a separate
@@ -62,21 +61,20 @@ Optimized low-level primitives for image manipulation, split into dedicated modu
 - **`color.c`**: SIMD-accelerated (NEON/SSE) color conversion and grayscale
   transformation using configurable weights (`PH_GRAY_R/G/B`, BT.601-derived — see
   `docs/algorithm-provenance.md`).
-- **`filters.c`**: Gaussian blur (sigma-parameterized since 2.0.0 — see
-  `docs/algorithms.md`'s Radial section) and Laplacian sharpening.
+- **`filters.c`**: Gaussian blur (σ-parameterised; see `docs/algorithms.md`'s Radial
+  section) and Laplacian sharpening.
 - **`orient.c`**: the EXIF/WebP auto-orientation layer described above.
-- **Gamma Correction**: LUT-based gamma normalization, default 1.0 (identity) since
-  2.0.0 — was 2.2 in earlier releases; see `docs/algorithm-provenance.md` §7 for why
-  that was a defect specific to the Radial hash, not a general display-gamma setting.
+- **Gamma Correction**: `(v/max)^γ · max` per image, default γ = 1.0 (identity), Radial
+  only; see `docs/algorithm-provenance.md` §7.
 
 ### 3. Hash Algorithms (`src/hashes/`)
 Divided into specific implementations corresponding to unique theoretical properties:
-- `ahash.c`: Average Hash (frequency-based).
-- `phash.c`: DCT-based perceptual hash (robust against moderate scaling/rotation).
+- `ahash.c`: Average Hash (mean threshold on an 8×8 reduction).
+- `phash.c`: DCT-based perceptual hash (robust to scaling and moderate compression).
 - `dhash.c`: Gradient-based hash (extremely fast).
-- `mhash.c`: a real Marr-Hildreth hash (Laplacian-of-Gaussian correlation, 576-bit
-  digest) since 2.0.0 — see `docs/algorithms.md` for what it replaced.
-- `whash.c`: Wavelet-based (DWT Haar) hash supporting fast and full-academic decompositions.
+- `mhash.c`: Marr–Hildreth hash (Laplacian-of-Gaussian correlation, 576-bit digest).
+- `whash.c`: Wavelet-based (DWT Haar) hash, in fast (fixed 16×16) and full (power-of-two
+  cascade) modes.
 - `bmh.c`: Block Mean Hash, producing a `block_size²`-bit digest (256 bits at the
   default 16×16, up to 1024 bits/128 bytes at the maximum 32×32).
 - `radial.c`: variance along projection lines through the centre, standardized and
@@ -89,7 +87,8 @@ Divided into specific implementations corresponding to unique theoretical proper
   algorithms (aHash/dHash/pHash/wHash) in one call.
 - `common.c`: bit-packing/statistics helpers shared by several of the above.
 
-Every one of these is traced to its primary source, and every known divergence from
+Every one of these is traced to its source (or, for wHash, to the absence of one), and
+every known divergence from
 that source is written down, in `docs/algorithm-provenance.md` — this page describes
 where the code lives, not what it computes or why; see `docs/algorithms.md` for that.
 
@@ -137,7 +136,7 @@ contract.
 - `ph_create()`/`ph_free()` — allocate/release a `ph_context_t`. `ph_create()` is
   `PH_NODISCARD`; check its return before using the context.
 - `ph_version()`/`ph_version_number()` — the library version as a string or a single
-  comparable integer (see `MIGRATION.md` for the 2.0.0 numbering-scheme change).
+  comparable integer (major×1000000 + minor×1000 + patch).
 - `ph_can_use_jpeg()`/`ph_can_use_png()`/`ph_can_use_webp()` — whether this build
   was compiled with the corresponding native decoder, for a caller that wants to know
   without triggering a `PH_ERR_DECODER_UNAVAILABLE` first. `ph_can_use_png()` answers
@@ -193,7 +192,7 @@ thread-safe.
 **Memory.** Each worker holds one decoded image at a time: its RGB pixels plus a
 grayscale copy, about 4 bytes per pixel. The peak is therefore roughly
 `workers × 4 × the largest image's pixel count` — linear in the thread count, and
-`threads = 0` means one worker per core. At the default `max_pixels` (256 Mi pixels) that
+`threads = 0` means one worker per CPU available to the process. At the default `max_pixels` (256 Mi pixels) that
 bound is about 1 GB per worker; measured on 20-megapixel JPEGs it is about 80 MB per
 worker (94 MB at one thread, 1.35 GB at sixteen). To bound it, pass an explicit thread
 count, a lower `max_pixels` on the template, or both.

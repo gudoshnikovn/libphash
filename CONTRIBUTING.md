@@ -130,7 +130,7 @@ header, because they affect binary compatibility for anyone linking a prebuilt
   public struct, the width and values of every public enum, and array capacities that
   shape a struct (`PH_DIGEST_MAX_BYTES`, `PH_BATCH_HASHES_CAPACITY`).
   `tests/src/test_abi.c` pins the struct layouts; a change that makes it fail is a
-  major version bump. The ABI is frozen by the 2.0.0 tag.
+  major version bump. The ABI is fixed for the whole 2.x series.
 - **This project follows semantic versioning** for `include/libphash.h`: a
   source-or-binary-incompatible change (a removed/renamed public symbol, a changed
   function signature, a struct layout change, a default that changes existing hash

@@ -13,14 +13,15 @@
  * @file libphash.h
  * @brief High-performance, thread-safe perceptual hashing library.
  *
- * Designed for easy FFI integration (Python, Rust, Node.js).
+ * Designed for easy FFI integration from any language with a C FFI: an opaque context
+ * pointer, flat structs, and fixed-width enums.
  * All functions are thread-safe provided they operate on different contexts.
  *
- * ABI: the shared library's soname carries only the major version, so from the 2.0.0
- * tag on, everything a compiled consumer depends on stays fixed for the whole 2.x
- * series -- function signatures, the size and field offsets of every public struct,
- * and the width and values of every public enum. New functions, enumerators and error
- * codes may be added in a minor release; nothing existing is moved or reused.
+ * ABI: the shared library's soname carries only the major version, so everything a
+ * compiled consumer depends on stays fixed for the whole 2.x series -- function signatures, the
+ * size and field offsets of every public struct, and the width and values of every public enum. New
+ * functions, enumerators and error codes may be added in a minor release; nothing existing is moved
+ * or reused.
  */
 
 // --- Platform & Export Macros ---
@@ -75,11 +76,10 @@ extern "C" {
 /** Maximum size in bytes for any digest supported by the library (128 bytes =
  * 1024 bits).
  *
- * Raised from 64 in 2.0.0. The widest digest the library produces is the Marr-Hildreth
- * hash at 576 bits (72 bytes), which did not fit; the rest of the room is headroom for
- * the colour histogram's bin count and is deliberate, so that the ABI does not have to
- * move again inside this major. Note that @c ph_digest_t is passed and stored by value,
- * so it now costs 136 bytes wherever one lives. */
+ * The widest digest the library produces is the Marr-Hildreth hash at 576 bits (72
+ * bytes); the rest is headroom for the colour histogram's bin count, reserved so that the
+ * size stays fixed for the whole 2.x series. @c ph_digest_t is passed and stored by
+ * value, so it costs 136 bytes wherever one lives. */
 #define PH_DIGEST_MAX_BYTES 128
 
 // --- Enum width ---
@@ -101,7 +101,7 @@ extern "C" {
  * code) with the next free negative value.
  * Renumbering or reusing a value silently changes the meaning of an error in
  * already-compiled consumers and in FFI bindings that hardcode the number, so
- * a removed code's value stays retired rather than being handed to a new one. */
+ * a value, once assigned, is never handed to a different code. */
 typedef enum {
     PH_SUCCESS = 0,
     PH_ERR_ALLOCATION_FAILED = -1, ///< A malloc() somewhere on the call path returned NULL --
@@ -112,23 +112,17 @@ typedef enum {
                                    ///< native decoder backends (jpeg.c/png.c/webp.c, on their
                                    ///< own malloc() failing) and by the stb_image fallback (on
                                    ///< stbi_load_from_memory() failing with its "outofmem"
-                                   ///< reason) -- the two used to disagree, with the stb path
-                                   ///< reporting PH_ERR_CORRUPT_DATA instead.
-    /* -2 is retired: it was PH_ERR_DECODE_FAILED, removed in 2.0.0. It had stopped
-     * being returned from anywhere while still being declared, so
-     * `if (err == PH_ERR_DECODE_FAILED)` silently never fired and the compiler said
-     * nothing. Removing the name makes that break visible at compile time. The value
-     * is not reused -- see the ABI rule above. Migration: PH_ERR_CORRUPT_DATA,
-     * PH_ERR_UNSUPPORTED_FORMAT, PH_ERR_IMAGE_TOO_LARGE, PH_ERR_IO,
-     * PH_ERR_DECODER_UNAVAILABLE. */
+                                   ///< reason).
+    /* -2 is reserved and never assigned (see MIGRATION.md).
+     * Decoding failures are reported as PH_ERR_CORRUPT_DATA, PH_ERR_UNSUPPORTED_FORMAT,
+     * PH_ERR_IMAGE_TOO_LARGE, PH_ERR_IO or PH_ERR_DECODER_UNAVAILABLE. */
     PH_ERR_INVALID_ARGUMENT = -3, ///< A NULL pointer, or a value outside the documented range.
                                   ///< Always a mistake in the call itself -- a hash function
                                   ///< called before any image was loaded is
                                   ///< PH_ERR_EMPTY_IMAGE instead.
-    /* -4 is retired: it was PH_ERR_NOT_IMPLEMENTED, removed in 2.0.0 for the same reason
-     * as -2 -- nothing returned it. A feature missing from a build is reported as
-     * PH_ERR_DECODER_UNAVAILABLE (a decoder) or degrades without an error (threads: the
-     * batch runs sequentially). The value is not reused. */
+    /* -4 is reserved and never assigned (see MIGRATION.md). A feature missing from a
+     * build is reported as PH_ERR_DECODER_UNAVAILABLE (a decoder) or degrades without
+     * an error (threads: the batch runs sequentially). */
     PH_ERR_EMPTY_IMAGE = -5, ///< A hash was requested from a context that holds no image:
                              ///< nothing was loaded yet, or the last ph_load_from_file() /
                              ///< ph_load_from_memory() failed (a failed ph_load_from_pixels()
@@ -200,7 +194,7 @@ typedef enum {
  * merely reading it concurrently (e.g. one loading a new image while another reads
  * ph_get_last_error_message()); that pairing is the caller's to serialize, not the
  * library's. ph_hash_files()/ph_hash_buffers() follow this same rule internally: each
- * worker thread in their pool creates and owns its own context (see src/batch.c).
+ * worker thread in their pool creates and owns its own context.
  */
 typedef struct ph_context ph_context_t;
 
@@ -235,13 +229,16 @@ PH_API const char *ph_get_last_error_message(const ph_context_t *ctx);
  *
  * @c PH_DIGEST_KIND_UNSPECIFIED is what a hand-filled struct contains, since it is zero.
  * Every comparison function accepts it — an FFI binding that fills in `data` and `size`
- * and nothing else keeps working exactly as before, and gets no protection.
+ * and nothing else is accepted by every comparison, and gets no protection.
  */
 typedef enum {
     PH_DIGEST_KIND_UNSPECIFIED = 0,  ///< Not stated. Accepted by every comparison.
     PH_DIGEST_KIND_BITS = 1,         ///< A bit vector. Hamming distance, similarity. BMH, mHash.
     PH_DIGEST_KIND_COEFFICIENTS = 2, ///< Quantised transform coefficients. Radial.
-    PH_DIGEST_KIND_VECTOR = 3,       ///< Real-valued features in an unsigned byte each.
+    PH_DIGEST_KIND_VECTOR = 3,       ///< Real-valued features, one unsigned byte each. No
+                                     ///< algorithm here produces it: it tags a feature
+                                     ///< vector the caller builds, compared with
+                                     ///< ph_l2_distance().
     PH_DIGEST_KIND_HISTOGRAM = 4,    ///< Bin counts. Histogram intersection. ColorHash.
     PH_DIGEST_KIND_VECTOR16 = 5,     ///< Real-valued features, signed 16-bit. ColorMoments.
     PH_DIGEST_KIND_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE ///< Not a kind -- see "Enum width".
@@ -263,9 +260,7 @@ typedef enum {
  * @note This structure is FFI-safe and can be allocated on the stack.
  * It does not own any heap memory.
  *
- * @note Grew in 2.0.0: `data` is 128 bytes rather than 64, and the byte after `size`
- * is now the @c kind tag rather than padding. The struct is 136 bytes; any binding
- * that hardcoded 72 must be rebuilt.
+ * @note The struct is 136 bytes: 128 data bytes, `size`, `kind`, and 6 bytes of padding.
  */
 typedef struct {
     uint8_t data[PH_DIGEST_MAX_BYTES]; ///< The raw hash bytes.
@@ -277,7 +272,7 @@ typedef struct {
 // --- Lifecycle & Configuration ---
 
 /**
- * @brief Returns the library version string (e.g., "1.11.0").
+ * @brief Returns the library version string (e.g., "2.0.0").
  */
 PH_API const char *ph_version(void);
 
@@ -290,8 +285,8 @@ PH_API const char *ph_version(void);
  *        the library it runs with are the same version.
  *        Intended for FFI callers doing compatibility checks without string parsing.
  *
- * @note The scheme changed in 2.0.0 (was major*10000 + minor*100 + patch, which
- *       collided as soon as a minor or patch number exceeded 99). See `MIGRATION.md`.
+ * @note Each component has 1000 slots, so the number stays monotonic for any minor or
+ *       patch up to 999.
  */
 PH_API int ph_version_number(void);
 
@@ -310,17 +305,17 @@ PH_API void ph_free(ph_context_t *ctx);
 /**
  * @name Configuration setters
  *
- * Since 2.0.0 every `ph_context_set_*` function returns @c ph_error_t instead of
- * `void`, with one contract shared by all of them:
+ * Every `ph_context_set_*` function returns @c ph_error_t, with one contract shared by
+ * all of them:
  *
  *   - a valid argument (and a non-NULL @c ctx) returns @c PH_SUCCESS;
  *   - anything else returns @c PH_ERR_INVALID_ARGUMENT and leaves the configuration
  *     **completely unchanged** — values are never clamped into range, never partially
  *     applied, and never replaced by defaults.
  *
- * Before 2.0.0 these functions returned `void` and ignored invalid input silently, so a
- * caller could hash a whole batch with a configuration it never asked for. Each upper
- * bound below is a hard limit of the implementation (digest capacity, hash width, the
+ * An invalid argument is reported rather than ignored, because a silently ignored one
+ * would let a caller hash a whole batch with a configuration it never asked for. Each
+ * upper bound below is a hard limit of the implementation (digest capacity, hash width, the
  * supported pixel ceiling), not a style preference.
  *
  * @note These setters are intentionally not `warn_unused_result`: they are commonly
@@ -341,34 +336,25 @@ PH_API void ph_free(ph_context_t *ctx);
  * @warning Despite living on the context, this setting affects **only** the Radial
  *          hash, applied to the blurred grayscale buffer before the radial projections
  *          are taken. aHash, dHash, pHash, wHash, mHash, BMH, ColorHash and
- *          ColorMoments ignore it entirely. Setting it and expecting any of those to
- *          change is a mistake the previous wording invited.
+ *          ColorMoments ignore it entirely.
  *
- * @note Since 2.0.0 this follows pHash's own header default (`ph_compare_images()`,
- *       aetilius/pHash) exactly: gamma defaults to 1.0, not 2.2, pixels are raised to
- *       `gamma` directly rather than `1.0/gamma`, and the buffer is normalised by its
- *       own maximum before the power step and rescaled by the same maximum after.
- *       Before this fix the default was an independently-chosen sRGB display gamma
- *       (2.2) with no connection to Radial's reference implementation, and the older
- *       convention and lack of normalisation meant an explicit non-default gamma value
- *       did not mean what a caller porting pHash settings would expect. Changing this
- *       moved every Radial hash; see docs/algorithm-provenance.md section 7 for the
- *       history and the measured delta.
+ * @note This follows pHash's own default (`ph_compare_images()`, aetilius/pHash)
+ *       exactly: gamma defaults to 1.0, pixels are raised to `gamma` directly, and the
+ *       buffer is normalised by its own maximum before the power step and rescaled by
+ *       the same maximum after, so a gamma value ported from pHash means the same thing
+ *       here. See docs/algorithm-provenance.md section 7.
  *
- * @note Whether gamma belongs in the shared grayscale path (affecting every algorithm,
- *       not only Radial) is a deliberately open question, not an oversight. No reference
- *       implementation among the ones this library follows does that -- ImageHash
- *       applies no gamma at all -- so extending it would need its own correctness
- *       methodology, not just a code change, and none exists yet.
+ * @note Gamma is deliberately confined to Radial: none of the reference implementations
+ *       this library follows applies it to the other algorithms (ImageHash applies no
+ *       gamma at all).
  *
  * @param ctx The context.
  * @param gamma The gamma value (e.g., 1.0). Must be finite and in (0.001, 1000].
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
  *         out-of-range @p gamma.
  *
- * @note Since 2.0.0 non-finite values (NaN, +/-infinity) are rejected. They used to pass
- *       validation — every comparison against NaN is false — and filled the LUT with
- *       NaN, after which all hashes were garbage while the call reported success.
+ * @note Non-finite values (NaN, +/-infinity) are rejected: a NaN gamma compares false
+ *       against both bounds and would otherwise pass.
  */
 PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma);
 
@@ -385,9 +371,8 @@ PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma);
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx, a negative
  *         weight, or a sum outside the range above.
  *
- * @note Since 2.0.0 a zero sum is an error. It used to silently reset the weights to the
- *       BT.601 defaults, changing the configuration to something the caller had not asked
- *       for and reporting nothing.
+ * @note A zero sum is an error, not a request for the defaults: the configuration is
+ *       never replaced by something the caller did not ask for.
  */
 PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, int b);
 
@@ -424,7 +409,7 @@ PH_NODISCARD PH_API ph_error_t ph_context_get_gray_weights(const ph_context_t *c
  * @param dct_size Size of the DCT matrix, 1..32 (default 32).
  * @param reduction_size Size of the low-frequency coefficient block to keep,
  *                       2..8 and <= @p dct_size (default 8). The lower bound is 2, not 1:
- *                       since 2.0.0 the DC coefficient is excluded from the hash, so
+ *                       the DC coefficient is excluded from the hash, so
  *                       reduction_size == 1 would leave no AC coefficients at all and the
  *                       hash would be the fixed value 0 for every image, regardless of
  *                       content. 2 is the smallest size that leaves at least one AC
@@ -439,11 +424,9 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
  *
  * @param ctx The context.
  * @param projections Number of angular projections over [0, pi), 40..131072
- *        (default 180). Since 2.0.0 this is the number of **angles** only: the digest is
- *        always 40 bytes, being the first 40 coefficients of a DCT of the projection
- *        vector, as the algorithm's source specifies. Before 2.0.0 the projection count
- *        was also the digest width, and the DCT was missing entirely; a value of 40 no
- *        longer reproduces the old hashes. The lower bound is the coefficient count (a
+ *        (default 180). This is the number of **angles** only: the digest is always 40
+ *        bytes, the first 40 coefficients of a DCT of the projection vector, as the
+ *        algorithm's source specifies. The lower bound is the coefficient count (a
  *        DCT of an n-element vector has n coefficients); the upper bound is the angular
  *        resolution the largest supported image can distinguish.
  * @param samples Number of samples per projection, 2..65536 (default 128). Samples are
@@ -457,12 +440,9 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
  *        projection's variance can be nonzero.
  * @param sigma Gaussian blur sigma applied before the projections are taken, in
  *        (0, 64/3] (default 3.5, pHash's own header default -- see
- *        ph_context_set_gamma()). Since 2.0.0 this replaces a fixed, unparameterised
- *        3x3 kernel; passing a value outside the accepted range no longer reproduces the
- *        old hashes for those images that relied on the previous fixed blur. The upper
- *        bound is where the underlying blur's kernel radius, ceil(3*sigma), reaches its
- *        fixed-buffer cap of 64 -- a larger sigma would be silently narrower than
- *        requested, which this setter refuses rather than clamp.
+ *        ph_context_set_gamma()). The upper bound is where the underlying blur's kernel radius,
+ * ceil(3*sigma), reaches its fixed-buffer cap of 64 -- a larger sigma would be silently narrower
+ * than requested, which this setter refuses rather than clamp.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
  *         out-of-range value.
  */
@@ -476,10 +456,9 @@ PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projection
  * @param block_size Resolution of the grid, 2..32 (default 16). BMH packs one bit per
  *        block, i.e. `block_size * block_size` bits, into a @c ph_digest_t of at most
  *        PH_DIGEST_MAX_BYTES (128) bytes: 32x32 = 1024 bits = 128 bytes fits exactly,
- *        33x33 = 1089 bits = 137 bytes does not. The bound was 22 before 2.0.0 and moved
- *        with the digest capacity, not by choice. Above the bound, ph_compute_bmh() used to
- * truncate the digest to 64 bytes, hash the full grid anyway and return @c PH_SUCCESS — a partial
- * result indistinguishable from a complete one. The lower bound is 2, not 1: with a single
+ *        33x33 = 1089 bits = 137 bytes does not. The upper bound is set by the digest
+ *        capacity: a larger grid cannot be represented, so it is refused rather than
+ *        truncated. The lower bound is 2, not 1: with a single
  * block its mean equals itself, the median of one value is that same value, the threshold
  * is ">=" and is therefore always true, so the digest is the fixed 0x01 for every
  * image regardless of content. 2 is the smallest grid whose blocks can have different
@@ -487,8 +466,8 @@ PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projection
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
  *         out-of-range @p block_size.
  *
- * @note This affects BMH only. mHash uses a fixed 18x18 grid and ignores this setting
- *       (the parameter was previously documented as "BMH/mHash", which was inaccurate).
+ * @note This affects BMH only; mHash has its own parameters, see
+ *       ph_context_set_mhash_params().
  */
 PH_API ph_error_t ph_context_set_block_params(ph_context_t *ctx, int block_size);
 
@@ -506,9 +485,9 @@ PH_API ph_error_t ph_context_set_block_params(ph_context_t *ctx, int block_size)
  * is the ratio that decides what the hash actually sees. It is also the cost: the work is
  * roughly quadratic in @p size.
  *
- * The defaults are alpha 2, level 1 and size 512. The first two are the reference
- * implementation's; the size is not, and neither is what it is set to — see
- * `docs/algorithm-provenance.md` for the measurement behind it.
+ * The defaults are alpha 2, level 1 and size 512 — all three the reference
+ * implementation's (pHash fixes the size at 512 and does not expose it). A sweep of the
+ * alternatives finds no better setting; see `docs/algorithm-provenance.md`.
  *
  * @param ctx The context.
  * @param alpha Scale base, > 1 and finite.
@@ -566,8 +545,8 @@ PH_API ph_error_t ph_context_set_whash_remove_max_haar_ll(ph_context_t *ctx, int
  *       Enable it (set to 1) for significant speedup if you only need grayscale hashes
  *       (pHash, aHash, dHash, mHash, wHash, BMH, Radial).
  * @note While this is enabled, the color algorithms — ph_compute_color_hash() and
- *       ph_compute_color_moments_hash(), and therefore ph_compute_multi() with
- *       @c PH_HASH_COLOR_HASH set — fail with @c PH_ERR_REQUIRES_COLOR: a
+ *       ph_compute_color_moments_hash(), and ph_compute_digest() for either — fail
+ *       with @c PH_ERR_REQUIRES_COLOR: a
  *       single-channel image has no color statistics to compute. Load with this
  *       disabled if you need them.
  *
@@ -620,24 +599,20 @@ PH_API ph_error_t ph_context_set_auto_orient(ph_context_t *ctx, int enable);
  * @note Loading an image that exceeds the limit fails with PH_ERR_IMAGE_TOO_LARGE
  *       instead of attempting the allocation.
  *
- * @note Since 2.0.0 an implementation ceiling of INT_MAX (2147483647) pixels always
- *       applies, whichever value is set here: a larger `max_pixels`, and `0`, are both
- *       capped by it, and an image above it is rejected with PH_ERR_IMAGE_TOO_LARGE.
- *       Pixel indexing inside the library is done in `int`, so a larger image would
- *       overflow it. Before 2.0.0, `0` disabled the check outright and such an image
- *       caused undefined behaviour and a heap overflow rather than an error. The
- *       default limit is eight times below the ceiling, so this only affects callers
- *       that deliberately raise or disable the limit.
+ * @note An implementation ceiling of INT_MAX (2147483647) pixels always applies,
+ *       whichever value is set here: a larger `max_pixels`, and `0`, are both capped by
+ *       it, and an image above it is rejected with PH_ERR_IMAGE_TOO_LARGE, because pixel
+ *       indexing inside the library is done in `int`. The default limit is eight times below the
+ * ceiling, so this only affects callers that deliberately raise or disable the limit.
  *
- * @note Since 2.0.0 a per-dimension cap of 1000000 pixels also always applies, on top
+ * @note A per-dimension cap of 1000000 pixels also always applies, on top
  *       of the area limit and independently of it: an image wider or taller than that
  *       is rejected with PH_ERR_IMAGE_TOO_LARGE whatever @p max_pixels is set to,
  *       including 0. The area limit alone permits an absurd aspect ratio -- a
  *       268435456 x 1 image sits exactly on the default limit, yet makes a decoder size
  *       a single row of ~800 MB -- and the cap closes that. It applies to every format
  *       and to both decoding entry points (@c ph_load_from_file and
- *       @c ph_load_from_memory); before 2.0.0 it existed only inside the native PNG
- *       decoder, so the same input was answered differently depending on the build.
+ *       @c ph_load_from_memory), so every build answers the same input the same way.
  *       @c ph_load_from_pixels() is not subject to it -- there is no decoder there to
  *       protect, and the area limit already bounds what the library will process.
  *
@@ -663,11 +638,11 @@ PH_API ph_error_t ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixe
  *       convert stage, while Huffman-decoding every coded coefficient still happens at
  *       full cost regardless of the requested output size, because JPEG stores
  *       coefficients sequentially per 8x8 block and there is no way to skip that pass.
- *       Measured on a 20-megapixel synthetic photo (5472x3648, libjpeg-turbo, this
- *       library's TJFLAG_FASTDCT|TJFLAG_NOREALLOC call shape, min of 40 iterations
- *       after warmup): full decode 47.24ms; @c PH_DECODE_SCALE_HALF 42.38ms (10.3%
- *       faster); @c PH_DECODE_SCALE_QUARTER 39.87ms (15.6%); @c PH_DECODE_SCALE_EIGHTH
- *       38.53ms (18.4%) -- the gain saturates well short of proportional to the scale.
+ *       Measured on a 20-megapixel synthetic photo (5472x3648, libjpeg-turbo with the
+ *       fast integer IDCT this library uses, min of 40 iterations after warmup): full
+ * decode 47.24ms; @c PH_DECODE_SCALE_HALF 42.38ms (10.3% faster); @c
+ * PH_DECODE_SCALE_QUARTER 39.87ms (15.6%); @c PH_DECODE_SCALE_EIGHTH 38.53ms (18.4%) -- the gain
+ * saturates well short of proportional to the scale.
  *
  * @note **This changes the hash, and by how much depends on the algorithm and on the
  *       image's content, not on the scale alone.** Measured as the Hamming distance
@@ -746,9 +721,7 @@ PH_API int ph_is_loaded(const ph_context_t *ctx);
  * @note Peak memory therefore includes the encoded file in addition to the
  *       decoded image. For ordinary photographs the encoded bytes are a small
  *       fraction of the decoded ones, but a caller that streams very large files
- *       on a tight memory budget should be aware of it. Before 2.0.0 the file
- *       was read incrementally in some build configurations — and opened up to
- *       six times per call, which is what this replaced.
+ *       on a tight memory budget should be aware of it.
  *
  * @param ctx The context.
  * @param filepath Path to the image file.
@@ -822,12 +795,9 @@ typedef enum {
     PH_HASH_DHASH = 1 << 1,
     PH_HASH_PHASH = 1 << 2,
     PH_HASH_WHASH = 1 << 3,
-    /* Bits 4 and 5 are retired. It was PH_HASH_MHASH, removed in 2.0.0 when the Marr-Hildreth
-     * hash became 576 bits and could no longer be a uint64_t, and bit 5 was
-     * PH_HASH_COLOR_HASH, removed in the same release when ColorHash became a 108-bin
-     * histogram. Call ph_compute_mhash() and ph_compute_color_hash() directly. As with
-     * the error codes, a retired bit is not handed to a new flag -- an old caller's
-     * `1 << 4` would otherwise silently mean something else. */
+    /* Only the four uint64_t algorithms are flags. Every other algorithm returns a
+     * digest and is computed with its own ph_compute_* function or ph_compute_digest().
+     * Bits 4 and up are not valid flags. */
     PH_HASH_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE ///< Not a flag -- see "Enum width".
 } ph_hash_flags_t;
 
@@ -840,14 +810,12 @@ typedef enum {
  * Equivalent to calling the individual `ph_compute_*` functions for each flag set in
  * `flags`, but shares the grayscale conversion across all of them instead of recomputing
  * it once per algorithm (each `ph_compute_*` call already reuses the context's cached
- * grayscale buffer, so calling several of them back to back on the same context has
- * always been cheaper than reloading between them — this just wraps that into one call).
+ * grayscale buffer, so calling several of them back to back on one context is already
+ * cheaper than reloading between them; this wraps that into one call).
  * Results are bit-for-bit identical to calling the equivalent `ph_compute_*` function
  * directly.
  *
- * Computation stops at the first algorithm that fails and its error code is returned;
- * in particular @c PH_HASH_COLOR_HASH on a grayscale image fails the whole call with
- * @c PH_ERR_REQUIRES_COLOR (see ph_compute_color_hash()).
+ * Computation stops at the first algorithm that fails and its error code is returned.
  *
  * On such a failure @p out is left partially written: the slots of the algorithms that
  * ran before the failing one hold their correct hashes, and the failing algorithm's slot
@@ -861,8 +829,8 @@ typedef enum {
  *            @c PH_ERR_EMPTY_IMAGE.
  * @param flags Bitwise-OR of `ph_hash_flags_t` values selecting which hashes to compute.
  * @param[out] out Array written with one uint64_t per flag that was set, in ascending
- *                 bit order (e.g. for `PH_HASH_DHASH | PH_HASH_COLOR_HASH`, `out[0]` receives
- *                 the dHash and `out[1]` the mHash). Must have room for at least as many
+ *                 bit order (e.g. for `PH_HASH_DHASH | PH_HASH_WHASH`, `out[0]` receives
+ *                 the dHash and `out[1]` the wHash). Must have room for at least as many
  *                 elements as bits set in `flags` (at most `PH_HASH_FLAGS_COUNT`).
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flags, uint64_t out[]);
@@ -1180,7 +1148,8 @@ PH_NODISCARD PH_API ph_error_t ph_algorithm_from_name(const char *name, ph_algor
 // --- Digest Hash Algorithms ---
 
 /**
- * @brief Computes Block Mean Hash (BMH). Returns a 256-bit (32-byte) digest.
+ * @brief Computes Block Mean Hash (BMH). Returns a `block_size * block_size`-bit digest
+ * (256 bits / 32 bytes at the default block_size 16; see ph_context_set_block_params()).
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest);
 
@@ -1201,8 +1170,8 @@ PH_NODISCARD PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
  * The image's pixels are counted into 108 bins of the opponent colour space — red against
  * green, blue against yellow, light against dark, at 6 x 6 x 3 — and each bin is scaled
  * against the largest. This is a colour histogram with histogram intersection, after
- * Swain & Ballard (1991); the paper itself could not be obtained, so it is implemented
- * from secondary descriptions and no conformance to it is claimed. The quantisation is
+ * Swain & Ballard (1991), implemented from secondary descriptions of the paper; no
+ * conformance to the paper itself is claimed. The quantisation is
  * this library's own, chosen by measurement.
  *
  * Compare with ph_histogram_intersection(), not with the bit or vector metrics.
@@ -1211,11 +1180,6 @@ PH_NODISCARD PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
  * single-channel image — one loaded while ph_context_set_load_grayscale() was enabled, or
  * handed to ph_load_from_pixels() with @c channels = 1 — this returns
  * @c PH_ERR_REQUIRES_COLOR and leaves @p out_digest untouched.
- *
- * @note Changed completely in 2.0.0, signature included. It used to return a `uint64_t`
- *       holding 42 bits of quantised PIL-HSV category fractions, ported from ImageHash,
- *       which cites no source for it. Stored values do not carry over, and
- *       `PH_HASH_COLOR_HASH` is gone from the multi-hash bitfield.
  *
  * @note Like every colour histogram it discards spatial layout entirely: an image and a
  *       shuffling of its pixels hash identically. Use it alongside a structural hash, not
@@ -1226,9 +1190,11 @@ PH_NODISCARD PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_diges
 /**
  * @brief Computes the Marr-Hildreth hash. Returns a 72-byte (576-bit) digest.
  *
- * The image is blurred at sigma 1, normalised to 512x512 and histogram-equalised over 256
- * levels; the Laplacian-of-Gaussian operator of Marr and Hildreth (alpha = 2, level = 1)
- * is correlated with it; the response is summed over 16x16 blocks into a 31x31 grid; and
+ * The image is blurred at sigma 1, normalised to `size` x `size` (512 by default) and
+ * histogram-equalised over 256 levels; the Laplacian-of-Gaussian operator of Marr and
+ * Hildreth (alpha = 2, level = 1 by default; see ph_context_set_mhash_params()) is
+ * correlated with it; the response is summed into a 31x31 grid of blocks (16x16 pixels
+ * at the default size); and
  * nine bits are emitted per 3x3 window of that grid at stride 4, each thresholded against
  * its window's mean. That construction is pHash's `ph_mh_imagehash()`, which is its
  * primary source — there is no paper for it. Values are close in spirit but not identical
@@ -1237,14 +1203,9 @@ PH_NODISCARD PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_diges
  * The digest is a bit vector: compare it with ph_hamming_distance_digest() or
  * ph_similarity_digest().
  *
- * @note Changed completely in 2.0.0. This used to return a `uint64_t` holding 64 bits of
- *       something that was not a Marr-Hildreth hash at all — the sign of a four-neighbour
- *       discrete Laplacian on an 18x18 grid. Stored values do not carry over, the
- *       signature is different, and `PH_HASH_MHASH` no longer exists: this is a hash the
- *       multi-hash bitfield cannot express, so call it directly.
- *
- * @note It is by far the most expensive hash here — a 17x17 correlation over a 512x512
- *       image — which is a property of the algorithm, not of this implementation.
+ * @note It is by far the most expensive hash here — at the defaults, a 17x17 correlation
+ *       over a 512x512 image — which is a property of the algorithm, not of this
+ *       implementation.
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest);
 
@@ -1263,10 +1224,6 @@ PH_NODISCARD PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *
  *          The rotation tolerance the algorithm is known for comes from the comparison,
  *          not from the hash -- and it is a few degrees plus an exact half turn, not
  *          invariance to an arbitrary rotation. See docs/algorithms.md section 8.
- *
- * @note Since 2.0.0 the digest is 40 bytes of DCT coefficients rather than one byte per
- *       projection, and the default projection count is 180 rather than 40. Values from
- *       earlier releases do not carry over.
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_digest);
 
@@ -1277,24 +1234,23 @@ PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
  *
  * ph_digest_t is a flat struct callers (including FFI bindings) may fill in
  * themselves, and `size` can hold values `data` cannot: a digest whose `size`
- * exceeds PH_DIGEST_MAX_BYTES is rejected, never truncated. Since 2.0.0 this is
- * enforced rather than trusted -- code that relied on the previous leniency will
- * now get an error instead of a value read past the end of the array.
+ * exceeds PH_DIGEST_MAX_BYTES is rejected, never truncated.
  *
- * Since 2.0.0 the `kind` tag is checked too. Each comparison below states the kind it
+ * The `kind` tag is checked too. Each comparison below states the kind it
  * is for, and refuses a digest tagged as something else: Hamming distance over
  * quantised DCT coefficients returns a plausible number that means nothing, and this
  * is how that call fails instead. PH_DIGEST_KIND_UNSPECIFIED -- the zero a hand-filled
- * struct holds -- is accepted everywhere, so a binding that does not know about the
- * field behaves exactly as before and simply gets no protection.
+ * struct holds -- is accepted everywhere, so a binding that does not set the field gets
+ * no protection but no error either.
  *
  *   - functions returning ph_error_t: PH_ERR_INVALID_ARGUMENT;
  *   - distance/similarity functions: -1 (also for a size of 0, which carries no
  *     bits to compare -- reporting distance 0 there would read as "identical").
  *
  * ph_hamming_distance_digest() and ph_similarity_digest() are for
- * PH_DIGEST_KIND_BITS; ph_l2_distance() is for PH_DIGEST_KIND_VECTOR;
- * ph_radial_similarity() is for PH_DIGEST_KIND_COEFFICIENTS.
+ * PH_DIGEST_KIND_BITS; ph_l2_distance() is for PH_DIGEST_KIND_VECTOR and
+ * PH_DIGEST_KIND_VECTOR16; ph_radial_similarity() is for PH_DIGEST_KIND_COEFFICIENTS;
+ * ph_histogram_intersection() is for PH_DIGEST_KIND_HISTOGRAM.
  */
 PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b);
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b);
@@ -1310,7 +1266,8 @@ PH_API double ph_similarity(uint64_t a, uint64_t b);
 
 /**
  * @brief Normalized similarity between two digests, in [0.0, 1.0].
- * @return -1.0 if the digests are NULL or have mismatched sizes.
+ * @return -1.0 for anything the digest contract above rejects: NULL, mismatched or
+ *         invalid sizes, or a kind other than PH_DIGEST_KIND_BITS.
  */
 PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
 
@@ -1411,9 +1368,9 @@ PH_NODISCARD PH_API ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out,
  *
  * The kind prefix is required and must be one of the names ph_digest_to_hex() writes,
  * in lowercase; the hex digits after the colon may be either case. A bare hex string
- * without a prefix -- the format of 2.0 pre-releases -- is rejected rather than read as
- * an untagged digest: prefix it with `unspecified:` to accept it knowingly, or better,
- * with the kind of the algorithm that produced it.
+ * without a prefix is rejected rather than read as an untagged digest: prefix it with
+ * `unspecified:` to accept it knowingly, or better, with the kind of the algorithm that produced
+ * it.
  *
  * @param text NUL-terminated string `<kind>:<hex>`; the hex part must have an even number
  * of digits and decode to at most PH_DIGEST_MAX_BYTES bytes.
@@ -1448,8 +1405,7 @@ PH_NODISCARD PH_API ph_error_t ph_hash_to_hex(uint64_t hash, char *out, size_t o
 PH_NODISCARD PH_API ph_error_t ph_hash_from_hex(const char *hex, uint64_t *out);
 
 /* The three capability checks are named after the format, not the library behind it:
- * ph_can_use_jpeg(), ph_can_use_png(), ph_can_use_webp(). 1.x had ph_can_use_libjpeg()
- * and ph_can_use_libpng(); both were renamed in 2.0.0. ph_get_build_info() names the
+ * ph_can_use_jpeg(), ph_can_use_png(), ph_can_use_webp(). ph_get_build_info() names the
  * library. */
 
 /**
@@ -1464,8 +1420,7 @@ PH_API int ph_can_use_jpeg(void);
  * compiled.
  *
  * Native means either of the two alternative PNG backends, libpng or spng; which one is
- * named by ph_get_build_info(). Renamed in 2.0.0 from ph_can_use_libpng(), which answered
- * 1 for spng too, where libpng is not linked at all.
+ * named by ph_get_build_info().
  * @return 1 if PNG is decoded natively, 0 if it goes through the stb_image fallback.
  */
 PH_API int ph_can_use_png(void);

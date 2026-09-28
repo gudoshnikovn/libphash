@@ -57,7 +57,7 @@ good at; the second is not in scope.
 | wHash | this library, after ImageHash | **none** — see below | n/a — justified by measurement |
 | mHash | pHash (construction); Marr & Hildreth 1980 (operator) | implementation + paper | no |
 | BMH | Yang, Gu & Niu | paper, 2006 | no |
-| Radial | De Roover, De Vleeschouwer, Lefèbvre & Macq | paper, 2005 | no — the gamma/sigma divergence is fixed |
+| Radial | De Roover, De Vleeschouwer, Lefèbvre & Macq | paper, 2005 | no |
 | ColorHash | Swain & Ballard (method); this library (quantisation) | paper, 1991 — **not read** | n/a — no conformance claimed |
 | ColorMoments | Stricker & Orengo | paper, 1995 | **yes** — colour space (RGB, not HSV) |
 
@@ -73,17 +73,14 @@ because there is none.
 
 Nine algorithms and none of their primary sources specify a grayscale formula, and most
 leave the tie-break and the bit layout unstated too. Where a source is silent, this
-library still has to pick *something* — the choice below is deliberate, not inherited
-from whoever wrote the code first, and each one is repeated in the delta table of the
-algorithm(s) it touches in `docs/algorithm-provenance.md`.
+library still has to pick *something*. Each choice below is deliberate and is repeated in
+the delta table of the algorithm(s) it touches in `docs/algorithm-provenance.md`.
 
 **Grayscale coefficients.** `PH_GRAY_R/G/B` = 38/75/15 over 128 (`src/internal.h`), an
 integer approximation of the **ITU-R BT.601** luma coefficients (0.299/0.587/0.114) —
-cited as an external standard, not because any source here asks for it. A closer
-8-bit approximation exists (77/150/29 over 256) and was measured as a replacement;
-rejected because it regresses BMH and wHash separability on this library's test corpus
-with no compensating gain, so the existing triple stays — kept on evidence, not just
-inherited. Used by every algorithm that reduces to grayscale: aHash, dHash, pHash,
+cited as an external standard, not because any source here asks for it. The closer
+77/150/29-over-256 approximation measures worse (it regresses BMH and wHash separability
+on this library's test corpus with no gain elsewhere), so 38/75/15 is used. Used by every algorithm that reduces to grayscale: aHash, dHash, pHash,
 wHash, mHash, BMH, Radial. ColorHash and ColorMoments work in colour and never call
 this path.
 
@@ -94,9 +91,9 @@ answer than "pick a convention":
 | Algorithm(s) | Rule | Why |
 |---|---|---|
 | BMH | `>=` | Matches Zauner's equation 3.9, the one place among all nine sources that states a direction. |
-| aHash | `>=` | Genuinely unpinned by its source ("above or below" leaves it unstated) and no reference implementation is cited to defer to here — adopted `>=` to agree with BMH rather than leave a fourth arbitrary answer in the codebase. |
+| aHash | `>=` | Unpinned by its source ("above or below" leaves it unstated) and no reference implementation is cited to defer to — `>=`, to agree with BMH, the only source that states a direction. |
 | pHash, wHash (`ph_median_bitpack()`/`ph_median_bitpack_from()`, shared) | `>` | Each is pinned to its own reference implementation's code instead: pHash's `ph_dct_imagehash()` and ImageHash's `whash()` both use `>`. Overriding a real reference implementation to chase a uniform convention would be the wrong kind of consistency. |
-| mHash | `>` | pHash's `ph_mh_imagehash()` construction; no inequality direction is stated in either source, so this is a choice, not a pinned conformance claim, but it was not moved because there is no signal either way to move it toward. |
+| mHash | `>` | pHash's `ph_mh_imagehash()` construction; no inequality direction is stated in either source, so this is a choice, not a conformance claim. |
 
 **Bit order.** Never affects Hamming distance — everything here is internally
 consistent — but it decides what the hash looks like in hex, which matters for
@@ -151,11 +148,10 @@ portability and comparison against a foreign implementation.
 - **The DC coefficient**: DCT(0,0) is thresholded like the other 63 but takes no part in
   choosing the threshold, which is what pHash's `ph_dct_imagehash()` does. Since DC is
   above that threshold for any ordinary image, its bit is always 1 and the hash is
-  effectively 63 bits wide — again as pHash. Changed in 2.0.0, and it changed no hash
-  value on any test fixture: contrary to the usual explanation, a median is not dragged by
-  an outlier. See [`algorithm-provenance.md`](algorithm-provenance.md) §3, which also
-  records why the 8×8 block was *not* moved to DCT(1,1) despite both written descriptions
-  saying so.
+  effectively 63 bits wide, as in pHash. Excluding DC from the median changes no bit
+  except on an exact tie: a median is not dragged by an outlier. See
+  [`algorithm-provenance.md`](algorithm-provenance.md) §3, which also records why the 8×8
+  block is not at DCT(1,1) despite both written descriptions saying so.
 
 ## 4. wHash (Wavelet Hash)
 
@@ -173,10 +169,11 @@ portability and comparison against a foreign implementation.
   keyed, and its key is not optional. No paper describes an unkeyed deterministic wavelet
   hash because there is nothing for the security literature to prove about one. So wHash
   is justified by measurement instead: separability 4.10 on the synthetic corpus, third
-  best of the nine, behind only BMH and aHash. Kept on those grounds rather than replaced.
-- One known difference from ImageHash: that implementation zeroes the coarsest LL band by
-  default, so its hash describes local structure rather than overall brightness; this one
-  does not.
+  best of the nine, behind only BMH and aHash.
+- ImageHash zeroes the coarsest LL band by default (`remove_max_haar_ll`). Under a median
+  threshold that operation only subtracts the image mean and cannot change a bit except by
+  rounding a tie, so it is off by default here. `ph_context_set_whash_remove_max_haar_ll()`
+  enables it for callers mirroring ImageHash's configuration.
 
 ## 5. mHash (Marr–Hildreth)
 
@@ -189,17 +186,13 @@ portability and comparison against a foreign implementation.
   `ph_hamming_distance_digest()`.
 - **Tuning**: `ph_context_set_mhash_params(alpha, level, size)` — `alpha` and `level` set
   the kernel's scale (pHash's own two parameters), `size` the normalisation preset. The
-  defaults are 2, 1 and 512, and are the reference implementation's; a sweep over 24
-  combinations on two corpora found nothing that reliably beats them.
+  defaults are 2, 1 and 512, and are the reference implementation's; across 24
+  combinations nothing reliably beats them.
 - **Strength**: a coarse-structure edge descriptor, indifferent to colour — a colour shift
   moves 25 of 576 bits on the test photograph where an unrelated image moves 288.
 - **Weakness**: the most expensive hash here (1.8 ms against 0.04 ms for aHash), and it
   notices a small local edit *less* than it notices a rescale — see
   [`algorithm-provenance.md`](algorithm-provenance.md) §5.
-- **Changed completely in 2.0.0.** This used to be 64 bits of something that was not a
-  Marr–Hildreth hash at all: the sign of a four-neighbour discrete Laplacian on an 18×18
-  grid, no Gaussian and no scale. The signature changed with it, and `PH_HASH_MHASH` is
-  gone from the multi-hash bitfield — 576 bits do not fit a `uint64_t`.
 
 ## 6. BMH (Block Mean Hash)
 
@@ -213,8 +206,7 @@ portability and comparison against a foreign implementation.
 - **Use case**: when 64 bits are not enough entropy and a lower collision rate is worth
   the extra bytes.
 - **Threshold**: the **median** of the block means, as the paper specifies, which is what
-  makes the bit distribution balanced by construction. Changed in 2.0.0 — it was the
-  arithmetic mean, so every BMH value moves. Note that this puts the library at odds with
+  makes the bit distribution balanced by construction. This puts the library at odds with
   OpenCV's `BlockMeanHash`, which thresholds on the mean (in a variable it calls `median`);
   expect BMH values to differ from OpenCV's. See
   [`algorithm-provenance.md`](algorithm-provenance.md) §6.
@@ -227,13 +219,9 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
   into one of 108 bins of the opponent colour space (red–green × blue–yellow × light–dark,
   6 × 6 × 3), and two of them are compared with **`ph_histogram_intersection()`**, not with
   a bit or vector metric. A colour histogram with histogram intersection, after Swain &
-  Ballard (1991) — the paper could not be obtained, so it is implemented from secondary
-  descriptions and no conformance to it is claimed; the quantisation is this library's,
-  chosen by measurement over sixteen candidates.
-  **Changed completely in 2.0.0**, signature included: it used to be a 42-bit port of
-  ImageHash's `colorhash`, for which even ImageHash cites nothing. Separability on the
-  test corpus went from 1.89 to 3.95. `PH_HASH_COLOR_HASH` is gone from the multi-hash
-  bitfield — call the function directly.
+  Ballard (1991), implemented from secondary descriptions of the paper, so no conformance
+  to it is claimed; the quantisation is this library's, chosen by measurement over sixteen
+  candidates. Separability on the test corpus: 3.95.
   **Blind spots**, both inherent to a histogram and both asserted in the tests: it ignores
   where the colours are, so a 90° rotation does not move it at all and neither does
   shuffling the pixels; and flat colours that share a chroma bin and an intensity third —
@@ -243,7 +231,7 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
   big-endian fixed-point number in units of 1/128. Follows the formulas of Stricker &
   Orengo, including the sign of the skewness, which is the direction of the asymmetry.
   Compare with `ph_l2_distance()`, which decodes the pairs.
-  **⚠ Known divergence**: the moments are taken on RGB where the source uses HSV.
+  **Deliberate divergence**: the moments are taken on RGB where the source uses HSV.
 - **Use case**: telling apart images that are structurally identical but coloured
   differently — recoloured product photography, for instance — where the luminance hashes
   agree by design.
@@ -263,18 +251,10 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
   - `samples` — default 128 samples per projection.
   - `sigma` — Gaussian-blur σ applied before the projections, default 3.5, (0, 64/3].
   - gamma (`ph_context_set_gamma()`) — default 1.0 (identity), affects Radial only.
-- **Changed in 2.0.0**: the DCT the source specifies is now applied and the 40 is back on
-  the coefficient count rather than the angle count; the variance vector is standardised
-  before the transform; and the source's comparison is exposed. The gamma default moved
-  from 2.2 to 1.0, the gamma exponent convention flipped to match pHash's, gamma now
-  normalises by the buffer's own maximum, and the blur moved from a fixed 3×3 kernel to a
-  σ-parameterised one defaulting to 3.5. Radial digests from 1.x, and from before
-  this gamma/sigma change, do not carry over.
 - **Rotation: a few degrees, plus an exact half turn — not arbitrary rotation.** Measured
   on `tests/data/photo.jpeg` against a 0.69 baseline for an unrelated image: 1° → 0.993,
   3° → 0.944, 5° → 0.870, 15° → 0.437, 90° → 0.243, 180° → 0.993. That is what the
-  algorithm's source delivers and what this page's earlier "up to 360°" claim got wrong;
-  the half turn matches because a projection line at α and at α+180 is the same line. See
+  algorithm delivers; the half turn matches because a projection line at α and at α+180 is the same line. See
   [`algorithm-provenance.md`](algorithm-provenance.md) §7 for why the transform does not
   carry a larger rotation.
 - **Blind spot worth knowing**: an image whose variance is the same at every angle — a

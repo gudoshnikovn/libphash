@@ -37,12 +37,12 @@ not covered here.
 
 | Rank | Meaning |
 |---|---|
-| 1 | Peer-reviewed paper or thesis by the algorithm's author |
-| 2 | Technical report or preprint |
+| 1 | Peer-reviewed paper, thesis or technical report by the algorithm's author |
+| 2 | Preprint or unrefereed write-up by the algorithm's author |
 | 3 | Code or prose published by the algorithm's author (including a blog post) |
-| 4 | Third-party implementation or restatement |
+| 4 | Third-party description or implementation, including a thesis analysing someone else's code |
 
-When two sources disagree, the lower rank wins. A rank-4 source is a hint about where to
+When two sources disagree, the lower-numbered rank wins. A rank-4 source is a hint about where to
 look; it is never the basis for a claim that this code is correct.
 
 **Read** says whether the source was retrieved and read in full. Several are behind IEEE
@@ -67,14 +67,16 @@ July 2010.
 - PDF: <https://www.phash.org/docs/pubs/thesis_zauner.pdf>
 - Also at the Internet Archive:
   <https://archive.org/details/thesis_zauner_Implementation_and_benchmarking_of_perceptual_image_hash_functions>
-- Rank 1 · **Read in full**
+- Rank 1 as a thesis; rank 4 for the algorithms it describes, which are other people's
+  (see [`algorithm-provenance.md`](algorithm-provenance.md), "Source trust ranking") ·
+  **Read in full**
 
 Covers four of our algorithms and is the only source that documents both the theory and
 what the pHash library actually computes, side by side. Sections used here: §3.1.1 (DCT
 definitions), §3.1.2 (Laplacian and Marr–Hildreth), §3.1.3 (radial variance), §3.1.4
 (block mean value, all four methods), §3.2.1–3.2.4 (pHash's implementations).
 
-Used for: **pHash**, **BMH**, **Radial**, and for establishing what **mHash** is *not*.
+Used for: **pHash**, **mHash** (§3.2.2, the construction), **BMH**, **Radial**.
 
 ### [K11] Krawetz 2011 — aHash, and a second description of pHash
 
@@ -124,7 +126,7 @@ Processing (IIH-MSP)*, IEEE, 2006, pp. 167–172. ISBN 0-7695-2745-0.
 - Rank 1 · **Not read** (IEEE paywall) — steps taken from [Z10] §3.1.4, which reproduces
   all four of the paper's methods and whose author implemented method 1 into pHash.
 
-Used for: **BMH**. Specifies the median threshold that this code currently does not use.
+Used for: **BMH**. Specifies the median threshold, which this code uses.
 
 ### [DR05] De Roover et al. 2005 — the radial variance hash
 
@@ -138,7 +140,7 @@ radial variance of pixels"**, *Proc. International Conference on Image Processin
   this paper.
 
 Used for: **Radial**. This — not RASH below — is the algorithm pHash implements and the
-one this library is trying to be.
+one this library implements.
 
 ### [LML02] Lefèbvre, Macq & Legat 2002 — RASH, the superseded predecessor
 
@@ -205,7 +207,7 @@ for a neural embedding does not buy adversarial robustness; a self-supervised vi
 backbone is not trained for it, and adversarial examples are that family's oldest known
 failure mode.
 
-### [MH80] Marr & Hildreth 1980 — cited only as a negative
+### [MH80] Marr & Hildreth 1980 — the LoG operator in mHash
 
 D. Marr, E. Hildreth, **"Theory of edge detection"**, *Proceedings of the Royal Society of
 London B*, 207(1167):187–217, February 1980.
@@ -213,10 +215,10 @@ London B*, 207(1167):187–217, February 1980.
 - <https://doi.org/10.1098/rspb.1980.0020>
 - Rank 1 · **Not read**
 
-Listed here because this library's `mHash` was named after it and **is not an
-implementation of it**. See [`algorithm-provenance.md`](algorithm-provenance.md) §5.
-Cite this paper only if `mHash` is ever changed to actually compute a Laplacian of
-Gaussian with zero-crossing detection.
+The Laplacian-of-Gaussian (Mexican hat) kernel mHash correlates with. The hash
+construction built on it is pHash's; zero-crossing edge detection, the paper's actual edge
+detector, is not used by pHash or here. See
+[`algorithm-provenance.md`](algorithm-provenance.md) §5.
 
 ### [VKJM00] Venkatesan et al. 2000 — related work, not our source
 
@@ -226,13 +228,11 @@ ICIP*, vol. 3, IEEE, 2000, pp. 664–666.
 - <https://doi.org/10.1109/ICIP.2000.899541>
 - Rank 1 · **Read in full**
 
-Listed first to record a rejected hypothesis: this is the paper usually named as the
-origin of "wHash", and it is not. It describes a *keyed* algorithm — `h = H(I, K)`, where
+Listed because it is usually named as the origin of "wHash", and it is not. It describes a *keyed* algorithm — `h = H(I, K)`, where
 "the key is kept secret, and the hash value of a given image cannot be computed or
 verified by an unauthorized party". Neither our wHash nor ImageHash's `whash` has a key.
 
-Read in full because of a later question: could it replace our source-less wHash? What it
-specifies is four steps —
+Nor can it replace wHash as a source. What it specifies is four steps —
 
 1. a three-level Haar wavelet decomposition, each subband **randomly tiled into
    rectangles** under the key; averages of coefficients in the coarse subband, variances
@@ -307,7 +307,7 @@ one; see §6 of `algorithm-provenance.md`.
 M. J. Swain, D. H. Ballard, **"Color Indexing"**, *International Journal of Computer
 Vision* 7(1):11–32, 1991. doi:10.1007/BF00130487.
 
-The source for **ColorHash** since 2.0.0: a colour histogram over quantised opponent axes,
+The source for **ColorHash**: a colour histogram over quantised opponent axes,
 compared by histogram intersection.
 
 **Not read.** IJCV is closed, OpenAlex reports `oa_status: closed` and no repository holds
@@ -337,13 +337,11 @@ library's BMH values differ from OpenCV's, deliberately.
 Johannes Buchner. <https://github.com/JohannesBuchner/imagehash>
 
 The de facto reference for **aHash**, **dHash**, **pHash**, **wHash** and **ColorHash** in
-the Python ecosystem, and the implementation this library has historically been compared
-against. Its README cites [K11] for aHash and pHash, [K13] for dHash, a blog post for
+the Python ecosystem. Its README cites [K11] for aHash and pHash, [K13] for dHash, a blog post for
 wHash, and **nothing at all** for colorhash.
 
-**It is the origin, not merely a comparison point, for two of our algorithms**: wHash and
-ColorHash exist here because they exist there. For those two, ImageHash is the closest
-thing to a specification, and the analysis document says so plainly rather than implying
+**It is the origin, not merely a comparison point, for wHash**, which exists here because
+it exists there. For wHash, ImageHash is the closest thing to a specification, and the analysis document says so plainly rather than implying
 an academic pedigree that does not exist.
 
 ### [Pe16] Petrov — the blog post behind wHash
@@ -363,16 +361,16 @@ source" is a checkable statement rather than an assertion.
 | aHash | [K11] | 3 | yes | [IH] |
 | dHash | [K13] (algorithm by David Oftedal) | 3 | yes | [IH] |
 | pHash | [Z10] §3.2.1, [K11]; origin [CS04] | 1 | [Z10] yes, [CS04] no | [pHash], [IH] |
-| wHash | **none** — [VKJM00] read and rejected as a candidate | — | — | [IH], via [Pe16] |
-| mHash | **none** — see [MH80] for the name it wrongly claims | — | — | none |
-| BMH | [YGN06] | 1 | no — via [Z10] §3.1.4 | [pHash] |
+| wHash | **none** — [VKJM00] is a different, keyed algorithm | — | — | [IH], via [Pe16] |
+| mHash | pHash `ph_mh_imagehash()` (construction), [MH80] (operator) | 3 / 1 | [Z10] §3.2.2 yes, [MH80] no | [pHash] |
+| BMH | [YGN06] | 1 | no — via [Z10] §3.1.4 | [CV] |
 | Radial | [DR05]; background [LML02], [St05] | 1 | no — via [Z10] §3.1.3, §3.2.3 | [pHash] |
-| ColorHash | **none** | — | — | [IH] |
+| ColorHash | [SB91] | 4 (secondary restatements) | no | none |
 | ColorMoments | [SO95] | 1 | no — via [Ke05], rank 4 | none |
 
-Three of the nine have no primary source at all. Per the verification methodology, those
-three are judged only by measurable properties, and their attribution headers say so
-instead of implying a specification exists.
+One of the nine, wHash, has no primary source. Per the verification methodology it is
+judged only by measurable properties, and its attribution header says so instead of
+implying a specification exists.
 
 ## Adding to this file
 

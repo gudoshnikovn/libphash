@@ -5,7 +5,7 @@
 | Version | Supported |
 |---|---|
 | 2.x (latest minor) | Yes |
-| 1.x | No, once 2.0.0 ships — see `MIGRATION.md` |
+| 1.x | No — see `MIGRATION.md` to upgrade |
 
 Only the latest minor of the current major version receives security fixes. This is a
 single-maintainer project; there is no capacity to backport fixes across multiple
@@ -53,9 +53,8 @@ In scope:
 - A vulnerability in a vendored decoder (`vendor/libjpeg-turbo`, `vendor/libpng`,
   `vendor/spng`, `vendor/libwebp`, `vendor/zlib-ng`, or the copied-in
   `vendor/stb_image.h`/`vendor/stb_image_resize2.h`) that this project ships and
-  that isn't already fixed upstream. Please also report it upstream — see
-  "Vendored dependencies" below for why this project cannot simply subscribe to
-  their advisories yet for all of them.
+  that isn't already fixed upstream. Please also report it upstream. See
+  "Vendored dependencies" below for how updates to each are tracked.
 
 Out of scope:
 - The hash algorithms themselves are **unkeyed and deterministic by design** — this
@@ -112,8 +111,8 @@ This library bundles five decoder libraries as git submodules
 (`libjpeg-turbo`, `libpng`, `spng`, `libwebp`, `zlib-ng`) plus two files copied
 directly into the tree rather than submoduled (`vendor/stb_image.h`,
 `vendor/stb_image_resize2.h` — both locally patched; see `THIRD-PARTY-NOTICES.md`
-for their exact pinned versions and hashes, and `docs/development.md` for why they
-carry local patches instead of being submodules like the rest of `vendor/`).
+for their exact pinned versions and hashes, and `docs/development.md` for the local
+patches they carry).
 
 - **Submoduled dependencies:** [Dependabot](https://docs.github.com/en/code-security/dependabot)
   is configured (`.github/dependabot.yml`, `gitsubmodule` ecosystem) to open a pull
@@ -126,7 +125,7 @@ carry local patches instead of being submodules like the rest of `vendor/`).
   compares each file's pinned upstream hash (recorded in `THIRD-PARTY-NOTICES.md`)
   against the current upstream file and opens a tracking issue if they differ — the
   bump itself is still a manual, reviewed task, since it has to reapply the local
-  OOM-handling patch and re-verify against `tests/src/test_alloc_failure.c` rather
+  patches (see `docs/development.md`) and re-verify against `tests/src/test_alloc_failure.c` rather
   than being a drop-in file replacement.
 
 ## Fuzzing
@@ -135,5 +134,6 @@ carry local patches instead of being submodules like the rest of `vendor/`).
 entry point every format-decoding path funnels through. Build it with
 `-DPHASH_BUILD_FUZZERS=ON` (requires Clang — libFuzzer needs compiler-rt, so this
 option is a configure-time error under GCC). CI runs it nightly for 30 minutes with a
-cached, growing corpus (see `.github/workflows/ci.yml`); a crash there is treated the
+cached, growing corpus (`.github/workflows/fuzz-nightly.yml`), plus a 90-second run on
+every CI run (`ci.yml`); a crash there is treated the
 same as a privately reported vulnerability.

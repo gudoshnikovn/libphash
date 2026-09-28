@@ -21,10 +21,9 @@ cmake -B build -DCMAKE_C_COMPILER=gcc  # equivalent, no presets
 ```
 
 The C standard is pinned explicitly: `CMAKE_C_STANDARD 17` (`CMakeLists.txt`), with
-`CMAKE_C_EXTENSIONS OFF` since nothing here needs the GNU dialect. This was previously
-unset, i.e. silently whatever the compiler defaulted to. It is not C23 yet, even though
-every toolchain this project tests on Linux/macOS handles it fine (confirmed locally
-and via the `c-standard-matrix` CI job below) — `windows-latest`'s MSVC support for
+`CMAKE_C_EXTENSIONS OFF` since nothing here needs the GNU dialect. It is not C23, even
+though every toolchain this project tests on Linux/macOS handles it (the
+`c-standard-matrix` CI job below builds it) — `windows-latest`'s MSVC support for
 `/std:c23` isn't mature enough to trust as the project-wide default.
 
 ### Build systems and their defaults
@@ -46,10 +45,10 @@ sync when you add or flip a switch.**
 |---|---|---|---|
 | Bundled libjpeg-turbo | `PHASH_USE_LIBJPEG_TURBO=ON` | *n/a* (stb only) | Makefile has no native JPEG path |
 | Bundled libpng | `PHASH_USE_LIBPNG=ON` | *n/a* (stb only) | mutually exclusive with `PHASH_USE_SPNG` |
-| spng instead of libpng | `PHASH_USE_SPNG=OFF` | *n/a* | raw `-D` flag, not an `option()` |
+| spng instead of libpng | `PHASH_USE_SPNG=OFF` | *n/a* | mutually exclusive with `PHASH_USE_LIBPNG` (configure-time error if both are on) |
 | libwebp | `PHASH_USE_WEBP=ON` | `USE_WEBP=0` | Makefile path expects a system libwebp |
 | zlib-ng instead of system zlib | `PHASH_USE_ZLIB_NG=ON` | *n/a* | |
-| **Batch thread pool** | `PHASH_ENABLE_THREADS=ON` | `PHASH_ENABLE_THREADS=1` | was `0` in the Makefile, matched to CMake's default |
+| **Batch thread pool** | `PHASH_ENABLE_THREADS=ON` | `PHASH_ENABLE_THREADS=1` | matches CMake's default |
 | Shared library | `PHASH_BUILD_SHARED=OFF` | *n/a* (static `libphash.a` only) | |
 | Tests | `PHASH_BUILD_TESTS=ON` | always built by `all` | |
 | `-march=native` | `PHASH_OPTIMIZE_NATIVE=OFF` | *n/a* (fixed `-msse4.2` / `-march=armv8-a+simd`) | |
@@ -65,24 +64,18 @@ make PHASH_ENABLE_THREADS=0                  # portable build without -pthread
 cmake -S . -B build -DPHASH_ENABLE_THREADS=OFF
 ```
 
-**Why the thread default was changed.** The Makefile used to default to
-`PHASH_ENABLE_THREADS=0` "to keep the portable build free of pthread linkage". The
-practical effect was not a leaner build but a dead code path: `src/batch.c`'s worker
-pool was compiled out of every local `make test` and every `make coverage` run, so the
-threaded half of `ph_hash_files()`/`ph_hash_buffers()` was never executed or measured
-locally — which is how a real Windows thread-pool defect survived undetected for a while.
-The default is now
-`1`, i.e. `-pthread` *is* a dependency of the portable build. That is a deliberate
-trade: a pthread implementation is present on every platform the Makefile targets
-(it uses `uname` and POSIX tooling throughout), and correctness coverage of the
-concurrent path is worth more than the dependency.
+**Why threads are on in the portable build.** With the pool compiled out, `make test` and
+`make coverage` would never execute the threaded half of
+`ph_hash_files()`/`ph_hash_buffers()`. `-pthread` is therefore a dependency of the
+portable build: a pthread implementation is present on every platform the Makefile
+targets (it uses `uname` and POSIX tooling throughout), and coverage of the concurrent
+path is worth more than the dependency.
 
 ### Instrumented build modes (Makefile)
 
 `debug` and `coverage` are switch-driven (`PHASH_SANITIZE=1`, `PHASH_COVERAGE=1`) and
-re-invoke `make` rather than listing `clean` as a sibling prerequisite. The old
-`debug: clean all` shape raced under `-jN`: `clean` deleted object files while other
-jobs were compiling them. Prefer the same shape for any future instrumented mode.
+re-invoke `make` rather than listing `clean` as a sibling prerequisite, which would race
+under `-jN` (`clean` deleting object files other jobs are compiling). Prefer the same shape for any future instrumented mode.
 
 ### Two coverage targets, and why one isn't enough
 
@@ -128,7 +121,7 @@ a throwaway prefix, builds a consumer through `find_package(phash)` and through
 `pkg-config`, then **moves the prefix** and repeats the `pkg-config` build from the new
 location.
 
-That last step is the regression guard for a real relocation bug found this way. `libphash.pc.in` writes
+That last step guards relocatability. `libphash.pc.in` writes
 
 ```
 prefix=@CMAKE_INSTALL_PREFIX@
@@ -138,21 +131,21 @@ includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
 
 so that redefining `prefix` moves everything else with it — `pkg-config --define-prefix`
 guesses `prefix` from the `.pc` file's own location, which is how relocatable and
-relocated (packaged, then unpacked elsewhere) install trees are consumed. It previously
-substituted `@CMAKE_INSTALL_FULL_LIBDIR@`, an absolute configure-time path that
-`--define-prefix` cannot touch.
+relocated (packaged, then unpacked elsewhere) install trees are consumed. An absolute
+`@CMAKE_INSTALL_FULL_LIBDIR@` would be a configure-time path that `--define-prefix`
+cannot touch.
 
 Three caveats worth knowing:
 
 - Plain `pkg-config` does **not** redefine the prefix unless asked (`--define-prefix`,
   or a build of pkg-config/pkgconf configured to do it by default, as on Windows). The
-  fix makes relocation *possible*; the consumer still opts into it.
+  `.pc` makes relocation possible; the consumer still opts into it.
 - The behavioural half of the smoke check (move the tree, rebuild) is **not** a
   sufficient regression guard on its own, which is why `smoke_install.sh` also asserts
   on the text of the generated `.pc`. `pkgconf` (3.0.6, what Homebrew installs as
   `pkg-config`) implements `--define-prefix` by string-replacing the old prefix inside
-  absolute variable values as well, so it produces correct output even from the broken
-  `@CMAKE_INSTALL_FULL_LIBDIR@` form. freedesktop `pkg-config` only redefines the
+  absolute variable values as well, so it produces correct output even from a `.pc`
+  with an absolute `libdir`. freedesktop `pkg-config` only redefines the
   `prefix` variable and leaves an absolute `libdir` stale — the same `.pc` is relocatable
   under one implementation and not the other. Assert on the file, not just the output.
 - `GNUInstallDirs` allows `CMAKE_INSTALL_LIBDIR`/`CMAKE_INSTALL_INCLUDEDIR` to be
@@ -178,28 +171,26 @@ run a real PNG through `ph_load_from_file`) by
 - `BUILD_SHARED_LIBS=OFF` (static parent),
 - `BUILD_SHARED_LIBS=ON` (shared parent).
 
-Two rules keep this working, and both were learned the hard way:
+Two rules keep this working:
 
 - **The parent owns the global build settings.** `BUILD_SHARED_LIBS` and
   `BUILD_TESTING` are global CMake variables, not options of the vendored codecs, yet
   the codecs have to see them `OFF` while they configure. `CMakeLists.txt` therefore
   saves the parent's values, forces its own, and restores them immediately
-  (`phash_push/pop_global_build_flags()`). Forcing them and walking away silently
-  turned off a parent's shared build and its `ctest`.
+  (`phash_push/pop_global_build_flags()`). Forcing them without restoring would silently
+  turn off a parent's shared build and its `ctest`.
 - **Never force a dependency pin into the parent's cache.** libpng's
   `find_package(ZLIB REQUIRED)` has to be steered at the bundled zlib-ng, which is
   done by pre-setting `ZLIB_INCLUDE_DIR`/`ZLIB_LIBRARY` (and pre-creating the
   `ZLIB::ZLIB` alias) — but as **normal, directory-scope variables**. `vendor/libpng`
   is a child scope and inherits them, so nothing has to enter the cache. As `CACHE …
-  FORCE` entries they persisted into the *next* configure of the same build tree,
+  FORCE` entries they would persist into the *next* configure of the same build tree,
   where libphash's own "did the parent bring its own zlib?" check
-  (`DEFINED CACHE{ZLIB_LIBRARY}`) then fired on libphash's own pin: libphash stood
-  aside, the `zlib-ng` target was never created, and the cached absolute path to its
-  archive stayed on libpng's link interface — so the parent's link line acquired a
-  file dependency nothing produced (`No rule to make target
-  'phash_build/vendor/zlib-ng/libz.a'`). Any second `cmake -S . -B build`, i.e.
-  any normal incremental build, hit it, in both parent configurations. Hence the
-  deliberate re-configure step in the smoke script.
+  (`DEFINED CACHE{ZLIB_LIBRARY}`) would fire on libphash's own pin: libphash would stand
+  aside, the `zlib-ng` target would never be created, and the cached absolute path to its
+  archive would stay on libpng's link interface — a file dependency nothing produces
+  (`No rule to make target 'phash_build/vendor/zlib-ng/libz.a'`) on every incremental
+  build. The smoke script re-configures deliberately to catch that.
 
 `ZLIB_LIBRARY` also holds the zlib-ng **target name**, not a path to `libz.a`: CMake
 resolves a target name to the real artifact plus a build-order dependency, whereas the
@@ -226,7 +217,7 @@ We use `clang-format` with a custom style (based on LLVM with minor tweaks).
 - **Public APIs**: Prefix with `ph_` (e.g., `ph_compute_ahash`).
 - **Internal Helper Functions**: Standard C naming, not exposed in `libphash.h`.
 - **Types**: Suffix with `_t` (e.g., `ph_context_t`).
-- **Files**: Lowercase with underscores (e.g., `color_hsv.c`).
+- **Files**: Lowercase with underscores (e.g., `color_moments.c`).
 
 ## CI matrix (`.github/workflows/ci.yml`)
 
@@ -257,7 +248,7 @@ itself cannot move into the action, because a local action is read from the work
 copy. Configure and build steps stay in the jobs, since their arguments are what
 distinguishes one job from another.
 
-Two more workflows run on their own schedule rather than per-push:
+Two more workflows, and Dependabot, run on their own schedule rather than per push:
 
 - **`.github/workflows/fuzz-nightly.yml`** — a 30-minute libFuzzer run, sharing the
   same growing corpus cache across every night and every PR's short run. See
@@ -288,10 +279,10 @@ from the default branch only.
 
 ## Testing Strategy
 
-### 1. Unit Tests (`tests/test_*.c`)
+### 1. Unit Tests (`tests/src/test_*.c`)
 Each module should have a corresponding test file. We use a simple `test_macros.h` for assertions.
 
-### 2. Stability Tests (`tests/test_stability.c`)
+### 2. Stability Tests (`tests/src/test_stability.c`)
 Ensures that different loading modes (RGB vs Grayscale) and different architectures (NEON vs Scalar) produce bit-exact or near-exact results.
 
 ### 3. Fuzzing (`tests/fuzz/fuzz_load.c`)
@@ -351,23 +342,22 @@ comparison whose true answer is 0% for every metric:
 
 | Comparison metric | Gate runs | False regressions at 25% | Max observed deviation |
 |---|---|---|---|
-| `avg_ms`, 50 iterations (before) | 5 | **3 metrics in 1 run** | **45.3%** |
-| `min_ms`, 200 iterations (now) | 7 | 0 | 6.7% (typically under 4%) |
+| `avg_ms`, 50 iterations | 5 | **3 metrics in 1 run** | **45.3%** |
+| `min_ms`, 200 iterations (the gate's configuration) | 7 | 0 | 6.7% (typically under 4%) |
 
-The old configuration could not tell a real regression from runner noise, so
-flipping `STRICT=1` on it would have failed pull requests at random.
+`avg_ms` cannot tell a real regression from runner noise; `min_ms` over 200 iterations
+can.
 
 The gate's default threshold is therefore **10%**: comfortably above the
 measured floor, still far below the cost of an accidental extra decode pass.
-On a shared CI runner the floor is higher than measured here, which is why
-`STRICT=0` (warning-only) stays in place until the signal has been observed
-across several real pull requests.
+The gate runs warning-only (`STRICT=0`) on CI, because a shared runner's floor
+is higher than measured here.
 
 ### 5. Sanitizers (ASan + UBSan)
 
 ```bash
 make debug        # rebuilds with -O0 -g -fsanitize=address,undefined
-                  # NOTE: this target is `clean all` — it does NOT run the tests
+                  # NOTE: this cleans and rebuilds; it does NOT run the tests
 make test         # ...so always run the suite afterwards
 ```
 
@@ -383,7 +373,7 @@ casts a `float*` to `stbir_uint64*`, and the coefficient stride is frequently od
 aligned at its base — and the buffers we hand to `stbir_resize*` are always
 16-byte aligned, so nothing about our call sites is at fault. The pattern is
 present verbatim in current upstream master (v2.18), i.e. a version bump does not
-help. Untreated it produced 5 `runtime error: load/store of misaligned address
+help. Untreated it produces 5 `runtime error: load/store of misaligned address
 ... for type 'stbir_uint64'` per test-suite run, which is exactly the kind of
 constant noise that lets a real finding of ours slip through.
 
@@ -395,9 +385,9 @@ is compiled with `-fno-sanitize=alignment` (`STB_NOSAN_CFLAGS` in the `Makefile`
 no code of ours in it, alignment violations in `libphash` itself are still
 reported normally — as are all other UBSan checks, including in that file.
 
-A runtime `UBSAN_OPTIONS=suppressions=...` file was tried first and rejected: the
-suppression is silently ignored under `-fno-sanitize-recover=all`, so the report
-still fires and the process still aborts — the CI job would stay red.
+A runtime `UBSAN_OPTIONS=suppressions=...` file does not work here: the suppression is
+silently ignored under `-fno-sanitize-recover=all`, so the report still fires and the
+process still aborts.
 
 If you add another file that includes a vendored header with known UB, prefer the
 same shape (isolated TU + narrowest possible `-fno-sanitize=<check>`) over a
@@ -434,11 +424,10 @@ marker — there are five call sites):
   leaks. Fixed by mirroring each of these onto `info` immediately after its
   own successful allocation, instead of waiting for the later bulk copy.
 
-Found and independently reproduced via the allocation-failure harness
-(`tests/src/alloc_shim.h` + `tests/src/test_alloc_failure.c`), which fails a
-chosen allocation ordinal and checks for crashes/leaks; before this patch, two
-of its five scenarios had to be skipped under sanitizer builds specifically
-because of these bugs. All five now run unconditionally.
+The allocation-failure harness (`tests/src/alloc_shim.h` +
+`tests/src/test_alloc_failure.c`), which fails a chosen allocation ordinal and checks
+for crashes/leaks, exercises all five of its scenarios, including under sanitizers;
+without the patch two of them crash or leak.
 
 This diverges from upstream `stb_image_resize2` (present verbatim in current
 upstream master) and **must be re-applied and re-verified against
@@ -473,13 +462,11 @@ that reason in two independent places, so a decode that failed purely because
   success path is untouched.
 
 Each change carries the same `/* libphash local patch (not upstream): ... */`
-marker as the resize patch above (search the file for it). Before the patch,
-`test_alloc_failure` reported 5 problems across 83 failure points, all of this
-shape; after it, 83/83. As with the resize patch, **a bump of this vendored file
-must re-apply and re-verify it** against `test_alloc_failure`. Consider reporting
-the underlying bug upstream if it hasn't been already -- see SECURITY.md's
-"Vendored dependencies" section for how this project tracks the two copied-in
-stb headers against upstream.
+marker as the resize patch above (search the file for it). Without the patch, 5 of
+`test_alloc_failure`'s 83 failure points misreport. As with the resize patch, **a bump
+of this vendored file must re-apply and re-verify it** against `test_alloc_failure`.
+See SECURITY.md's "Vendored dependencies" section for how this project tracks the two
+copied-in stb headers against upstream.
 
 ## Adding New Features
 
