@@ -376,6 +376,7 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   build type. A standalone configure that names no build type defaults to `Release`; under
   `add_subdirectory()` the parent's build type applies. The project's warning flags are not
   applied to the vendored decoders.
+- `libphash.h`'s include guard is `PH_LIBPHASH_H` (1.x: `LIBPHASH_H`).
 - **The shared library exports only the functions of `libphash.h`.** 1.x exported every
   internal helper, the bundled `stb_image`, and all of the libjpeg-turbo, libpng and
   libwebp linked into it, so an application with its own copy of any of those got
