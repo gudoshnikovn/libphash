@@ -157,18 +157,17 @@ option(PHASH_ENABLE_MOCK_BACKEND "Register the DE AD mock decoder in the loader'
 option(PHASH_STRICT_DEPS "Fail the configure step instead of silently falling back when a bundled decoder dependency (e.g. vendored libjpeg-turbo/zlib-ng) can't be found" OFF)
 option(PHASH_ENABLE_THREADS "Let ph_hash_files()/ph_hash_buffers() spawn a pool of OS threads (pthreads/Win32) instead of always running sequentially" ON)
 # `make coverage` (Makefile) measures only the stb_image-only path: the native
-# decoders (src/loaders/{jpeg,png,webp}.c) compile to nothing but their
-# ph_can_use_*() stub under that flow, so their max_pixels checks, error-callback
-# plumbing and overflow guards are invisible to it. This option instruments *this*
+# decoders in src/loaders/ compile to nothing or are not built at all under that flow,
+# so their max_pixels checks, error-callback plumbing and overflow guards are
+# invisible to it. This option instruments *this*
 # CMake build instead, so a Release-equivalent config with the vendored decoders on
 # can be measured; scripts/coverage_cmake.sh drives it (also for the spng variant)
 # and merges both into one report.
 option(PHASH_COVERAGE "Instrument phash and its tests with --coverage (gcov/lcov); see scripts/coverage_cmake.sh" OFF)
 
-# libpng and spng are two alternative implementations of the *same* PNG backend:
-# src/loaders/png.c compiles exactly one of them (#ifdef PH_USE_LIBPNG / #elif
-# PH_USE_SPNG). Enabling both would build and link both libraries while using
-# libpng only -- an unused dependency baked into the artifact.
+# libpng and spng are two alternative implementations of the *same* PNG backend,
+# src/loaders/png_libpng.c and src/loaders/png_spng.c, and the library compiles one of
+# them. Both would define ph_decode_png_mem() twice and link two PNG libraries.
 # Refuse the configuration instead of picking a winner behind the user's back.
 if(PHASH_USE_LIBPNG AND PHASH_USE_SPNG)
     message(FATAL_ERROR
@@ -327,6 +326,8 @@ endif()
 
 # --- Library ---
 file(GLOB_RECURSE SOURCES "src/*.c")
+# The two PNG backends are added by their options below, at most one of them.
+list(FILTER SOURCES EXCLUDE REGEX "/src/loaders/png_(libpng|spng)\\.c$")
 
 # The vendored stb_image_resize2 packs filter coefficients with deliberately
 # unaligned 64-bit moves (STBIR_MOVE_2 casts float* -> stbir_uint64*) on its own
@@ -640,6 +641,7 @@ endif()
 # --- Bundled libpng ---
 if(PHASH_USE_LIBPNG)
     target_compile_definitions(phash PRIVATE PH_USE_LIBPNG)
+    target_sources(phash PRIVATE src/loaders/png_libpng.c)
     set(PNG_SHARED OFF CACHE BOOL "" FORCE)
     set(PNG_STATIC ON CACHE BOOL "" FORCE)
     set(PNG_TESTS OFF CACHE BOOL "" FORCE)
@@ -676,6 +678,7 @@ endif()
 # --- Bundled spng ---
 if(PHASH_USE_SPNG)
     target_compile_definitions(phash PRIVATE PH_USE_SPNG)
+    target_sources(phash PRIVATE src/loaders/png_spng.c)
     add_library(spng_static STATIC vendor/spng/spng/spng.c)
     target_include_directories(spng_static PUBLIC vendor/spng/spng)
     target_link_libraries(phash PRIVATE $<BUILD_INTERFACE:spng_static> $<BUILD_INTERFACE:${PHASH_ZLIB_TARGET}>)

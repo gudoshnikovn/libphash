@@ -109,7 +109,7 @@ typedef enum {
                                    ///< memory it needed right now. This is transient and worth
                                    ///< retrying, unlike PH_ERR_CORRUPT_DATA below, which is a
                                    ///< verdict on the input itself. Reported identically by the
-                                   ///< native decoder backends (jpeg.c/png.c/webp.c, on their
+                                   ///< native decoder backends (JPEG, PNG and WebP, on their
                                    ///< own malloc() failing) and by the stb_image fallback (on
                                    ///< stbi_load_from_memory() failing with its "outofmem"
                                    ///< reason).

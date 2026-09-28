@@ -10,8 +10,9 @@
 #include <stdint.h>
 #include <string.h> // memcmp, for the PNG signature check
 
-/* PNG magic bytes. Available regardless of which backend (if any) is compiled in:
- * the dimension check below is made by the dispatcher, before it picks a backend. */
+/* PNG magic bytes, and the PNG backend's can_read(). Available regardless of which
+ * backend (if any) is compiled in: the dimension check below is made by the dispatcher,
+ * before it picks a backend. */
 static inline int ph_magic_is_png(const uint8_t *magic, size_t len) {
     static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
     return len >= 8 && memcmp(magic, sig, sizeof(sig)) == 0;
@@ -45,10 +46,6 @@ static inline int ph_png_dimensions_within_limit(const unsigned char *buffer, si
 
 #ifdef PH_USE_LIBJPEG_TURBO
 int ph_can_read_jpeg(const uint8_t *magic, size_t len);
-#endif
-
-#if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
-int ph_can_read_png(const uint8_t *magic, size_t len);
 #endif
 
 #ifdef PH_USE_WEBP

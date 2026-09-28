@@ -126,7 +126,10 @@ endif
 # Sources and Objects
 LOADER_DIR = $(SRC_DIR)/loaders
 IMAGE_DIR = $(SRC_DIR)/image
-SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(HASH_DIR)/*.c) $(wildcard $(LOADER_DIR)/*.c) $(wildcard $(IMAGE_DIR)/*.c)
+# The libpng and spng backends need their vendored libraries, which only the CMake build
+# provides; this flow decodes PNG through stb_image.
+SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(HASH_DIR)/*.c) $(wildcard $(IMAGE_DIR)/*.c) \
+       $(filter-out $(LOADER_DIR)/png_libpng.c $(LOADER_DIR)/png_spng.c,$(wildcard $(LOADER_DIR)/*.c))
 OBJS = $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
 # Tests

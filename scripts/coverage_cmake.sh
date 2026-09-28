@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # `make coverage` (Makefile) measures only the stb_image-only path -- the
-# native decoders in src/loaders/{jpeg,png,webp}.c compile down to nothing but their
-# ph_can_use_*() stub there, so their max_pixels checks, error-callback plumbing
-# (png_error_fn/png_warning_fn + the longjmp that carries libpng's message out,
+# native decoders in src/loaders/ compile to nothing or are not built there, so their
+# max_pixels checks, error-callback plumbing (png_error_fn/png_warning_fn + the
+# longjmp that carries libpng's message out,
 # spng_strerror() branches) and the pitch/alloc_size overflow guards in jpeg.c are
 # never exercised or measured by that flow.
 #

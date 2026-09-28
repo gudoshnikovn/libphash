@@ -82,9 +82,9 @@ under `-jN` (`clean` deleting object files other jobs are compiling). Prefer the
 `make coverage` and `make coverage-cmake` measure disjoint code:
 
 - **`make coverage`** runs the Makefile's stb_image-only build. Every line inside
-  `#ifdef PH_USE_LIBJPEG_TURBO` / `PH_USE_LIBPNG` / `PH_USE_SPNG` / `PH_USE_WEBP` in
-  `src/loaders/{jpeg,png,webp}.c` doesn't exist in that binary at all — those
-  backends compile down to nothing but their `ph_can_use_*()` stub. The overall
+  native decoder code in `src/loaders/` doesn't exist in that binary at all — `jpeg.c`
+  and `webp.c` compile to nothing without their `PH_USE_*` flag, and `png_libpng.c`/
+  `png_spng.c` are not built. The overall
   percentage this target reports (currently ~95% lines) does **not** include the
   native decoders, no matter how high it reads.
 - **`make coverage-cmake`** (`scripts/coverage_cmake.sh`) runs two separate CMake

@@ -90,11 +90,11 @@ static void guard_check(const uint8_t *front, const uint8_t *back, const char *t
  *     failing -- for any reason, including its own internal allocation failing --
  *     is collapsed by spng's zlib_init() into one generic SPNG_EZLIB_INIT ("zlib
  *     init error"), with no separate code or message for the OOM case specifically
- *     (src/loaders/png.c's ph_spng_err() has no SPNG_EMEM to check for here, unlike
+ *     (src/loaders/png_spng.c's ph_spng_err() has no SPNG_EMEM to check for here, unlike
  *     every other spng failure site, which do get a precise check).
  * These are real, narrow limitations of each library's own error reporting, not a
  * libphash bug. The libpng PNG backend has no such gap -- ph_png_message_is_oom()
- * in src/loaders/png.c covers every OOM wording it can produce precisely -- so on a
+ * in src/loaders/png_libpng.c covers every OOM wording it can produce precisely -- so on a
  * libpng build this flag never actually triggers on scen_load_file()/
  * scen_hash_all(), and a real future libpng misclassification regression still
  * fails loudly there; it only matters for a PHASH_USE_SPNG build. Nor does the

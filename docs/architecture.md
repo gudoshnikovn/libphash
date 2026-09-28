@@ -12,8 +12,9 @@ dispatches across a small table of `{can_read, decode}` pairs (`backends[]`), tr
 order:
 
 1. **Native backends**, each compiled in only when its `PH_USE_*` flag is set:
-   `jpeg.c` (libjpeg-turbo, libjpeg API), `png.c` (libpng *or* spng — mutually exclusive,
-   selected at compile time), `webp.c` (libwebp).
+   `jpeg.c` (libjpeg-turbo, libjpeg API), `png_libpng.c` *or* `png_spng.c` (two
+   implementations of the one PNG backend; the build compiles one of them), `webp.c`
+   (libwebp).
 2. **`stb_image`** (`src/loaders/stb_image_impl.c`, wrapping the vendored
    `vendor/stb_image.h`) — always registered last, **unconditionally**, not behind any
    `PH_USE_*` flag. It catches anything no native backend claimed, which is what gives

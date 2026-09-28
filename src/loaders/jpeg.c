@@ -25,8 +25,6 @@
 
 #include "jerror.h"
 
-PH_API int ph_can_use_jpeg(void) { return 1; }
-
 int ph_can_read_jpeg(const uint8_t *magic, size_t len) {
     return (len >= 2 && magic[0] == 0xFF && magic[1] == 0xD8);
 }
@@ -200,7 +198,4 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
     return output;
 }
 
-#else
-// No native JPEG decoder -- stb_image will handle JPEG
-PH_API int ph_can_use_jpeg(void) { return 0; }
 #endif // PH_USE_LIBJPEG_TURBO

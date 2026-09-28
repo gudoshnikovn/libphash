@@ -53,6 +53,32 @@ PH_API int ph_version_number(void) { return PH_VERSION_NUMBER; }
 #define PH_BUILD_MOCK "off"
 #endif
 
+/* The same macros select the backends, so neither these nor ph_get_build_info() can claim
+ * a decoder that was not compiled in. */
+PH_API int ph_can_use_jpeg(void) {
+#if defined(PH_USE_LIBJPEG_TURBO)
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+PH_API int ph_can_use_png(void) {
+#if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
+    return 1;
+#else
+    return 0;
+#endif
+}
+
+PH_API int ph_can_use_webp(void) {
+#if defined(PH_USE_WEBP)
+    return 1;
+#else
+    return 0;
+#endif
+}
+
 PH_API const char *ph_get_build_info(void) {
     return "version=" PH_VERSION_STRING " jpeg=" PH_BUILD_JPEG " png=" PH_BUILD_PNG
            " webp=" PH_BUILD_WEBP " zlib=" PH_BUILD_ZLIB " threads=" PH_BUILD_THREADS

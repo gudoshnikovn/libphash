@@ -88,8 +88,8 @@ jobs:
             os: macos-latest
             needs_nasm: false
             cc: clang
-          # spng is the other PNG backend (src/loaders/png.c compiles exactly
-          # one of libpng/spng); this leg builds and tests it.
+          # spng is the other PNG backend (src/loaders/png_spng.c, built instead of
+          # png_libpng.c); this leg builds and tests it.
           - name: ubuntu-x86_64-gcc-spng
             os: ubuntu-latest
             needs_nasm: true
@@ -124,8 +124,8 @@ jobs:
       run: cd build && ctest --output-on-failure
 
   # `make coverage` (Makefile) only measures the stb_image-only path -- none
-  # of src/loaders/{jpeg,png,webp}.c's native decoding code (the #ifdef PH_USE_*
-  # bodies) exists in that binary at all, just their ph_can_use_*() stub. This job
+  # of the native decoding code in src/loaders/ (jpeg.c and webp.c compile to nothing
+  # there, and png_libpng.c/png_spng.c are not built) exists in that binary. This job
   # runs scripts/coverage_cmake.sh, which drives the vendored decoder build (plus
   # a separate spng pass) under -DPHASH_COVERAGE=ON and merges both lcov traces,
   # then publishes the merged HTML report as an artifact. See
@@ -257,7 +257,7 @@ jobs:
   # native PNG backend (libpng) plus system zlib, not the full vendored set: cross-
   # building libjpeg-turbo/zlib-ng's own NASM-based 32-bit SIMD and libwebp under -m32
   # is a much larger, separate lift, and this backend already links the one native
-  # decoder (src/loaders/png.c) whose overflow guards this leg exists to exercise.
+  # decoder (src/loaders/png_libpng.c) whose overflow guards this leg exists to exercise.
   #
   # -Werror=incompatible-pointer-types belongs on this leg specifically: a decoder
   # declared with `unsigned long` where the backend table expects `size_t` is the same

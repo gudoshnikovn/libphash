@@ -77,7 +77,7 @@ static int ph_stb_reason_is_unsupported(const char *reason) {
 /* Same coupling as ph_stb_unsupported_reasons above, for the other reason worth telling
  * apart: stb_image's own malloc()/realloc() calls failing mid-decode. Unrecognized, it
  * would fall into PH_ERR_CORRUPT_DATA and call the file bad when the process ran out of
- * memory; the native decoder backends (jpeg.c, png.c, webp.c) report their own malloc
+ * memory; the native decoder backends (src/loaders/) report their own malloc
  * failures as PH_ERR_ALLOCATION_FAILED, and this keeps the stb-only build consistent
  * with them. test_stb_oom_reason_pinned() in tests/src/test_alloc_failure.c pins this
  * literal against a real forced allocation failure (not just a mocked reason string);
@@ -223,7 +223,7 @@ static const ph_image_backend_t backends[] = {
     {ph_can_read_jpeg, ph_decode_jpeg_mem},
 #endif
 #if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
-    {ph_can_read_png, ph_decode_png_mem},
+    {ph_magic_is_png, ph_decode_png_mem},
 #endif
 #ifdef PH_USE_WEBP
     {ph_can_read_webp, ph_decode_webp_mem},
@@ -436,7 +436,7 @@ uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int 
     return NULL;
 }
 
-/* Every decode path -- native backends (plain malloc in jpeg.c/png.c/webp.c)
+/* Every decode path -- native backends (plain malloc in src/loaders/)
  * and stb_image (STBI_MALLOC/STBI_FREE default to malloc/free, unoverridden
  * in this project) -- hands out a plain malloc()'d buffer, so this is just
  * free(). Spelled out directly rather than via stbi_image_free() so freeing
