@@ -268,6 +268,10 @@ walkthrough.
 - **Enabling both PNG backends is now a configure-time error.** `PHASH_USE_LIBPNG`
   and `PHASH_USE_SPNG` are mutually exclusive; setting both used to silently pick one.
   *Restore the old behaviour:* not applicable — choose one backend explicitly.
+- **The JPEG backend option is `PHASH_USE_LIBJPEG_TURBO`** (1.x: `PHASH_USE_TURBOJPEG`),
+  named after the codec. Passing the old name stops the configure step and names the new
+  one, rather than being ignored and building the default backend set.
+  *Restore the old behaviour:* not applicable — pass `-DPHASH_USE_LIBJPEG_TURBO=…`.
 - **Non-regular files are rejected instead of decoded.** Passing a FIFO, a character
   device or `/dev/stdin` to `ph_load_from_file()` now returns `PH_ERR_IO`. Previously
   the fallback decoder would read such a path happily, so this turns a former
