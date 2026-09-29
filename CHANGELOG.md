@@ -409,6 +409,15 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   `-mavx2` whenever the compiler accepted it, so the CMake build and anything packaged from
   it died with an illegal instruction on a CPU without AVX2. The x86-64 baseline is SSE4.2
   with POPCNT (x86-64-v2), and it is stated in the README.
+- **Architecture flags follow the target compiler, not the build host.** 1.x chose them
+  from the host's processor name, so a build for another architecture on the same machine
+  (`CMAKE_OSX_ARCHITECTURES=x86_64` on Apple silicon, a macOS universal build) failed on a
+  foreign `-march`, and the Makefile gave Linux arm64 (`aarch64`) no flag while naming one
+  for macOS. arm64 gets no architecture flag at all: Advanced SIMD is part of the base
+  architecture. A universal macOS build works with every bundled decoder except
+  libjpeg-turbo, which it refuses at configure time. The Makefile takes
+  `EXTRA_CFLAGS`/`EXTRA_LDFLAGS`, appended to its own, so `make EXTRA_CFLAGS=-m32
+  EXTRA_LDFLAGS=-m32` builds 32-bit x86 on a 64-bit host.
 - **Minimum supported 32-bit x86 CPU is one with SSE2** (~Pentium 4/Athlon 64, 2000-2003
   onward). Both build systems force `-mfpmath=sse -msse2` there to avoid x87
   extended-precision float math, whose results depend on the compiler/CPU in a way SSE2's
