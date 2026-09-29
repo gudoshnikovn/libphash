@@ -935,11 +935,11 @@ typedef struct {
 /**
  * @brief Hashes a batch of image files, optionally across a pool of internal threads.
  *
- * Each item is loaded and hashed independently. Internally this calls the same shared-
- * grayscale `ph_compute_multi()` used for a single image, so requesting several
- * algorithms for the same file is no more expensive per-file than requesting one (the
- * grayscale conversion/downscales are not repeated). A decode/hash failure on one item is
- * recorded in that item's `status` and does not stop the rest of the batch from being
+ * Each item is loaded and hashed independently. Internally this calls the same
+ * `ph_compute_multi()` used for a single image: the file is decoded once and converted to
+ * grayscale once, whatever the flags, while each algorithm still resizes that grayscale
+ * image to its own working size, so each flag adds its own resize. A decode/hash failure on one
+ * item is recorded in that item's `status` and does not stop the rest of the batch from being
  * processed.
  *
  * This is ph_hash_files_ex() with every option at its default, and three of those
