@@ -80,7 +80,7 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   vector, applies a 1-D DCT and keeps the first 40 coefficients — always a 40-byte
   digest (De Roover et al. 2005, as pHash implements it). 1.x took 40 angles, no
   transform, and a digest one byte per angle.
-  `ph_context_set_radial_params()`'s first argument is the number of angles (40..131072,
+  `ph_context_set_radial_params()`'s first argument is the number of angles (40..4096,
   default 180), and it takes a new third argument, `sigma`, the Gaussian blur before the
   projections (default 3.5, pHash's own default; 1.x used a fixed 3×3 kernel). Gamma
   follows pHash: default 1.0, pixels normalised by the buffer's maximum and raised to
@@ -128,9 +128,12 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   configuration **completely unchanged** — never clamped, never partially applied, never
   reset to defaults. Existing call sites still compile (the setters are deliberately not
   `warn_unused_result`). The bounds are implementation limits: `gamma` finite and in
-  (0.001, 1000]; gray weights each ≥ 0 with a sum in (0, INT_MAX/255]; `dct_size` 1..32;
-  `reduction_size` 2..8 and ≤ `dct_size`; radial `projections` 40..131072 (the lower bound
-  is the coefficient count the DCT keeps), `samples` 2..65536, `sigma` in (0, 64/3];
+  (0.001, 1000]; gray weights each ≥ 0 with a sum in (0, INT_MAX/255];
+  `reduction_size` 4..8 (below 4 most unrelated images share a pHash) and `dct_size`
+  `reduction_size`..32; radial `projections` 40..4096 (the lower bound is the coefficient
+  count the DCT keeps) and `samples` 2..4096 (the digest has converged well below both
+  ceilings, and one call at the ceiling costs about 56 ms instead of tens of seconds),
+  `sigma` in (0, 64/3];
   `block_size` 2..32 (a single block cannot threshold against a median; 32×32 bits is the
   largest grid a digest holds — 1.x accepted any positive value and truncated the BMH
   digest to 64 bytes above 22×22); `whash_mode` a declared enumerator only.

@@ -186,8 +186,10 @@ if (ph_context_set_phash_params(ctx, dct_size, reduction_size) != PH_SUCCESS) {
 
 Bounds: `gamma` finite in `(0.001, 1000]`; gray weights each ≥ 0 with a sum in
 `(0, INT_MAX/255]` (a zero sum is an error, not a request for the defaults);
-`dct_size` 1..32; `reduction_size` 2..8 and ≤ `dct_size`; radial `projections`
-40..131072, `samples` 2..65536, `sigma` in `(0, 64/3]`; `block_size` 2..32 (1.x
+`reduction_size` 4..8 and `dct_size` `reduction_size`..32 (a 2×2 or 3×3 block gives most
+unrelated images the same pHash); radial `projections` 40..4096 and `samples` 2..4096
+(the digest has converged far below both; above them a call only costs more CPU),
+`sigma` in `(0, 64/3]`; `block_size` 2..32 (1.x
 accepted any positive value and truncated the BMH digest to 64 bytes above 22×22);
 `whash_mode` a declared enumerator only.
 
