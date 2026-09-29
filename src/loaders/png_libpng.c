@@ -246,15 +246,14 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     // Gray (1 channel) when asked for it, RGB (3) otherwise, each followed by the alpha
     // channel when the image has one (an alpha colour type, or tRNS expanded above).
     // Alpha is resolved by the caller (ph_resolve_alpha()), the same for every backend.
-    if (req_comp == 1) {
-        // Force grayscale using same weights as ph_to_grayscale (Rec. 601)
-        if (color_type & PNG_COLOR_MASK_COLOR) {
-            // Weights are scaled by 100,000 for libpng
-            // R: 38/128 = 0.296875 -> 29688
-            // G: 75/128 = 0.5859375 -> 58594
-            png_set_rgb_to_gray_fixed(png_ptr, 1, 29688, 58594);
-        }
-    } else if (color_type == PNG_COLOR_TYPE_GRAY || color_type == PNG_COLOR_TYPE_GRAY_ALPHA) {
+    //
+    // A colour image asked for as gray is decoded to 8-bit RGB(A) and folded below with
+    // the library's own weights, as the spng and stb_image paths do. libpng's
+    // png_set_rgb_to_gray_fixed() would run before the 16 -> 8 bit reduction, at 16-bit
+    // precision, and land a level away from the other backends on a 16-bit PNG.
+    const int fold_to_gray = (req_comp == 1) && (color_type & PNG_COLOR_MASK_COLOR);
+    if (req_comp != 1 &&
+        (color_type == PNG_COLOR_TYPE_GRAY || color_type == PNG_COLOR_TYPE_GRAY_ALPHA)) {
         png_set_gray_to_rgb(png_ptr);
     }
 
@@ -319,6 +318,26 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     png_read_image(png_ptr, row_ptrs);
     free(row_ptrs);
     png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+
+    if (fold_to_gray) {
+        /* RGB(A) -> gray(+alpha), in place: each pixel shrinks, so a forward pass never
+         * overwrites a byte it has yet to read. Rows are tightly packed (rowbytes is
+         * w * out_channels for 8-bit samples). */
+        const int gray_channels = out_channels - 2;
+        const size_t num_pixels = (size_t)w * (size_t)h;
+        for (size_t i = 0; i < num_pixels; i++) {
+            const unsigned char *src = data + i * (size_t)out_channels;
+            unsigned char *dst = data + i * (size_t)gray_channels;
+            const unsigned char alpha = (out_channels == 4) ? src[3] : 0;
+            dst[0] = (unsigned char)((PH_GRAY_R * (unsigned)src[0] + PH_GRAY_G * (unsigned)src[1] +
+                                      PH_GRAY_B * (unsigned)src[2]) >>
+                                     7);
+            if (out_channels == 4) {
+                dst[1] = alpha;
+            }
+        }
+        out_channels = gray_channels;
+    }
 
     *width = (int)w;
     *height = (int)h;
