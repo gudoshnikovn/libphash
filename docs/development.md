@@ -51,11 +51,35 @@ sync when you add or flip a switch.**
 | **Batch thread pool** | `PHASH_ENABLE_THREADS=ON` | `PHASH_ENABLE_THREADS=1` | matches CMake's default |
 | Shared library | `PHASH_BUILD_SHARED=OFF` | *n/a* (static `libphash.a` only) | |
 | Tests | `PHASH_BUILD_TESTS=ON` | always built by `all` | |
-| `-march=native` | `PHASH_OPTIMIZE_NATIVE=OFF` | *n/a* (fixed `-msse4.2` / `-march=armv8-a+simd`) | without it the CPU baseline is x86-64-v2 (SSE4.2 + POPCNT, for the Hamming distances) on x86-64, SSE2 on 32-bit x86, ARMv8-A + Advanced SIMD on arm64; no AVX anywhere |
+| `-march=native` | `PHASH_OPTIMIZE_NATIVE=OFF` | *n/a* | without it the flags follow the target (see below); no AVX anywhere |
 | libFuzzer harnesses | `PHASH_BUILD_FUZZERS=OFF` | *n/a* | requires Clang |
 | Test-only mock decoder | `PHASH_ENABLE_MOCK_BACKEND=OFF` | `PHASH_ENABLE_MOCK_BACKEND=0` | must never be on in a shipped build |
 | Strict dependency handling | `PHASH_STRICT_DEPS=OFF` | *n/a* | |
 | Coverage instrumentation | `PHASH_COVERAGE=OFF` | `PHASH_COVERAGE=0` | same flag name, independent implementations — see below for why one build alone isn't enough |
+
+**Architecture flags follow the target, not the host.** Both build systems read the
+target from the compiler's predefined macros, so `-m32`, a toolchain file and
+`CMAKE_OSX_ARCHITECTURES` all count:
+
+| Target | Flags | CPU baseline |
+|---|---|---|
+| x86-64 | `-msse4.2` | x86-64-v2 (SSE4.2 + POPCNT, which the Hamming distances run on) |
+| 32-bit x86 | `-msse2 -mfpmath=sse` | SSE2; x87 intermediates would make 32-bit hashes differ from 64-bit ones |
+| arm64 | none | ARMv8-A; Advanced SIMD is part of the base architecture |
+
+```bash
+make EXTRA_CFLAGS=-m32 EXTRA_LDFLAGS=-m32          # 32-bit x86 on a 64-bit host
+cmake -B build -DCMAKE_OSX_ARCHITECTURES=x86_64      # Intel macOS from Apple silicon
+cmake -B build "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64" -DPHASH_USE_LIBJPEG_TURBO=OFF
+```
+
+`EXTRA_CFLAGS`/`EXTRA_LDFLAGS` are appended after everything the Makefile sets; plain
+`make CFLAGS=...` would replace the include paths too. A universal build gives the x86-64
+slice its flag through `-Xarch_x86_64` and builds libpng with its portable filters, since
+libpng chooses NEON or SSE2 sources for the whole build. The bundled libjpeg-turbo is a
+separately configured single-architecture archive, so a universal build refuses it at
+configure time: use stb_image for JPEG, or build each architecture and join them with
+`lipo -create`.
 
 Both spellings of the thread switch accept the same off-ramp:
 

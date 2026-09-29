@@ -18,26 +18,19 @@ GENERATED_DIR = generated
 CFLAGS = -std=c17 -ffp-contract=off -I./include -I./src -I./$(GENERATED_DIR) -O3 -Wall -Wextra -fPIC
 LDFLAGS = -lm
 
-# Architecture-specific optimizations
-UNAME_M := $(shell uname -m)
-ifeq ($(UNAME_M),x86_64)
+# Extra flags from the command line, appended after everything this file sets: `make
+# CFLAGS=...` would replace CFLAGS wholesale, include paths and all. A 32-bit build on a
+# 64-bit host is `make EXTRA_CFLAGS=-m32 EXTRA_LDFLAGS=-m32`.
+EXTRA_CFLAGS ?=
+EXTRA_LDFLAGS ?=
+
+# Architecture flags follow the TARGET, read from the compiler's predefined macros (with
+# EXTRA_CFLAGS, so -m32 counts), not from `uname -m`, which names the host. Why each
+# flag, and why arm64 gets none: see the matching block in CMakeLists.txt.
+TARGET_MACROS := $(shell $(CC) $(EXTRA_CFLAGS) -dM -E -x c /dev/null 2>/dev/null)
+ifneq (,$(findstring __x86_64__,$(TARGET_MACROS)))
     CFLAGS += -msse4.2
-endif
-ifeq ($(UNAME_M),arm64)
-    CFLAGS += -march=armv8-a+simd
-endif
-# 32-bit x86 has no fixed float ABI of its own -- GCC/Clang default to
-# x87 FPU extended-precision intermediates for scalar double/float math there, not
-# SSE2, unless told otherwise. That default silently changes this library's own
-# floating-point output (e.g. ph_compute_phash()'s rounding noise on solid-colour
-# input, tests/src/test_hash_properties.c's synthetic rotation profile) purely
-# because of how the compiler happens to schedule intermediate precision, with
-# nothing in the library or its test corpus asking for it. Force SSE2-based float
-# math so 32-bit and 64-bit x86 builds agree bit-for-bit wherever they should.
-# Raises the minimum 32-bit CPU to SSE2-capable hardware (~Pentium 4/Athlon 64,
-# 2000-2003) -- the same floor most current Linux distributions already assume
-# for i686 builds.
-ifneq (,$(filter i386 i486 i586 i686 x86,$(UNAME_M)))
+else ifneq (,$(findstring __i386__,$(TARGET_MACROS)))
     CFLAGS += -msse2 -mfpmath=sse
 endif
 
@@ -122,6 +115,10 @@ ifeq ($(PHASH_COVERAGE),1)
 CFLAGS += -g -O0 --coverage -fprofile-update=atomic
 LDFLAGS += --coverage
 endif
+
+# Command-line additions go last, so they can override anything above.
+CFLAGS += $(EXTRA_CFLAGS)
+LDFLAGS += $(EXTRA_LDFLAGS)
 
 # Sources and Objects
 LOADER_DIR = $(SRC_DIR)/loaders

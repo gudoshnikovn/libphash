@@ -214,6 +214,8 @@ endif()
 
 # --- Compiler Flags ---
 include(CheckCCompilerFlag)
+# More than one entry: a macOS universal build, one compile per source for every slice.
+list(LENGTH CMAKE_OSX_ARCHITECTURES PHASH_OSX_ARCH_COUNT)
 
 if(MSVC)
     # src/batch.c and src/loader.c include <stdatomic.h> unconditionally, and
@@ -285,41 +287,53 @@ else()
     if(PHASH_OPTIMIZE_NATIVE)
         add_compile_options(-march=native)
     else()
-        # Architecture specific optimizations.
+        # Architecture flags follow the TARGET, read from the compiler's own predefined
+        # macros, which honour -m32, a toolchain file and CMAKE_OSX_ARCHITECTURES alike.
+        # CMAKE_SYSTEM_PROCESSOR would be the host's uname without a toolchain file, and
+        # would hand x86 flags to an arm64 slice of a macOS build or the reverse.
         #
-        # CMAKE_SYSTEM_PROCESSOR is NOT reliable for telling 32-bit x86 apart from
-        # 64-bit here: without a real cross-compiling toolchain file (CMAKE_SYSTEM_NAME
-        # set), CMake reports the *host*'s uname -- so build-and-test-32bit's
-        # -DCMAKE_C_FLAGS=-m32 -DCMAKE_SYSTEM_PROCESSOR=i686 in ci.yml is silently
-        # overridden back to the runner's real "x86_64" during project(), and this
-        # branch would match "x86_64|amd64" for that leg too. CMAKE_SIZEOF_VOID_P, by
-        # contrast, is derived from an actual compiled
-        # test binary and correctly reflects -m32, so it's what distinguishes the two
-        # x86 widths below.
-        if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64|i[3-6]86|^x86$")
-            if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-                # The x86-64 baseline is SSE4.2 with POPCNT (x86-64-v2: every x86-64 CPU
-                # since 2009-2011). POPCNT is what the Hamming distances run on; without it
-                # the popcount is a dozen instructions. Nothing in the library needs AVX2,
-                # and a binary built with it would die with SIGILL on a CPU without it.
-                add_compile_options(-msse4.2)
-            else()
-                # 32-bit x86 has no fixed float ABI of its own -- GCC/Clang
-                # default to x87 FPU extended-precision intermediates for scalar
-                # double/float math there, not SSE2, unless told otherwise. That default
-                # silently changes this library's own floating-point output (e.g.
-                # ph_compute_phash()'s rounding noise on solid-colour input,
-                # tests/src/test_hash_properties.c's synthetic rotation profile) purely
-                # because of how the compiler happens to schedule intermediate
-                # precision, with nothing in the library or its test corpus asking for
-                # it. Force SSE2-based float math so 32-bit and 64-bit x86 builds agree
-                # bit-for-bit wherever they should. Raises the minimum 32-bit CPU to
-                # SSE2-capable hardware (~Pentium 4/Athlon 64, 2000-2003) -- the same
-                # floor most current Linux distributions already assume for i686 builds.
-                add_compile_options(-msse2 -mfpmath=sse)
+        # x86-64: SSE4.2 with POPCNT (x86-64-v2, every x86-64 CPU since 2009-2011).
+        # POPCNT is what the Hamming distances run on; without it the popcount is a dozen
+        # instructions. Nothing in the library needs AVX, and a binary built with it
+        # would die with SIGILL on a CPU without it.
+        #
+        # 32-bit x86: SSE2 float math. GCC/Clang otherwise use x87 extended-precision
+        # intermediates there, which moves this library's floating-point output (e.g.
+        # ph_compute_phash()'s rounding noise on solid-colour input) with how the
+        # compiler schedules intermediate precision; with SSE2, 32-bit and 64-bit x86
+        # agree bit for bit. Raises the minimum 32-bit CPU to SSE2 (~Pentium 4/Athlon 64,
+        # 2000-2003), the floor current Linux distributions assume for i686 anyway.
+        #
+        # arm64: no flag. Advanced SIMD is part of the AArch64 base architecture, so
+        # __ARM_NEON is always defined, and an explicit -march would only override the
+        # toolchain's own tuning (Apple's default targets its own cores).
+        set(PHASH_X86_64_FLAGS -msse4.2)
+        set(PHASH_X86_32_FLAGS -msse2 -mfpmath=sse)
+        if(PHASH_OSX_ARCH_COUNT GREATER 1)
+            # One compile per source produces every slice of a universal binary, so a
+            # flag meant for one slice goes through -Xarch_<arch>.
+            if("x86_64" IN_LIST CMAKE_OSX_ARCHITECTURES)
+                foreach(flag ${PHASH_X86_64_FLAGS})
+                    add_compile_options("SHELL:-Xarch_x86_64 ${flag}")
+                endforeach()
             endif()
-        elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
-            add_compile_options(-march=armv8-a+simd)
+        else()
+            include(CheckCSourceCompiles)
+            check_c_source_compiles("
+                #if !defined(__x86_64__)
+                #error not x86-64
+                #endif
+                int main(void) { return 0; }" PHASH_TARGET_X86_64)
+            check_c_source_compiles("
+                #if !defined(__i386__)
+                #error not 32-bit x86
+                #endif
+                int main(void) { return 0; }" PHASH_TARGET_X86_32)
+            if(PHASH_TARGET_X86_64)
+                add_compile_options(${PHASH_X86_64_FLAGS})
+            elseif(PHASH_TARGET_X86_32)
+                add_compile_options(${PHASH_X86_32_FLAGS})
+            endif()
         endif()
     endif()
 endif()
@@ -449,6 +463,15 @@ if(PHASH_ENABLE_THREADS)
 endif()
 
 # --- Bundled libjpeg-turbo (libjpeg API, jpeg-static) ---
+if(PHASH_USE_LIBJPEG_TURBO AND PHASH_OSX_ARCH_COUNT GREATER 1)
+    # The archive below is built by a separate configure for one architecture; its SIMD
+    # code is per-architecture assembly, and one compile cannot produce two slices of it.
+    message(FATAL_ERROR
+        "A universal build (CMAKE_OSX_ARCHITECTURES=${CMAKE_OSX_ARCHITECTURES}) cannot use "
+        "the bundled libjpeg-turbo. Either configure with -DPHASH_USE_LIBJPEG_TURBO=OFF "
+        "(stb_image decodes JPEG), or build each architecture separately and join the "
+        "libraries with `lipo -create`.")
+endif()
 if(PHASH_USE_LIBJPEG_TURBO)
     # The libjpeg API archive (jpeg-static), not the TurboJPEG one (turbojpeg-static):
     # libjpeg-turbo 3.x compiles its own zlib and spng into the TurboJPEG archive, with
@@ -645,7 +668,14 @@ if(PHASH_USE_LIBPNG)
     set(PNG_SHARED OFF CACHE BOOL "" FORCE)
     set(PNG_STATIC ON CACHE BOOL "" FORCE)
     set(PNG_TESTS OFF CACHE BOOL "" FORCE)
-    set(PNG_HARDWARE_OPTIMIZATIONS ON CACHE BOOL "" FORCE)
+    # libpng picks its SIMD sources (NEON or SSE2) for the whole build, from one
+    # architecture, so a universal build would compile NEON code into its x86_64 slice.
+    # There it runs with the portable C filters.
+    if(PHASH_OSX_ARCH_COUNT GREATER 1)
+        set(PNG_HARDWARE_OPTIMIZATIONS OFF CACHE BOOL "" FORCE)
+    else()
+        set(PNG_HARDWARE_OPTIMIZATIONS ON CACHE BOOL "" FORCE)
+    endif()
     # libpng works mostly OK with add_subdirectory
     add_subdirectory(vendor/libpng EXCLUDE_FROM_ALL)
     # png_static/PHASH_ZLIB_TARGET aren't in phash's export set, so they can
