@@ -260,7 +260,12 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   a video frame), skipping the encode/decode round-trip. Accepts 1, 3 or 4 channels and an
   arbitrary row stride; the `max_pixels` limit applies to it too.
 - **`ph_radial_similarity()`** and **`ph_histogram_intersection()`**, the comparisons the
-  Radial hash and ColorHash are defined with (see BREAKING CHANGES). Histogram
+  Radial hash and ColorHash are defined with (see BREAKING CHANGES). An image with no
+  angular structure (blank, or radially symmetric: a variance profile spread across angles
+  by less than 1 % of its mean) hashes to an all-zero radial digest, and
+  `ph_radial_similarity()` answers any comparison with it with **`PH_ERR_NO_STRUCTURE`**
+  rather than a score — the threshold is relative, so a faint pattern still gets a digest
+  of its own. Histogram
   intersection is computed exactly: identical or proportionally scaled histograms score
   exactly `1.0`, swapping the arguments gives a bit-identical result, and the value is the
   same on every platform.
@@ -305,8 +310,9 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   in an orientation the caller did not ask for.
 - **Specific error codes** replacing 1.x's single decode failure: `PH_ERR_IMAGE_TOO_LARGE`,
   `PH_ERR_UNSUPPORTED_FORMAT`, `PH_ERR_CORRUPT_DATA`, `PH_ERR_DECODER_UNAVAILABLE`,
-  `PH_ERR_IO`, plus `PH_ERR_REQUIRES_COLOR` and `PH_ERR_CANCELLED`. Every build and every
-  decoder answers the same input with the same code:
+  `PH_ERR_IO`, plus `PH_ERR_REQUIRES_COLOR`, `PH_ERR_CANCELLED` and
+  `PH_ERR_NO_STRUCTURE`. Every build and every decoder answers the same input with the
+  same code:
   - `PH_ERR_IO` — a missing path (including a dangling symlink), no read permission, a
     non-regular file, an empty file, or a file larger than the address space (a 32-bit
     build fed something above 4 GB), decided before any decoder sees the bytes;
