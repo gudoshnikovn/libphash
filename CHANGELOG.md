@@ -56,6 +56,15 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   *Restore the old behaviour:* rebuild any FFI binding that hardcodes the layout; where a
   comparison returns -1, switch to the metric for that digest.
 
+- **aHash sets the bit of a pixel exactly equal to the mean.** 1.x cleared it
+  (`pixel > mean`); the tie-break is `>=`, the rule BMH follows. The mean is compared
+  exactly, so only a genuine tie is affected: an image that is uniform at 8×8 hashes to
+  all ones instead of all zeros, and any other value moves only where a pixel lands
+  exactly on the mean. Across 807 photographs and textures, 39 values change: 38 uniform
+  images and one tie.
+  *Restore the old behaviour:* not possible; recompute stored aHash values, at least
+  those equal to zero.
+
 - **The Block Mean Hash thresholds against the median of the block means, not their
   arithmetic mean, so every BMH value changes.** That is what Yang, Gu and Niu's method 1
   specifies (step d and equation 3.9), and the median makes the bit distribution balanced
@@ -467,11 +476,6 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
 - The vendored `stb_image_resize2` crashed or leaked when one of its internal allocations
   failed under AddressSanitizer's separate-allocation mode. Patched locally pending an
   upstream fix.
-- **aHash now thresholds a pixel exactly equal to the mean as set, not clear**
-  (`pixel >= mean`, was `pixel > mean`), matching the tie-break this library already
-  uses for BMH. The source leaves the tie unstated either way. This moves aHash's
-  result only on a genuinely flat/uniform image, where every pixel equals the mean —
-  the all-zero hash becomes all-ones. No ordinary photograph has this property.
 
 ### Security
 
