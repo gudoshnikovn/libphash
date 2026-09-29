@@ -396,9 +396,9 @@ PH_NODISCARD PH_API ph_error_t ph_context_get_gray_weights(const ph_context_t *c
  * @brief Sets pHash parameters.
  *
  * Both values are hard-bounded by the implementation:
- *   - @p dct_size must be in [1, 32];
- *   - @p reduction_size must be in [2, 8] and must not exceed @p dct_size
- *     (the resulting hash has to fit into the 64 bits of @c uint64_t).
+ *   - @p reduction_size must be in [4, 8] (the hash has to fit into the 64 bits of
+ *     @c uint64_t);
+ *   - @p dct_size must be in [@p reduction_size, 32].
  *
  * Out-of-range values are rejected and the current configuration is left
  * unchanged — they are never clamped. If an out-of-range value reaches
@@ -406,14 +406,15 @@ PH_NODISCARD PH_API ph_error_t ph_context_get_gray_weights(const ph_context_t *c
  * and leaves the output digest untouched.
  *
  * @param ctx The context.
- * @param dct_size Size of the DCT matrix, 1..32 (default 32).
+ * @param dct_size Size of the DCT matrix, @p reduction_size..32 (default 32).
  * @param reduction_size Size of the low-frequency coefficient block to keep,
- *                       2..8 and <= @p dct_size (default 8). The lower bound is 2, not 1:
- *                       the DC coefficient is excluded from the hash, so
- *                       reduction_size == 1 would leave no AC coefficients at all and the
- *                       hash would be the fixed value 0 for every image, regardless of
- *                       content. 2 is the smallest size that leaves at least one AC
- *                       coefficient to hash.
+ *                       4..8 and <= @p dct_size (default 8). The hash has
+ *                       reduction_size^2 - 1 bits (the DC coefficient is excluded). The
+ *                       lower bound is where the hash stops being degenerate: over 400
+ *                       photographs, reduction_size 3 (8 bits) gives 70 distinct hashes
+ *                       and 2 gives 4, while 4 (15 bits) gives 304 of the 350 an 8x8
+ *                       block tells apart. Between 4 and 8, a smaller block trades
+ *                       precision for length.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
  *         out-of-range pair.
  */
@@ -422,17 +423,25 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
 /**
  * @brief Sets Radial Hash parameters.
  *
+ * The cost of one call is projections * samples bilinear samples, whatever the image
+ * size, and the digest converges long before the ceilings. Measured on a 400 x 400
+ * photograph, squared L2 distance of the 40-byte digest to a 16384 x 16384 reference:
+ *
+ * | projections x samples | time    | squared L2 to the reference |
+ * |-----------------------|---------|-----------------------------|
+ * | 180 x 128 (default)   | 0.6 ms  | 146                         |
+ * | 1440 x 1024           | 5.5 ms  | 8                           |
+ * | 4096 x 4096 (maximum) | 56 ms   | 4                           |
+ *
+ * Values above the point of convergence do not add information.
+ *
  * @param ctx The context.
- * @param projections Number of angular projections over [0, pi), 40..131072
+ * @param projections Number of angular projections over [0, pi), 40..4096
  *        (default 180). This is the number of **angles** only: the digest is always 40
  *        bytes, the first 40 coefficients of a DCT of the projection vector, as the
  *        algorithm's source specifies. The lower bound is the coefficient count (a
- *        DCT of an n-element vector has n coefficients); the upper bound is the angular
- *        resolution the largest supported image can distinguish.
- * @param samples Number of samples per projection, 2..65536 (default 128). Samples are
- *        taken along a straight line across the image, and 65536 covers the diagonal of
- *        the largest square image the library will process (46340 x 46340, from the
- *        INT_MAX pixel ceiling); more samples only re-visit pixels already sampled. The
+ *        DCT of an n-element vector has n coefficients).
+ * @param samples Number of samples per projection, 2..4096 (default 128). The
  *        lower bound is 2, not 1: variance of a single observation is 0 by definition, so
  *        samples == 1 makes every projection's variance 0 regardless of image content --
  *        the same all-flat condition @c PH_RADIAL_FLAT_VARIANCE exists to catch -- and the

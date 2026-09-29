@@ -183,14 +183,23 @@ const float *ph_get_dct_matrix_32(void);
 #define PH_DCT_MAX_SIZE           32
 #define PH_DCT_MAX_REDUCTION_SIZE 8
 
-/* Hard lower bound for reduction_size. The DC coefficient is
- * excluded from the hash: ph_median_bitpack_from(dct_out, n=reduction_size^2, median_from=1)
- * skips the first (DC) coefficient and thresholds only the AC ones. At
- * reduction_size == 1 there is exactly one coefficient (the DC one), all of it is
- * skipped, and the hash is the fixed 64-bit value 0 for every image -- content-independent
- * by construction, not by a bad input. 2 is the smallest value that leaves at least one
- * AC coefficient (2^2 - 1 = 3) for the hash to depend on. */
-#define PH_DCT_MIN_REDUCTION_SIZE 2
+/* Hard lower bound for reduction_size. The DC coefficient is excluded from the hash
+ * (ph_median_bitpack_from(dct_out, n = reduction_size^2, median_from = 1)), so a block of
+ * r x r coefficients leaves r^2 - 1 AC bits. The bound is where the hash stops being
+ * degenerate, measured over 400 photographs (at most 350 distinct at r = 8: the rest are
+ * near-duplicates) and the synthetic corpus of tests/src/test_hash_properties.c:
+ *
+ *   r   AC bits   distinct photos   false-match rate at 95% true matches
+ *   2      3            4                1.00
+ *   3      8           70                0.74
+ *   4     15          304                0.40
+ *   5     24          329                0.35
+ *   8     63          350                0.14
+ *
+ * At 2 and 3 most unrelated images collide; 4 is the first size at which nearly every
+ * distinct image gets its own hash. Above it the gain is gradual, a trade of length for
+ * precision that stays the caller's choice. 1 would leave no AC bit at all. */
+#define PH_DCT_MIN_REDUCTION_SIZE 4
 
 /* Hard upper bounds for the remaining tunable parameters. Every one of them is
  * derived from a real limit of the implementation, not picked as a round number; the
@@ -215,32 +224,27 @@ const float *ph_get_dct_matrix_32(void);
  * produce blocks with different means and therefore a content-dependent bit pattern. */
 #define PH_BLOCK_MIN_SIZE 2
 
-/* The projection count is the number of ANGLES; the digest is always PH_RADIAL_COEFFS
- * DCT coefficients. So the bound is the angular resolution beyond which more angles
- * carry no new information -- two neighbouring projections have to differ by at least one
- * pixel at the far end of the longest one. The largest square image the library will
- * process is 46340 x 46340 (PH_MAX_SUPPORTED_PIXELS), whose projection radius is
- * min(w,h)/2 = 23170 pixels; the finest useful angular step is therefore 1/23170 rad and
- * the useful angle count over [0, pi) is pi * 23170 = 72792. 131072 is the first power of
- * two above that. Same caveat as PH_RADIAL_MAX_SAMPLES: a degenerate strip could in
- * principle want more, and carries no radial structure to want it for.
+/* Upper bounds for the Radial projection grid. The work is projections * samples bilinear
+ * samples (about 3 ns each), independent of the image size, and the digest is always
+ * PH_RADIAL_COEFFS coefficients, so past a few thousand of either nothing is gained.
+ * Measured on tests/data/photo.jpeg and photo_complex.png (400 x 400), digest distance
+ * (squared L2 over the 40 bytes) against a 16384 x 16384 reference:
  *
- * The lower bound is a hard one: a DCT of an n-element vector has n coefficients, so
- * fewer angles than PH_RADIAL_COEFFS cannot produce the hash at all. */
+ *   projections x samples   time      squared L2 to the reference
+ *     180 x  128 (default)   0.6 ms    146 / 272
+ *    1440 x 1024             5.5 ms      8 /  17
+ *    4096 x 4096              56 ms      4 /   2
+ *
+ * 4096 x 4096 is already within one or two units per coefficient of a grid 16 times as
+ * fine, and its cost, 56 ms, is that of decoding a large JPEG. A higher ceiling would buy
+ * no information and would let a configuration taken from an untrusted source spend
+ * seconds of CPU on one call, which cannot be cancelled.
+ *
+ * The lower bound on projections is a hard one: a DCT of an n-element vector has n
+ * coefficients, so fewer angles than PH_RADIAL_COEFFS cannot produce the hash at all. */
 #define PH_RADIAL_MIN_PROJECTIONS PH_RADIAL_COEFFS
-#define PH_RADIAL_MAX_PROJECTIONS 131072
-
-/* Radial samples are taken along a straight line across the image, so more samples
- * than the image's diagonal add no information -- they only re-sample pixels already
- * visited. The largest square image the library will process has
- * floor(sqrt(PH_MAX_SUPPORTED_PIXELS)) = 46340 pixels per side (46341^2 exceeds
- * INT_MAX), and its diagonal is 46340 * sqrt(2) = 65534.66, so 65536 is the first
- * power of two at or above every diagonal that can occur for a square image.
- * Caveat, deliberately accepted: a degenerate strip (e.g. INT_MAX x 1) has a longer
- * diagonal while still fitting the pixel ceiling. Such aspect ratios carry no radial
- * structure to sample, so the bound is treated as the practical maximum rather than
- * being raised to INT_MAX for their sake. */
-#define PH_RADIAL_MAX_SAMPLES 65536
+#define PH_RADIAL_MAX_PROJECTIONS 4096
+#define PH_RADIAL_MAX_SAMPLES     4096
 
 /* Hard lower bound for samples. Variance is undefined-in-effect for a single
  * observation: with one sample per projection, every projection's variance is exactly 0
@@ -270,6 +274,12 @@ _Static_assert(PH_RADIAL_COEFFS <= PH_DIGEST_MAX_BYTES,
 _Static_assert(PH_RADIAL_PROJECTIONS >= PH_RADIAL_MIN_PROJECTIONS &&
                    PH_RADIAL_PROJECTIONS <= PH_RADIAL_MAX_PROJECTIONS,
                "the default angle count must be inside the accepted range");
+_Static_assert(PH_RADIAL_SAMPLES >= PH_RADIAL_MIN_SAMPLES &&
+                   PH_RADIAL_SAMPLES <= PH_RADIAL_MAX_SAMPLES,
+               "the default sample count must be inside the accepted range");
+_Static_assert(PH_DCT_REDUCTION_SIZE >= PH_DCT_MIN_REDUCTION_SIZE &&
+                   PH_DCT_REDUCTION_SIZE <= PH_DCT_MAX_REDUCTION_SIZE,
+               "the default pHash reduction size must be inside the accepted range");
 #endif
 
 #define PH_COLOR_MOMENTS  3

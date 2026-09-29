@@ -354,11 +354,9 @@ void test_radial_ignores_everything_outside_the_central_disc() {
  * PH_RADIAL_COEFFS bytes of DCT coefficients -- so the two bounds mean different things
  * and both need checking. The lower one is hard: a DCT of an n-element vector has n
  * coefficients, so fewer angles than coefficients cannot produce the hash at all. The
- * upper one is a resolution limit, not a correctness one, and the test for it is
- * convergence: past the point where extra angles stop carrying information, the digest
- * has to stop moving. Measured: 4096 angles against 131072 correlate at 0.99995,
- * while 180 against 4096 are still at 0.9908 -- so the ceiling is well past the point of
- * diminishing returns, which is what a ceiling should be. */
+ * upper one is a cost limit, not a correctness one, and the test for it is convergence:
+ * the ceiling has to lie past the point where extra angles stop carrying information, so
+ * the digest barely moves between a fine grid and the ceiling. */
 void test_radial_projection_count_bounds() {
     enum {
         SIDE = 64,
@@ -371,7 +369,7 @@ void test_radial_projection_count_bounds() {
         }
     }
 
-    static const int counts[] = {PH_RADIAL_MIN_PROJECTIONS, PH_RADIAL_PROJECTIONS, 4096,
+    static const int counts[] = {PH_RADIAL_MIN_PROJECTIONS, PH_RADIAL_PROJECTIONS, 1440,
                                  PH_RADIAL_MAX_PROJECTIONS};
     ph_digest_t d[4];
     for (unsigned i = 0; i < sizeof(counts) / sizeof(counts[0]); i++) {
@@ -403,7 +401,7 @@ void test_radial_projection_count_bounds() {
     double coarse = 0.0, fine = 0.0;
     ASSERT_OK(ph_radial_similarity(&d[1], &d[2], &coarse));
     ASSERT_OK(ph_radial_similarity(&d[2], &d[3], &fine));
-    printf("  radial angle convergence: 180 vs 4096 %.5f, 4096 vs %d %.5f\n", coarse,
+    printf("  radial angle convergence: 180 vs 1440 %.5f, 1440 vs %d %.5f\n", coarse,
            PH_RADIAL_MAX_PROJECTIONS, fine);
     ASSERT(fine > 0.999);
     ASSERT(fine > coarse);

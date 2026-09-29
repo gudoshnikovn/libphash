@@ -392,8 +392,10 @@ void test_phash_of_a_uniform_image_is_rounding_noise(void) {
  *       of one sample is zero. Every projection would be flat, so every image would get
  *       the all-zero digest that means "no radial structure".
  *
- * The setters reject each of them with PH_ERR_INVALID_ARGUMENT; 2 is the smallest value
- * for which each algorithm depends on content. */
+ * The setters reject each of them with PH_ERR_INVALID_ARGUMENT. For BMH and Radial, 2 is
+ * the smallest value for which the algorithm depends on content. pHash's floor is higher,
+ * PH_DCT_MIN_REDUCTION_SIZE: at 2 and 3 the hash depends on content but most unrelated
+ * images still share one (measurement next to the constant). */
 void test_parameter_values_that_collapse_the_hash_to_a_constant(void) {
     enum {
         SIDE = 32,
@@ -407,13 +409,12 @@ void test_parameter_values_that_collapse_the_hash_to_a_constant(void) {
         }
     }
 
-    /* pHash: reduction_size == 1 is rejected; reduction_size == 2 (the minimum) gives
-     * content-dependent hashes. */
+    /* pHash: reduction_size == 1 is rejected; the minimum gives content-dependent hashes. */
     {
         ph_context_t *ctx = NULL;
         ASSERT_OK(ph_create(&ctx));
         ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, PH_DCT_SIZE, 1));
-        ASSERT_OK(ph_context_set_phash_params(ctx, PH_DCT_SIZE, 2));
+        ASSERT_OK(ph_context_set_phash_params(ctx, PH_DCT_SIZE, PH_DCT_MIN_REDUCTION_SIZE));
 
         ASSERT_OK(ph_load_from_pixels(ctx, a, SIDE, SIDE, 1, 0));
         uint64_t ha = 0xDEADBEEFULL;

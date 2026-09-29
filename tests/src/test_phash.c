@@ -124,26 +124,28 @@ void test_phash_params_setter_bounds() {
     ASSERT_INT_EQ(PH_DCT_SIZE, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(PH_DCT_REDUCTION_SIZE, ctx->config.phash_reduction_size);
 
-    /* reduction_size == 1: the DC coefficient is excluded, so it leaves no AC coefficient -> the
-     * hash would be the fixed value 0 for every image. Rejected, config untouched. */
-    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, 32, 1));
+    /* Below PH_DCT_MIN_REDUCTION_SIZE the hash is degenerate: 1 leaves no AC coefficient,
+     * 2 and 3 give most unrelated images the same hash. Rejected, config untouched. */
+    for (int red = 1; red < PH_DCT_MIN_REDUCTION_SIZE; red++) {
+        ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, 32, red));
+        ASSERT_INT_EQ(PH_DCT_SIZE, ctx->config.phash_dct_size);
+        ASSERT_INT_EQ(PH_DCT_REDUCTION_SIZE, ctx->config.phash_reduction_size);
+    }
+
+    /* dct_size below reduction_size -> rejected */
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_context_set_phash_params(ctx, 3, 4));
     ASSERT_INT_EQ(PH_DCT_SIZE, ctx->config.phash_dct_size);
-    ASSERT_INT_EQ(PH_DCT_REDUCTION_SIZE, ctx->config.phash_reduction_size);
 
     /* Boundary values are accepted */
     ASSERT_OK(ph_context_set_phash_params(ctx, 32, 8));
     ASSERT_INT_EQ(32, ctx->config.phash_dct_size);
     ASSERT_INT_EQ(8, ctx->config.phash_reduction_size);
 
-    /* A smaller valid pair is accepted too */
-    ASSERT_OK(ph_context_set_phash_params(ctx, 16, 4));
-    ASSERT_INT_EQ(16, ctx->config.phash_dct_size);
-    ASSERT_INT_EQ(4, ctx->config.phash_reduction_size);
-
-    /* The minimum, 2, succeeds. */
-    ASSERT_OK(ph_context_set_phash_params(ctx, 16, 2));
-    ASSERT_INT_EQ(16, ctx->config.phash_dct_size);
-    ASSERT_INT_EQ(2, ctx->config.phash_reduction_size);
+    /* The minimum succeeds, with the smallest dct_size that can hold it. */
+    ASSERT_OK(
+        ph_context_set_phash_params(ctx, PH_DCT_MIN_REDUCTION_SIZE, PH_DCT_MIN_REDUCTION_SIZE));
+    ASSERT_INT_EQ(PH_DCT_MIN_REDUCTION_SIZE, ctx->config.phash_dct_size);
+    ASSERT_INT_EQ(PH_DCT_MIN_REDUCTION_SIZE, ctx->config.phash_reduction_size);
 
     ph_free(ctx);
     PASS("test_phash_params_setter_bounds");

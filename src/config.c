@@ -101,9 +101,8 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
      * dct_size <= PH_DCT_MAX_SIZE and reduction_size <= PH_DCT_MAX_REDUCTION_SIZE
      * (the hash must fit into 64 bits). Out-of-range input is rejected without
      * touching the configuration; it is never clamped.
-     * Lower bound on reduction_size is PH_DCT_MIN_REDUCTION_SIZE, not 1: since the DC
-     * coefficient is excluded from the hash, reduction_size == 1 leaves zero AC
-     * coefficients and yields the fixed digest 0 for every image. */
+     * Lower bound on reduction_size is PH_DCT_MIN_REDUCTION_SIZE: below it most unrelated
+     * images share a hash (measurement next to the constant). */
     if (!ctx || dct_size <= 0 || dct_size > PH_DCT_MAX_SIZE ||
         reduction_size < PH_DCT_MIN_REDUCTION_SIZE || reduction_size > PH_DCT_MAX_REDUCTION_SIZE ||
         reduction_size > dct_size) {
@@ -117,11 +116,11 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
 PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projections, int samples,
                                                float sigma) {
     /* projections: the number of angles. At least PH_RADIAL_COEFFS of them, because the
-     * hash is that many DCT coefficients of the vector they form; at most as many as the
-     * angular resolution of the largest supported image can distinguish.
-     * samples: bounded by the diagonal of the largest image the library will process, and
-     * at least PH_RADIAL_MIN_SAMPLES, because a single sample per projection has zero
-     * variance by definition and yields the all-zero digest for every image.
+     * hash is that many DCT coefficients of the vector they form.
+     * samples: at least PH_RADIAL_MIN_SAMPLES, because a single sample per projection has
+     * zero variance by definition and yields the all-zero digest for every image.
+     * Both are capped where the digest has converged, so that one call costs tens of
+     * milliseconds at most.
      * sigma: the Gaussian blur applied before the projections are taken. Must be
      * finite and strictly positive -- ph_gaussian_blur_sigma() leaves its output
      * unwritten otherwise -- and at most PH_RADIAL_MAX_SIGMA, above which its kernel

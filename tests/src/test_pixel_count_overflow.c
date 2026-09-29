@@ -131,7 +131,7 @@ void test_setter_bounds_reject_out_of_range(void) {
     ASSERT_INT_EQ(PH_BLOCK_MIN_SIZE, ctx->config.block_size);
 
     /* Both ends: fewer angles than the DCT has coefficients is as invalid as more angles
-     * than the largest supported image can resolve. */
+     * than the digest can use. */
     const int bad_projections[] = {1, 39, 200000, INT_MAX, PH_RADIAL_MAX_PROJECTIONS + 1};
     for (size_t i = 0; i < sizeof(bad_projections) / sizeof(bad_projections[0]); i++) {
         ASSERT_INT_EQ(

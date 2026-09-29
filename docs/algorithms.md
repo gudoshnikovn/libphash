@@ -142,7 +142,9 @@ portability and comparison against a foreign implementation.
 - **Output**: 64-bit.
 - **Tuning**: `ph_context_set_phash_params(dct_size, reduction_size)` — `dct_size`
   default 32 (larger captures more detail and costs more), `reduction_size` default 8
-  (giving 8×8 = 64 bits).
+  (giving 8×8 = 64 bits), 4–8. Below 4 the hash is degenerate: over 400 photographs,
+  `reduction_size` 3 gives 70 distinct hashes and 2 gives 4, against 304 at 4 and 350 at
+  8. Between 4 and 8 a smaller block trades precision for a shorter hash.
 - **Strength**: robust to scaling and moderate compression; the usual first choice when
   aHash and dHash are not tolerant enough.
 - **The DC coefficient**: DCT(0,0) is thresholded like the other 63 but takes no part in
@@ -247,8 +249,12 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
   the peak of the cross-correlation, and `PH_RADIAL_PCC_THRESHOLD` (0.9) is the source's
   cut — a documented starting point, not a tuned recommendation for your corpus.
 - **Tuning**: `ph_context_set_radial_params(projections, samples, sigma)`:
-  - `projections` — number of **angles**, default 180, 40–131072.
-  - `samples` — default 128 samples per projection.
+  - `projections` — number of **angles**, default 180, 40–4096.
+  - `samples` — default 128 samples per projection, 2–4096.
+  - The cost is `projections × samples` samples whatever the image size, and the digest
+    converges long before the ceilings: 1440 × 1024 costs 5.5 ms on a 400×400 photograph,
+    4096 × 4096 costs 56 ms and lies within one or two units per coefficient of a 16384²
+    grid. Raising either value past the low thousands buys time, not information.
   - `sigma` — Gaussian-blur σ applied before the projections, default 3.5, (0, 64/3].
   - gamma (`ph_context_set_gamma()`) — default 1.0 (identity), affects Radial only.
 - **Rotation: a few degrees, plus an exact half turn — not arbitrary rotation.** Measured
