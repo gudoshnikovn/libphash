@@ -405,6 +405,10 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   hashes on arm64. On arm64 a 1.x build made by a compiler that contracts multiply-adds
   into FMA (Clang's default) can give different pHash values on some images (20 of 807
   photographs, all PNG, in one measurement); x86-64 hashes are unaffected.
+- **An x86-64 build does not require AVX2.** 1.x compiled the Hamming distance with
+  `-mavx2` whenever the compiler accepted it, so the CMake build and anything packaged from
+  it died with an illegal instruction on a CPU without AVX2. The x86-64 baseline is SSE4.2
+  with POPCNT (x86-64-v2), and it is stated in the README.
 - **Minimum supported 32-bit x86 CPU is one with SSE2** (~Pentium 4/Athlon 64, 2000-2003
   onward). Both build systems force `-mfpmath=sse -msse2` there to avoid x87
   extended-precision float math, whose results depend on the compiler/CPU in a way SSE2's
@@ -443,17 +447,16 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
 - Pixel counts were computed in `int` and could overflow (undefined behaviour); they are
   computed in `size_t`.
 - **`ph_hamming_distance_digest()` silently undercounted on x86_64** for a digest whose
-  size in bytes wasn't a multiple of 32: the AVX2 loop advances its index as a byte offset,
-  but the SSE4.2 loop that follows compared that same index against a word count, so the
-  last bytes of the digest were dropped from the popcount without any error. arm64 (NEON
-  path) was not affected.
+  size in bytes wasn't a multiple of 32: the AVX2 loop advanced its index as a byte offset,
+  but the SSE4.2 loop after it compared that index against a word count, so the last bytes
+  of the digest were dropped from the popcount without any error. A 32-bit x86 build with
+  AVX2 available failed to link, on an intrinsic that exists only on x86-64. Both lived in
+  hand-written vector paths that bought nothing on a digest of at most 128 bytes; the
+  function is one portable loop over 64-bit words on every target.
 - **32-bit x86 (`i686`) builds could produce a different hash than a 64-bit build for the
   same image**, including a degenerate all-zero pHash for a uniform-colour input that a
   64-bit build hashes normally: GCC/Clang default to x87 extended-precision intermediates
   on 32-bit x86. See "Changed" for the SSE2 floor.
-- The AVX2 Hamming-distance path called an intrinsic (`_mm256_extract_epi64`) that does
-  not exist on 32-bit x86, so a 32-bit x86 build with AVX2 available failed to link. AVX2
-  is gated on `__x86_64__`/`_M_X64` in addition to `__AVX2__`.
 - **The library did not compile for any target where `size_t` is not `unsigned long`.**
   The native decoder backends declared their compressed-buffer length as `unsigned long`
   while the backend table declares it as `size_t`: GCC 14+/Clang 16+ reject that on a
