@@ -476,8 +476,10 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   hashed a mixture of gray and alpha values, in every build without a native PNG decoder
   (the Makefile build). stb_image also hands back a grayscale PNG as one channel, so
   ColorHash and ColorMoments refused an image that a libpng build accepted, and
-  grayscale loading used stb_image's own gray weights instead of the library's. Every PNG
-  decoder produces the same channel layout and the same gray values.
+  grayscale loading used stb_image's own gray weights instead of the library's. libpng,
+  for its part, converted a 16-bit colour PNG to gray before reducing it to 8 bits, a level
+  away from the other decoders. Every PNG decoder produces the same channel layout and the
+  same gray values.
 - **`ph_hamming_distance_digest()` silently undercounted on x86_64** for a digest whose
   size in bytes wasn't a multiple of 32: the AVX2 loop advanced its index as a byte offset,
   but the SSE4.2 loop after it compared that index against a word count, so the last bytes
