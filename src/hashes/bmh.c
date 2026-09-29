@@ -56,7 +56,7 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     /* Casting to size_t before multiplying does not help where size_t is 32 bits: the
      * product wraps like a plain int product (block_size = 1<<30 wraps to 0 and INT_MAX
      * to 1), ph_get_scratchpad() below would hand back a tiny (or NULL) buffer, and
-     * ph_resize_box() would address it as block_size^2 bytes -- a huge out-of-bounds
+     * ph_area_downscale() would address it as block_size^2 bytes -- a huge out-of-bounds
      * write, not a clean allocation failure. ph_safe_image_alloc_size() does the check
      * width-independently (uint64_t arithmetic, checked against SIZE_MAX). */
     size_t total_pixels;
@@ -74,19 +74,15 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
      * silently partial hash -- the anti-pattern the setter's rejection prevents. */
     ph_digest_begin(out_digest, ctx, PH_ALGO_BMH);
 
-    uint8_t *full_gray = ph_get_gray(ctx);
-    if (!full_gray) {
-        return PH_ERR_ALLOCATION_FAILED;
-    }
-
     ph_arena_mark_t arena_mark = ph_arena_mark(ctx);
     uint8_t *block_data = ph_get_scratchpad(ctx, total_pixels);
     if (!block_data) {
         return PH_ERR_ALLOCATION_FAILED;
     }
 
-    if (!ph_resize_box(full_gray, ctx->image.width, ctx->image.height, block_data, block_size,
-                       block_size)) {
+    /* Each block's value is the mean of the pixels it covers -- the paper's "block mean
+     * value" -- by area averaging, shared with aHash, pHash and wHash. */
+    if (!ph_area_downscale(ctx, block_size, block_size, block_data)) {
         ph_arena_release(ctx, arena_mark);
         return PH_ERR_ALLOCATION_FAILED;
     }

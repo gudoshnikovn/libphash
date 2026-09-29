@@ -12,12 +12,20 @@
 /* Max length (including NUL) of the diagnostic message stashed by a failed load. */
 #define PH_LAST_ERROR_MAX 160
 
+/* Side of the shared area-average grid: see ph_area_downscale(). Every working size it
+ * serves directly -- 32 (pHash), 16 (wHash, BMH), 8 (aHash) -- divides it. */
+#define PH_AREA_GRID 32
+
 /* Internal Context Structure */
 struct ph_context {
     // Uploaded image data
     struct {
         uint8_t *raw_rgb;
         uint8_t *gray_cache;
+        // Exact area sums of the gray image on a PH_AREA_GRID square grid; see
+        // ph_area_downscale(). Valid while area_grid_valid, dropped with the gray cache.
+        uint64_t area_grid[PH_AREA_GRID * PH_AREA_GRID];
+        int area_grid_valid;
         int width;
         int height;
         int channels;

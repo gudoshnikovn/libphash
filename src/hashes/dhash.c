@@ -10,7 +10,10 @@
  * differences of each of the 8 rows, with "a '1' to indicate that P[x] < P[x+1]" and
  * the bits set "from left to right, top to bottom using big-endian". This code follows
  * that exactly, including the direction of the comparison. The resampling filter is not
- * specified by the source; see ahash.c on the Mitchell filter ph_resize_mitchell() uses.
+ * specified by the source. It is stb's Mitchell filter (ph_resize_mitchell()) from the full
+ * image, not the area average the other three uint64_t hashes share: the differences of
+ * neighbouring cells of an area average are noisier, and measured worse (see
+ * docs/algorithm-provenance.md section 2).
  *
  * See docs/algorithm-provenance.md and docs/references.md.
  */

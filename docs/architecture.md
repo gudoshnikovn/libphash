@@ -57,7 +57,8 @@ entirely for algorithms that only need luma.
 
 ### 2. Image Processing Kernels (`src/image/`)
 Optimized low-level primitives for image manipulation, split into dedicated modules:
-- **`resize.c`**: box-filter area sampling for downscaling, Mitchell/bilinear filters
+- **`resize.c`**: the exact area average (`ph_area_downscale()`, with the context's cached
+  32×32 grid of area sums), box-filter sampling, Mitchell/bilinear filters
   (via the vendored `stb_image_resize2`, `stb_resize_impl.c`) for the rest.
 - **`color.c`**: color conversion (NEON-accelerated on Arm) and grayscale
   transformation using configurable weights (`PH_GRAY_R/G/B`, BT.601-derived — see
@@ -84,8 +85,8 @@ Divided into specific implementations corresponding to unique theoretical proper
   by histogram intersection, not a bit vector.
 - `color_moments.c`: mean/std-dev/skew of each RGB channel as nine signed fixed-point
   features.
-- `multi.c`: `ph_compute_multi()`'s shared-grayscale batching of the four `uint64_t`
-  algorithms (aHash/dHash/pHash/wHash) in one call.
+- `multi.c`: `ph_compute_multi()`, the four `uint64_t` algorithms (aHash/dHash/pHash/wHash)
+  in one call, over the context's cached grayscale and shared area-average pass.
 - `common.c`: the median threshold pHash and wHash share (`ph_median_bitpack*`).
 
 Comparison and serialisation of finished digests (`ph_hamming_distance*`,

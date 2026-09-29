@@ -136,13 +136,7 @@ static ph_error_t ph_compute_whash_fast(ph_context_t *ctx, uint64_t *out_hash) {
     int image_scale = hash_size * 2; // 16
     uint8_t hash_input[256];         // image_scale * image_scale
 
-    uint8_t *full_gray = ph_get_gray(ctx);
-    if (!full_gray) {
-        return PH_ERR_ALLOCATION_FAILED;
-    }
-
-    if (!ph_resize_box(full_gray, ctx->image.width, ctx->image.height, hash_input, image_scale,
-                       image_scale)) {
+    if (!ph_area_downscale(ctx, image_scale, image_scale, hash_input)) {
         return PH_ERR_ALLOCATION_FAILED;
     }
 

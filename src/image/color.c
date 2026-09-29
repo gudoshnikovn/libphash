@@ -81,6 +81,7 @@ void ph_resolve_alpha(uint8_t **pixels, size_t num_pixels, int *channels, ph_alp
 void ph_drop_gray_cache(ph_context_t *ctx) {
     free(ctx->image.gray_cache);
     ctx->image.gray_cache = NULL;
+    ctx->image.area_grid_valid = 0;
 }
 
 /* Scalar tail shared by ph_to_grayscale() (after its SIMD prefix, if any) and

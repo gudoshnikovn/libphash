@@ -177,11 +177,9 @@ static void test_ahash_pixel_below_fractional_mean_is_clear(void) {
 }
 
 static void test_ahash_pixel_equal_to_exact_mean_is_set(void) {
-    /* Rows 0-1 are 0, rows 2-5 are 10, rows 6-7 are 20, and the mean is exactly 10.
-     * The 8x8 Mitchell pass blurs only across the two edges: row 2 is pulled below 10
-     * (clear), row 5 above it (set). Rows 3 and 4 have nothing but 10s within the
-     * filter's reach, stay exactly 10 and are genuine ties -- set, as in BMH. Under a
-     * strict `>` they would be clear. */
+    /* Rows 0-1 are 0, rows 2-5 are 10, rows 6-7 are 20: the mean is exactly 10. An 8x8
+     * image reduces to itself, so the 10s are genuine ties and, like the 20s, get a set
+     * bit, as in BMH. Under a strict `>` they would be clear. */
     uint8_t pixels[64];
     memset(pixels, 0, 16);
     memset(pixels + 16, 10, 32);
@@ -192,7 +190,7 @@ static void test_ahash_pixel_equal_to_exact_mean_is_set(void) {
 
     uint64_t hash = 0;
     ASSERT_INT_EQ(PH_SUCCESS, ph_compute_ahash(ctx, &hash));
-    ASSERT_UINT64_EQ(0x000000FFFFFFFFFFULL, hash);
+    ASSERT_UINT64_EQ(0x0000FFFFFFFFFFFFULL, hash);
 
     ph_free(ctx);
     PASS("test_ahash_pixel_equal_to_exact_mean_is_set");

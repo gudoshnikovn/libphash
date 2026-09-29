@@ -100,7 +100,7 @@ pixel exactly equal to the mean.
 
 **What this implementation does** (`src/hashes/ahash.c`): grayscale via BT.601-approximate
 integer weights (38/75/15 over 128, configurable), resize to 8×8 through
-`ph_resize_mitchell()`, bit set when the pixel is at or above the exact mean of the 64
+an area average (`ph_area_downscale()`), bit set when the pixel is at or above the exact mean of the 64
 bytes (`pixel * 64 >= sum`, no rounding), bit index `63 - i` in row-major order — that is,
 MSB first, left to right, top to bottom, big-endian.
 
@@ -108,7 +108,7 @@ MSB first, left to right, top to bottom, big-endian.
 
 | Difference | Class | Note |
 |---|---|---|
-| Resampling filter | undefined | Source says only "shrink". `ph_resize_mitchell()` explicitly requests stb_image_resize2's **Mitchell** filter via `stbir_resize()`. Nothing in the source is violated. It is not the filter ImageHash uses (PIL `LANCZOS`). |
+| Resampling filter | undefined | Source says only "shrink". The reduction is an exact area average — each of the 64 values is the mean of the part of the image it covers — which is what "shrink" computes when nothing more is said. Nothing in the source is violated, and it is not the filter ImageHash uses (PIL `LANCZOS`). Against stb's Mitchell filter it measures better: separability 3.63 → 4.55 and false matches at 95 % recall 8.0 % → 2.9 % on the synthetic corpus; on 800 photographs 1208 → 1051 pairs of different images with identical hashes, the rest level. It is also shared: aHash, pHash, wHash and BMH read one area-average pass over the image. |
 | Grayscale coefficients | pinned | Source says only "convert to a grayscale". `PH_GRAY_R/G/B` = 38/75/15 over 128 (`src/image/image.h`) — an integer approximation of the **ITU-R BT.601** luma coefficients (0.299/0.587/0.114), cited as an external standard because none of this library's nine primary sources define a grayscale formula at all. The 77/150/29-over-256 triple, closer to BT.601 in decimal, measures worse on the separability corpus — BMH 5.24 → 4.97, wHash 4.34 → 4.27, no gain elsewhere — so 38/75/15 is used. Affects every algorithm that reduces to grayscale — aHash, dHash, pHash, wHash, mHash, BMH, Radial (all seven that call `ph_get_gray()`); noted once here, cross-referenced from the others. |
 | Ties (`pixel == mean` → 1) | pinned | "Above or below" leaves the tie unstated, and no reference implementation is cited here to defer to (contrast pHash/wHash below, which are). `>=` is the library-wide rule for an unpinned tie: it agrees with the one source that states a direction (Zauner eq. 3.9, for BMH). |
 | Mean compared exactly, not rounded | conforms | "Above or below the mean" is a comparison with the mean itself. A mean truncated to an integer would move every pixel equal to `floor(mean)` — below a fractional mean — onto the tie and set its bit, which on a low-contrast image sets nearly all 64. |
@@ -137,13 +137,13 @@ description by the people responsible for the algorithm.
    to bottom using big-endian."
 
 **What this implementation does** (`src/hashes/dhash.c`): resize to 9×8 through
-`ph_resize_mitchell()` (see aHash), bit set when `row[col] < row[col+1]`, bit index `63 - (row*8 + col)`.
+`ph_resize_mitchell()`, stb_image_resize2's Mitchell filter, bit set when `row[col] < row[col+1]`, bit index `63 - (row*8 + col)`.
 
 **Delta:**
 
 | Difference | Class | Note |
 |---|---|---|
-| Resampling filter | undefined | As for aHash. |
+| Resampling filter | undefined | Source says only "shrink". Mitchell, not the area average aHash uses: dHash compares neighbouring pixels, and the sharp cell edges of an area average make those differences noisier. Measured with an area average, straight to 9×8 or through any intermediate grid from 72×64 to 288×256: separability down (3.49 → 3.23 synthetic) and more pairs of different photographs sharing a hash (721 → 900–1100 of 800 photographs). |
 | Grayscale coefficients | pinned | As for aHash. |
 
 **Verdict: conforms**, down to the direction of the comparison and the bit order, both
@@ -472,8 +472,8 @@ Methods 2–4 add overlapping blocks and rotation; neither is implemented here, 
 are out of scope. Step 3 is omitted by pHash's own implementation too, and the paper
 does not name an encryption algorithm.
 
-**What this implementation does** (`src/hashes/bmh.c`): grayscale, `ph_resize_box()`
-straight to `block_size × block_size` (default 16×16 → 256 bits), **median** of the
+**What this implementation does** (`src/hashes/bmh.c`): grayscale, an exact area average
+(`ph_area_downscale()`) straight to `block_size × block_size` (default 16×16 → 256 bits), **median** of the
 resulting values, bit set when `value >= median`, packed LSB-first within each byte.
 
 There is no reference implementation to check the prose against, which is the situation
@@ -499,26 +499,17 @@ differ from OpenCV's.
 **The missing normalisation step, and why it is not needed.** Step (a) normalises the
 image to a preset size before blocking, and both implementations of the paper do it at
 256×256. This library resamples straight to the block grid. Resampling straight to the
-grid equals the block means for any source size, not only multiples of the grid: a naive
-resampler would not, but `ph_resize_box()` is stb_image_resize2 with `STBIR_FILTER_BOX`, whose support scales
-with the ratio, so every output pixel is the coverage-weighted average of exactly the
-source region behind it, fractional edges included.
-
-Measured against the exact area-weighted block mean computed in double precision, the
-largest deviation over 64 blocks is:
-
-| source | 64×64 | 100×100 | 401×239 | 37×53 |
-|---|---|---|---|---|
-| max deviation from the exact block mean | 0.500 | 0.499 | 0.485 | 0.497 |
-
-That is byte rounding, and it is no worse for the awkward sizes than for the exact
-multiple. The one-step form already computes what the paper defines.
+grid is the block means for any source size, not only multiples of the grid:
+`ph_area_downscale()` computes each block as the coverage-weighted sum of exactly the
+source region behind it, fractional edges included, in integers, and rounds once. It
+is the paper's block mean to the nearest byte, which
+`test_area_downscale_matches_brute_force()` checks against a brute-force sum.
 
 Normalising first, the paper's way — to the largest multiple of the grid at or below 256,
 then averaging integer blocks — measures worse: separability on the synthetic corpus falls
 from 5.24 to **5.11**, which is what an extra resampling stage
-costs — the intermediate is not an exact area average, so it adds error the direct box
-resample does not have. It would also tie the grid to divisors of the preset, and
+costs — the intermediate is rounded to integer pixels, so it adds error the direct area
+average does not have. It would also tie the grid to divisors of the preset, and
 most grid sizes this library accepts (2..32, e.g. 3×3 or 22×22) do not divide 256.
 
 So the step is skipped deliberately, and the invariant that licenses skipping it is pinned

@@ -61,9 +61,10 @@ good at; the second is not in scope.
 | ColorHash | Swain & Ballard (method); this library (quantisation) | paper, 1991 — **not read** | n/a — no conformance claimed |
 | ColorMoments | Stricker & Orengo | paper, 1995 | **yes** — colour space (RGB, not HSV) |
 
-One cross-cutting caveat: `ph_resize_mitchell()`, used by aHash and dHash, explicitly
-requests stb_image_resize2's Mitchell filter. No source specifies a filter, so nothing
-is violated, but this is not the filter ImageHash uses.
+One cross-cutting caveat: no source specifies a resampling filter. aHash, pHash, wHash and
+BMH reduce by an exact area average (the mean of the source area behind each output
+pixel), dHash through stb_image_resize2's Mitchell filter; neither is the filter ImageHash
+uses, and nothing in the sources is violated.
 
 One of the nine — wHash — has no primary source. For those, "correct" can only mean measured
 robustness, discrimination and separability — never conformance to a specification,
@@ -289,11 +290,16 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
 ## Computing several `uint64_t` hashes at once
 
 aHash, dHash, pHash and wHash all reduce to grayscale first. `ph_compute_multi()` takes a
-bitwise-OR of `ph_hash_flags_t` and computes any combination of them in one call, sharing
-that grayscale conversion instead of redoing it once per algorithm — the same saving
-`ph_hash_files()`/`ph_hash_buffers()` get internally for a whole batch. Results are
-bit-for-bit identical to calling the individual `ph_compute_*` functions yourself; this is
-purely a shared-work optimisation, not a different algorithm. mHash, BMH, Radial,
+bitwise-OR of `ph_hash_flags_t` and computes any combination of them in one call. The work
+over the full image is done once per context, whichever algorithms ask for it: the
+grayscale conversion, and one area-average pass onto a 32×32 grid of exact sums, from
+which aHash (8×8), pHash (32×32 at the default `dct_size`), wHash (16×16) and BMH (16×16
+at the default `block_size`) take their working images bit for bit as a direct area
+average would give them. dHash resamples on its own (Mitchell, see §2). On a 20-megapixel
+photograph the four hashes cost 7.6 ms together, of which dHash's pass is 4.8 ms and the
+shared pass 1.2 ms. Results are identical to calling the individual `ph_compute_*`
+functions yourself, which share the same cached work — the same saving
+`ph_hash_files()`/`ph_hash_buffers()` get for each file of a batch. mHash, BMH, Radial,
 ColorHash and ColorMoments are not part of this — their digests don't fit a `uint64_t`,
 and BMH's median threshold plus the colour algorithms' `PH_ERR_REQUIRES_COLOR` failure
 mode don't fit the "stops at the first failure, other slots partially written" contract

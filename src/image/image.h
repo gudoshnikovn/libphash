@@ -27,6 +27,16 @@ void ph_to_grayscale_scalar(const ph_context_t *ctx, const uint8_t *src, int w, 
  * fails the block stays valid, merely oversized. */
 void ph_resolve_alpha(uint8_t **pixels, size_t num_pixels, int *channels, ph_alpha_mode_t mode);
 
+/* Area-average downscale of the context's gray image to dw x dh: each output pixel is the
+ * mean of the source area it covers, a partially covered source pixel counting by the
+ * fraction covered, rounded once. Computed in integers, so the result is exact and the
+ * same on every platform. When the image is at least PH_AREA_GRID on both sides and both
+ * dw and dh divide PH_AREA_GRID, the answer is assembled from one cached pass over the
+ * image (the area sums on the PH_AREA_GRID grid) and is bit for bit what a direct pass
+ * would give: an average of equal-area cells is the average of their union. Returns 1 on
+ * success, 0 on an allocation failure (dst untouched). */
+int ph_area_downscale(ph_context_t *ctx, int dw, int dh, uint8_t *dst);
+
 /* Resizes a grayscale image using box sampling (averaging). Returns 1 on success, 0 if
  * the dimensions are degenerate or the underlying stb resize failed to allocate --
  * either way `dst` is left untouched and the caller must not read it. */

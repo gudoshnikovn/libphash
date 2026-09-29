@@ -9,12 +9,15 @@
  * All tests use hand-crafted pixel arrays — no image files needed.
  */
 
+#include "context.h"
 #include "image/image.h"
 #include "libphash.h"
 #include "test_macros.h"
 
 #include <math.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Helpers */
@@ -290,6 +293,73 @@ void test_box_resize_count_zero(void) {
     PASS("test_box_resize_count_zero");
 }
 
+/* ph_area_downscale() against a brute-force area average: every source pixel times the
+ * exact area it shares with each output cell, in integer units, divided by the cell area
+ * and rounded half up once. Sizes that divide PH_AREA_GRID come from the shared grid,
+ * the others from a direct pass, and an image smaller than the grid always takes the
+ * direct pass; all of them must agree with the brute force bit for bit. */
+static void area_reference(const uint8_t *src, int sw, int sh, int dw, int dh, uint8_t *dst) {
+    for (int r = 0; r < dh; r++) {
+        for (int c = 0; c < dw; c++) {
+            uint64_t sum = 0;
+            for (int y = 0; y < sh; y++) {
+                int64_t oy = (int64_t)((y + 1) * dh < (r + 1) * sh ? (y + 1) * dh : (r + 1) * sh) -
+                             (int64_t)(y * dh > r * sh ? y * dh : r * sh);
+                if (oy <= 0) {
+                    continue;
+                }
+                for (int x = 0; x < sw; x++) {
+                    int64_t ox =
+                        (int64_t)((x + 1) * dw < (c + 1) * sw ? (x + 1) * dw : (c + 1) * sw) -
+                        (int64_t)(x * dw > c * sw ? x * dw : c * sw);
+                    if (ox > 0) {
+                        sum += (uint64_t)(ox * oy) * src[y * sw + x];
+                    }
+                }
+            }
+            uint64_t den = (uint64_t)sw * (uint64_t)sh;
+            dst[r * dw + c] = (uint8_t)((2 * sum + den) / (2 * den));
+        }
+    }
+}
+
+static void check_area_downscale(int sw, int sh) {
+    uint8_t *img = malloc((size_t)sw * (size_t)sh);
+    ASSERT_PTR_NOT_NULL(img);
+    uint32_t state = 12345u + (uint32_t)(sw * 31 + sh);
+    for (int i = 0; i < sw * sh; i++) {
+        state = state * 1664525u + 1013904223u;
+        img[i] = (uint8_t)(state >> 24);
+    }
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_load_from_pixels(ctx, img, sw, sh, 1, 0));
+
+    static const int sizes[][2] = {{8, 8}, {16, 16}, {32, 32}, {8, 16}, {32, 4}, {9, 8}, {5, 7}};
+    for (size_t i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
+        const int dw = sizes[i][0], dh = sizes[i][1];
+        uint8_t got[32 * 32], want[32 * 32];
+        ASSERT(ph_area_downscale(ctx, dw, dh, got));
+        area_reference(img, sw, sh, dw, dh, want);
+        if (memcmp(got, want, (size_t)(dw * dh)) != 0) {
+            fprintf(stderr, "[FAIL] area downscale %dx%d -> %dx%d differs from brute force\n", sw,
+                    sh, dw, dh);
+            exit(1);
+        }
+    }
+    ph_free(ctx);
+    free(img);
+}
+
+void test_area_downscale_matches_brute_force(void) {
+    check_area_downscale(97, 61);  /* grid path for sizes dividing 32 */
+    check_area_downscale(64, 64);  /* cells aligned with pixels */
+    check_area_downscale(333, 40); /* wide, grid path */
+    check_area_downscale(20, 45);  /* narrower than the grid: direct pass only */
+    check_area_downscale(8, 8);    /* identity at 8x8 */
+    PASS("test_area_downscale_matches_brute_force");
+}
+
 int main(void) {
     /* Grayscale */
     test_gray_pure_red();
@@ -310,6 +380,7 @@ int main(void) {
     test_gamma_255_stays_255();
 
     /* Box resize */
+    test_area_downscale_matches_brute_force();
     test_box_uniform();
     test_box_2x2_to_1x1_average();
     test_box_4x1_to_2x1();

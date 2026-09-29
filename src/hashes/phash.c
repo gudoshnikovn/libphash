@@ -159,11 +159,6 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 
-    uint8_t *gray_full = ph_get_gray(ctx);
-    if (!gray_full) {
-        return PH_ERR_ALLOCATION_FAILED;
-    }
-
     /* Allocate all needed buffers.
      * Optimization: If dct_size=32, we use static cached matrix.
      */
@@ -197,8 +192,7 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
         compute_dct_coefficients(dct_mat, dct_size);
     }
 
-    if (!ph_resize_box(gray_full, ctx->image.width, ctx->image.height, dct_input, dct_size,
-                       dct_size)) {
+    if (!ph_area_downscale(ctx, dct_size, dct_size, dct_input)) {
         ph_arena_release(ctx, arena_mark);
         return PH_ERR_ALLOCATION_FAILED;
     }

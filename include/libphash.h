@@ -866,10 +866,11 @@ typedef enum {
  * @brief Computes multiple uint64_t hash algorithms for the loaded image in one call.
  *
  * Equivalent to calling the individual `ph_compute_*` functions for each flag set in
- * `flags`, but shares the grayscale conversion across all of them instead of recomputing
- * it once per algorithm (each `ph_compute_*` call already reuses the context's cached
- * grayscale buffer, so calling several of them back to back on one context is already
- * cheaper than reloading between them; this wraps that into one call).
+ * `flags`. The work over the full image is cached on the context and done once, whichever
+ * algorithms ask for it: the grayscale conversion, and one area-average pass that aHash,
+ * pHash (at the default `dct_size`) and wHash (`PH_WHASH_FAST`) all reduce from -- BMH
+ * shares it too. dHash resamples on its own. On a 20-megapixel image the four together
+ * cost about half of what four independent resizes would.
  * Results are bit-for-bit identical to calling the equivalent `ph_compute_*` function
  * directly.
  *
@@ -936,9 +937,9 @@ typedef struct {
  * @brief Hashes a batch of image files, optionally across a pool of internal threads.
  *
  * Each item is loaded and hashed independently. Internally this calls the same
- * `ph_compute_multi()` used for a single image: the file is decoded once and converted to
- * grayscale once, whatever the flags, while each algorithm still resizes that grayscale
- * image to its own working size, so each flag adds its own resize. A decode/hash failure on one
+ * `ph_compute_multi()` used for a single image: the file is decoded once, converted to
+ * grayscale once and reduced by one shared area-average pass, whatever the flags; dHash
+ * adds a resampling pass of its own. A decode/hash failure on one
  * item is recorded in that item's `status` and does not stop the rest of the batch from being
  * processed.
  *

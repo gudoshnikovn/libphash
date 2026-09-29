@@ -10,10 +10,11 @@
  * here -- MSB first, left to right, top to bottom -- is the one the post itself uses.
  *
  * The resampling filter, the grayscale coefficients and the handling of a pixel exactly
- * equal to the mean are not specified by the source. ph_resize_mitchell() explicitly
- * requests stb_image_resize2's Mitchell filter -- it is not the filter ImageHash uses
- * either. See docs/algorithm-provenance.md for the full comparison and docs/references.md
- * for the citation.
+ * equal to the mean are not specified by the source. The reduction is an area average
+ * (ph_area_downscale()): each of the 64 values is the mean of the part of the image it
+ * covers, which is what "shrink" computes when nothing else is said, and it is shared
+ * with pHash, wHash and BMH. See docs/algorithm-provenance.md for the full comparison and
+ * docs/references.md for the citation.
  */
 #include "context.h"
 #include "hashes/hashes.h"
@@ -29,15 +30,8 @@ PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash) {
         return PH_ERR_EMPTY_IMAGE;
     }
 
-    uint8_t *gray_input = ph_get_gray(ctx);
-    if (!gray_input) {
-        return PH_ERR_ALLOCATION_FAILED;
-    }
-
     uint8_t hash_input[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
-
-    if (!ph_resize_mitchell(gray_input, ctx->image.width, ctx->image.height, hash_input,
-                            PH_CORE_HASH_SIZE, PH_CORE_HASH_SIZE)) {
+    if (!ph_area_downscale(ctx, PH_CORE_HASH_SIZE, PH_CORE_HASH_SIZE, hash_input)) {
         return PH_ERR_ALLOCATION_FAILED;
     }
 
