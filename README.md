@@ -84,6 +84,11 @@ publishing — see `.github/workflows/release.yml`. This is the quickest path
 for FFI bindings or any consumer that doesn't want to build the vendored
 decoders itself.
 
+**CPU baseline.** The x86-64 archives need SSE4.2 and POPCNT (the x86-64-v2 level: every
+x86-64 CPU since 2009–2011); the arm64 archives need ARMv8-A with Advanced SIMD, which
+every arm64 CPU has. Nothing requires AVX or AVX2; libjpeg-turbo, libwebp and zlib-ng
+detect wider instruction sets at run time and use them where the CPU has them.
+
 ### Recommended (CMake)
 
 Best for managing bundled high-performance decoders and system integration.

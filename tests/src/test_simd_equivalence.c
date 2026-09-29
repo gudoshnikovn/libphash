@@ -1,21 +1,19 @@
 /*
  * test_simd_equivalence.c
  *
- * Checks color.c's NEON grayscale path, phash.c's NEON dot product and compare.c's
- * AVX2/SSE4.2/NEON Hamming distance against their scalar fallbacks. A mismatch here means two
- * different hashes for the same input depending on which architecture ran it -- exactly the class
- * of bug that would otherwise surface as an unexplained golden-hash mismatch.
+ * Checks color.c's NEON grayscale path and phash.c's NEON dot product against their
+ * scalar fallbacks, and compare.c's word-at-a-time Hamming distance against its
+ * byte-at-a-time twin. A mismatch here means two different hashes (or distances) for the
+ * same input depending on which architecture ran it -- exactly the class of bug that would
+ * otherwise surface as an unexplained golden-hash mismatch.
  *
- * Every function below exists in two forms: the production one (compiled with whatever
- * SIMD the target supports) and a `_scalar` twin that always takes the plain C path,
- * declared in the src/ header next to it for this purpose only. This test calls both on the same
- * inputs and diffs the outputs.
+ * Every function below exists in two forms: the production one and a `_scalar` twin that
+ * always takes the plain C path, declared in the src/ header next to it for this purpose
+ * only. This test calls both on the same inputs and diffs the outputs.
  *
- * On a build with no SIMD available at all (__ARM_NEON/__AVX2__/__SSE4_2__ all
- * undefined) the production and `_scalar` entry points are literally the same code path,
- * so the comparisons below are tautological there -- the test still passes, it just isn't
- * exercising anything. The matrix this needs to run on to mean something is arm64 (NEON)
- * and x86_64 with AVX2/SSE4.2 (both gcc and clang).
+ * Without NEON (__ARM_NEON undefined) the grayscale and DCT pairs are literally the same
+ * code path, so those comparisons are tautological there -- the test still passes, it just
+ * isn't exercising them. The Hamming pair differs on every target.
  *
  * ph_dct2_partial() is the one function here with a floating-point SIMD path
  * (dot_product_f32_u8_neon in phash.c, used only at dct_size == 32). Floating-point

@@ -51,7 +51,7 @@ sync when you add or flip a switch.**
 | **Batch thread pool** | `PHASH_ENABLE_THREADS=ON` | `PHASH_ENABLE_THREADS=1` | matches CMake's default |
 | Shared library | `PHASH_BUILD_SHARED=OFF` | *n/a* (static `libphash.a` only) | |
 | Tests | `PHASH_BUILD_TESTS=ON` | always built by `all` | |
-| `-march=native` | `PHASH_OPTIMIZE_NATIVE=OFF` | *n/a* (fixed `-msse4.2` / `-march=armv8-a+simd`) | |
+| `-march=native` | `PHASH_OPTIMIZE_NATIVE=OFF` | *n/a* (fixed `-msse4.2` / `-march=armv8-a+simd`) | without it the CPU baseline is x86-64-v2 (SSE4.2 + POPCNT, for the Hamming distances) on x86-64, SSE2 on 32-bit x86, ARMv8-A + Advanced SIMD on arm64; no AVX anywhere |
 | libFuzzer harnesses | `PHASH_BUILD_FUZZERS=OFF` | *n/a* | requires Clang |
 | Test-only mock decoder | `PHASH_ENABLE_MOCK_BACKEND=OFF` | `PHASH_ENABLE_MOCK_BACKEND=0` | must never be on in a shipped build |
 | Strict dependency handling | `PHASH_STRICT_DEPS=OFF` | *n/a* | |

@@ -5,25 +5,19 @@
 #include <stdint.h>
 #include <string.h>
 
-// Include intrinsics based on detected architecture
-#if defined(__AVX2__)
-#    include <immintrin.h>
-#elif defined(__ARM_NEON) || defined(__ARM_NEON__)
-#    include <arm_neon.h>
-#elif defined(__SSE4_2__)
-#    include <nmmintrin.h>
+#if defined(_MSC_VER)
+#    include <intrin.h>
 #endif
 
-PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2) {
-    uint64_t x = hash1 ^ hash2;
+/* One 64-bit popcount. GCC and Clang lower the builtin to the POPCNT instruction on x86-64
+ * (the build's SSE4.2 baseline includes it) and to CNT on arm64; MSVC's intrinsic always
+ * emits POPCNT on x64. */
+static inline int popcount64(uint64_t x) {
 #if defined(__GNUC__) || defined(__clang__)
-    // GCC/Clang built-in for 64-bit popcount
     return __builtin_popcountll(x);
-#elif defined(_MSC_VER)
-    // MSVC intrinsic for 64-bit popcount
+#elif defined(_MSC_VER) && defined(_M_X64)
     return (int)__popcnt64(x);
 #else
-    // Fallback: Kernighan's bit counting algorithm
     int count = 0;
     while (x) {
         x &= (x - 1);
@@ -33,9 +27,10 @@ PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2) {
 #endif
 }
 
-/* Shared tail of ph_hamming_distance_digest(): plain byte-at-a-time XOR + popcount, no
- * vector instructions. Used both as the fallback for whatever a SIMD prefix left
- * unprocessed, and standalone (over the whole digest) by
+PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2) { return popcount64(hash1 ^ hash2); }
+
+/* Shared tail of ph_hamming_distance_digest(): plain byte-at-a-time XOR + popcount. Used
+ * both for the bytes the word loop leaves, and standalone (over the whole digest) by
  * ph_hamming_distance_digest_scalar(), which exists only so
  * tests/src/test_simd_equivalence.c can compare the two against each other. */
 static int hamming_scalar_tail(const ph_digest_t *a, const ph_digest_t *b, size_t start,
@@ -61,6 +56,11 @@ int ph_hamming_distance_digest_scalar(const ph_digest_t *a, const ph_digest_t *b
     return hamming_scalar_tail(a, b, 0, 0);
 }
 
+/* Eight bytes at a time, then the byte tail. The words are read with memcpy(): the digest's
+ * bytes are neither aligned nor typed for a uint64_t load, and the compiler turns the copy
+ * into a plain load. Hand-written vector paths (AVX2, NEON) would buy nothing here: a digest
+ * is at most 128 bytes, the loop is already vectorised by the compiler where that pays, and
+ * measured on arm64 a NEON version was within a nanosecond either way. */
 PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b) {
     if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_BITS)) {
         return -1;
@@ -69,77 +69,12 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
     size_t len = a->size;
     int total = 0;
     size_t i = 0;
-
-    // --- Optimization 1: AVX2 (x86-64 only) ---
-    // _mm256_extract_epi64() extracts into a 64-bit GPR, which doesn't exist on 32-bit x86 --
-    // GCC/Clang leave it as an unresolved external there instead of failing to compile, so this
-    // whole block must additionally be gated on a 64-bit target. On 32-bit x86 with __AVX2__
-    // defined, execution falls through to the SSE4.2 block below (AVX2 implies SSE4.2) with 'i'
-    // still 0, so the 32-byte AVX2 lane is simply never taken and the 8-byte SSE4.2 lane covers
-    // it instead.
-#if defined(__AVX2__) && (defined(__x86_64__) || defined(_M_X64))
-    const uint8_t *a_ptr = a->data;
-    const uint8_t *b_ptr = b->data;
-    size_t len32 = len / 32;
-
-    for (; i < len32; i++) {
-        __m256i v_a = _mm256_loadu_si256((const __m256i *)&a_ptr[i * 32]);
-        __m256i v_b = _mm256_loadu_si256((const __m256i *)&b_ptr[i * 32]);
-        __m256i vxor = _mm256_xor_si256(v_a, v_b);
-        uint64_t v0 = _mm256_extract_epi64(vxor, 0);
-        uint64_t v1 = _mm256_extract_epi64(vxor, 1);
-        uint64_t v2 = _mm256_extract_epi64(vxor, 2);
-        uint64_t v3 = _mm256_extract_epi64(vxor, 3);
-
-#    if defined(__GNUC__) || defined(__clang__)
-        total += __builtin_popcountll(v0) + __builtin_popcountll(v1) + __builtin_popcountll(v2) +
-                 __builtin_popcountll(v3);
-#    else
-        total += (int)(_mm_popcnt_u64(v0) + _mm_popcnt_u64(v1) + _mm_popcnt_u64(v2) +
-                       _mm_popcnt_u64(v3));
-#    endif
+    for (; i + 8 <= len; i += 8) {
+        uint64_t wa, wb;
+        memcpy(&wa, &a->data[i], sizeof(wa));
+        memcpy(&wb, &b->data[i], sizeof(wb));
+        total += popcount64(wa ^ wb);
     }
-    i *= 32; // Advance byte index
-#endif
-
-    // --- Optimization 1b: SSE4.2 (x86) ---
-#if defined(__SSE4_2__) || defined(__AVX2__)
-    // AVX2 implies SSE4.2, and leaves 'i' as a byte offset (a multiple of 32, hence of 8)
-    // into a->data/b->data -- so it must be converted to a word index here, not compared
-    // directly against len8 (a word count) the way 'i' is used as a byte index everywhere
-    // else in this function.
-    const uint64_t *a64 = (const uint64_t *)a->data;
-    const uint64_t *b64 = (const uint64_t *)b->data;
-    size_t len8 = len / 8;
-
-    for (size_t w = i / 8; w < len8; w++) {
-        uint64_t x = a64[w] ^ b64[w];
-#    if defined(__GNUC__) || defined(__clang__)
-        total += __builtin_popcountll(x);
-#    else
-        total += (int)_mm_popcnt_u64(x);
-#    endif
-    }
-    i = len8 * 8; // Advance byte index
-#endif
-
-    // --- Optimization 2: NEON (ARM) ---
-#if defined(__ARM_NEON) || defined(__ARM_NEON__)
-    // Process in 16-byte chunks (uint8x16_t)
-    uint16x8_t v_sum = vdupq_n_u16(0);
-
-    for (; i + 16 <= len; i += 16) {
-        uint8x16_t va = vld1q_u8(&a->data[i]);
-        uint8x16_t vb = vld1q_u8(&b->data[i]);
-        uint8x16_t vxor = veorq_u8(va, vb);
-        uint8x16_t vcnt = vcntq_u8(vxor); // Byte-wise popcount
-        v_sum = vpadalq_u8(v_sum, vcnt);  // Accumulate 8-bit counts into 16-bit
-    }
-    // Final reduction of the 16-bit vector sum
-    total += (int)vaddlvq_u16(v_sum);
-#endif
-
-    // --- Fallback/Remainder Loop ---
     return hamming_scalar_tail(a, b, i, total);
 }
 
