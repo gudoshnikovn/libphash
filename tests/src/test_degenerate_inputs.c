@@ -252,8 +252,9 @@ void test_every_algorithm_is_defined_on_degenerate_geometry(void) {
  *            that bin is 255 and the other 107 are 0;
  *   ColorMoments the mean is the fill value; the second and third central moments are 0.
  *
- * pHash is deliberately absent: on a uniform image it produces rounding noise instead.
- * See test_phash_of_a_uniform_image_is_rounding_noise() below. */
+ * pHash is deliberately absent: on a uniform image its AC coefficients are float residue,
+ * so the answer is near zero rather than one exact value. See
+ * test_phash_of_a_uniform_image_is_near_zero() below. */
 void test_uniform_images_have_documented_digests(void) {
     static const int levels[] = {0, 1, 137, 254, 255};
     uint8_t px[MAX_PIXELS * 3];
@@ -312,39 +313,17 @@ void test_uniform_images_have_documented_digests(void) {
     PASS("test_uniform_images_have_documented_digests");
 }
 
-/* CHARACTERISATION TEST FOR A DEFECT. pHash on a uniform image is a readout of
- * floating-point rounding error, not a hash.
+/* pHash of a uniform image: close to zero, and flat greys close to each other.
  *
- * Mathematically every AC coefficient of the DCT of a constant image is exactly zero, so
- * the 63 values the median is taken over are all zero, the median is zero, and `> median`
- * sets nothing -- which is what happens for a black image, where the products are exactly
- * zero in float too. For any other level the row sums of the DCT matrix are not exactly
- * zero in float, so each AC coefficient comes out at some 1e-5 times the fill value, the
- * median lands in the middle of that noise, and half the bits are decided by which way a
- * rounding error went.
- *
- * The consequence is that two flat greys a human cannot tell apart hash to nothing like
- * each other: measured, levels 136, 137 and 138 give three unrelated hashes, and
- * 254 of the 255 steps from 0 to 255 change the hash. Only 0 is stable, and only because
- * zero times anything is zero.
- *
- * test_dct2_of_constant_image() in test_formula_conformance.c already records the cause
- * one level down, at the coefficients. What is added here is the consequence at the API,
- * which is the part a caller sees, plus the black image: it is the one input for which
- * the "the DC bit is always 1" invariant asserted in that same file does not hold, since
- * with DC at exactly 0 and a median of exactly 0 the `>` fails for DC too. The hash of a
- * fully black image is therefore 0, all 64 bits.
- *
- * This is not caught by comparing against ImageHash or pHash: they have the same problem,
- * for the same reason. It is confined to uniform images -- on any real picture the AC
- * coefficients are orders of magnitude above the noise -- so it does not touch the golden
- * hashes, and no fix is attempted here because every candidate (thresholding with `>=`,
- * snapping near-zero coefficients, special-casing a zero-variance input) changes pHash
- * values for some inputs and needs its own decision.
- *
- * WHEN THAT DECISION IS MADE: this test should become an assertion that all flat images
- * hash alike -- most likely to zero, matching every other algorithm here. */
-void test_phash_of_a_uniform_image_is_rounding_noise(void) {
+ * Mathematically every AC coefficient of the DCT of a constant image is zero. In float the
+ * rows of the DCT matrix do not sum to exactly zero, so for any level but black each AC
+ * coefficient comes out at some 1e-5 times the fill value and the median sits in the
+ * middle of that noise. With a plain median threshold half the bits followed the rounding,
+ * and two greys a human cannot tell apart hashed like unrelated images. The threshold's
+ * margin (PH_PHASH_MEDIAN_MARGIN) sends the crowd around the median to 0: measured over
+ * all 256 levels, every hash is within 11 bits of zero and any two within 13 of each other.
+ * Black, whose coefficients are exactly zero, hashes to 0. */
+void test_phash_of_a_uniform_image_is_near_zero(void) {
     enum {
         SIDE = 32,
     };
@@ -361,29 +340,15 @@ void test_phash_of_a_uniform_image_is_rounding_noise(void) {
         ph_free(ctx);
     }
 
-    /* Black is the only level whose coefficients are exactly zero. */
     ASSERT_UINT64_EQ(0ULL, hashes[0]);
-
-    /* Everything else is noise, and neighbouring levels are as far apart as unrelated
-     * images. If a future change makes these agree, the defect has been fixed and this
-     * test has to be rewritten -- see the note above; it must not simply be deleted. */
-    int changes = 0;
-    for (int v = 1; v < 256; v++) {
-        if (hashes[v] != hashes[v - 1]) {
-            changes++;
+    for (int a = 0; a < 256; a++) {
+        ASSERT(ph_hamming_distance(hashes[a], 0) <= 12);
+        for (int b = a + 1; b < 256; b++) {
+            ASSERT(ph_hamming_distance(hashes[a], hashes[b]) <= 16);
         }
     }
-    if (changes < 200) {
-        fprintf(stderr,
-                "[NOTE] pHash over flat greys now changes only %d times in 255 steps -- if it "
-                "is stable, replace this characterisation test with the invariant\n",
-                changes);
-        exit(1);
-    }
-    ASSERT(ph_hamming_distance(hashes[136], hashes[137]) > 10);
-    ASSERT(ph_hamming_distance(hashes[137], hashes[138]) > 10);
 
-    PASS("test_phash_of_a_uniform_image_is_rounding_noise");
+    PASS("test_phash_of_a_uniform_image_is_near_zero");
 }
 
 /* Three degenerate minima collapse their algorithm to a constant:
@@ -743,7 +708,7 @@ void test_saturated_colours_are_binned_apart(void) {
 int main(void) {
     test_every_algorithm_is_defined_on_degenerate_geometry();
     test_uniform_images_have_documented_digests();
-    test_phash_of_a_uniform_image_is_rounding_noise();
+    test_phash_of_a_uniform_image_is_near_zero();
     test_parameter_values_that_collapse_the_hash_to_a_constant();
     test_channel_layout_does_not_change_a_grey_hash();
     test_maximum_contrast_thresholds();

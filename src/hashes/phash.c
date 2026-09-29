@@ -205,7 +205,8 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
 
     /* median_from = 1: the DC coefficient is thresholded like the others but takes no
      * part in choosing the threshold. See the note at the top of this file. */
-    *out_hash = ph_median_bitpack_from(dct_out, reduction_size * reduction_size, 1);
+    *out_hash = ph_median_bitpack_margin(dct_out, reduction_size * reduction_size, 1,
+                                         PH_PHASH_MEDIAN_MARGIN);
 
     ph_arena_release(ctx, arena_mark);
     return PH_SUCCESS;

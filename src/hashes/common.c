@@ -10,6 +10,10 @@ uint64_t ph_median_bitpack(const float *values, int n) {
 }
 
 uint64_t ph_median_bitpack_from(const float *values, int n, int median_from) {
+    return ph_median_bitpack_margin(values, n, median_from, 0.0f);
+}
+
+uint64_t ph_median_bitpack_margin(const float *values, int n, int median_from, float margin) {
     if (n <= 0 || n > 64 || median_from < 0 || median_from >= n) {
         return 0;
     }
@@ -39,9 +43,12 @@ uint64_t ph_median_bitpack_from(const float *values, int n, int median_from) {
         median = sorted[m / 2];
     }
 
+    /* margin is a fraction of the range of the values that set the median; 0 is a plain
+     * median threshold. */
+    const float threshold = median + margin * (sorted[m - 1] - sorted[0]);
     uint64_t hash = 0;
     for (int i = 0; i < n; i++) {
-        if (values[i] > median) {
+        if (values[i] > threshold) {
             hash |= (1ULL << i);
         }
     }

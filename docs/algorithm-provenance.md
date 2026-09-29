@@ -222,10 +222,11 @@ author — Yang, Gu and Niu for BMH, Stricker and Orengo for the colour moments 
 outranks every implementation, including implementations more popular than this library
 will ever be. §6 follows the BMH paper against OpenCV for exactly that reason.
 
-**What this implementation does** (`src/hashes/phash.c`): grayscale, box resize to 32×32,
-type-II DCT by matrix multiplication with the same matrix definition as Zauner's
+**What this implementation does** (`src/hashes/phash.c`): grayscale, area-average resize to
+32×32, type-II DCT by matrix multiplication with the same matrix definition as Zauner's
 equation 3.3, coefficients (0,0) through (7,7), **median over the 63 AC coefficients**,
-bit set when `value > median` — pHash's construction. The bit order is this library's
+bit set when `value > median + 0.001 × (AC range)` — pHash's construction with a margin
+(see the delta table and "Where the weakness is" below). The bit order is this library's
 own: LSB first (see the bit-order table in [`algorithms.md`](algorithms.md)).
 
 **Delta:**
@@ -236,6 +237,7 @@ own: LSB first (see the bit-order table in [`algorithms.md`](algorithms.md)).
 | DC keeps its bit, so one bit of the 64 is constant | deliberate — pHash's own behaviour | DCT(0,0) is non-negative and larger than every AC term, so it is above the median every time and its bit is 1 every time. The hash is effectively 63 bits. Removing the dead bit means moving the block to (1,1), which the prose describes and the code does not; measured below and rejected. |
 | No 7×7 mean prefilter before the resize | deliberate | `ph_resize_box()` already averages over each source region, which is a low-pass step of a similar kind. Not identical to a 7×7 mean at full resolution; worth measuring rather than assuming. |
 | Threshold is the median | deliberate | The two sources disagree; the rank-1 source (Zauner/pHash) says median. |
+| Threshold is the median plus 0.1 % of the AC range, not the bare median | deliberate | Coefficients crowding the median decide their bits by noise; the margin sends them to 0 together. Measured below: false matches at 95 % recall on photographs halve. `ph_dct_imagehash()` thresholds at the bare median, so pHash values differ from it. |
 | `>` rather than `≥` | matches pHash's code | Zauner's 3.10 says `≥`; `ph_dct_imagehash()` writes `>`, and so does this. With floating-point coefficients the two differ only on an exact tie against the median, i.e. on degenerate input such as a solid colour. `>` because it is pinned to the reference implementation's code, which outranks a library-wide convention. |
 | Box resampling | undefined | No source specifies a filter. Zauner's account of pHash has a 7×7 mean filter and then a resize, so a box filter is at least the same kind of operation. |
 | Grayscale coefficients | pinned | As for aHash — see §1. `ph_median_bitpack_from()` (shared with wHash) operates on the DCT of the grayscale buffer, so the same BT.601 triple applies here too. |
@@ -286,12 +288,20 @@ in `tests/data` is one of the 50: 55 of its 63 AC coefficients lie within 0.1 % 
 median. It and the uniform `photo.png` therefore pin pHash's behaviour in that regime, not in
 the typical one.
 
-A dead zone would steady those bits — a threshold at the median plus a fraction of the AC
-range, so that coefficients crowding the median all give 0 — and at 0.1 % of the range it
-measures better on both corpora (separability 2.90 → 3.08 on 400 photographs, 2.69 → 3.17 on
-the synthetic one; three synthetic images start sharing a hash). It is not used: pHash's value
-is being pHash, bit for bit, and a dead zone makes a hash that `ph_dct_imagehash()` does not
-produce. The regime is documented instead, and its test fixtures are labelled as such.
+So the threshold is not the bare median. It is raised by a margin of 0.1 % of the AC
+range (`PH_PHASH_MEDIAN_MARGIN`), which sends the crowd around the median to 0 as a block:
+
+| margin | photographs: separability | false matches at 95 % recall | moved 11+ bits by ±1 level of noise |
+|---|---|---|---|
+| none (pHash's `ph_dct_imagehash()`) | 3.67 | 14.2 % | 140 of 800 |
+| **0.1 %** | **4.00** | **6.8 %** | **98** |
+| 0.2 % | 4.01 | 6.5 % | 92 |
+| 0.5 % | 3.77 | 8.2 % | 75 |
+
+The synthetic corpus agrees (separability 2.69 → 3.17). A uniform image, whose AC
+coefficients are float residue, hashes within 11 bits of zero instead of to rounding noise,
+and any two flat greys within 13 bits of each other. The price is conformance: pHash values
+are not `ph_dct_imagehash()`'s, and three near-flat synthetic images of 24 share a hash.
 
 ---
 

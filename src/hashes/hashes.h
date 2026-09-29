@@ -87,6 +87,29 @@ uint64_t ph_median_bitpack(const float *values, int n);
  * hash; median_from = 1 is that. median_from = 0 is ph_median_bitpack(). */
 uint64_t ph_median_bitpack_from(const float *values, int n, int median_from);
 
+/* As ph_median_bitpack_from(), with the threshold raised above the median by `margin`
+ * times the range (maximum minus minimum) of values[median_from..n-1]: a value within that
+ * margin above the median gets a 0 like the values below it. */
+uint64_t ph_median_bitpack_margin(const float *values, int n, int median_from, float margin);
+
+/* pHash's threshold margin, as a fraction of the AC coefficients' range. With a plain
+ * median, an image with little low-frequency structure has many AC coefficients crowding
+ * the median, and those bits follow whatever nudges them: +/-1 grey level of noise moves
+ * pHash by 11 bits or more on 140 of 800 photographs. A margin sends that crowd to 0 as a
+ * block. Measured over 800 photographs and the synthetic corpus of
+ * tests/src/test_hash_properties.c:
+ *
+ *   margin    photographs: separability, false matches at 95% recall, 11+ bits from noise
+ *   0              3.67        14.2%        140
+ *   0.001          4.00         6.8%         98
+ *   0.002          4.01         6.5%         92
+ *   0.005          3.77         8.2%         75
+ *
+ * The synthetic corpus agrees (separability 2.69 -> 3.17 at 0.001). 0.001 takes nearly all
+ * of the gain; larger margins start clearing bits that carry structure. The cost: three
+ * near-flat synthetic images of 24 share a hash, where their 64 bits were rounding noise. */
+#define PH_PHASH_MEDIAN_MARGIN 0.001f
+
 /* Which of the colour histogram's bins a pixel falls in. Exposed for the conformance
  * test, which checks the quantisation against the axis definitions by hand. */
 int ph_color_histogram_bin(int r, int g, int b);
