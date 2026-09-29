@@ -68,6 +68,16 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   aHash values move, mostly by 1–6 bits.
   *Restore the old behaviour:* not possible; recompute stored aHash values.
 
+- **pHash thresholds its DCT block at the median plus 0.1 % of the AC coefficients'
+  range, not at the bare median.** On an image with little low-frequency structure many
+  AC coefficients crowd the median and their bits followed rounding and noise: ±1 grey
+  level moved pHash by 11 bits or more on 140 of 800 photographs, and flat greys hashed
+  like unrelated images. The margin sends that crowd to 0 together: 98 of 800, and on the
+  same photographs false matches at 95 % recall fall from 14.2 % to 6.8 %. pHash values
+  differ from the reference `ph_dct_imagehash()` (and from 1.x) wherever coefficients sit
+  within the margin of the median.
+  *Restore the old behaviour:* not possible; recompute stored pHash values.
+
 - **Images with transparency are hashed as they look.** 1.x dropped the alpha channel and
   hashed the colour stored under it — invisible, and different from encoder to encoder:
   over 141 PNGs with at least 5 % transparency, two copies differing only in the colour
