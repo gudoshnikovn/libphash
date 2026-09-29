@@ -41,21 +41,23 @@ struct stored_hash {
 
 ## Restoring 1.x hash values (where possible)
 
-**Auto-orientation is the one breaking change you can opt out of.** Every other hash
-value change below (color hash, mHash, color moments, BMH, radial) is a rewritten
-algorithm with no "old mode" switch — recompute is the only path, per each item's own
-entry.
+**Auto-orientation and alpha compositing are the two breaking changes you can opt out
+of.** Every other hash value change below (color hash, mHash, color moments, BMH, radial)
+is a rewritten algorithm with no "old mode" switch — recompute is the only path, per each
+item's own entry.
 
 ```c
 ph_context_t *ctx;
 ph_create(&ctx);
-ph_context_set_auto_orient(ctx, 0); /* hash the stored pixels, as 1.x did */
+ph_context_set_auto_orient(ctx, 0);                /* hash the stored pixels, as 1.x did */
+ph_context_set_alpha_mode(ctx, PH_ALPHA_IGNORE);   /* drop alpha, as 1.x did */
 ```
 
-Read the EXIF-orientation entry below before doing this: it means the hash describes
-the *undisplayed* sensor buffer, not what a viewer shows the user, which is usually not
-what you actually want long-term — it is offered as a bridge to keep old values valid
-while you plan a rehash, not as the recommended steady state.
+Read the EXIF-orientation and alpha entries below before doing this: both make the hash
+describe something a viewer does not see — the undisplayed sensor buffer, the colour
+under transparent pixels — which is usually not what you actually want long-term. They
+are offered as a bridge to keep old values valid while you plan a rehash, not as the
+recommended steady state.
 
 ---
 
@@ -277,6 +279,20 @@ ph_hamming_distance_digest(&d, &other); /* -1; 1.x read past the struct */
 `ph_load_from_file()` returns `PH_ERR_IO` for a FIFO, a character device or `/dev/stdin`;
 1.x read them. Read the stream into a buffer yourself and call `ph_load_from_memory()`.
 Regular files are unaffected.
+
+## Transparent images are hashed as they look
+
+1.x dropped the alpha channel and hashed the colour stored under it, which is invisible
+and differs between encoders: two copies of the same icon, one with black and one with
+white under its transparent pixels, hashed about 30–40 bits apart. 2.0 composites every
+image with alpha (an alpha channel or a PNG `tRNS` chunk, or RGBA passed to
+`ph_load_from_pixels()`) onto mid-grey at load time, so such copies hash identically.
+Every stored hash of an image with transparency changes; opaque images are unaffected.
+`ph_context_set_alpha_mode()` picks a white or black background instead, or
+`PH_ALPHA_IGNORE` for the 1.x behaviour. `ph_context_get_dimensions()` reports 3
+channels (1 when loaded as grayscale) for such an image: alpha is never stored.
+
+---
 
 ## EXIF auto-orientation is on by default
 

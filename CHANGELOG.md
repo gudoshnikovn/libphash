@@ -65,6 +65,17 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   *Restore the old behaviour:* not possible; recompute stored aHash values, at least
   those equal to zero.
 
+- **Images with transparency are hashed as they look.** 1.x dropped the alpha channel and
+  hashed the colour stored under it — invisible, and different from encoder to encoder:
+  over 141 PNGs with at least 5 % transparency, two copies differing only in the colour
+  under alpha 0 hashed 28–42 bits apart of 64. Every image with alpha (an alpha channel or
+  a PNG `tRNS` chunk, from any decoder, or RGBA passed to `ph_load_from_pixels()`) is
+  composited onto mid-grey at load time, and such copies hash identically. The new
+  **`ph_context_set_alpha_mode()`** chooses a white or black background instead, or
+  `PH_ALPHA_IGNORE`. A loaded image never stores alpha: `ph_context_get_dimensions()`
+  reports 3 channels (1 when loaded as grayscale).
+  *Restore the old behaviour:* `ph_context_set_alpha_mode(ctx, PH_ALPHA_IGNORE)`.
+
 - **The Block Mean Hash thresholds against the median of the block means, not their
   arithmetic mean, so every BMH value changes.** That is what Yang, Gu and Niu's method 1
   specifies (step d and equation 3.9), and the median makes the bit distribution balanced
@@ -461,6 +472,12 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   `PH_ERR_ALLOCATION_FAILED` instead. No hash value changes on the success path.
 - Pixel counts were computed in `int` and could overflow (undefined behaviour); they are
   computed in `size_t`.
+- **A gray + alpha image decoded by stb_image read one byte past its pixel buffer** and
+  hashed a mixture of gray and alpha values, in every build without a native PNG decoder
+  (the Makefile build). stb_image also hands back a grayscale PNG as one channel, so
+  ColorHash and ColorMoments refused an image that a libpng build accepted, and
+  grayscale loading used stb_image's own gray weights instead of the library's. Every PNG
+  decoder produces the same channel layout and the same gray values.
 - **`ph_hamming_distance_digest()` silently undercounted on x86_64** for a digest whose
   size in bytes wasn't a multiple of 32: the AVX2 loop advanced its index as a byte offset,
   but the SSE4.2 loop after it compared that index against a word count, so the last bytes
