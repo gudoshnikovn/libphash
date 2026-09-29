@@ -161,6 +161,10 @@ static int golden_tolerance_levels(const char *algo) {
         "No golden_hashes.<backend-set>.<arch>-<compiler>.txt exists for this compiler yet -- add PH_GOLDEN_COMPILER_TAG for it, run this test with --update to generate the file, and commit it."
 #endif
 
+/* photo.png (a uniform colour) and photo_complex.png (55 of its 63 AC coefficients within
+ * 0.1% of the AC range of their median) pin pHash where its median threshold is decided by
+ * rounding, not where a typical photograph is; docs/algorithm-provenance.md section 3 has
+ * the corpus numbers. The JPEG fixtures are the typical case. */
 static const char *FIXTURES[] = {
     "photo.jpeg",
     "photo_copy.jpeg",

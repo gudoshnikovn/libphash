@@ -266,6 +266,33 @@ pHash.
 The DC term does not explain pHash's weaker robustness (mean intra-distance 0.177 against
 0.03–0.07 for the other structural hashes): neither treatment of DC moves that number.
 
+**Where the weakness is: coefficients crowding the median.** Every bit is a comparison
+with the median of the 63 AC coefficients, so a coefficient close to the median is decided
+by whatever nudges it, and an image with many of them has many such bits. On an image with
+little low-frequency structure most AC coefficients are near zero, and so is their median.
+Measured over 800 photographs and textures (JPEG and PNG images shipped with macOS,
+reduced to 512 px on the long side):
+
+| AC coefficients within 0.1 % of the AC range of the median | photographs |
+|---|---|
+| under 5 % | 520 (65 %) |
+| 5–25 % | 153 (19 %) |
+| 25–50 % | 77 (10 %) |
+| 50 % or more | 50 (6 %) |
+
+The same effect seen through the hash: ±1 grey level of uniform noise, invisible, moves
+pHash by 11 bits or more on 140 of the 800 (aHash 53, dHash 45, wHash 68). `photo_complex.png`
+in `tests/data` is one of the 50: 55 of its 63 AC coefficients lie within 0.1 % of the
+median. It and the uniform `photo.png` therefore pin pHash's behaviour in that regime, not in
+the typical one.
+
+A dead zone would steady those bits — a threshold at the median plus a fraction of the AC
+range, so that coefficients crowding the median all give 0 — and at 0.1 % of the range it
+measures better on both corpora (separability 2.90 → 3.08 on 400 photographs, 2.69 → 3.17 on
+the synthetic one; three synthetic images start sharing a hash). It is not used: pHash's value
+is being pHash, bit for bit, and a dead zone makes a hash that `ph_dct_imagehash()` does not
+produce. The regime is documented instead, and its test fixtures are labelled as such.
+
 ---
 
 ## 4. wHash — Wavelet hash
