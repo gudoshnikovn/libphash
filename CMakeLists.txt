@@ -711,6 +711,10 @@ if(PHASH_USE_SPNG)
     target_sources(phash PRIVATE src/loaders/png_spng.c)
     add_library(spng_static STATIC vendor/spng/spng/spng.c)
     target_include_directories(spng_static PUBLIC vendor/spng/spng)
+    # spng calls zlib: it compiles against the headers of the zlib it is linked with
+    # (zlib-ng's are generated at build time) and is built after it. Without this it would
+    # pick up whatever system zlib.h the compiler finds, or none.
+    target_link_libraries(spng_static PRIVATE ${PHASH_ZLIB_TARGET})
     target_link_libraries(phash PRIVATE $<BUILD_INTERFACE:spng_static> $<BUILD_INTERFACE:${PHASH_ZLIB_TARGET}>)
     target_include_directories(phash PRIVATE vendor/spng/spng)
     if(PHASH_INSTALL_PRIVATE_DEPS)
