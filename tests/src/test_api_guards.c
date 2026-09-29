@@ -179,7 +179,7 @@ void test_hashes_extra_coverage(void) {
     ASSERT_OK(ph_compute_phash(ctx, &hash));
 
     // --- Radial Extra ---
-    // Flat image: variance spread below PH_RADIAL_FLAT_VARIANCE
+    // Flat image: no angular structure, all-zero digest
     ASSERT_OK(ph_compute_radial_hash(ctx, &digest));
     // Hits ph_get_pixel_bilinear OOB
     ASSERT_FLOAT_EQ(-1.0f, ph_get_pixel_bilinear(ctx->image.raw_rgb, 32, 32, -1.0f, 0), 0.001);

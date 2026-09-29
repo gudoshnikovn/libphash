@@ -151,6 +151,10 @@ typedef enum {
                                      ///< started. Returned by ph_hash_files_ex() /
                                      ///< ph_hash_buffers_ex() and stored in the `status` of
                                      ///< every item they never reached.
+    PH_ERR_NO_STRUCTURE = -13,       ///< ph_radial_similarity() was given a digest with no
+                                     ///< structure to compare: the all-zero digest
+                                     ///< ph_compute_radial_hash() returns for an image with no
+                                     ///< angular structure (flat, or radially symmetric).
     PH_ERR_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE, ///< Not an error code -- see "Enum width".
 } ph_error_t;
 
@@ -443,10 +447,9 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
  *        DCT of an n-element vector has n coefficients).
  * @param samples Number of samples per projection, 2..4096 (default 128). The
  *        lower bound is 2, not 1: variance of a single observation is 0 by definition, so
- *        samples == 1 makes every projection's variance 0 regardless of image content --
- *        the same all-flat condition @c PH_RADIAL_FLAT_VARIANCE exists to catch -- and the
- *        digest is all zeroes for every image. 2 is the smallest count for which a
- *        projection's variance can be nonzero.
+ *        samples == 1 makes every projection's variance 0 regardless of image content,
+ *        and the digest is the all-zero "no structure" answer for every image. 2 is the
+ *        smallest count for which a projection's variance can be nonzero.
  * @param sigma Gaussian blur sigma applied before the projections are taken, in
  *        (0, 64/3] (default 3.5, pHash's own header default -- see
  *        ph_context_set_gamma()). The upper bound is where the underlying blur's kernel radius,
@@ -1226,6 +1229,12 @@ PH_NODISCARD PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *
  * coefficients, which are quantised into the digest. Uses the context gamma, and nothing
  * else does.
  *
+ * An image with no angular structure -- blank, or with nearly the same variance along
+ * every line, as a radially symmetric one has -- gets an all-zero digest and
+ * @c PH_SUCCESS; ph_radial_similarity() answers any comparison with it by
+ * @c PH_ERR_NO_STRUCTURE. The threshold is relative to the image's own contrast, so a
+ * faint pattern still gets a digest of its own.
+ *
  * @warning Compare these digests with ph_radial_similarity(), not with
  *          ph_hamming_distance_digest(), ph_l2_distance() or ph_similarity_digest(). Those
  *          three treat a digest as a bit vector or a point in space; a radial digest is
@@ -1307,13 +1316,20 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
  *
  * The score is a Pearson correlation, so it runs from -1.0 to 1.0 and 1.0 means the two
  * profiles are identical up to a shift. Compare it against @c PH_RADIAL_PCC_THRESHOLD, or
- * against your own measured cut. Two digests that are entirely flat (which is what a
- * blank image produces) score 1.0 against each other and 0.0 against anything varying.
+ * against your own measured cut.
+ *
+ * An image with no angular structure -- a blank one, or one whose variance is nearly the
+ * same along every line through its centre -- hashes to an all-zero digest. It carries no
+ * information for this descriptor, and no score is defined against it: any number would
+ * be invented, and 1.0 would call two unrelated faint images identical. Such a pair is
+ * answered with @c PH_ERR_NO_STRUCTURE; whether "no data" counts as a match is the
+ * caller's decision.
  *
  * @param a,b Digests of equal size, both valid per the contract above.
  * @param out_pcc Receives the score. Untouched on error.
- * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for a NULL argument, an invalid or
- *         empty digest, or two digests of different sizes.
+ * @return @c PH_SUCCESS; @c PH_ERR_NO_STRUCTURE if either digest has all bytes equal;
+ *         @c PH_ERR_INVALID_ARGUMENT for a NULL argument, an invalid or empty digest, or
+ *         two digests of different sizes.
  *
  * @note This returns its result through @p out_pcc rather than as the return value, as
  *       the other comparison functions here do. They signal failure with -1.0, and -1.0

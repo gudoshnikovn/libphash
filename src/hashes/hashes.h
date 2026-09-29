@@ -170,12 +170,31 @@ const float *ph_get_dct_matrix_32(void);
  * negative values must never reach it. */
 #define PH_RADIAL_MAX_SIGMA (64.0f / 3.0f)
 
-/* Below this spread across the projection variances an image has no radial structure to
- * describe -- it is flat, or radially symmetric -- and the digest is all zeroes rather
- * than a standardisation of floating-point residue. No source specifies the value; it is
- * this library's choice: small enough that no real image's projection variance falls
- * under it, large enough to catch the residue a flat image leaves. */
-#define PH_RADIAL_FLAT_VARIANCE 0.001
+/* When an image has no angular structure for Radial to describe. No source specifies it;
+ * both bounds are this library's, set by measurement. The projection variances are in
+ * grey levels squared.
+ *
+ * PH_RADIAL_MIN_MEAN_VARIANCE: below it no line through the image sees any change in
+ * brightness at all. A flat image leaves bilinear-interpolation residue around 1e-8; one
+ * pixel differing by a single level along one projection already gives about 1e-2.
+ *
+ * PH_RADIAL_MIN_RELATIVE_SPREAD: the variance profile's spread across angles, squared and
+ * relative to its mean squared (the squared coefficient of variation). Standardising a
+ * profile that barely varies amplifies rounding noise into the digest. Measured by
+ * comparing each image's digest with that of the same image plus +/-2 levels of noise
+ * (800 photographs, the 24 synthetic bases of tests/src/test_hash_properties.c, 40 discs):
+ *
+ *   relative spread    mean correlation with the noisy copy
+ *   below 1e-5             0.40 - 0.43
+ *   1e-5 .. 1e-4           0.68
+ *   1e-4 .. 1e-3           0.99
+ *   1e-3 and above         0.94 - 0.99
+ *
+ * Below 1e-4 the digest describes noise, not the image. Being relative, the bound does
+ * not depend on contrast: two faint patterns with different orientations keep different
+ * digests, where a bound on the absolute spread would give both the flat answer. */
+#define PH_RADIAL_MIN_MEAN_VARIANCE   1e-6
+#define PH_RADIAL_MIN_RELATIVE_SPREAD 1e-4
 
 /* Hard upper bounds for the pHash DCT: ph_dct2_partial() uses a fixed
  * 32*8 stack scratch buffer, and the resulting hash must fit into 64 bits
@@ -248,7 +267,7 @@ const float *ph_get_dct_matrix_32(void);
 
 /* Hard lower bound for samples. Variance is undefined-in-effect for a single
  * observation: with one sample per projection, every projection's variance is exactly 0
- * by definition, which is the same all-flat condition PH_RADIAL_FLAT_VARIANCE exists to
+ * by definition, which is the no-structure condition PH_RADIAL_MIN_MEAN_VARIANCE exists to
  * catch -- so at samples == 1 the digest is all zeroes for every image,
  * independent of content. 2 is the smallest sample count for which a projection's variance
  * can be nonzero. */

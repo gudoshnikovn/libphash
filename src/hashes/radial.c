@@ -38,7 +38,8 @@
  * zero instead of a constant 255 that would carry no information, waste the quantisation
  * range and correlate every pair of digests together. A vector with no spread -- a flat
  * image, or one radially symmetric enough that every angle sees the same variance -- has
- * nothing for this descriptor to say and yields an all-zero digest.
+ * nothing for this descriptor to say and yields an all-zero digest, which
+ * ph_radial_similarity() refuses to score.
  *
  * Comparison is ph_radial_similarity(), the peak of the cross-correlation over cyclic
  * shifts, which is what the source uses. What that delivers is a few degrees of rotation
@@ -107,8 +108,11 @@ double ph_projection_variance(const uint8_t *img, int w, int h, double cx, doubl
 
         float val = ph_get_pixel_bilinear(img, w, h, px, py);
         if (val >= 0.0f) {
+            /* Squared in double: a float square of a value near 255 carries a rounding
+             * error of about 4e-3 grey levels squared, which survives the subtraction
+             * below as a variance where the line has none. */
             sum += (double)val;
-            sum_sq += (double)(val * val);
+            sum_sq += (double)val * (double)val;
             count++;
         }
     }
@@ -239,9 +243,11 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
      *     which correlates every pair of digests towards each other under the comparison
      *     the source uses.
      *
-     * A vector with no spread at all -- a flat image, or one radially symmetric enough
-     * that every angle sees the same variance -- has nothing to standardise and nothing
-     * for this descriptor to say. It yields an all-zero digest, as pHash does. */
+     * A vector with no spread worth the name -- a flat image, or one radially symmetric
+     * enough that every angle sees nearly the same variance -- has nothing to standardise
+     * and nothing for this descriptor to say. It yields an all-zero digest, as pHash does,
+     * and ph_radial_similarity() refuses to score it. The two bounds are measured next to
+     * PH_RADIAL_MIN_RELATIVE_SPREAD. */
     double sum_v = 0.0, sum_v_sq = 0.0;
     for (int i = 0; i < projections; i++) {
         sum_v += projection_variances[i];
@@ -249,7 +255,8 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     }
     double mean_v = sum_v / (double)projections;
     double spread_sq = sum_v_sq / (double)projections - mean_v * mean_v;
-    if (spread_sq <= PH_RADIAL_FLAT_VARIANCE) {
+    if (mean_v <= PH_RADIAL_MIN_MEAN_VARIANCE ||
+        spread_sq <= PH_RADIAL_MIN_RELATIVE_SPREAD * mean_v * mean_v) {
         ph_arena_release(ctx, arena_mark);
         free(blurred);
         return PH_SUCCESS;

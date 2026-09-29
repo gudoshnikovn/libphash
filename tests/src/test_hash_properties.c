@@ -389,9 +389,15 @@ static double distance(algo_t a, const hash_set_t *x, const hash_set_t *y) {
         ASSERT_OK(ph_histogram_intersection(&x[a].dig, &y[a].dig, &inter));
         return 1.0 - inter;
     }
+    /* A radial digest with no angular structure (a radially symmetric base) has no score
+     * against anything: the pair is left out of both distributions, and counted. */
     if (a == A_RADIAL) {
         double pcc = 0.0;
-        ASSERT_OK(ph_radial_similarity(&x[a].dig, &y[a].dig, &pcc));
+        ph_error_t err = ph_radial_similarity(&x[a].dig, &y[a].dig, &pcc);
+        if (err == PH_ERR_NO_STRUCTURE) {
+            return -1.0;
+        }
+        ASSERT_OK(err);
         return (1.0 - pcc) / 2.0;
     }
     if (a == A_BMH || a == A_MHASH) {
@@ -456,7 +462,8 @@ static double separability(const stats_t *intra, const stats_t *inter) {
 /* ---------------------------------------------------------------------------
  * Thresholds
  *
- * Measured on this corpus (24 bases x 7 transforms = 168 intra-pairs, 276 inter-pairs) at
+ * Measured on this corpus (24 bases x 7 transforms = 168 intra-pairs, 276 inter-pairs; for
+ * Radial, less the pairs with a radially symmetric base, which have no score) at
  * IMG_W=160 with the numbers printed by this test, then floored well below
  * the observation so a genuine regression trips it and ordinary noise does not. Observed
  * values are in the comment beside each entry; re-measure rather than relax.
@@ -469,22 +476,22 @@ typedef struct {
 
 static const bounds_t BOUNDS[A_COUNT] = {
     /*             sep.  intra  inter        measured @ 160x160: sep / mean intra / mean inter */
-    [A_AHASH] = {2.90, 0.060, 0.360},  /* 4.15 / 0.029 / 0.444 */
+    [A_AHASH] = {2.90, 0.075, 0.360},  /* 3.63 / 0.054 / 0.472 */
     [A_DHASH] = {2.40, 0.115, 0.370},  /* 3.49 / 0.063 / 0.460 */
-    [A_PHASH] = {1.80, 0.250, 0.390},  /* 2.65 / 0.170 / 0.489 */
+    [A_PHASH] = {1.80, 0.250, 0.390},  /* 2.69 / 0.163 / 0.480 */
     [A_WHASH] = {2.80, 0.085, 0.390},  /* 4.10 / 0.038 / 0.484 */
     [A_MHASH] = {1.80, 0.185, 0.380},  /* 2.62 / 0.151 / 0.490 -- but read the note */
     [A_BMH] = {3.60, 0.080, 0.390},    /* 5.43 / 0.034 / 0.480 */
     [A_COLOR] = {2.80, 0.120, 0.690},  /* 4.01 / 0.081 / 0.841 */
-    [A_RADIAL] = {1.65, 0.085, 0.175}, /* 2.31 / 0.037 / 0.260, by cross-correlation */
+    [A_RADIAL] = {1.65, 0.085, 0.175}, /* 2.72 / 0.021 / 0.261, by cross-correlation */
 };
 
 /* This corpus still understates any algorithm that normalises to a fixed size larger than
  * IMG_W. Feature sizes scale with IMG_W (via BASE_RES), so the bias is only about how far
  * a resize has to travel, not also about what it is resizing. mHash upsamples this
- * 160x160 corpus 3.2x to reach its 512 default, and it separates at 2.62 here -- ahead of pHash
- * (2.65 is close enough that the two are not meaningfully ordered) and Radial, behind everything
- * else. Absolute numbers are only comparable within one run of this file with one corpus
+ * 160x160 corpus 3.2x to reach its 512 default, and it separates at 2.62 here -- the lowest,
+ * with pHash (2.69) and Radial (2.72) close enough that the three are not meaningfully
+ * ordered. Absolute numbers are only comparable within one run of this file with one corpus
  * resolution, which is what the thresholds above are for; docs/algorithm-provenance.md's
  * per-algorithm notes cite this same run's numbers where they describe current behaviour.
  *
@@ -502,8 +509,8 @@ static const bounds_t BOUNDS[A_COUNT] = {
  * absolute distances with anyone else's. See docs/algorithm-provenance.md section 7.
  *
  * pHash has the worst robustness of the structural hashes here -- mean intra-distance
- * 0.170 against 0.03-0.06 for the others -- and separability ahead of only Radial and
- * mHash (2.65 against their 2.31 and 2.62). The DC coefficient does not explain it:
+ * 0.163 against 0.02-0.06 for the others -- and separability level with Radial and
+ * mHash (2.69 against their 2.72 and 2.62). The DC coefficient does not explain it:
  * removing DC from the median does not change the intra-distance, and removing it from the
  * hash (the 8x8 block at DCT(1,1)) makes it worse; docs/algorithm-provenance.md section 3
  * has the measurement. */
@@ -527,6 +534,8 @@ static void test_robustness_discrimination_separability(void) {
         }
     }
 
+    int no_structure = 0; /* Radial pairs with no score defined */
+
     /* Robustness: every base against every benign transformation of itself. */
     for (int i = 0; i < NUM_BASE; i++) {
         for (int t = 0; t < NUM_TRANSFORMS; t++) {
@@ -535,6 +544,10 @@ static void test_robustness_discrimination_separability(void) {
             hash_image(&moved, h);
             for (int a = 0; a < A_COUNT; a++) {
                 double d = distance((algo_t)a, base_hash[i], h);
+                if (d < 0.0) {
+                    no_structure++;
+                    continue;
+                }
                 stats_add(&intra[a], d);
                 stats_add(&per_xf[a][t], d);
             }
@@ -546,11 +559,17 @@ static void test_robustness_discrimination_separability(void) {
     for (int i = 0; i < NUM_BASE; i++) {
         for (int j = i + 1; j < NUM_BASE; j++) {
             for (int a = 0; a < A_COUNT; a++) {
-                stats_add(&inter[a], distance((algo_t)a, base_hash[i], base_hash[j]));
+                double d = distance((algo_t)a, base_hash[i], base_hash[j]);
+                if (d < 0.0) {
+                    no_structure++;
+                    continue;
+                }
+                stats_add(&inter[a], d);
             }
         }
     }
 
+    printf("\n  Radial pairs without angular structure, left out: %d\n", no_structure);
     printf("\n  %-10s %19s %19s %8s\n", "algorithm", "same image (intra)", "different (inter)",
            "sep.");
     printf("  %-10s %19s %19s %8s\n", "", "mean    sd    max", "mean    sd    min", "");

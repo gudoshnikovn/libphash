@@ -547,9 +547,10 @@ then for each of `radial_projections` angles (**default 180**) spread over [0, �
 `radial_samples` points (**default 128**) bilinearly along the line through the image
 centre out to `min(w,h)/2` and compute
 the variance with exactly the source's formula. That vector is standardised to zero mean
-and unit variance, as pHash's `ph_feature_vector()` does; a vector with no spread — a flat
-image, or one radially symmetric enough that every angle sees the same variance — yields
-an all-zero digest. A 1-D DCT-II follows, and its **first 40 coefficients** are the hash,
+and unit variance, as pHash's `ph_feature_vector()` does; a vector with no spread worth
+the name — mean variance at most 1e-6 grey levels², or a spread across angles below 1 % of
+the mean (squared coefficient of variation 1e-4) — yields an all-zero digest, which
+`ph_radial_similarity()` refuses to score (`PH_ERR_NO_STRUCTURE`). A 1-D DCT-II follows, and its **first 40 coefficients** are the hash,
 mapped affinely onto 0–255 by their own minimum and maximum, the quantisation pHash's
 `ph_dct()` uses. Digests are compared by `ph_radial_similarity()`, the peak of the
 cross-correlation over cyclic shifts, against a threshold of 0.9 — pHash's

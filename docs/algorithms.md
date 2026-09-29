@@ -263,9 +263,14 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
   algorithm delivers; the half turn matches because a projection line at α and at α+180 is the same line. See
   [`algorithm-provenance.md`](algorithm-provenance.md) §7 for why the transform does not
   carry a larger rotation.
-- **Blind spot worth knowing**: an image whose variance is the same at every angle — a
-  radially symmetric one — has no angular structure for this descriptor, and hashes to all
-  zeroes. Two such images compare as identical.
+- **No angular structure, no score**: an image whose variance is nearly the same at every
+  angle — a blank one, or a radially symmetric one — has nothing for this descriptor to
+  describe and hashes to all zeroes. `ph_radial_similarity()` answers any comparison with
+  such a digest with `PH_ERR_NO_STRUCTURE` instead of inventing a score. "Nearly the same"
+  is relative to the image's own contrast: below a 1 % spread of the variance profile
+  across angles the digest would describe rounding noise (against the same image with ±2
+  levels of noise it correlates at 0.4–0.7), while a faint pattern of one grey level still
+  gets a digest of its own.
 
 ## Computing several `uint64_t` hashes at once
 

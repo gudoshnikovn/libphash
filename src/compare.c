@@ -158,10 +158,11 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b) {
  * tests/src/test_radial.c and docs/algorithm-provenance.md section 7.
  *
  * Degenerate input: a digest whose bytes are all equal has zero variance and no Pearson
- * correlation is defined against it. Two such digests are reported as a perfect match
- * (1.0) -- the radial hash emits an all-zero digest for a flat image, and two flat images
- * are the same picture as far as this descriptor can tell -- and a constant against a
- * varying one as no match at all (0.0).
+ * correlation is defined against it. ph_compute_radial_hash() emits one (all zeroes) for
+ * an image with no angular structure, and never otherwise: a real digest is quantised
+ * onto 0..255 by its own minimum and maximum. Any score for such a pair would be
+ * invented -- 1.0 would declare two unrelated faint or flat images a perfect match -- so
+ * the answer is PH_ERR_NO_STRUCTURE, and the caller decides what "no data" means.
  */
 PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *b,
                                        double *out_pcc) {
@@ -191,8 +192,7 @@ PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *
     }
 
     if (var_a <= 0.0 || var_b <= 0.0) {
-        *out_pcc = (var_a <= 0.0 && var_b <= 0.0) ? 1.0 : 0.0;
-        return PH_SUCCESS;
+        return PH_ERR_NO_STRUCTURE;
     }
 
     const double denom = sqrt(var_a * var_b);

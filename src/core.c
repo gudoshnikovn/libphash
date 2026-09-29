@@ -32,6 +32,8 @@ PH_API const char *ph_get_error_string(ph_error_t err) {
             return "Algorithm requires a color image, but the loaded image is grayscale";
         case PH_ERR_CANCELLED:
             return "Batch cancelled before this item was started";
+        case PH_ERR_NO_STRUCTURE:
+            return "Radial digest carries no structure to compare";
         case PH_ERR_FORCE_INT32_: /* width spacer, not an error code */
         default:
             return "Unknown error";

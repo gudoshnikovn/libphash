@@ -89,17 +89,17 @@ void test_radial_similarity_contract() {
     ASSERT_FLOAT_EQ(pcc, back, 1e-9);
     ASSERT(pcc >= -1.0 && pcc <= 1.0);
 
-    /* Two flat digests -- what a blank or radially symmetric image produces -- are the
-     * same picture as far as this descriptor can tell. A flat one against a varying one
-     * is not a match. */
+    /* A flat digest -- what an image with no angular structure produces -- has no score
+     * against anything, itself included, and the output is left alone. */
     ph_digest_t flat1, flat2;
     memset(&flat1, 0, sizeof flat1);
     memset(&flat2, 0, sizeof flat2);
     flat1.size = flat2.size = 8;
-    ASSERT_OK(ph_radial_similarity(&flat1, &flat2, &pcc));
-    ASSERT_FLOAT_EQ(1.0, pcc, 1e-9);
-    ASSERT_OK(ph_radial_similarity(&flat1, &a, &pcc));
-    ASSERT_FLOAT_EQ(0.0, pcc, 1e-9);
+    pcc = -9.0;
+    ASSERT_INT_EQ(PH_ERR_NO_STRUCTURE, ph_radial_similarity(&flat1, &flat2, &pcc));
+    ASSERT_INT_EQ(PH_ERR_NO_STRUCTURE, ph_radial_similarity(&flat1, &a, &pcc));
+    ASSERT_INT_EQ(PH_ERR_NO_STRUCTURE, ph_radial_similarity(&a, &flat1, &pcc));
+    ASSERT_FLOAT_EQ(-9.0, pcc, 1e-9);
 
     /* Rejections leave the output untouched. */
     pcc = -9.0;
@@ -409,12 +409,72 @@ void test_radial_projection_count_bounds() {
     PASS("test_radial_projection_count_bounds");
 }
 
+static void radial_of_gray(const uint8_t *px, int side, ph_digest_t *out) {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_load_from_pixels(ctx, px, side, side, 1, 0));
+    ASSERT_OK(ph_compute_radial_hash(ctx, out));
+    ph_free(ctx);
+}
+
+static int digest_is_all_zero(const ph_digest_t *d) {
+    for (int i = 0; i < d->size; i++) {
+        if (d->data[i] != 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* Structure is judged relative to the image's own contrast. Stripes one grey level either
+ * side of 128, eight pixels apart, carry a clear orientation, so vertical and horizontal
+ * ones get digests of their own and do not match. An image that is blank, or the same
+ * along every line through its centre, gets the all-zero digest, and no score is defined
+ * against it. */
+void test_radial_structure_is_relative_to_contrast() {
+    enum {
+        SIDE = 128,
+    };
+
+    static uint8_t vert[SIDE * SIDE], horiz[SIDE * SIDE], flat[SIDE * SIDE], disc[SIDE * SIDE];
+    for (int y = 0; y < SIDE; y++) {
+        for (int x = 0; x < SIDE; x++) {
+            vert[y * SIDE + x] = (uint8_t)((x / 4) % 2 ? 129 : 127);
+            horiz[y * SIDE + x] = (uint8_t)((y / 4) % 2 ? 129 : 127);
+            flat[y * SIDE + x] = 90;
+            int dx = x - SIDE / 2, dy = y - SIDE / 2;
+            disc[y * SIDE + x] = (uint8_t)(dx * dx + dy * dy < 30 * 30 ? 160 : 96);
+        }
+    }
+
+    ph_digest_t dv, dh, df, dd;
+    radial_of_gray(vert, SIDE, &dv);
+    radial_of_gray(horiz, SIDE, &dh);
+    radial_of_gray(flat, SIDE, &df);
+    radial_of_gray(disc, SIDE, &dd);
+
+    ASSERT(!digest_is_all_zero(&dv));
+    ASSERT(!digest_is_all_zero(&dh));
+    double pcc = 0.0;
+    ASSERT_OK(ph_radial_similarity(&dv, &dh, &pcc));
+    printf("  faint vertical vs horizontal stripes: %.3f\n", pcc);
+    ASSERT(pcc < PH_RADIAL_PCC_THRESHOLD);
+
+    ASSERT(digest_is_all_zero(&df));
+    ASSERT(digest_is_all_zero(&dd));
+    ASSERT_INT_EQ(PH_ERR_NO_STRUCTURE, ph_radial_similarity(&df, &dd, &pcc));
+    ASSERT_INT_EQ(PH_ERR_NO_STRUCTURE, ph_radial_similarity(&df, &dv, &pcc));
+
+    PASS("test_radial_structure_is_relative_to_contrast");
+}
+
 int main() {
     test_bilinear_unit();
     test_radial_ignores_everything_outside_the_central_disc();
     test_radial_projection_count_bounds();
     test_projection_variance_unit();
     test_radial_similarity_contract();
+    test_radial_structure_is_relative_to_contrast();
     test_radial_with_real_rotation();
     test_radial_rotation_on_a_photograph();
     return 0;
