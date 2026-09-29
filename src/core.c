@@ -144,6 +144,10 @@ static ph_error_t ph_load_encoded_bytes(ph_context_t *ctx, const uint8_t *data, 
         return (decode_err != PH_SUCCESS) ? decode_err : PH_ERR_CORRUPT_DATA;
     }
 
+    /* A decoder hands alpha back as a fourth (or, gray, second) channel; nothing past this
+     * point sees it. */
+    ph_resolve_alpha(&decoded, ph_size(w) * ph_size(h), &ch, ctx->config.alpha_mode);
+
     ctx->image.raw_rgb = decoded;
     ctx->image.width = w;
     ctx->image.height = h;
@@ -246,6 +250,7 @@ PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels, 
     for (size_t y = 0, rows = ph_size(height); y < rows; y++) {
         memcpy(dst + y * row_bytes, pixels + y * src_stride, row_bytes);
     }
+    ph_resolve_alpha(&dst, ph_size(width) * ph_size(height), &channels, ctx->config.alpha_mode);
 
     if (ctx->image.raw_rgb) {
         ph_free_image(ctx->image.raw_rgb);

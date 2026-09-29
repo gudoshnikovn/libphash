@@ -94,18 +94,29 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
      * SPNG_EFMT ("invalid format") and the whole decode fails, so G8 cannot be
      * requested unconditionally.
      *
-     * Take the same route libpng does: let spng deliver RGB8 whenever G8 is not
-     * applicable, then fold the pixels down here with the exact weights the libpng
-     * path hands to png_set_rgb_to_gray_fixed() -- PH_GRAY_R/G/B over 128, i.e. the
-     * Rec.601 weights of ph_to_grayscale() -- so both backends produce the same
-     * bytes for the same input. */
-    const int gray_native = (ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE && ihdr.bit_depth <= 8);
+     * Take the same route libpng does: let spng deliver RGB8 (RGBA8 when the image has
+     * alpha) whenever G8 is not applicable, then fold the pixels down here with the exact
+     * weights the libpng path hands to png_set_rgb_to_gray_fixed() -- PH_GRAY_R/G/B over
+     * 128, i.e. the Rec.601 weights of ph_to_grayscale() -- so both backends produce the
+     * same bytes for the same input. Alpha comes back as the last channel, as from every
+     * backend, for the caller to resolve (ph_resolve_alpha()); a tRNS chunk counts as
+     * alpha, as libpng's png_set_tRNS_to_alpha() makes it. */
+    struct spng_trns trns;
+    const int has_trns = spng_get_trns(ctx, &trns) == 0;
+    const int has_alpha = has_trns || ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE_ALPHA ||
+                          ihdr.color_type == SPNG_COLOR_TYPE_TRUECOLOR_ALPHA;
+    const int gray_native =
+        (ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE && ihdr.bit_depth <= 8 && !has_alpha);
     int fmt;
-    if (req_comp == 1) {
-        fmt = gray_native ? SPNG_FMT_G8 : SPNG_FMT_RGB8;
+    if (has_alpha) {
+        fmt = SPNG_FMT_RGBA8;
+    } else if (req_comp == 1 && gray_native) {
+        fmt = SPNG_FMT_G8;
     } else {
         fmt = SPNG_FMT_RGB8;
     }
+    const int decoded_channels = (fmt == SPNG_FMT_RGBA8) ? 4 : (fmt == SPNG_FMT_G8) ? 1 : 3;
+    const int out_channels = (req_comp == 1) ? (has_alpha ? 2 : 1) : decoded_channels;
     size_t out_size;
     ret = spng_decoded_image_size(ctx, fmt, &out_size);
     if (ret != 0) {
@@ -127,7 +138,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
         return NULL;
     }
 
-    ret = spng_decode_image(ctx, data, out_size, fmt, 0);
+    ret = spng_decode_image(ctx, data, out_size, fmt, has_trns ? SPNG_DECODE_TRNS : 0);
     if (ret != 0) {
         if (out_err) {
             *out_err = ph_spng_err(ret);
@@ -140,19 +151,26 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
 
     spng_ctx_free(ctx);
 
-    if (req_comp == 1 && fmt == SPNG_FMT_RGB8) {
-        /* In-place RGB -> gray: the destination index i never runs ahead of the
-         * source index 3*i, so a forward pass is safe. */
-        size_t num_pixels = out_size / 3;
+    if (decoded_channels != out_channels) {
+        /* In-place colour -> gray, keeping alpha: the destination index never runs ahead
+         * of the source index, so a forward pass is safe. */
+        size_t num_pixels = out_size / (size_t)decoded_channels;
         for (size_t i = 0; i < num_pixels; i++) {
-            unsigned int r = data[i * 3];
-            unsigned int g = data[i * 3 + 1];
-            unsigned int b = data[i * 3 + 2];
-            data[i] = (unsigned char)((PH_GRAY_R * r + PH_GRAY_G * g + PH_GRAY_B * b) >> 7);
+            const unsigned char *src = data + i * (size_t)decoded_channels;
+            unsigned int r = src[0];
+            unsigned int g = src[1];
+            unsigned int b = src[2];
+            unsigned char alpha = has_alpha ? src[3] : 0;
+            unsigned char *dst = data + i * (size_t)out_channels;
+            dst[0] = (unsigned char)((PH_GRAY_R * r + PH_GRAY_G * g + PH_GRAY_B * b) >> 7);
+            if (has_alpha) {
+                dst[1] = alpha;
+            }
         }
         /* Hand back a buffer of the size the caller believes it got. A failed shrink
          * is harmless -- the original block stays valid and merely oversized. */
-        unsigned char *shrunk = (unsigned char *)realloc(data, num_pixels ? num_pixels : 1);
+        size_t out_bytes = num_pixels * (size_t)out_channels;
+        unsigned char *shrunk = (unsigned char *)realloc(data, out_bytes ? out_bytes : 1);
         if (shrunk) {
             data = shrunk;
         }
@@ -160,6 +178,6 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
 
     *width = (int)ihdr.width;
     *height = (int)ihdr.height;
-    *channels = (req_comp == 1) ? 1 : 3;
+    *channels = out_channels;
     return data;
 }

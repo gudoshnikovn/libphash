@@ -84,6 +84,20 @@ on this library's test corpus with no gain elsewhere), so 38/75/15 is used. Used
 wHash, mHash, BMH, Radial. ColorHash and ColorMoments work in colour and never call
 this path.
 
+**Alpha.** None of the sources hash transparent images; they describe what a picture
+looks like, and a transparent pixel looks like whatever is behind it. The colour stored
+under alpha 0 is invisible and arbitrary — one encoder writes black, another white — so
+by default an image with alpha (an alpha channel or a PNG `tRNS` chunk, from any decoder,
+or RGBA given to `ph_load_from_pixels()`) is composited onto mid-grey at load time,
+`(c·a + 128·(255 − a) + 127) / 255` per channel, and every algorithm sees the visible
+image only. Over 141 PNGs with at least 5 % transparency, two copies differing only in
+the colour under alpha 0 hash 28–42 bits apart (of 64) when alpha is dropped, and 0 when
+it is composited. Grey rather than white or black because it keeps those images the most
+distinct: white erases light artwork and black dark artwork (pHash pairs within 6 bits:
+1.7 % on grey, 3.3 % on white, 4.3 % on black). `ph_context_set_alpha_mode()` chooses
+white, black, or `PH_ALPHA_IGNORE` — hash the stored colour whatever its alpha, which is
+what ImageHash and PIL's `convert("L")` do.
+
 **Tie-break at the threshold (`value == threshold`).** Two different rules are in force,
 and unifying them would mean breaking one of two things that already have a stronger
 answer than "pick a convention":

@@ -34,6 +34,50 @@ uint8_t *ph_get_gray(ph_context_t *ctx) {
     return ctx->image.gray_cache;
 }
 
+void ph_resolve_alpha(uint8_t **pixels, size_t num_pixels, int *channels, ph_alpha_mode_t mode) {
+    const int in = *channels;
+    if (in != 2 && in != 4) {
+        return;
+    }
+    const int out = in - 1;
+    unsigned int bg = 0;
+    switch (mode) {
+        case PH_ALPHA_BLEND_WHITE:
+            bg = 255;
+            break;
+        case PH_ALPHA_BLEND_BLACK:
+            bg = 0;
+            break;
+        case PH_ALPHA_IGNORE:
+            break;
+        case PH_ALPHA_BLEND_GREY:
+        case PH_ALPHA_FORCE_INT32_:
+        default:
+            bg = 128;
+            break;
+    }
+
+    /* Forward pass in place: pixel i is written at out * i and read from in * i, and
+     * out < in, so no write ever lands on a byte not yet read. */
+    uint8_t *px = *pixels;
+    for (size_t i = 0; i < num_pixels; i++) {
+        const uint8_t *s = px + i * (size_t)in;
+        uint8_t *d = px + i * (size_t)out;
+        const unsigned int a = s[out];
+        for (int c = 0; c < out; c++) {
+            d[c] = (mode == PH_ALPHA_IGNORE)
+                       ? s[c]
+                       : (uint8_t)((s[c] * a + bg * (255u - a) + 127u) / 255u);
+        }
+    }
+    *channels = out;
+
+    uint8_t *shrunk = realloc(px, num_pixels ? num_pixels * (size_t)out : 1);
+    if (shrunk) {
+        *pixels = shrunk;
+    }
+}
+
 void ph_drop_gray_cache(ph_context_t *ctx) {
     free(ctx->image.gray_cache);
     ctx->image.gray_cache = NULL;

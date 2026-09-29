@@ -192,6 +192,19 @@ PH_API ph_error_t ph_context_set_auto_orient(ph_context_t *ctx, int enable) {
     return PH_SUCCESS;
 }
 
+PH_API ph_error_t ph_context_set_alpha_mode(ph_context_t *ctx, ph_alpha_mode_t mode) {
+    if (!ctx) {
+        return PH_ERR_INVALID_ARGUMENT;
+    }
+    /* Only the declared enumerators, for the reason given in ph_context_set_whash_mode(). */
+    if (mode != PH_ALPHA_BLEND_GREY && mode != PH_ALPHA_BLEND_WHITE &&
+        mode != PH_ALPHA_BLEND_BLACK && mode != PH_ALPHA_IGNORE) {
+        return PH_ERR_INVALID_ARGUMENT;
+    }
+    ctx->config.alpha_mode = mode;
+    return PH_SUCCESS;
+}
+
 PH_API ph_error_t ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t mode) {
     if (!ctx) {
         return PH_ERR_INVALID_ARGUMENT;
@@ -267,6 +280,7 @@ void ph_config_init_defaults(struct ph_context_config *config) {
     /* Optimization Default: disabled by default for compatibility with
      * ColorHash and custom weights. */
     config->load_grayscale = 0;
+    config->alpha_mode = PH_ALPHA_BLEND_GREY;
     /* Applying EXIF/WebP-metadata orientation defaults to on: an image hashed
      * "as the sensor stored it" instead of "as it displays" is a correctness
      * bug, not a neutral choice. See ph_context_set_auto_orient(). */

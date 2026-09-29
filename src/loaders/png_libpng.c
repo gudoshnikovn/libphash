@@ -243,6 +243,9 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
         png_set_tRNS_to_alpha(png_ptr);
     }
 
+    // Gray (1 channel) when asked for it, RGB (3) otherwise, each followed by the alpha
+    // channel when the image has one (an alpha colour type, or tRNS expanded above).
+    // Alpha is resolved by the caller (ph_resolve_alpha()), the same for every backend.
     if (req_comp == 1) {
         // Force grayscale using same weights as ph_to_grayscale (Rec. 601)
         if (color_type & PNG_COLOR_MASK_COLOR) {
@@ -251,17 +254,8 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
             // G: 75/128 = 0.5859375 -> 58594
             png_set_rgb_to_gray_fixed(png_ptr, 1, 29688, 58594);
         }
-        if (color_type & PNG_COLOR_MASK_ALPHA) {
-            png_set_strip_alpha(png_ptr);
-        }
-    } else {
-        // Force RGB (strip alpha)
-        if (color_type == PNG_COLOR_TYPE_GRAY || color_type == PNG_COLOR_TYPE_GRAY_ALPHA) {
-            png_set_gray_to_rgb(png_ptr);
-        }
-        if (color_type & PNG_COLOR_MASK_ALPHA) {
-            png_set_strip_alpha(png_ptr);
-        }
+    } else if (color_type == PNG_COLOR_TYPE_GRAY || color_type == PNG_COLOR_TYPE_GRAY_ALPHA) {
+        png_set_gray_to_rgb(png_ptr);
     }
 
     png_read_update_info(png_ptr, info_ptr);

@@ -206,10 +206,10 @@ static void check_stride_matches_dense(int ch, int stride_pad, uint8_t pad_byte)
      * rejection. */
     ASSERT_OK(ph_load_from_pixels(explicit_ctx, dense, w, h, ch, (int)dense_row));
 
-    ASSERT_INT_EQ(
-        0, memcmp(dense_ctx->image.raw_rgb, padded_ctx->image.raw_rgb, dense_row * (size_t)h));
-    ASSERT_INT_EQ(
-        0, memcmp(dense_ctx->image.raw_rgb, explicit_ctx->image.raw_rgb, dense_row * (size_t)h));
+    /* What is stored: RGBA loses its alpha channel at load time. */
+    const size_t stored_bytes = (size_t)w * (size_t)h * (size_t)dense_ctx->image.channels;
+    ASSERT_INT_EQ(0, memcmp(dense_ctx->image.raw_rgb, padded_ctx->image.raw_rgb, stored_bytes));
+    ASSERT_INT_EQ(0, memcmp(dense_ctx->image.raw_rgb, explicit_ctx->image.raw_rgb, stored_bytes));
 
     ph_context_t *ctxs[3] = {dense_ctx, padded_ctx, explicit_ctx};
     uint64_t a[3], d[3], p[3], wh[3];
@@ -290,18 +290,26 @@ void test_load_from_pixels_stride_degenerate_shapes() {
 
         ph_context_t *ctx = NULL;
         ASSERT_OK(ph_create(&ctx));
+        /* Alpha dropped rather than composited, so every stored byte is a source byte. */
+        ASSERT_OK(ph_context_set_alpha_mode(ctx, PH_ALPHA_IGNORE));
         ASSERT_OK(ph_load_from_pixels(ctx, buf, w, h, ch, stride));
 
+        /* A loaded image has no alpha channel: RGBA is stored as RGB. */
+        const int stored = (ch == 4) ? 3 : ch;
         int gw, gh, gch;
         ph_context_get_dimensions(ctx, &gw, &gh, &gch);
         ASSERT_INT_EQ(w, gw);
         ASSERT_INT_EQ(h, gh);
-        ASSERT_INT_EQ(ch, gch);
+        ASSERT_INT_EQ(stored, gch);
 
-        /* Every row must have come from its own stride offset. */
+        /* Every pixel must have come from its own row's stride offset. */
         for (int y = 0; y < h; y++) {
-            ASSERT_INT_EQ(0, memcmp(ctx->image.raw_rgb + (size_t)y * row,
-                                    buf + (size_t)y * (size_t)stride, row));
+            for (int x = 0; x < w; x++) {
+                ASSERT_INT_EQ(0, memcmp(ctx->image.raw_rgb +
+                                            ((size_t)y * (size_t)w + (size_t)x) * (size_t)stored,
+                                        buf + (size_t)y * (size_t)stride + (size_t)x * (size_t)ch,
+                                        (size_t)stored));
+            }
         }
 
         uint64_t hash = 0;

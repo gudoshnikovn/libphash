@@ -20,6 +20,13 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
 void ph_to_grayscale_scalar(const ph_context_t *ctx, const uint8_t *src, int w, int h, int channels,
                             uint8_t *dst);
 
+/* Removes the alpha channel of a freshly decoded or copied image, in place: 4 channels
+ * (RGBA) become 3, 2 (gray + alpha) become 1; 1 and 3 are left alone. Every mode but
+ * PH_ALPHA_IGNORE composites onto its background, per channel,
+ * (c * a + bg * (255 - a) + 127) / 255. *pixels may be shrunk to the new size; if that
+ * fails the block stays valid, merely oversized. */
+void ph_resolve_alpha(uint8_t **pixels, size_t num_pixels, int *channels, ph_alpha_mode_t mode);
+
 /* Resizes a grayscale image using box sampling (averaging). Returns 1 on success, 0 if
  * the dimensions are degenerate or the underlying stb resize failed to allocate --
  * either way `dst` is left untouched and the caller must not read it. */

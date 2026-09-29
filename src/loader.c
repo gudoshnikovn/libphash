@@ -1,5 +1,6 @@
 #include "loader.h"
 
+#include "image/image.h"
 #include "loaders/backends.h"
 #include "safety.h"
 
@@ -144,6 +145,62 @@ static int ph_stb_reason_is_too_large(const char *reason) {
     return 0;
 }
 
+/* stb_image's native layout (1-4 channels, alpha last) -> the backends' common one: gray
+ * (+ alpha) when `gray`, RGB (+ alpha) otherwise. Folding to gray happens in place;
+ * expanding gray to RGB needs a new buffer, and the old one is released either way. */
+static uint8_t *ph_stb_normalise_channels(uint8_t *px, size_t num_pixels, int native, int gray,
+                                          int *out_channels, ph_error_t *out_err, char *err_msg,
+                                          size_t err_msg_cap) {
+    const int has_alpha = (native == 2 || native == 4);
+    const int want = gray ? (has_alpha ? 2 : 1) : (has_alpha ? 4 : 3);
+    if (want == native) {
+        *out_channels = native;
+        return px;
+    }
+    if (gray) {
+        /* RGB(A) -> gray(+alpha): pixel i shrinks from `native` to `want` bytes, so a
+         * forward pass never overwrites a byte it has yet to read. */
+        for (size_t i = 0; i < num_pixels; i++) {
+            const uint8_t *s = px + i * (size_t)native;
+            uint8_t *d = px + i * (size_t)want;
+            const uint8_t alpha = has_alpha ? s[3] : 0;
+            d[0] = (uint8_t)((PH_GRAY_R * (unsigned)s[0] + PH_GRAY_G * (unsigned)s[1] +
+                              PH_GRAY_B * (unsigned)s[2]) >>
+                             7);
+            if (has_alpha) {
+                d[1] = alpha;
+            }
+        }
+        *out_channels = want;
+        return px;
+    }
+    /* gray(+alpha) -> RGB(+alpha) */
+    size_t bytes;
+    uint8_t *out = NULL;
+    if (ph_safe_image_alloc_size(num_pixels, (uint64_t)want, 1, &bytes)) {
+        out = (uint8_t *)malloc(bytes ? bytes : 1);
+    }
+    if (!out) {
+        stbi_image_free(px);
+        if (out_err) {
+            *out_err = PH_ERR_ALLOCATION_FAILED;
+        }
+        ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
+        return NULL;
+    }
+    for (size_t i = 0; i < num_pixels; i++) {
+        const uint8_t *s = px + i * (size_t)native;
+        uint8_t *d = out + i * (size_t)want;
+        d[0] = d[1] = d[2] = s[0];
+        if (has_alpha) {
+            d[3] = s[1];
+        }
+    }
+    stbi_image_free(px);
+    *out_channels = want;
+    return out;
+}
+
 static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *h, int *ch,
                                   int req_comp, uint64_t max_pixels, ph_decode_scale_t decode_scale,
                                   ph_error_t *out_err, char *err_msg, size_t err_msg_cap) {
@@ -176,7 +233,13 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
         }
     }
 
-    uint8_t *decoded = stbi_load_from_memory(data, (int)len, w, h, ch, req_comp);
+    /* Always the native channel count: only that one reports alpha from a tRNS chunk,
+     * which stbi_info() does not see. The channel layout every backend hands back -- gray
+     * (1) or RGB (3), each plus alpha -- is produced below, with the library's own gray
+     * weights, as the libpng and spng backends do, so a build's choice of PNG decoder
+     * does not change what gets hashed. */
+    int native = 0;
+    uint8_t *decoded = stbi_load_from_memory(data, (int)len, w, h, &native, 0);
     if (!decoded) {
         const char *reason = stbi_failure_reason();
         if (reason) {
@@ -195,10 +258,8 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
         }
         return NULL;
     }
-    if (req_comp != 0) {
-        *ch = req_comp;
-    }
-    return decoded;
+    return ph_stb_normalise_channels(decoded, (size_t)*w * (size_t)*h, native, req_comp == 1, ch,
+                                     out_err, err_msg, err_msg_cap);
 }
 
 #ifdef PH_ENABLE_MOCK_BACKEND

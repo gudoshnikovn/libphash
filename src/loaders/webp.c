@@ -27,8 +27,8 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
         return NULL;
     }
 
-    int w, h;
-    if (!WebPGetInfo(buffer, size, &w, &h)) {
+    WebPBitstreamFeatures features;
+    if (WebPGetFeatures(buffer, size, &features) != VP8_STATUS_OK) {
         if (out_err) {
             *out_err = PH_ERR_CORRUPT_DATA;
         }
@@ -37,6 +37,8 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
         return NULL;
     }
 
+    int w = features.width;
+    int h = features.height;
     if (ph_exceeds_pixel_limit((uint64_t)w, (uint64_t)h, max_pixels)) {
         if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
@@ -45,9 +47,10 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
         return NULL;
     }
 
-    /* libwebp has no native grayscale decode — always decode to RGB.
+    /* libwebp has no native grayscale decode — always decode to RGB, plus the alpha
+     * channel when the image has one, which the caller resolves (ph_resolve_alpha()).
      * Grayscale conversion is handled later by ph_to_grayscale. */
-    int out_channels = 3;
+    int out_channels = features.has_alpha ? 4 : 3;
 
     size_t out_size;
     if (!ph_safe_image_alloc_size((uint64_t)w, (uint64_t)h, (uint64_t)out_channels, &out_size)) {
@@ -57,7 +60,7 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
         ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         return NULL;
     }
-    /* int, the type libwebp takes: WebP caps a dimension at 16383, so w * 3 fits. */
+    /* int, the type libwebp takes: WebP caps a dimension at 16383, so w * 4 fits. */
     int stride = w * out_channels;
 
     unsigned char *output = (unsigned char *)malloc(out_size);
@@ -84,7 +87,7 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
         free(output);
         return NULL;
     }
-    config.output.colorspace = MODE_RGB;
+    config.output.colorspace = features.has_alpha ? MODE_RGBA : MODE_RGB;
     config.output.is_external_memory = 1;
     config.output.u.RGBA.rgba = output;
     config.output.u.RGBA.stride = stride;

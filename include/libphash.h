@@ -185,6 +185,18 @@ typedef enum {
     PH_DECODE_SCALE_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE, ///< Not a scale -- see "Enum width".
 } ph_decode_scale_t;
 
+/**
+ * @brief What becomes of an image's alpha channel before it is hashed — see
+ *        ph_context_set_alpha_mode().
+ */
+typedef enum {
+    PH_ALPHA_BLEND_GREY = 0,  ///< Composite onto mid-grey (128, 128, 128) (default).
+    PH_ALPHA_BLEND_WHITE = 1, ///< Composite onto white.
+    PH_ALPHA_BLEND_BLACK = 2, ///< Composite onto black.
+    PH_ALPHA_IGNORE = 3, ///< Drop alpha and hash the colour stored under it, as ImageHash does.
+    PH_ALPHA_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE, ///< Not a mode -- see "Enum width".
+} ph_alpha_mode_t;
+
 // --- Types ---
 
 /**
@@ -571,6 +583,38 @@ PH_API ph_error_t ph_context_set_whash_remove_max_haar_ll(ph_context_t *ctx, int
 PH_API ph_error_t ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
 
 /**
+ * @brief Chooses what an image's alpha channel does to the hash.
+ *
+ * A perceptual hash describes what an image looks like, and a transparent pixel looks
+ * like whatever is behind it. The colour stored under alpha 0 is invisible and arbitrary:
+ * one encoder writes black there, another white, an optimiser whatever compresses best.
+ * By default every image with alpha — a PNG or WebP with an alpha channel or a tRNS
+ * chunk, or a 4-channel buffer given to ph_load_from_pixels() — is composited onto a fixed
+ * background before anything else happens, so the hash follows the visible image only.
+ *
+ * Measured over 141 PNGs with at least 5% transparency: two copies differing only in the
+ * colour under fully transparent pixels (black against white) hash on average 42 (aHash),
+ * 28 (dHash), 34 (pHash) and 35 (wHash) bits apart of 64 when alpha is dropped, and 0 bits
+ * apart when it is composited. Mid-grey is the default because it tells those images
+ * apart best: white makes light artwork vanish and black dark artwork, and on the same
+ * set grey leaves the fewest pairs of different images within 6 bits of each other
+ * (pHash: 1.7% of pairs, against 3.3% on white and 4.3% on black).
+ *
+ * The mode applies at load time: set it before ph_load_from_file(),
+ * ph_load_from_memory() or ph_load_from_pixels(). A loaded image never has an alpha
+ * channel, so ph_context_get_dimensions() reports 3 channels (1 when loaded as
+ * grayscale) for an image that had one.
+ *
+ * @param ctx The context.
+ * @param mode @c PH_ALPHA_BLEND_GREY (default), @c PH_ALPHA_BLEND_WHITE,
+ *        @c PH_ALPHA_BLEND_BLACK, or @c PH_ALPHA_IGNORE to hash the stored colour
+ *        whatever its alpha, which is what ImageHash (and PIL's `convert("L")`) does.
+ * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or a @p mode that
+ *         is not one of the enumerators above (configuration unchanged).
+ */
+PH_API ph_error_t ph_context_set_alpha_mode(ph_context_t *ctx, ph_alpha_mode_t mode);
+
+/**
  * @brief Controls whether EXIF/metadata orientation is applied automatically
  * right after decoding. On by default.
  *
@@ -708,7 +752,8 @@ PH_API ph_error_t ph_context_set_decode_scale(ph_context_t *ctx, ph_decode_scale
  * @param ctx The context. With NULL, nothing is written.
  * @param width Output for width; may be NULL.
  * @param height Output for height; may be NULL.
- * @param channels Output for number of channels; may be NULL.
+ * @param channels Output for number of channels -- 1 or 3; may be NULL. An alpha channel is
+ *        resolved at load time (ph_context_set_alpha_mode()) and never stored.
  */
 PH_API void ph_context_get_dimensions(const ph_context_t *ctx, int *width, int *height,
                                       int *channels);
@@ -784,7 +829,8 @@ PH_NODISCARD PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint
  * @param pixels Pointer to the raw pixel data, `height` rows of `channels`-interleaved bytes.
  * @param width Image width in pixels. Must be > 0.
  * @param height Image height in pixels. Must be > 0.
- * @param channels Number of channels per pixel. Must be 1, 3, or 4.
+ * @param channels Number of channels per pixel. Must be 1, 3, or 4; 4 is RGBA, with
+ *        straight (not premultiplied) alpha, resolved as ph_context_set_alpha_mode() says.
  * @param stride Number of bytes between the start of consecutive rows. Pass 0 for
  *               tightly packed rows (stride = width * channels).
  */

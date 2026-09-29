@@ -99,10 +99,12 @@ typedef struct {
     ph_digest_t bmh, mhash, radial, color, moments;
 } results_t;
 
-static void compute_all(const uint8_t *px, int w, int h, int channels, results_t *out) {
+static void compute_all_alpha(const uint8_t *px, int w, int h, int channels,
+                              ph_alpha_mode_t alpha_mode, results_t *out) {
     ph_context_t *ctx = NULL;
     memset(out, 0, sizeof(*out));
     ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_context_set_alpha_mode(ctx, alpha_mode));
     ASSERT_OK(ph_load_from_pixels(ctx, px, w, h, channels, 0));
 
     ASSERT_OK(ph_compute_ahash(ctx, &out->ahash));
@@ -132,6 +134,10 @@ static void compute_all(const uint8_t *px, int w, int h, int channels, results_t
         ASSERT(memcmp(&probe, &untouched, sizeof(probe)) == 0);
     }
     ph_free(ctx);
+}
+
+static void compute_all(const uint8_t *px, int w, int h, int channels, results_t *out) {
+    compute_all_alpha(px, w, h, channels, PH_ALPHA_BLEND_GREY, out);
 }
 
 /* A digest may never claim more bytes than it wrote, nor leave anything in the tail of
@@ -483,8 +489,9 @@ void test_parameter_values_that_collapse_the_hash_to_a_constant(void) {
  * The default weights are 38/75/15 and the conversion is a >> 7, so a pixel (v, v, v)
  * converts to exactly v -- the weights are normalised to sum to exactly 128, with the
  * blue weight absorbing the rounding, which is what makes this exact at both ends of the
- * range rather than approximately right in the middle. And alpha is not a colour: a
- * fourth channel full of noise must not move a single bit.
+ * range rather than approximately right in the middle. A fourth channel of alpha 255
+ * composites to the colour itself, and under PH_ALPHA_IGNORE a fourth channel full of
+ * noise must not move a single bit.
  *
  * This catches a whole class of channel-indexing mistakes that a single-layout test
  * cannot -- reading the wrong stride, forgetting the alpha skip, taking the grayscale
@@ -495,20 +502,24 @@ void test_channel_layout_does_not_change_a_grey_hash(void) {
         H = 23,
     };
 
-    uint8_t gray[W * H], rgb[W * H * 3], rgba[W * H * 4];
+    uint8_t gray[W * H], rgb[W * H * 3], rgba[W * H * 4], opaque[W * H * 4];
 
     for (int i = 0; i < W * H; i++) {
         uint8_t v = (uint8_t)((i * 97) % 256);
         gray[i] = v;
         rgb[i * 3] = rgb[i * 3 + 1] = rgb[i * 3 + 2] = v;
         rgba[i * 4] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = v;
-        rgba[i * 4 + 3] = (uint8_t)((i * 31) % 256); /* alpha varies and is irrelevant */
+        rgba[i * 4 + 3] = (uint8_t)((i * 31) % 256); /* alpha varies; ignored below */
+        memcpy(&opaque[i * 4], &rgba[i * 4], 3);
+        opaque[i * 4 + 3] = 255;
     }
 
-    results_t g1, g3, g4;
+    results_t g1, g3, g4, g4_opaque;
     compute_all(gray, W, H, 1, &g1);
     compute_all(rgb, W, H, 3, &g3);
-    compute_all(rgba, W, H, 4, &g4);
+    compute_all_alpha(rgba, W, H, 4, PH_ALPHA_IGNORE, &g4);
+    compute_all(opaque, W, H, 4, &g4_opaque);
+    ASSERT(memcmp(&g3, &g4_opaque, sizeof(g3)) == 0);
 
     /* The colour digests are left out of the comparison: the 1-channel run has none. */
     g1.color = g3.color;
