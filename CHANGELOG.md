@@ -56,14 +56,17 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   *Restore the old behaviour:* rebuild any FFI binding that hardcodes the layout; where a
   comparison returns -1, switch to the metric for that digest.
 
-- **aHash sets the bit of a pixel exactly equal to the mean.** 1.x cleared it
-  (`pixel > mean`); the tie-break is `>=`, the rule BMH follows. The mean is compared
-  exactly, so only a genuine tie is affected: an image that is uniform at 8×8 hashes to
-  all ones instead of all zeros, and any other value moves only where a pixel lands
-  exactly on the mean. Across 807 photographs and textures, 39 values change: 38 uniform
-  images and one tie.
-  *Restore the old behaviour:* not possible; recompute stored aHash values, at least
-  those equal to zero.
+- **aHash reduces the image by an exact area average and sets the bit of a pixel exactly
+  equal to the mean.** 1.x resampled to 8×8 with stb's Mitchell filter and cleared a
+  pixel on the mean (`pixel > mean`). Each of the 64 values is the mean of the part of the
+  image it covers, which measures better — on the synthetic test corpus separability
+  3.63 → 4.55 and false matches at 95 % recall 8.0 % → 2.9 %; on 800 photographs fewer
+  pairs of different images share a hash (1208 → 1051) — and the reduction is shared with
+  pHash, wHash and BMH, so `ph_compute_multi()` pays for it once. The tie-break is `>=`,
+  the rule BMH follows, against the exact mean: an image that is uniform at 8×8 hashes to
+  all ones instead of all zeros. Across 807 photographs and textures about two thirds of
+  aHash values move, mostly by 1–6 bits.
+  *Restore the old behaviour:* not possible; recompute stored aHash values.
 
 - **Images with transparency are hashed as they look.** 1.x dropped the alpha channel and
   hashed the colour stored under it — invisible, and different from encoder to encoder:
@@ -257,9 +260,11 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   and an `on_progress` callback. The plain `ph_hash_files()`/`ph_hash_buffers()` run on the
   default configuration.
 - **`ph_compute_multi()`** computes several of the four `uint64_t` algorithms (aHash,
-  dHash, pHash, wHash) in one call, selected by a `ph_hash_flags_t` bitmask, sharing the
-  grayscale conversion across them. Results are bit-for-bit identical to the individual
-  `ph_compute_*` calls.
+  dHash, pHash, wHash) in one call, selected by a `ph_hash_flags_t` bitmask. The work over
+  the full image is cached on the context and done once whichever algorithms ask for it —
+  the grayscale conversion and one area-average pass that aHash, pHash, wHash and BMH all
+  reduce from — so on a 20-megapixel photograph the four cost 7.6 ms rather than 15.8.
+  Results are bit-for-bit identical to the individual `ph_compute_*` calls.
 - **Algorithms as values.** `ph_algorithm_t` names every algorithm (contiguous from 0 to
   `PH_ALGORITHM_COUNT - 1`; for the four `uint64_t` ones the `ph_hash_flags_t` bit is
   `1 << value`). `ph_compute_digest()` computes any of them into a `ph_digest_t` — the
