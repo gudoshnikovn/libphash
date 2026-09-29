@@ -46,11 +46,14 @@ PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash) {
     for (size_t i = 0; i < num_pixels; i++) {
         total_sum += hash_input[i];
     }
-    uint8_t avg = (uint8_t)(total_sum / num_pixels);
 
+    /* pixel >= sum / n, compared exactly as pixel * n >= sum. A mean truncated to an
+     * integer would turn every pixel equal to floor(mean) -- below a fractional mean --
+     * into a tie and set its bit. Only a pixel exactly equal to the mean is a tie, and it
+     * is set, the same rule as BMH. */
     uint64_t hash = 0;
     for (size_t i = 0; i < num_pixels; i++) {
-        if (hash_input[i] >= avg) {
+        if ((uint64_t)hash_input[i] * num_pixels >= total_sum) {
             hash |= (1ULL << (63 - i));
         }
     }

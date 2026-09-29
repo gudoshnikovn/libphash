@@ -100,9 +100,9 @@ pixel exactly equal to the mean.
 
 **What this implementation does** (`src/hashes/ahash.c`): grayscale via BT.601-approximate
 integer weights (38/75/15 over 128, configurable), resize to 8×8 through
-`ph_resize_mitchell()`, mean of the
-64 bytes truncated to `uint8_t`, bit set when `pixel >= avg`, bit index `63 - i` in
-row-major order — that is, MSB first, left to right, top to bottom, big-endian.
+`ph_resize_mitchell()`, bit set when the pixel is at or above the exact mean of the 64
+bytes (`pixel * 64 >= sum`, no rounding), bit index `63 - i` in row-major order — that is,
+MSB first, left to right, top to bottom, big-endian.
 
 **Delta:**
 
@@ -110,8 +110,8 @@ row-major order — that is, MSB first, left to right, top to bottom, big-endian
 |---|---|---|
 | Resampling filter | undefined | Source says only "shrink". `ph_resize_mitchell()` explicitly requests stb_image_resize2's **Mitchell** filter via `stbir_resize()`. Nothing in the source is violated. It is not the filter ImageHash uses (PIL `LANCZOS`). |
 | Grayscale coefficients | pinned | Source says only "convert to a grayscale". `PH_GRAY_R/G/B` = 38/75/15 over 128 (`src/image/image.h`) — an integer approximation of the **ITU-R BT.601** luma coefficients (0.299/0.587/0.114), cited as an external standard because none of this library's nine primary sources define a grayscale formula at all. The 77/150/29-over-256 triple, closer to BT.601 in decimal, measures worse on the separability corpus — BMH 5.24 → 4.97, wHash 4.34 → 4.27, no gain elsewhere — so 38/75/15 is used. Affects every algorithm that reduces to grayscale — aHash, dHash, pHash, wHash, mHash, BMH, Radial (all seven that call `ph_get_gray()`); noted once here, cross-referenced from the others. |
-| Ties (`pixel == avg` → 1) | pinned | "Above or below" leaves the tie unstated, and no reference implementation is cited here to defer to (contrast pHash/wHash below, which are). `>=` is the library-wide rule for an unpinned tie: it agrees with the one source that states a direction (Zauner eq. 3.9, for BMH). |
-| Average truncated to `uint8_t` before comparison | undefined | Loses at most one level; not a choice so much as the natural result of the pixel buffer already being 8-bit — there is no computation left to intervene between the mean and the comparison, so there is nothing to pin beyond noting it. |
+| Ties (`pixel == mean` → 1) | pinned | "Above or below" leaves the tie unstated, and no reference implementation is cited here to defer to (contrast pHash/wHash below, which are). `>=` is the library-wide rule for an unpinned tie: it agrees with the one source that states a direction (Zauner eq. 3.9, for BMH). |
+| Mean compared exactly, not rounded | conforms | "Above or below the mean" is a comparison with the mean itself. A mean truncated to an integer would move every pixel equal to `floor(mean)` — below a fractional mean — onto the tie and set its bit, which on a low-contrast image sets nearly all 64. |
 
 **Verdict: conforms.** Including the bit order, which the source explicitly leaves free
 but happens to describe exactly as implemented here.

@@ -157,6 +157,47 @@ static void test_ahash_all_black(void) {
     PASS("test_ahash_all_black");
 }
 
+static void test_ahash_pixel_below_fractional_mean_is_clear(void) {
+    /* 63 pixels of 10 and one of 11: the mean is 641/64 = 10.016. Every 10 lies below
+     * it and gets a clear bit, even though it equals the mean rounded down; only the
+     * 11 (index 63, the least significant bit) is set. */
+    uint8_t pixels[64];
+    memset(pixels, 10, 64);
+    pixels[63] = 11;
+
+    ph_context_t *ctx = load_pgm(8, 8, pixels);
+    ASSERT_PTR_NOT_NULL(ctx);
+
+    uint64_t hash = 0;
+    ASSERT_INT_EQ(PH_SUCCESS, ph_compute_ahash(ctx, &hash));
+    ASSERT_UINT64_EQ(0x0000000000000001ULL, hash);
+
+    ph_free(ctx);
+    PASS("test_ahash_pixel_below_fractional_mean_is_clear");
+}
+
+static void test_ahash_pixel_equal_to_exact_mean_is_set(void) {
+    /* Rows 0-1 are 0, rows 2-5 are 10, rows 6-7 are 20, and the mean is exactly 10.
+     * The 8x8 Mitchell pass blurs only across the two edges: row 2 is pulled below 10
+     * (clear), row 5 above it (set). Rows 3 and 4 have nothing but 10s within the
+     * filter's reach, stay exactly 10 and are genuine ties -- set, as in BMH. Under a
+     * strict `>` they would be clear. */
+    uint8_t pixels[64];
+    memset(pixels, 0, 16);
+    memset(pixels + 16, 10, 32);
+    memset(pixels + 48, 20, 16);
+
+    ph_context_t *ctx = load_pgm(8, 8, pixels);
+    ASSERT_PTR_NOT_NULL(ctx);
+
+    uint64_t hash = 0;
+    ASSERT_INT_EQ(PH_SUCCESS, ph_compute_ahash(ctx, &hash));
+    ASSERT_UINT64_EQ(0x000000FFFFFFFFFFULL, hash);
+
+    ph_free(ctx);
+    PASS("test_ahash_pixel_equal_to_exact_mean_is_set");
+}
+
 static void test_ahash_deterministic(void) {
     /* Same image must produce the same hash on two different calls */
     uint8_t pixels[64];
@@ -480,6 +521,8 @@ int main(void) {
     /* aHash */
     test_ahash_uniform_gray();
     test_ahash_all_black();
+    test_ahash_pixel_below_fractional_mean_is_clear();
+    test_ahash_pixel_equal_to_exact_mean_is_set();
     test_ahash_deterministic();
 
     /* dHash */
