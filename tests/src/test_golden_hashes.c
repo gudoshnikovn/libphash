@@ -367,11 +367,18 @@ static void process_fixture(const char *filename, FILE *update_out) {
         check_uint64(filename, UINT64_ALGO_NAMES[i], hashes[i], update_out);
     }
 
+    /* Every algorithm succeeds on every fixture. A failure is a regression like a changed
+     * value -- and in --update it must not leave a hole in the regenerated file. */
     for (size_t i = 0; i < NUM_DIGEST_ALGOS; i++) {
         ph_digest_t digest;
-        if (DIGEST_FNS[i](ctx, &digest) == PH_SUCCESS) {
-            check_digest(filename, DIGEST_ALGO_NAMES[i], &digest, update_out);
+        ph_error_t derr = DIGEST_FNS[i](ctx, &digest);
+        if (derr != PH_SUCCESS) {
+            fprintf(stderr, "[FAIL] test_golden_hashes - %s/%s failed: %s\n", filename,
+                    DIGEST_ALGO_NAMES[i], ph_get_error_string(derr));
+            g_mismatches++;
+            continue;
         }
+        check_digest(filename, DIGEST_ALGO_NAMES[i], &digest, update_out);
     }
 
     ph_free(ctx);
@@ -382,10 +389,14 @@ int main(int argc, char **argv) {
     int update = (argc > 1 && strcmp(argv[1], "--update") == 0);
 
     if (update) {
-        FILE *out = fopen(golden_path(), "w");
+        /* Written next to the golden file and renamed over it only when every fixture and
+         * every algorithm succeeded: a failed regeneration leaves the old file intact. */
+        char tmp_path[512];
+        snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", golden_path());
+        FILE *out = fopen(tmp_path, "w");
         if (!out) {
             fprintf(stderr, "[FAIL] test_golden_hashes - could not open %s for writing\n",
-                    golden_path());
+                    tmp_path);
             return 1;
         }
         printf("test_golden_hashes: regenerating %s\n", golden_path());
@@ -393,6 +404,11 @@ int main(int argc, char **argv) {
             process_fixture(FIXTURES[i], out);
         }
         fclose(out);
+        if (g_mismatches > 0 || rename(tmp_path, golden_path()) != 0) {
+            remove(tmp_path);
+            fprintf(stderr, "test_golden_hashes: golden file NOT updated\n");
+            return 1;
+        }
         printf("test_golden_hashes: golden file updated\n");
         return 0;
     }
@@ -403,6 +419,13 @@ int main(int argc, char **argv) {
         process_fixture(FIXTURES[i], NULL);
     }
 
+    /* Every entry of the golden file must have been checked: a fixture or an algorithm that
+     * silently stopped being compared would otherwise pass. */
+    if (g_checked != g_golden_count) {
+        fprintf(stderr, "[FAIL] test_golden_hashes - %d of %d golden entries checked\n", g_checked,
+                g_golden_count);
+        g_mismatches++;
+    }
     if (g_mismatches > 0) {
         fprintf(stderr, "test_golden_hashes: FAILED (%d mismatch(es) out of %d checked)\n",
                 g_mismatches, g_checked);
