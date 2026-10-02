@@ -89,55 +89,6 @@ const float *ph_get_dct_matrix_32(void) {
     return s_dct_matrix_32;
 }
 
-// --- NEON Helpers ---
-#if defined(__ARM_NEON)
-#    include <arm_neon.h>
-
-// Dot product of float[N] and uint8[N]
-static float dot_product_f32_u8_neon(const float *f, const uint8_t *u, int n) {
-    float32x4_t sum_vec = vdupq_n_f32(0.0f);
-    int i = 0;
-    for (; i <= n - 16; i += 16) {
-        uint8x16_t u_val = vld1q_u8(&u[i]);
-
-        // Convert u8 -> u16 -> u32 -> f32
-        uint16x8_t u_low = vmovl_u8(vget_low_u8(u_val));
-        uint16x8_t u_high = vmovl_u8(vget_high_u8(u_val));
-
-        uint32x4_t u_ll = vmovl_u16(vget_low_u16(u_low));
-        uint32x4_t u_lh = vmovl_u16(vget_high_u16(u_low));
-        uint32x4_t u_hl = vmovl_u16(vget_low_u16(u_high));
-        uint32x4_t u_hh = vmovl_u16(vget_high_u16(u_high));
-
-        float32x4_t f_ll = vcvtq_f32_u32(u_ll);
-        float32x4_t f_lh = vcvtq_f32_u32(u_lh);
-        float32x4_t f_hl = vcvtq_f32_u32(u_hl);
-        float32x4_t f_hh = vcvtq_f32_u32(u_hh);
-
-        // Load floats
-        float32x4_t f_val1 = vld1q_f32(&f[i]);
-        float32x4_t f_val2 = vld1q_f32(&f[i + 4]);
-        float32x4_t f_val3 = vld1q_f32(&f[i + 8]);
-        float32x4_t f_val4 = vld1q_f32(&f[i + 12]);
-
-        // Accumulate
-        sum_vec = vmlaq_f32(sum_vec, f_val1, f_ll);
-        sum_vec = vmlaq_f32(sum_vec, f_val2, f_lh);
-        sum_vec = vmlaq_f32(sum_vec, f_val3, f_hl);
-        sum_vec = vmlaq_f32(sum_vec, f_val4, f_hh);
-    }
-
-    // Horizontal reduce
-    float sum = vaddvq_f32(sum_vec);
-
-    // Fallback
-    for (; i < n; i++) {
-        sum += f[i] * u[i];
-    }
-    return sum;
-}
-#endif
-
 PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     if (!ctx || !out_hash) {
         return PH_ERR_INVALID_ARGUMENT;
@@ -212,11 +163,13 @@ PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash) {
     return PH_SUCCESS;
 }
 
-/* Shared body of ph_dct2_partial() and ph_dct2_partial_scalar(): identical except for
- * whether the row-DCT dot product may take the NEON path. force_scalar exists only so
- * tests/src/test_simd_equivalence.c can compare the two against each other. */
-static ph_error_t dct2_partial_impl(const float *dct_mat, const uint8_t *input, int dct_size,
-                                    int reduction_size, float *out, bool force_scalar) {
+/* Plain sequential sums in a fixed order, and no vector path: the DCT is the step whose
+ * last-bit rounding pHash can turn into flipped bits, so it is computed the same way on
+ * every architecture, and with -ffp-contract=off every build gives the same coefficients
+ * bit for bit. It runs on a 32x32 input, where a SIMD version would save nothing that
+ * shows. */
+ph_error_t ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size,
+                           int reduction_size, float *out) {
     // Temporary matrix for first pass: dct_size rows, reduction_size columns
     float temp[PH_DCT_MAX_SIZE * PH_DCT_MAX_REDUCTION_SIZE];
 
@@ -237,20 +190,9 @@ static ph_error_t dct2_partial_impl(const float *dct_mat, const uint8_t *input, 
             const float *coeffs = &dct_mat[j * dct_size];
             const uint8_t *in = &input[i * dct_size];
 
-#if defined(__ARM_NEON)
-            if (!force_scalar && dct_size == 32) {
-                sum = dot_product_f32_u8_neon(coeffs, in, 32);
-            } else {
-                for (int k = 0; k < dct_size; k++) {
-                    sum += coeffs[k] * in[k];
-                }
-            }
-#else
-            (void)force_scalar;
             for (int k = 0; k < dct_size; k++) {
                 sum += coeffs[k] * in[k];
             }
-#endif
             temp[i * reduction_size + j] = sum;
         }
     }
@@ -268,14 +210,4 @@ static ph_error_t dct2_partial_impl(const float *dct_mat, const uint8_t *input, 
     }
 
     return PH_SUCCESS;
-}
-
-ph_error_t ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size,
-                           int reduction_size, float *out) {
-    return dct2_partial_impl(dct_mat, input, dct_size, reduction_size, out, false);
-}
-
-ph_error_t ph_dct2_partial_scalar(const float *dct_mat, const uint8_t *input, int dct_size,
-                                  int reduction_size, float *out) {
-    return dct2_partial_impl(dct_mat, input, dct_size, reduction_size, out, true);
 }

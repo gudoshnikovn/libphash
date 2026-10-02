@@ -1,28 +1,22 @@
 /*
  * test_simd_equivalence.c
  *
- * Checks color.c's NEON grayscale path and phash.c's NEON dot product against their
- * scalar fallbacks, and compare.c's word-at-a-time Hamming distance against its
- * byte-at-a-time twin. A mismatch here means two different hashes (or distances) for the
- * same input depending on which architecture ran it -- exactly the class of bug that would
- * otherwise surface as an unexplained golden-hash mismatch.
+ * Checks color.c's NEON grayscale path against its scalar fallback, and compare.c's
+ * word-at-a-time Hamming distance against its byte-at-a-time twin. A mismatch here means
+ * two different hashes (or distances) for the same input depending on which
+ * architecture ran it -- exactly the class of bug that would otherwise surface as an
+ * unexplained golden-hash mismatch.
  *
  * Every function below exists in two forms: the production one and a `_scalar` twin that
  * always takes the plain C path, declared in the src/ header next to it for this purpose
- * only. This test calls both on the same inputs and diffs the outputs.
+ * only. This test calls both on the same inputs and compares the outputs exactly: both
+ * are integer arithmetic.
  *
- * Without NEON (__ARM_NEON undefined) the grayscale and DCT pairs are literally the same
- * code path, so those comparisons are tautological there -- the test still passes, it just
- * isn't exercising them. The Hamming pair differs on every target.
- *
- * ph_dct2_partial() is the one function here with a floating-point SIMD path
- * (dot_product_f32_u8_neon in phash.c, used only at dct_size == 32). Floating-point
- * addition is not associative, so NEON's 4-lane tree reduction and the scalar sequential
- * sum are only guaranteed equal up to rounding, not bit-for-bit -- unlike every other
- * function tested here, which is pure integer/byte arithmetic and compared exactly. The
- * DCT case is checked against a tolerance instead (see dct2_close_enough below), loose
- * enough to pass on rounding and tight enough that the deliberate-breakage check further
- * down (see the note before main()) still catches a real divergence.
+ * Without NEON (__ARM_NEON undefined) the grayscale pair is literally the same code path,
+ * so that comparison is tautological there -- the test still passes, it just isn't
+ * exercising it. The Hamming pair differs on every target. There is no floating-point
+ * SIMD path in the library to compare: the one place it would matter, pHash's DCT, is a
+ * single plain loop on every architecture.
  */
 
 #include "digest.h"
@@ -149,69 +143,6 @@ static void test_grayscale_equivalence(void) {
 }
 
 /* =========================================================
- * ph_dct2_partial vs ph_dct2_partial_scalar
- * ========================================================= */
-
-static int dct2_close_enough(const float *a, const float *b, int n) {
-    for (int i = 0; i < n; i++) {
-        float diff = fabsf(a[i] - b[i]);
-        float scale = fmaxf(1.0f, fmaxf(fabsf(a[i]), fabsf(b[i])));
-        if (diff > 1e-3f * scale) {
-            return 0;
-        }
-    }
-    return 1;
-}
-
-static void run_dct2_case(int dct_size, int reduction_size, void (*fill)(uint8_t *, size_t)) {
-    uint8_t input[PH_DCT_MAX_SIZE * PH_DCT_MAX_SIZE];
-    fill(input, (size_t)dct_size * (size_t)dct_size);
-
-    const float *mat = ph_get_dct_matrix_32();
-    float out_simd[PH_DCT_MAX_REDUCTION_SIZE * PH_DCT_MAX_REDUCTION_SIZE];
-    float out_scalar[PH_DCT_MAX_REDUCTION_SIZE * PH_DCT_MAX_REDUCTION_SIZE];
-
-    ASSERT(ph_dct2_partial(mat, input, dct_size, reduction_size, out_simd) == PH_SUCCESS);
-    ASSERT(ph_dct2_partial_scalar(mat, input, dct_size, reduction_size, out_scalar) == PH_SUCCESS);
-
-    if (!dct2_close_enough(out_simd, out_scalar, reduction_size * reduction_size)) {
-        for (int i = 0; i < reduction_size * reduction_size; i++) {
-            fprintf(stderr, "[FAIL] ph_dct2_partial: coeff %d differs: simd=%g scalar=%g\n", i,
-                    (double)out_simd[i], (double)out_scalar[i]);
-        }
-        exit(1);
-    }
-}
-
-static void test_dct2_partial_equivalence(void) {
-    /* dct_size == 32 is the only size the NEON dot product ever takes; the smaller sizes
-     * are included as a control -- both entry points already share the same scalar loop
-     * there, so they trivially agree. */
-    static const int reduction_sizes[] = {1, 4, 8};
-    for (size_t r = 0; r < sizeof(reduction_sizes) / sizeof(reduction_sizes[0]); r++) {
-        rng_seed(0x9ABC0000u + (uint32_t)reduction_sizes[r]);
-        run_dct2_case(32, reduction_sizes[r], fill_random);
-        run_dct2_case(32, reduction_sizes[r], fill_gradient);
-    }
-    rng_seed(0xDEF1u);
-    run_dct2_case(8, 4, fill_random);
-
-    /* Flat (zero-variance) input: every AC coefficient should come out at/near zero on
-     * both paths. */
-    {
-        uint8_t input[32 * 32];
-        memset(input, 128, sizeof(input));
-        const float *mat = ph_get_dct_matrix_32();
-        float out_simd[64], out_scalar[64];
-        ASSERT(ph_dct2_partial(mat, input, 32, 8, out_simd) == PH_SUCCESS);
-        ASSERT(ph_dct2_partial_scalar(mat, input, 32, 8, out_scalar) == PH_SUCCESS);
-        ASSERT(dct2_close_enough(out_simd, out_scalar, 64));
-    }
-
-    PASS("test_dct2_partial_equivalence");
-}
-
-/* =========================================================
  * ph_hamming_distance_digest vs ph_hamming_distance_digest_scalar
  * ========================================================= */
 
@@ -266,7 +197,6 @@ static void test_hamming_distance_equivalence(void) {
 
 int main(void) {
     test_grayscale_equivalence();
-    test_dct2_partial_equivalence();
     test_hamming_distance_equivalence();
 
     printf("\nAll SIMD/scalar equivalence tests passed!\n");

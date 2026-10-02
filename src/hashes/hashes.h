@@ -73,12 +73,6 @@ ph_channel_moments_t ph_compute_moments(const uint8_t *data, size_t num_pixels, 
 PH_NODISCARD ph_error_t ph_dct2_partial(const float *dct_mat, const uint8_t *input, int dct_size,
                                         int reduction_size, float *out);
 
-/* Same contract as ph_dct2_partial(), but always the scalar path, even on a build with a
- * SIMD-capable target. Exists only so tests/src/test_simd_equivalence.c can compare the
- * two against each other; production code should call ph_dct2_partial(). */
-PH_NODISCARD ph_error_t ph_dct2_partial_scalar(const float *dct_mat, const uint8_t *input,
-                                               int dct_size, int reduction_size, float *out);
-
 uint64_t ph_median_bitpack(const float *values, int n);
 
 /* As above, but the median is taken over values[median_from..n-1] only, while every one
