@@ -75,7 +75,8 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   like unrelated images. The margin sends that crowd to 0 together: 98 of 800, and on the
   same photographs false matches at 95 % recall fall from 14.2 % to 6.8 %. pHash values
   differ from the reference `ph_dct_imagehash()` (and from 1.x) wherever coefficients sit
-  within the margin of the median.
+  within the margin of the median: across 807 photographs and textures, about three in
+  five, mostly by 1–3 bits.
   *Restore the old behaviour:* not possible; recompute stored pHash values.
 
 - **Images with transparency are hashed as they look.** 1.x dropped the alpha channel and
@@ -454,12 +455,13 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   onward). Both build systems force `-mfpmath=sse -msse2` there to avoid x87
   extended-precision float math, whose results depend on the compiler/CPU in a way SSE2's
   don't — see "Fixed". Every other architecture this library targets is unaffected.
-- Two hash algorithms can differ by a few bits between CPU architectures for
-  near-uniform/degenerate input (e.g. a single flat colour), because floating-point
-  addition isn't associative and pHash/Radial threshold their coefficients against a
-  median that such input places right at the boundary. Ordinary photographs are not
-  affected. `tests/data/golden_hashes.*` fixtures are namespaced by architecture for this
-  reason.
+- **The same image hashes to the same values on every platform measured** — arm64 and
+  x86-64, Linux and macOS, GCC and Clang, and 32-bit x86 with SSE2 — whichever PNG
+  decoder the build uses. The one difference between builds is the JPEG decoder:
+  libjpeg-turbo and stb_image round their IDCT differently, so a JPEG reaches the hashes
+  as slightly different pixels. 1.x differed between architectures on near-uniform
+  images: pHash's DCT summed in a different order on arm64, and its bare median
+  threshold turned the rounding into flipped bits.
 
 ### Fixed
 
