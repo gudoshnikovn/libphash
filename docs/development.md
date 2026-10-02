@@ -378,6 +378,24 @@ Their pixels follow formulas that `tests/src/test_png_variants.c` recomputes. Th
 committed; regenerating them with another zlib may change the compressed bytes, never the
 pixels.
 
+**Golden hashes.** `tests/src/test_golden_hashes.c` compares every algorithm on every
+fixture, exactly, with `tests/data/golden_hashes.<jpeg>.txt` — one file per JPEG decoder
+(`libjpegturbo`, `stbjpeg`), because the two round their IDCT differently; nothing else
+in a build changes a value, so there is no tolerance and no per-platform file. A build
+without a WebP decoder skips the WebP fixtures. Regenerate only after a deliberate change
+to an algorithm's output, both files, from builds that decode WebP:
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --target test_golden_hashes
+./build/test_golden_hashes --update
+cmake -B build-stb -DPHASH_USE_LIBJPEG_TURBO=OFF && cmake --build build-stb --target test_golden_hashes
+./build-stb/test_golden_hashes --update
+```
+
+`--update` writes the file only when every fixture and algorithm succeeded. A difference
+on one platform alone is not a reason to regenerate: it means that platform computes
+differently, which is the defect to find.
+
 ### 2. Stability Tests (`tests/src/test_stability.c`)
 A colour load and a grayscale load of the same file must hash identically wherever both
 reach gray through the library's own weights (every PNG decoder, WebP, JPEG through

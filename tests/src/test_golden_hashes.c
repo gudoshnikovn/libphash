@@ -1,45 +1,24 @@
-// Golden-hash regression test. Computes every algorithm's hash for every valid
-// fixture in tests/data/ and compares against a committed golden file
-// (tests/data/golden_hashes.<backend-set>.<arch>-<compiler>.txt) -- any unintentional
-// change to hash output (e.g. an optimization that subtly changes results)
-// shows up as a failing test here, instead of silently shipping.
+// Golden-hash regression test. Computes every algorithm's hash for every valid fixture in
+// tests/data/ and compares it, exactly, with a committed golden file. Any change to hash
+// output -- an optimisation that moves a rounding, a refactor that changes an order of
+// operations -- shows up here as a failing test instead of shipping.
 //
-// One golden file cannot cover every build: libjpeg-turbo and the stb_image
-// JPEG fallback round their IDCT differently, so the *same* pixels never reach
-// the hash functions in a libjpeg-turbo build and a stb-only build -- this is
-// not decoder noise absorbable by a tolerance, it is a different input. On
-// darwin-arm64 that alone puts 12/72 checks (every mHash/ColorHash/
-// ColorMoments entry on a JPEG fixture) outside a tolerance of 2. So instead
-// of one file, the golden path is namespaced by the backend set the binary
-// was actually built with -- see PH_GOLDEN_BACKEND_SET below, computed from
-// the same PH_USE_* macros the loader dispatches on, never set by hand in CI.
-// Each backend set gets its own committed file; a build picks its file by
-// construction, so switching PHASH_USE_LIBJPEG_TURBO/PHASH_USE_LIBPNG/
-// PHASH_USE_SPNG/PHASH_USE_WEBP can never compare against the wrong one.
+// One file per JPEG decoder: tests/data/golden_hashes.<jpeg>.txt, <jpeg> being
+// "libjpegturbo" or "stbjpeg". The two round their IDCT differently, so the same JPEG
+// reaches the hash functions as different pixels; nothing else in the build changes a
+// value. Measured across macOS and Linux on arm64 and x86-64, clang and gcc, libpng, spng
+// and stb_image for PNG: the files of one JPEG decoder are byte for byte identical. That
+// holds because the library computes the same way everywhere -- -ffp-contract=off, one
+// plain loop for pHash's DCT, integer area averaging and gray conversion, exact histogram
+// intersection -- so there is no tolerance either: a difference of one bit or one level
+// is a regression, or a platform that has stopped computing the same, and either is worth
+// a failing test.
 //
-// What tolerance is for, given a fixed decoder: the *same* decoder can still round its last couple
-// of bits differently across CPU architectures (NEON vs. SSE4.2 in resize.c), and two algorithms
-// quantise a continuous value into a byte -- Radial (PH_DIGEST_KIND_COEFFICIENTS) rescales its 40
-// coefficients by their own per-image min/max before quantising to 0..255, so a one-ULP
-// perturbation in any single coefficient can shift where every other one lands; ColorMoments
-// (PH_DIGEST_KIND_VECTOR16) has a fixed 1/128-per-level scale, so the same
-// perturbation moves a bounded, small number of levels. Both get a wider
-// per-algorithm tolerance than the generic byte-vector default; see
-// GOLDEN_TOLERANCE_LEVELS_FOR() below for the reasoning per algorithm.
+// The files carry the WebP fixtures too. A build without a WebP decoder skips them and
+// does not count their entries; its --update keeps their lines from the existing file.
 //
-// pHash does NOT get folded into that tolerance: its median-of-63-AC-
-// coefficients threshold (strict >, see src/hashes/phash.c) turns a sub-
-// tolerance cross-arch DCT rounding difference into a Hamming distance as
-// large as ~half the hash on ordinary photos -- no fixed bit tolerance both
-// catches a real pHash regression and survives that swing. It gets its own
-// golden-file dimension instead; see PH_GOLDEN_ARCH_TAG below.
-//
-// Run with --update to regenerate the current build's golden file after a
-// verified, intentional change to an algorithm's output. Regenerating one
-// backend-set/arch file does not touch the others -- if the change is real
-// (not decoder-identity or cross-arch DCT noise), regenerate every
-// backend-set/arch combination you can build locally and let CI catch any
-// you can't.
+// Run with --update to regenerate the current build's file after a verified, intentional
+// change to an algorithm's output, and regenerate the other JPEG decoder's file too.
 #include "libphash.h"
 #include "test_macros.h"
 
@@ -47,118 +26,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define GOLDEN_TOLERANCE_BITS                 2
-/* The default allowance for digests whose bytes are numbers rather than bits: two
- * levels of same-decoder, cross-arch rounding noise per byte, not two bits over the
- * whole digest. Algorithms that amplify that noise get their own wider constant
- * below instead of a change here. */
-#define GOLDEN_TOLERANCE_LEVELS               2
-/* Radial's per-image min/max rescaling (src/hashes/radial.c) turns a one-ULP
- * difference in a single DCT coefficient into a shift of the quantisation range for
- * all 40 -- the generic tolerance above is sized for noise that stays local to one
- * byte, not noise an upstream normalisation step can spread across the whole
- * digest. */
-#define GOLDEN_TOLERANCE_LEVELS_RADIAL        8
-/* ColorMoments (src/hashes/color_moments.c) quantises at a fixed 1/128-per-level
- * scale with no data-dependent rescaling, so the same cross-arch float noise moves a
- * smaller, bounded number of levels than Radial's -- wider than the generic default,
- * but not as wide as Radial's. */
-#define GOLDEN_TOLERANCE_LEVELS_COLOR_MOMENTS 4
-
-static int golden_tolerance_levels(const char *algo) {
-    if (strcmp(algo, "Radial") == 0) {
-        return GOLDEN_TOLERANCE_LEVELS_RADIAL;
-    }
-    if (strcmp(algo, "ColorMoments") == 0) {
-        return GOLDEN_TOLERANCE_LEVELS_COLOR_MOMENTS;
-    }
-    return GOLDEN_TOLERANCE_LEVELS;
-}
-
-/* The backend set a build actually decodes with, computed from the same PH_USE_*
- * macros src/loader.c dispatches on -- never set by hand, so it cannot drift out of
- * sync with what the binary was actually built with. */
 #if defined(PH_USE_LIBJPEG_TURBO)
 #    define PH_GOLDEN_JPEG_TAG "libjpegturbo"
 #else
 #    define PH_GOLDEN_JPEG_TAG "stbjpeg"
-#endif
-
-#if defined(PH_USE_LIBPNG)
-#    define PH_GOLDEN_PNG_TAG "libpng"
-#elif defined(PH_USE_SPNG)
-#    define PH_GOLDEN_PNG_TAG "spng"
-#else
-#    define PH_GOLDEN_PNG_TAG "stbpng"
-#endif
-
-#if defined(PH_USE_WEBP)
-#    define PH_GOLDEN_WEBP_TAG "webp"
-#else
-#    define PH_GOLDEN_WEBP_TAG "nowebp"
-#endif
-
-#define PH_GOLDEN_BACKEND_SET PH_GOLDEN_JPEG_TAG "-" PH_GOLDEN_PNG_TAG "-" PH_GOLDEN_WEBP_TAG
-
-/* pHash's row-DCT dot product (src/hashes/phash.c) has a NEON-vectorized fast
- * path (4-lane tree reduction) that only exists for __ARM_NEON and only activates at
- * the library's default dct_size (32); x86_64 has no equivalent SIMD path for this
- * function at all, so it always takes the plain sequential scalar loop instead.
- * Floating-point addition isn't associative, so the two computed DCT coefficients
- * differ by less than test_simd_equivalence.c's tolerance for exactly this pair of
- * paths -- but pHash thresholds every AC coefficient against their own median with
- * strict >, and natural photos commonly cluster many near-zero high-frequency
- * coefficients tightly around that median, so a sub-tolerance perturbation can shift
- * the median itself and flip every coefficient sitting close to it at once. This is
- * decoder-identity-independent (reproduces on both stb and libjpeg-turbo+libpng) and
- * reproduces on every build regardless of PH_USE_* backend selection, unlike
- * the JPEG-IDCT-rounding split PH_GOLDEN_BACKEND_SET exists for above -- it is
- * purely a function of which architecture's DCT summation order produced the pixels'
- * hash, so it gets its own, orthogonal namespace dimension instead of folding into
- * the backend-set tag. Golden files for an architecture not listed here do not
- * exist; add one (see PH_GOLDEN_ARCH_TAG's #else) rather than reusing another
- * architecture's numbers, since nothing here has been shown to agree with them.
- *
- * Architecture alone isn't the whole story, though: arm64 always has FMA in
- * hardware (unlike x86-64's SSE2 baseline, which doesn't), so GCC and Clang's
- * differing default floating-point-contraction policy (whether a*b+c fuses into one
- * rounding step or stays two) can change pHash's answer on arm64 between compilers.
- * The build pins -ffp-contract=off, and on x86-64 baseline (no FMA available at all)
- * GCC and Clang agree, but the compiler tag is included unconditionally rather than
- * only for arm64, so a
- * future x86-64 divergence (a different -march baseline, a compiler version that
- * changes its default) fails loudly with a missing-file #error instead of silently
- * comparing against numbers from a compiler that was never shown to agree. */
-#if defined(__aarch64__) || defined(__arm64__) || defined(_M_ARM64)
-#    define PH_GOLDEN_ARCH_TAG "arm64"
-#elif defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64)
-#    define PH_GOLDEN_ARCH_TAG "x86_64"
-/* 32-bit x86 (-m32, no explicit -mfpmath=sse) defaults to x87 FPU intermediates for
- * float math instead of x86-64's SSE2 doubles, which is a second, orthogonal source of the
- * same class of drift arm64-vs-x86_64 FMA contraction causes above. It surfaces starkest on
- * photo.png's pHash: that fixture is a solid, uniform-colour image, so every AC coefficient
- * is nominally zero and its computed value is pure rounding noise. On x86-64 that noise is a
- * few ULPs off zero in either direction, giving pHash's genuinely-arbitrary-but-stable sign
- * bits; on i686 it lands on exactly 0.0f, and pHash thresholds with strict '>' against a
- * median of 0.0f (see the note above PH_GOLDEN_ARCH_TAG's definition), so every AC bit reads
- * as 0 -- not a bug, the exact "degenerate input such as a solid colour" case that note
- * already documents, reached here through x87 precision rather than a NEON/scalar split. */
-#elif defined(__i386__) || defined(_M_IX86)
-#    define PH_GOLDEN_ARCH_TAG "i686"
-#else
-#    error \
-        "No golden_hashes.<backend-set>.<arch>-<compiler>.txt exists for this architecture yet -- add PH_GOLDEN_ARCH_TAG for it, run this test with --update to generate the file, and commit it."
-#endif
-
-#if defined(__clang__)
-#    define PH_GOLDEN_COMPILER_TAG "clang"
-#elif defined(_MSC_VER)
-#    define PH_GOLDEN_COMPILER_TAG "msvc"
-#elif defined(__GNUC__)
-#    define PH_GOLDEN_COMPILER_TAG "gcc"
-#else
-#    error \
-        "No golden_hashes.<backend-set>.<arch>-<compiler>.txt exists for this compiler yet -- add PH_GOLDEN_COMPILER_TAG for it, run this test with --update to generate the file, and commit it."
 #endif
 
 /* photo.png (a uniform colour) and photo_complex.png (55 of its 63 AC coefficients within
@@ -198,9 +69,12 @@ static int g_mismatches = 0;
 static int g_checked = 0;
 
 static const char *golden_path(void) {
-    return TEST_DATA_DIR "/golden_hashes." PH_GOLDEN_BACKEND_SET "." PH_GOLDEN_ARCH_TAG
-                         "-" PH_GOLDEN_COMPILER_TAG ".txt";
+    return TEST_DATA_DIR "/golden_hashes." PH_GOLDEN_JPEG_TAG ".txt";
 }
+
+/* Fixtures this build cannot decode (WebP without a WebP decoder): their entries are not
+ * expected to be checked, and --update carries them over unchanged. */
+static int fixture_skipped[NUM_FIXTURES];
 
 /* The hex field width has to track PH_DIGEST_MAX_BYTES: a shorter literal would
  * truncate long digests (mHash, ColorHash) mid-line and desynchronise every fscanf()
@@ -215,9 +89,13 @@ _Static_assert(PH_GOLDEN_HEX_DIGITS == PH_DIGEST_MAX_BYTES * 2,
 #define PH_GOLDEN_STR2(x) #x
 #define PH_GOLDEN_STR(x)  PH_GOLDEN_STR2(x)
 
-static void load_golden(void) {
+/* A missing file is only an error when comparing: --update creates it. */
+static void load_golden(int required) {
     FILE *f = fopen(golden_path(), "r");
     if (!f) {
+        if (!required) {
+            return;
+        }
         fprintf(stderr, "[FAIL] test_golden_hashes - could not open %s\n", golden_path());
         exit(1);
     }
@@ -239,15 +117,14 @@ static const char *find_golden(const char *filename, const char *algo) {
     return NULL;
 }
 
-static void check_uint64(const char *filename, const char *algo, uint64_t value, FILE *update_out) {
-    char hex[17];
-    ASSERT_OK(ph_hash_to_hex(value, hex, sizeof(hex)));
+/* One entry, compared exactly; in --update mode, written out instead. */
+static void check_entry(const char *filename, const char *algo, const char *hex, FILE *update_out) {
     if (update_out) {
         fprintf(update_out, "%s %s %s\n", filename, algo, hex);
         return;
     }
-    const char *expected_hex = find_golden(filename, algo);
-    if (!expected_hex) {
+    const char *expected = find_golden(filename, algo);
+    if (!expected) {
         fprintf(stderr,
                 "[FAIL] test_golden_hashes - no golden entry for %s/%s (run with --update "
                 "after verifying this is intentional)\n",
@@ -255,92 +132,16 @@ static void check_uint64(const char *filename, const char *algo, uint64_t value,
         g_mismatches++;
         return;
     }
-    uint64_t expected = strtoull(expected_hex, NULL, 16);
-    int dist = ph_hamming_distance(expected, value);
     g_checked++;
-    if (dist > GOLDEN_TOLERANCE_BITS) {
-        fprintf(
-            stderr,
-            "[FAIL] test_golden_hashes - %s/%s changed: golden=%s actual=%s (dist=%d, max %d)\n",
-            filename, algo, expected_hex, hex, dist, GOLDEN_TOLERANCE_BITS);
+    if (strcmp(expected, hex) != 0) {
+        fprintf(stderr, "[FAIL] test_golden_hashes - %s/%s changed: golden=%s actual=%s\n",
+                filename, algo, expected, hex);
         g_mismatches++;
     }
 }
 
-static void check_digest(const char *filename, const char *algo, const ph_digest_t *value,
-                         FILE *update_out) {
-    /* The golden files store the bytes alone, without the "<kind>:" prefix of the public
-     * text form: the kind is not what they pin (it comes from the algorithm, and
-     * test_digest_helpers checks it). */
-    char text[PH_DIGEST_HEX_BUFFER_SIZE];
-    ASSERT_OK(ph_digest_to_hex(value, text, sizeof(text)));
-    const char *hex = strchr(text, ':') + 1;
-    if (update_out) {
-        fprintf(update_out, "%s %s %s\n", filename, algo, hex);
-        return;
-    }
-    const char *expected_hex = find_golden(filename, algo);
-    if (!expected_hex) {
-        fprintf(stderr,
-                "[FAIL] test_golden_hashes - no golden entry for %s/%s (run with --update "
-                "after verifying this is intentional)\n",
-                filename, algo);
-        g_mismatches++;
-        return;
-    }
-    char expected_text[PH_DIGEST_HEX_BUFFER_SIZE];
-    ASSERT(strlen(expected_hex) <= PH_DIGEST_MAX_BYTES * 2);
-    snprintf(expected_text, sizeof(expected_text), "unspecified:%s", expected_hex);
-    ph_digest_t expected;
-    ASSERT_OK(ph_digest_from_hex(expected_text, &expected));
-    g_checked++;
-    if (expected.size != value->size) {
-        fprintf(stderr, "[FAIL] test_golden_hashes - %s/%s changed size: %d -> %d\n", filename,
-                algo, expected.size, value->size);
-        g_mismatches++;
-        return;
-    }
-    expected.kind = value->kind;
-
-    /* Only a bit vector has a Hamming distance. For the digests that are quantised
-     * numbers -- the radial coefficients, the colour moments -- the analogue of "a couple
-     * of bits of decoder noise" is a couple of levels per byte, and asking for a Hamming
-     * distance instead gets the comparison refused and -1 returned, which a
-     * `dist > tolerance` test reads as "unchanged". */
-    if (value->kind == (uint8_t)PH_DIGEST_KIND_BITS ||
-        value->kind == (uint8_t)PH_DIGEST_KIND_UNSPECIFIED) {
-        int dist = ph_hamming_distance_digest(&expected, value);
-        if (dist < 0 || dist > GOLDEN_TOLERANCE_BITS) {
-            fprintf(stderr,
-                    "[FAIL] test_golden_hashes - %s/%s changed: golden=%s actual=%s (dist=%d, "
-                    "max %d)\n",
-                    filename, algo, expected_hex, hex, dist, GOLDEN_TOLERANCE_BITS);
-            g_mismatches++;
-        }
-        return;
-    }
-
-    int worst = 0;
-    for (int i = 0; i < value->size; i++) {
-        int diff = (int)expected.data[i] - (int)value->data[i];
-        if (diff < 0) {
-            diff = -diff;
-        }
-        if (diff > worst) {
-            worst = diff;
-        }
-    }
-    int tolerance = golden_tolerance_levels(algo);
-    if (worst > tolerance) {
-        fprintf(stderr,
-                "[FAIL] test_golden_hashes - %s/%s changed: golden=%s actual=%s (worst byte "
-                "differs by %d, max %d)\n",
-                filename, algo, expected_hex, hex, worst, tolerance);
-        g_mismatches++;
-    }
-}
-
-static void process_fixture(const char *filename, FILE *update_out) {
+static void process_fixture(size_t index, FILE *update_out) {
+    const char *filename = FIXTURES[index];
     char path[256];
     snprintf(path, sizeof(path), "%s/%s", TEST_DATA_DIR, filename);
 
@@ -348,9 +149,8 @@ static void process_fixture(const char *filename, FILE *update_out) {
     ASSERT_OK(ph_create(&ctx));
     ph_error_t err = ph_load_from_file(ctx, path);
     if (err == PH_ERR_DECODER_UNAVAILABLE) {
-        // e.g. WebP fixtures on a build without PH_USE_WEBP -- not a failure,
-        // just nothing to check on this build.
         printf("  %s: SKIPPED (%s)\n", filename, ph_get_error_string(err));
+        fixture_skipped[index] = 1;
         ph_free(ctx);
         return;
     }
@@ -364,11 +164,15 @@ static void process_fixture(const char *filename, FILE *update_out) {
     uint32_t flags = PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH;
     ASSERT_OK(ph_compute_multi(ctx, flags, hashes));
     for (int i = 0; i < PH_HASH_FLAGS_COUNT; i++) {
-        check_uint64(filename, UINT64_ALGO_NAMES[i], hashes[i], update_out);
+        char hex[17];
+        ASSERT_OK(ph_hash_to_hex(hashes[i], hex, sizeof(hex)));
+        check_entry(filename, UINT64_ALGO_NAMES[i], hex, update_out);
     }
 
     /* Every algorithm succeeds on every fixture. A failure is a regression like a changed
-     * value -- and in --update it must not leave a hole in the regenerated file. */
+     * value -- and in --update it must not leave a hole in the regenerated file. The files
+     * store a digest's bytes without the "<kind>:" prefix of the public text form: the kind
+     * comes from the algorithm, and test_digest_helpers checks it. */
     for (size_t i = 0; i < NUM_DIGEST_ALGOS; i++) {
         ph_digest_t digest;
         ph_error_t derr = DIGEST_FNS[i](ctx, &digest);
@@ -378,15 +182,28 @@ static void process_fixture(const char *filename, FILE *update_out) {
             g_mismatches++;
             continue;
         }
-        check_digest(filename, DIGEST_ALGO_NAMES[i], &digest, update_out);
+        char text[PH_DIGEST_HEX_BUFFER_SIZE];
+        ASSERT_OK(ph_digest_to_hex(&digest, text, sizeof(text)));
+        check_entry(filename, DIGEST_ALGO_NAMES[i], strchr(text, ':') + 1, update_out);
     }
 
     ph_free(ctx);
     printf("  %s: checked\n", filename);
 }
 
+static int is_skipped(const char *filename) {
+    for (size_t i = 0; i < NUM_FIXTURES; i++) {
+        if (fixture_skipped[i] && strcmp(FIXTURES[i], filename) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 int main(int argc, char **argv) {
     int update = (argc > 1 && strcmp(argv[1], "--update") == 0);
+    load_golden(!update);
+    printf("test_golden_hashes (%s):\n", golden_path());
 
     if (update) {
         /* Written next to the golden file and renamed over it only when every fixture and
@@ -399,9 +216,14 @@ int main(int argc, char **argv) {
                     tmp_path);
             return 1;
         }
-        printf("test_golden_hashes: regenerating %s\n", golden_path());
         for (size_t i = 0; i < NUM_FIXTURES; i++) {
-            process_fixture(FIXTURES[i], out);
+            process_fixture(i, out);
+        }
+        /* Fixtures this build cannot decode keep their existing lines. */
+        for (int i = 0; i < g_golden_count; i++) {
+            if (is_skipped(g_golden[i].filename)) {
+                fprintf(out, "%s %s %s\n", g_golden[i].filename, g_golden[i].algo, g_golden[i].hex);
+            }
         }
         fclose(out);
         if (g_mismatches > 0 || rename(tmp_path, golden_path()) != 0) {
@@ -413,17 +235,20 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    load_golden();
-    printf("test_golden_hashes (backend set: %s):\n", PH_GOLDEN_BACKEND_SET);
     for (size_t i = 0; i < NUM_FIXTURES; i++) {
-        process_fixture(FIXTURES[i], NULL);
+        process_fixture(i, NULL);
     }
 
-    /* Every entry of the golden file must have been checked: a fixture or an algorithm that
-     * silently stopped being compared would otherwise pass. */
-    if (g_checked != g_golden_count) {
+    /* Every entry of the golden file for a fixture this build decodes must have been
+     * checked: a fixture or an algorithm that silently stopped being compared would
+     * otherwise pass. */
+    int expected = 0;
+    for (int i = 0; i < g_golden_count; i++) {
+        expected += !is_skipped(g_golden[i].filename);
+    }
+    if (g_checked != expected) {
         fprintf(stderr, "[FAIL] test_golden_hashes - %d of %d golden entries checked\n", g_checked,
-                g_golden_count);
+                expected);
         g_mismatches++;
     }
     if (g_mismatches > 0) {
