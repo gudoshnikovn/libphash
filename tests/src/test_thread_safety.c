@@ -5,11 +5,17 @@
  * (tests/src/test_batch.c, test_batch_stress.c); this file tests application-driven
  * threads, each owning its own context: N threads, each creating and owning its own context,
  * running concurrently (synchronized to start together, not just interleaved by
- * scheduling luck), each computing the same set of algorithms on the same fixtures a
- * single-threaded reference already computed. Any global or file-scope mutable state
- * accidentally shared between contexts -- the bug class this guards against -- would
- * show up either as a wrong result here or, under the `tsan` CI job, as a
- * reported data race even if the result happened to still be right.
+ * scheduling luck), each computing all nine algorithms on every fixture format. Any
+ * global or file-scope mutable state accidentally shared between contexts -- the bug
+ * class this guards against -- would show up either as a wrong result here or, under
+ * the `tsan` CI job, as a reported data race even if the result happened to still be
+ * right.
+ *
+ * Nothing is decoded or hashed before the first threads start. One-time lazy
+ * initialisation -- the library's own tables or a decoder's CPU dispatch -- happens on
+ * first use, and a sequential warm-up would run it before any thread exists and hide a
+ * race in it. The threads therefore check each other, and the single-threaded reference
+ * is computed after them.
  *
  * Two contexts sharing state from two threads at once is deliberately not tested:
  * the header's documented contract is the one-context-per-thread rule above, not a
@@ -38,32 +44,85 @@
 #    define NUM_THREADS           8
 #    define ITERATIONS_PER_THREAD 5
 
+/* PNG first: right after the barrier every thread is in the same decoder at once, which
+ * is where a race in lazily initialised decoder state shows. */
 static const char *FIXTURES[] = {
-    TEST_DATA_DIR "/photo.jpeg",
-    TEST_DATA_DIR "/photo_copy.jpeg",
-    TEST_DATA_DIR "/photo_rotated_90.jpeg",
     TEST_DATA_DIR "/photo.png",
+    TEST_DATA_DIR "/photo.webp",
+    TEST_DATA_DIR "/photo.jpeg",
     TEST_DATA_DIR "/photo_complex.png",
+    TEST_DATA_DIR "/photo_copy.jpeg",
+    TEST_DATA_DIR "/photo_complex.webp",
+    TEST_DATA_DIR "/photo_rotated_90.jpeg",
 };
 #    define NUM_FIXTURES (sizeof(FIXTURES) / sizeof(FIXTURES[0]))
 
 #    define ALL_FLAGS_MASK (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH)
 
+enum {
+    D_BMH,
+    D_MHASH,
+    D_RADIAL,
+    D_COLOR,
+    D_MOMENTS,
+    NUM_DIGESTS,
+};
+
+static const char *const DIGEST_NAMES[NUM_DIGESTS] = {"BMH", "mHash", "Radial", "ColorHash",
+                                                      "ColorMoments"};
+
 typedef struct {
+    ph_error_t load;
     uint64_t hashes[PH_HASH_FLAGS_COUNT];
-    ph_digest_t bmh;
-    ph_digest_t mhash;
+    ph_digest_t digests[NUM_DIGESTS];
 } fixture_result_t;
 
+/* Each thread's results from its first pass, then the sequential reference. */
+static fixture_result_t g_first[NUM_THREADS][NUM_FIXTURES];
 static fixture_result_t g_reference[NUM_FIXTURES];
+
+/* A WebP fixture is undecodable in a build without the WebP backend; everything else
+ * decodes everywhere. */
+static ph_error_t expected_load(const char *path) {
+    size_t n = strlen(path);
+    if (n > 5 && strcmp(path + n - 5, ".webp") == 0 && !ph_can_use_webp()) {
+        return PH_ERR_DECODER_UNAVAILABLE;
+    }
+    return PH_SUCCESS;
+}
 
 /* Everything one context computes for one fixture, in a fixed order so two calls on
  * two different contexts are directly comparable. */
 static void compute_all(ph_context_t *ctx, const char *path, fixture_result_t *out) {
-    ASSERT_OK(ph_load_from_file(ctx, path));
+    memset(out, 0, sizeof(*out));
+    out->load = ph_load_from_file(ctx, path);
+    ASSERT_MSG(out->load == expected_load(path), "%s: load returned %d, expected %d", path,
+               out->load, expected_load(path));
+    if (out->load != PH_SUCCESS) {
+        return;
+    }
     ASSERT_OK(ph_compute_multi(ctx, ALL_FLAGS_MASK, out->hashes));
-    ASSERT_OK(ph_compute_bmh(ctx, &out->bmh));
-    ASSERT_OK(ph_compute_mhash(ctx, &out->mhash));
+    ASSERT_OK(ph_compute_bmh(ctx, &out->digests[D_BMH]));
+    ASSERT_OK(ph_compute_mhash(ctx, &out->digests[D_MHASH]));
+    ASSERT_OK(ph_compute_radial_hash(ctx, &out->digests[D_RADIAL]));
+    ASSERT_OK(ph_compute_color_hash(ctx, &out->digests[D_COLOR]));
+    ASSERT_OK(ph_compute_color_moments_hash(ctx, &out->digests[D_MOMENTS]));
+}
+
+static int digest_equal(const ph_digest_t *a, const ph_digest_t *b) {
+    return a->size == b->size && a->kind == b->kind && memcmp(a->data, b->data, a->size) == 0;
+}
+
+static void check_same(const char *what, const fixture_result_t *got, const fixture_result_t *want,
+                       size_t i) {
+    ASSERT_MSG(got->load == want->load, "%s: %s: load status %d, expected %d", what, FIXTURES[i],
+               got->load, want->load);
+    ASSERT_MSG(memcmp(got->hashes, want->hashes, sizeof(got->hashes)) == 0,
+               "%s: %s: uint64 hashes differ", what, FIXTURES[i]);
+    for (int d = 0; d < NUM_DIGESTS; d++) {
+        ASSERT_MSG(digest_equal(&got->digests[d], &want->digests[d]), "%s: %s: %s differs", what,
+                   FIXTURES[i], DIGEST_NAMES[d]);
+    }
 }
 
 static void compute_reference(void) {
@@ -73,23 +132,6 @@ static void compute_reference(void) {
         compute_all(ctx, FIXTURES[i], &g_reference[i]);
     }
     ph_free(ctx);
-}
-
-static void check_matches_reference(const char *what, const fixture_result_t *got, size_t i) {
-    const fixture_result_t *want = &g_reference[i];
-    if (memcmp(got->hashes, want->hashes, sizeof(got->hashes)) != 0) {
-        fprintf(stderr, "[FAIL] test_thread_safety (%s): fixture %zu uint64 hashes differ\n", what,
-                i);
-        exit(1);
-    }
-    if (ph_hamming_distance_digest(&got->bmh, &want->bmh) != 0) {
-        fprintf(stderr, "[FAIL] test_thread_safety (%s): fixture %zu BMH differs\n", what, i);
-        exit(1);
-    }
-    if (ph_hamming_distance_digest(&got->mhash, &want->mhash) != 0) {
-        fprintf(stderr, "[FAIL] test_thread_safety (%s): fixture %zu mHash differs\n", what, i);
-        exit(1);
-    }
 }
 
 /* Every thread spins on this until every other thread has also arrived, so the
@@ -126,11 +168,15 @@ static void worker_body(worker_arg_t *arg) {
     char what[64];
     snprintf(what, sizeof(what), "thread %d", arg->thread_index);
 
-    for (int rep = 0; rep < ITERATIONS_PER_THREAD; rep++) {
+    fixture_result_t *first = g_first[arg->thread_index];
+    for (size_t i = 0; i < NUM_FIXTURES; i++) {
+        compute_all(ctx, FIXTURES[i], &first[i]);
+    }
+    for (int rep = 1; rep < ITERATIONS_PER_THREAD; rep++) {
         for (size_t i = 0; i < NUM_FIXTURES; i++) {
             fixture_result_t got;
             compute_all(ctx, FIXTURES[i], &got);
-            check_matches_reference(what, &got, i);
+            check_same(what, &got, &first[i], i);
         }
     }
 
@@ -184,20 +230,30 @@ static void run_once(void) {
 #    endif
 
     for (int i = 0; i < NUM_THREADS; i++) {
-        if (args[i].failed) {
-            fprintf(stderr, "[FAIL] test_thread_safety: thread %d could not ph_create()\n", i);
-            exit(1);
+        ASSERT_MSG(!args[i].failed, "thread %d could not ph_create()", i);
+    }
+    for (int t = 1; t < NUM_THREADS; t++) {
+        char what[64];
+        snprintf(what, sizeof(what), "thread %d vs thread 0", t);
+        for (size_t i = 0; i < NUM_FIXTURES; i++) {
+            check_same(what, &g_first[t][i], &g_first[0][i], i);
         }
     }
 }
 
 /* Run the whole thing three times back to back: a race that only shows up
  * occasionally would still be expected to show up at least once across three runs,
- * and TSan (see .github/workflows/ci.yml, tsan job) is watching every one of them. */
+ * and TSan (see .github/workflows/ci.yml, tsan job) is watching every one of them. The
+ * first run starts cold; the reference comes after it. */
 static void test_many_contexts_many_threads(void) {
-    compute_reference();
     for (int rep = 0; rep < 3; rep++) {
         run_once();
+        if (rep == 0) {
+            compute_reference();
+        }
+        for (size_t i = 0; i < NUM_FIXTURES; i++) {
+            check_same("threads vs sequential", &g_first[0][i], &g_reference[i], i);
+        }
     }
     PASS("test_many_contexts_many_threads");
 }

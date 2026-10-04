@@ -37,9 +37,10 @@
  * hashes[] is left untouched, so only the first STRESS_NSET slots are comparable. */
 #define STRESS_NSET  4
 
-/* Mixed inputs on purpose: three decodable images of different formats/sizes, a
- * corrupted file and a NULL path. Per-item error statuses must come out of the
- * threaded path exactly as they do out of the sequential one. */
+/* Mixed inputs on purpose: PNG, JPEG and WebP images of different sizes, a corrupted
+ * file and a NULL path. Per-item error statuses must come out of the threaded path
+ * exactly as they do out of the sequential one -- including WebP's
+ * PH_ERR_DECODER_UNAVAILABLE in a build without the WebP backend. */
 static const char *stress_path(size_t i) {
     switch (i % 7) {
         case 0:
@@ -47,7 +48,7 @@ static const char *stress_path(size_t i) {
         case 1:
             return TEST_DATA_DIR "/photo.jpeg";
         case 2:
-            return TEST_DATA_DIR "/photo.png";
+            return TEST_DATA_DIR "/photo.webp";
         case 3:
             return TEST_DATA_DIR "/photo_copy.jpeg";
         case 4:
