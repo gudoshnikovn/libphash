@@ -546,6 +546,23 @@ static void scen_load_gray_as_colour(int recording) {
     ph_free(ctx);
 }
 
+/* The same expansion for a grey PGM, which stb_image decodes in every build. */
+static void scen_load_pgm_as_colour(int recording) {
+    (void)recording;
+    static const uint8_t pgm[] = "P5\n4 3\n255\n\x10\x20\x30\x40\x50\x60\x70\x80\x90\xa0\xb0\xc0";
+    ph_context_t *ctx = NULL;
+    if (ph_create(&ctx) != PH_SUCCESS) {
+        return;
+    }
+    ASSERT_OK(ph_context_set_load_grayscale(ctx, 0));
+    ph_error_t err = ph_load_from_memory(ctx, pgm, sizeof(pgm) - 1);
+    check("ph_load_from_memory(grey PGM as colour)", err, ALLOW_ALLOC);
+    if (err != PH_SUCCESS && ph_is_loaded(ctx)) {
+        defect("the PGM load failed but the context reports an image is loaded");
+    }
+    ph_free(ctx);
+}
+
 /* Decoding at reduced resolution takes its own allocation path in the JPEG backend. */
 static void scen_load_scaled(int recording) {
     ph_context_t *ctx = NULL;
@@ -656,6 +673,7 @@ static const scenario_t SCENARIOS[] = {
     {"load, EXIF orientation", scen_load_oriented},
     {"load_from_pixels", scen_load_pixels},
     {"load, grey PNG as colour", scen_load_gray_as_colour},
+    {"load, grey PGM as colour", scen_load_pgm_as_colour},
     {"load, decode scale 1/2", scen_load_scaled},
     {"batch API, sequential", scen_batch_api},
 };

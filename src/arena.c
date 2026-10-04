@@ -49,9 +49,12 @@ uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size) {
      * block is rounded up first. The backing buffer itself is allocated with that
      * alignment, so the block is aligned in absolute terms too. */
     size_t start = ph_arena_align_up(ctx->arena.offset);
+    /* LCOV_EXCL_START -- excluded from coverage: every caller asks for a size bounded by an
+     * image already held in memory, so the sum cannot reach SIZE_MAX. */
     if (start < ctx->arena.offset || size > SIZE_MAX - start) {
         return NULL;
     }
+    /* LCOV_EXCL_STOP */
     size_t required = start + size;
 
     if (ctx->arena.capacity < required) {
@@ -62,9 +65,12 @@ uint8_t *ph_get_scratchpad(ph_context_t *ctx, size_t size) {
         }
 
         // Ensure new_size is a multiple of the alignment for posix_memalign
+        /* LCOV_EXCL_START -- excluded from coverage: new_size is at most twice an already
+         * allocated capacity plus a bounded request, far below SIZE_MAX. */
         if (new_size > SIZE_MAX - (PH_ARENA_ALIGNMENT - 1)) {
             return NULL;
         }
+        /* LCOV_EXCL_STOP */
         new_size = ph_arena_align_up(new_size);
 
         uint8_t *new_ptr = ph_aligned_alloc(new_size);

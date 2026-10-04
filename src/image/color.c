@@ -21,10 +21,13 @@ uint8_t *ph_get_gray(ph_context_t *ctx) {
          * i.e. huge after conversion) size while ph_to_grayscale() still writes
          * w * h bytes -- a heap overflow. */
         size_t gray_size;
+        /* LCOV_EXCL_START -- excluded from coverage: one byte per pixel is no more than the
+         * decoded image, which is already allocated. */
         if (!ph_safe_image_alloc_size(ph_size(ctx->image.width), ph_size(ctx->image.height), 1,
                                       &gray_size)) {
             return NULL;
         }
+        /* LCOV_EXCL_STOP */
         ctx->image.gray_cache = malloc(gray_size);
         if (ctx->image.gray_cache) {
             ph_to_grayscale(ctx, ctx->image.raw_rgb, ctx->image.width, ctx->image.height,

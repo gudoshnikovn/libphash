@@ -73,9 +73,12 @@ static const char *const ph_stb_unsupported_reasons[] = {
 };
 
 static int ph_stb_reason_is_unsupported(const char *reason) {
+    /* LCOV_EXCL_START -- excluded from coverage: stb_image sets a reason with every
+     * failure it reports; NULL is handled, not expected. */
     if (!reason) {
         return 0;
     }
+    /* LCOV_EXCL_STOP */
     for (size_t i = 0; i < sizeof(ph_stb_unsupported_reasons) / sizeof(*ph_stb_unsupported_reasons);
          i++) {
         if (strcmp(reason, ph_stb_unsupported_reasons[i]) == 0) {
@@ -110,9 +113,12 @@ static const char *const ph_stb_oom_reasons[] = {
 };
 
 static int ph_stb_reason_is_oom(const char *reason) {
+    /* LCOV_EXCL_START -- excluded from coverage: stb_image sets a reason with every
+     * failure it reports; NULL is handled, not expected. */
     if (!reason) {
         return 0;
     }
+    /* LCOV_EXCL_STOP */
     for (size_t i = 0; i < sizeof(ph_stb_oom_reasons) / sizeof(*ph_stb_oom_reasons); i++) {
         if (strcmp(reason, ph_stb_oom_reasons[i]) == 0) {
             return 1;
@@ -137,9 +143,12 @@ static const char *const ph_stb_too_large_reasons[] = {
 };
 
 static int ph_stb_reason_is_too_large(const char *reason) {
+    /* LCOV_EXCL_START -- excluded from coverage: stb_image sets a reason with every
+     * failure it reports; NULL is handled, not expected. */
     if (!reason) {
         return 0;
     }
+    /* LCOV_EXCL_STOP */
     for (size_t i = 0; i < sizeof(ph_stb_too_large_reasons) / sizeof(*ph_stb_too_large_reasons);
          i++) {
         if (strcmp(reason, ph_stb_too_large_reasons[i]) == 0) {
@@ -621,7 +630,10 @@ uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int 
         return NULL;
     }
 #endif
+    /* LCOV_EXCL_START -- excluded from coverage: stb_image claims every buffer no other
+     * backend did, so the loop above always returns. */
     return NULL;
+    /* LCOV_EXCL_STOP */
 }
 
 /* Every decode path -- native backends (plain malloc in src/loaders/)

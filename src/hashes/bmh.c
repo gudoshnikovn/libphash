@@ -60,9 +60,12 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
      * write, not a clean allocation failure. ph_safe_image_alloc_size() does the check
      * width-independently (uint64_t arithmetic, checked against SIZE_MAX). */
     size_t total_pixels;
+    /* LCOV_EXCL_START -- excluded from coverage: block_size is validated, so its square
+     * always fits a size_t (see above). */
     if (!ph_safe_image_alloc_size(ph_size(block_size), ph_size(block_size), 1, &total_pixels)) {
         return PH_ERR_ALLOCATION_FAILED;
     }
+    /* LCOV_EXCL_STOP */
 
     /* One bit per block. The size is capped at PH_DIGEST_MAX_BYTES inside
      * ph_digest_shape(): unreachable through the public API, because

@@ -53,6 +53,8 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
     int out_channels = features.has_alpha ? 4 : 3;
 
     size_t out_size;
+    /* LCOV_EXCL_START -- excluded from coverage: VP8 caps a side at 16383, so 16383^2 * 4
+     * bytes fit even a 32-bit size_t. */
     if (!ph_safe_image_alloc_size(ph_size(w), ph_size(h), ph_size(out_channels), &out_size)) {
         if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
@@ -60,6 +62,7 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
         ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
         return NULL;
     }
+    /* LCOV_EXCL_STOP */
     /* int, the type libwebp takes: WebP caps a dimension at 16383, so w * 4 fits. */
     int stride = w * out_channels;
 

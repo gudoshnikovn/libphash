@@ -108,8 +108,7 @@ under `-jN` (`clean` deleting object files other jobs are compiling). Prefer the
 - **`make coverage`** runs the Makefile's stb_image-only build. Every line inside
   native decoder code in `src/loaders/` doesn't exist in that binary at all — `jpeg.c`
   and `webp.c` compile to nothing without their `PH_USE_*` flag, and `png_libpng.c`
-  is not built. The overall
-  percentage this target reports (currently ~95% lines) does **not** include the
+  is not built. The overall percentage this target reports does **not** include the
   native decoders, no matter how high it reads.
 - **`make coverage-cmake`** (`scripts/coverage_cmake.sh`) runs a CMake
   `-DPHASH_COVERAGE=ON` + `ctest` pass with the default vendored decoder set
@@ -126,8 +125,8 @@ under `-jN` (`clean` deleting object files other jobs are compiling). Prefer the
   fail only where `size_t` is 32 bits: an image within `PH_MAX_SUPPORTED_PIXELS` needs
   at most 8 GiB, which a 64-bit `size_t` holds. libpng's is run by CI's 32-bit job; the
   JPEG one has no 32-bit libjpeg-turbo build to run in, and the WebP one cannot fail
-  at all (VP8 caps a side at 16383 pixels). On a 64-bit coverage run these lines stay
-  uncovered by construction.
+  at all (VP8 caps a side at 16383 pixels). These blocks are marked as coverage
+  exclusions (see "Coverage standard" below).
 
 Neither target subsumes the other — always read the two side by side, and treat a
 report that only ran one of them as measuring at most half the decoder surface.
@@ -141,6 +140,45 @@ that machine; `find_library(PHASH_LIBJPEG_LIB ...)` falls back to stb_image sile
 that case, same as any other CMake build here, so check the summary's per-file
 breakdown (`lcov --list docs/coverage/cmake/native.info`) rather than assuming the
 option being `ON` means the backend was actually linked.
+
+### Coverage standard
+
+Both targets measure lines **and branches**: the paths that lines alone report as
+covered while their error branch never ran are where the defects live. CI's
+`coverage-cmake` job (Linux x86_64, native decoders) checks the result against
+`scripts/coverage_thresholds.txt` with `scripts/check_coverage.py`, and fails when an
+area drops below its minimum:
+
+| Area | Lines | Branches |
+|---|---|---|
+| `src/hashes/` | 95% | 90% |
+| `src/image/` | 95% | 86% |
+| `src/loaders/` | 92% | 74% |
+| `src/core.c` | 95% | 88% |
+| `src/batch.c` | 95% | 90% |
+| `src/loader.c` | 94% | 80% |
+| `src/fileio.c` | 94% | 85% |
+| all of `src/` | 95% | 86% |
+
+The thresholds file is the one source of these numbers; the table repeats it. Each
+minimum is the measured coverage less one or two points: the threaded batch takes
+different branches from run to run, and the canonical runner compiles x86 code that an
+arm64 machine does not. Functions are not given a threshold -- one uncovered function
+out of two hundred is not a quantity worth steering by.
+
+A line may be left out only when no test can reach it: a defensive check that
+validation upstream makes impossible, or a size check that can fail only where
+`size_t` is 32 bits. It is marked in the code with `LCOV_EXCL_START -- <reason>` and
+`LCOV_EXCL_STOP` around the block, and the reason says why it cannot run. Everything
+else that is uncovered is a missing test, not an exclusion.
+
+Coverage is measured on Linux and macOS only. Lines under `#ifdef _WIN32` (the CRT file
+calls, the Win32 thread pool) are not in any number; they are compiled and tested by
+CI's Windows build, which measures no coverage.
+
+Locally: `make coverage` (stb_image build) or `make coverage-cmake` (native decoders),
+then `python3 scripts/check_coverage.py docs/coverage/cmake/native.info` for the gate
+itself. Both targets print the per-area table.
 
 ### Installed package and `pkg-config`
 
@@ -329,10 +367,10 @@ and on any pull request targeting either:
 
 | Job | What it checks |
 |---|---|
-| `format-check` | `scripts/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`; `scripts/check_docs_coverage.sh`; `scripts/check_final_state_voice.sh`, which fails on tracker ids, paths into local planning notes and release-cycle wording (a feature "since" a version) in tracked text; `shellcheck --severity=warning` over `scripts/*.sh`; and `scripts/check_casts.py`, the explicit-cast count per file in `src/` against `scripts/explicit_casts.txt`. Fast, no build, catches these before the slower jobs run. |
+| `format-check` | `scripts/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`; `scripts/check_docs_coverage.sh`; `scripts/check_final_state_voice.sh`, which fails on tracker ids, paths into local planning notes and release-cycle wording (a feature "since" a version) in tracked text; `shellcheck --severity=warning` over `scripts/*.sh`; `scripts/check_casts.py`, the explicit-cast count per file in `src/` against `scripts/explicit_casts.txt`; and `scripts/check_coverage.py --check-docs`, which keeps the coverage table below equal to `scripts/coverage_thresholds.txt`. Fast, no build, catches these before the slower jobs run. |
 | `build-and-test` | Full vendored build (libjpeg-turbo + libpng + libwebp + zlib-ng) across linux-x86_64 (gcc, clang), linux-arm64, macos-arm64. `PHASH_STRICT_DEPS=ON`, so a decoder silently falling back to stb_image is a hard configure failure, not a quiet pass. |
 | `strict-warnings` | The full vendored build with `PHASH_WARNINGS_AS_ERRORS=ON` (gcc, clang): any warning in libphash's own sources, tests or benchmark fails it. The only job with `-Werror`, so a newer compiler's new warning never breaks a build from source. Its clang leg also runs clang-tidy's `bugprone-misplaced-widening-cast` over `src/`. |
-| `coverage-cmake` | `scripts/coverage_cmake.sh` — lcov report of the vendored decoder build; published as a downloadable artifact. |
+| `coverage-cmake` | `scripts/coverage_cmake.sh` — line and branch coverage of the vendored decoder build, checked against `scripts/coverage_thresholds.txt` (see "Coverage standard"); the HTML report is published as a downloadable artifact. |
 | `minimal-build` | Zero-dependency build (every `PHASH_USE_*` off, stb_image only) on ubuntu-latest, macos-latest, windows-latest. |
 | `c-standard-matrix` | Full test suite under `-DCMAKE_C_STANDARD=11/17/23`, gcc+clang, Linux+macOS (no Windows — see the Toolchains section above for why). |
 | `build-and-test-32bit` | The native PNG backend (libpng) built `-m32`, catching `size_t`/`int`-width overflow bugs a 64-bit build can't reach. |

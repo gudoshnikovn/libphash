@@ -178,9 +178,11 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
      * does on a 32-bit one. ph_context_set_radial_params() caps projections
      * at PH_RADIAL_MAX_PROJECTIONS, so this cannot trigger through the public API either;
      * kept as defence in depth. Refuse rather than wrap. */
+    /* LCOV_EXCL_START -- excluded from coverage: unreachable through the public API (above). */
     if (n_projections > SIZE_MAX / sizeof(double)) {
         return PH_ERR_ALLOCATION_FAILED;
     }
+    /* LCOV_EXCL_STOP */
 
     /* Quantised DCT coefficients, PH_RADIAL_COEFFS of them whatever the angle count:
      * compare with ph_radial_similarity(). */

@@ -74,6 +74,9 @@ jobs:
     - name: Explicit casts as recorded
       run: python3 scripts/check_casts.py
 
+    - name: Coverage thresholds as documented
+      run: python3 scripts/check_coverage.py --check-docs
+
   # Full vendored build (all bundled decoders) across the platforms/arches we
   # actually ship for. PHASH_STRICT_DEPS=ON turns a silent decoder fallback
   # (e.g. libjpeg-turbo not found) into a hard configure failure, so a CI green
@@ -198,6 +201,11 @@ jobs:
 
     - name: Run coverage-cmake
       run: ./scripts/coverage_cmake.sh
+
+    # The one place coverage is a gate: thresholds per area, lines and branches, in
+    # scripts/coverage_thresholds.txt (docs/development.md, "Coverage standard").
+    - name: Coverage thresholds
+      run: python3 scripts/check_coverage.py docs/coverage/cmake/native.info
 
     - name: Upload coverage report
       uses: actions/upload-artifact@v4

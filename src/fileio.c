@@ -112,10 +112,13 @@ static ph_error_t ph_report_file_open_failure(const char *filepath, int open_err
 static ph_error_t ph_check_open_file(int fd, const char *filepath, long long *out_size,
                                      char *err_buf, size_t err_len) {
     ph_file_stat_t st;
+    /* LCOV_EXCL_START -- excluded from coverage: fstat() on a descriptor just opened
+     * does not fail outside a kernel or filesystem fault. */
     if (PH_FILE_FSTAT(fd, &st) != 0) {
         ph_format_err_msg(err_buf, err_len, "Cannot stat '%s': %s", filepath, strerror(errno));
         return PH_ERR_IO;
     }
+    /* LCOV_EXCL_STOP */
     if (!S_ISREG(st.st_mode)) {
         ph_format_err_msg(err_buf, err_len, "Cannot read '%s': not a regular file", filepath);
         return PH_ERR_IO;
@@ -232,12 +235,14 @@ ph_error_t ph_open_file_bytes(const char *filepath, ph_file_bytes_t *out, char *
 
     /* Only reachable where size_t is narrower than off_t (a 32-bit build looking
      * at a >4 GB file). Neither mapping nor reading it can work. */
+    /* LCOV_EXCL_START -- excluded from coverage: needs a 32-bit size_t and a file over 4 GiB. */
     if ((unsigned long long)size > (unsigned long long)SIZE_MAX) {
         ph_format_err_msg(err_buf, err_len,
                           "Cannot read '%s': file is too large to load into memory", filepath);
         PH_FILE_CLOSE(fd);
         return PH_ERR_IO;
     }
+    /* LCOV_EXCL_STOP */
     const size_t length = (size_t)size; /* positive and at most SIZE_MAX, checked above */
 
 #ifdef PH_HAVE_MMAP

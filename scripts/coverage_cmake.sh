@@ -27,9 +27,11 @@ for tool in cmake ctest lcov genhtml; do
     }
 done
 
-# --ignore-errors mismatch,unused: same rationale/pairs as the Makefile `coverage`
-# target -- lcov 2.x otherwise aborts on a handful of harmless version-mismatch and
-# zero-hit-file warnings from the vendored decoder trees.
+# Branches as well as lines, with the same suppressions as the Makefile `coverage`
+# target (see LCOV_BRANCH_FLAGS there for what each one is for).
+LCOV_FLAGS=(--rc branch_coverage=1
+    --ignore-errors "mismatch,mismatch,unused,unused,inconsistent,inconsistent,unsupported,unsupported")
+
 capture_run() {
     local build_dir="$1" label="$2"
     shift 2
@@ -46,17 +48,16 @@ capture_run() {
     # out the whole report.
     (cd "$build_dir" && ctest --output-on-failure) || echo "WARNING: ctest reported failures in the '$label' run -- see above" >&2
 
-    lcov --capture --directory "$build_dir" --output-file "$OUT_DIR/$label.info" \
-        --ignore-errors mismatch,mismatch,unused,unused
+    lcov --capture --directory "$build_dir" --output-file "$OUT_DIR/$label.info" "${LCOV_FLAGS[@]}"
     lcov --remove "$OUT_DIR/$label.info" '/usr/*' '*/vendor/*' '*/tests/*' \
-        --output-file "$OUT_DIR/$label.info" --ignore-errors unused,unused
+        --output-file "$OUT_DIR/$label.info" "${LCOV_FLAGS[@]}"
 }
 
 capture_run "$OUT_DIR/build-native" native \
     -DPHASH_USE_LIBJPEG_TURBO=ON -DPHASH_USE_LIBPNG=ON \
     -DPHASH_USE_WEBP=ON -DPHASH_USE_ZLIB_NG=ON
 
-genhtml "$OUT_DIR/native.info" --output-directory "$OUT_DIR/html"
+genhtml "$OUT_DIR/native.info" --output-directory "$OUT_DIR/html" "${LCOV_FLAGS[@]}"
 
 echo "Coverage report: $OUT_DIR/html/index.html"
-lcov --summary "$OUT_DIR/native.info"
+python3 scripts/check_coverage.py --report "$OUT_DIR/native.info"

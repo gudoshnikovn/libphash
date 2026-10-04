@@ -366,9 +366,12 @@ static ph_error_t ph_batch_run_threaded(uint8_t *items_base, size_t item_stride,
     /* Spelled out rather than via a SIZE_MAX-vs-ULLONG_MAX helper: such a helper is a
      * tautology wherever the two are equal, i.e. on every 64-bit build. */
     const size_t n_threads = ph_size(nthreads);
+    /* LCOV_EXCL_START -- excluded from coverage: n_threads is at most the item count and the
+     * core count; it cannot approach SIZE_MAX / sizeof(pthread_t). */
     if (n_threads > SIZE_MAX / sizeof(pthread_t)) {
         return PH_ERR_ALLOCATION_FAILED;
     }
+    /* LCOV_EXCL_STOP */
     pthread_t *threads_arr = malloc(sizeof(pthread_t) * n_threads);
     if (!threads_arr) {
         return PH_ERR_ALLOCATION_FAILED;
@@ -394,9 +397,13 @@ static ph_error_t ph_batch_run_threaded(uint8_t *items_base, size_t item_stride,
      * Partial degradation is deliberately *not* an error: as long as one worker got a
      * context it drains the whole index by itself, so the batch still completes and the
      * per-item statuses are the full story. */
+    /* LCOV_EXCL_START -- excluded from coverage: reached when no thread starts or every
+     * worker's ph_create() fails, which needs failures injected into running threads --
+     * the allocation shim is single-threaded. */
     if (spawned == 0 || atomic_load(&shared.workers_ready) == 0) {
         return PH_ERR_ALLOCATION_FAILED;
     }
+    /* LCOV_EXCL_STOP */
 
     size_t claimed = atomic_load(&shared.next);
     *out_started = claimed < n ? claimed : n;

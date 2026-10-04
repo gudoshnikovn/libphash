@@ -1,0 +1,15 @@
+# Minimum line and branch coverage (percent) per area of libphash's own sources, checked by
+# scripts/check_coverage.py on CI's coverage-cmake job (Linux x86_64, native decoders).
+# An area is a directory (trailing /), a file, or `total` for all of src/. Lines marked
+# LCOV_EXCL_START/STOP are outside the count; docs/development.md, "Coverage standard",
+# says what may be marked and how the numbers were set.
+#
+# area          lines  branches
+src/hashes/       95      90
+src/image/        95      86
+src/loaders/      92      74
+src/core.c        95      88
+src/batch.c       95      90
+src/loader.c      94      80
+src/fileio.c      94      85
+total             95      86

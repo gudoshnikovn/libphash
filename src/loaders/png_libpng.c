@@ -262,6 +262,8 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     int out_channels = (int)(rowbytes / w);
 
     size_t alloc_size;
+    /* LCOV_EXCL_START -- excluded from coverage: fails only where size_t is 32 bits; run
+     * by test_png_backend_limits in CI's 32-bit job, not by the coverage build. */
     if (!ph_safe_image_alloc_size(rowbytes, h, 1, &alloc_size)) {
         if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
@@ -271,6 +273,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return NULL;
     }
+    /* LCOV_EXCL_STOP */
 
     unsigned char *data = malloc(alloc_size);
     if (!data) {
@@ -287,6 +290,8 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
      * png_uint_32, so on a 32-bit target sizeof(png_bytep) * h wraps and produces a too-small array
      * that png_read_image() then writes past. Refuse instead. */
     size_t row_ptrs_size;
+    /* LCOV_EXCL_START -- excluded from coverage: h is at most PH_MAX_IMAGE_DIMENSION, so
+     * h row pointers fit any size_t. */
     if (!ph_safe_image_alloc_size(sizeof(png_bytep), h, 1, &row_ptrs_size)) {
         if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
@@ -297,6 +302,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
         png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
         return NULL;
     }
+    /* LCOV_EXCL_STOP */
 
     png_bytep *row_ptrs = malloc(row_ptrs_size);
     if (!row_ptrs) {

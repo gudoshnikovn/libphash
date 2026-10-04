@@ -910,7 +910,43 @@ void test_stb_too_large_is_image_too_large() {
     printf("test_stb_too_large_is_image_too_large: PASSED\n");
 }
 
+/* PNM is decoded by stb_image in every build, so these reach the stb path's own limit
+ * checks even where PNG and JPEG go to native decoders. */
+static size_t build_pnm(uint8_t *out, size_t cap, const char *magic, unsigned w, unsigned h,
+                        size_t body) {
+    int n = snprintf((char *)out, cap, "%s\n%u %u\n255\n", magic, w, h);
+    ASSERT(n > 0 && (size_t)n + body <= cap);
+    memset(out + n, 0x80, body);
+    return (size_t)n + body;
+}
+
+void test_stb_path_limits() {
+    uint8_t buf[64];
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+
+    /* A 4x3 grey PGM: loads, and is refused one pixel under its size by the header check. */
+    size_t n = build_pnm(buf, sizeof(buf), "P5", 4, 3, 12);
+    ASSERT_OK(ph_load_from_memory(ctx, buf, n));
+    ASSERT_OK(ph_context_set_max_pixels(ctx, 11));
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, ph_load_from_memory(ctx, buf, n));
+
+    /* 30000 x 30000 RGB: within the pixel ceiling with no limit of the caller's own, but its
+     * 2.7e9 bytes are more than stb_image allocates; its "too large" reason maps to
+     * PH_ERR_IMAGE_TOO_LARGE. Only the header is present -- it is refused before any
+     * allocation. */
+    ASSERT_OK(ph_context_set_max_pixels(ctx, 0));
+    n = build_pnm(buf, sizeof(buf), "P6", 30000, 30000, 8);
+    ph_error_t err = ph_load_from_memory(ctx, buf, n);
+    ASSERT_MSG(err == PH_ERR_IMAGE_TOO_LARGE, "30000x30000 PPM: %d (%s)", err,
+               ph_get_last_error_message(ctx));
+
+    ph_free(ctx);
+    PASS("test_stb_path_limits");
+}
+
 int main() {
+    test_stb_path_limits();
     test_truncated_input_rejected_in_every_build();
     test_stb_too_large_is_image_too_large();
     test_jpeg_loading();

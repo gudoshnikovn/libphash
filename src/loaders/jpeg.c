@@ -180,6 +180,9 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
 
     const JDIMENSION w = cinfo.output_width, h = cinfo.output_height;
     size_t stride, total;
+    /* LCOV_EXCL_START -- excluded from coverage: JPEG caps a side at 65535 and the pixel
+     * limit above caps the area, so this fails only where size_t is 32 bits, and no
+     * 32-bit build has libjpeg-turbo (docs/development.md, "Two coverage targets"). */
     if (w > INT_MAX || h > INT_MAX ||
         !ph_safe_image_alloc_size(w, ph_size(out_channels), 1, &stride) ||
         !ph_safe_image_alloc_size(stride, h, 1, &total)) {
@@ -191,6 +194,7 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
                        "Image exceeds the configured maximum pixel count");
         return NULL;
     }
+    /* LCOV_EXCL_STOP */
 
     output = malloc(total);
     rows = malloc(sizeof(JSAMPROW) * h);

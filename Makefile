@@ -196,14 +196,23 @@ test: $(TEST_BINS)
 # Coverage build. Recursive for the same reason as `debug` above.
 # Note this inherits PHASH_ENABLE_THREADS=1, so the threaded batch path in
 # src/batch.c is instrumented and executed here.
+# Branches as well as lines. lcov 2.x stops on llvm-cov's gcov emulation without the
+# suppressions: "mismatch" and "unused" for harmless version and zero-hit warnings,
+# "inconsistent" for a line hit with none of its branches evaluated (inside stb_image),
+# "unsupported" for branch data it cannot attribute. Each appears twice so that lcov
+# reports the suppressed messages instead of only counting them.
+LCOV_BRANCH_FLAGS = --rc branch_coverage=1 \
+	--ignore-errors mismatch,mismatch,unused,unused,inconsistent,inconsistent,unsupported,unsupported
+
 coverage:
 	@$(MAKE) clean
 	@$(MAKE) test PHASH_COVERAGE=1
 	@echo "Generating coverage reports..."
 	@mkdir -p docs/coverage
-	@lcov --capture --directory . --output-file docs/coverage/coverage.info --ignore-errors mismatch,mismatch,unused,unused
-	@lcov --remove docs/coverage/coverage.info '/usr/*' 'tests/*' 'vendor/*' --output-file docs/coverage/coverage.info --ignore-errors unused,unused
-	@genhtml docs/coverage/coverage.info --output-directory docs/coverage/html
+	@lcov --capture --directory . --output-file docs/coverage/coverage.info $(LCOV_BRANCH_FLAGS)
+	@lcov --remove docs/coverage/coverage.info '/usr/*' 'tests/*' 'vendor/*' --output-file docs/coverage/coverage.info $(LCOV_BRANCH_FLAGS)
+	@genhtml docs/coverage/coverage.info --output-directory docs/coverage/html $(LCOV_BRANCH_FLAGS)
+	@python3 scripts/check_coverage.py --report docs/coverage/coverage.info
 	@echo "Coverage report generated at docs/coverage/html/index.html"
 
 # Coverage for the CMake build's native decoders (libjpeg-turbo/libpng/
