@@ -149,9 +149,7 @@ batch sequentially.
 ## `ph_can_use_libjpeg()`/`ph_can_use_libpng()` are `ph_can_use_jpeg()`/`ph_can_use_png()`
 
 All three capability checks, with `ph_can_use_webp()`, are named after the format.
-`ph_can_use_png()` answers "a native PNG decoder, libpng or spng, is compiled in" — what
-1.x's `ph_can_use_libpng()` returned too, including in a spng build where libpng is not
-linked. Return values are unchanged; rename the calls. `ph_get_build_info()` names the
+Return values are unchanged; rename the calls. `ph_get_build_info()` names the
 library behind each format.
 
 ## `ph_digest_t` is 136 bytes and carries a `kind` tag
@@ -407,5 +405,7 @@ that list tracked by hand.
   backend that claimed any buffer starting with `DE AD` and "decoded" it into a 1×1
   image; in 2.0 such a buffer is `PH_ERR_UNSUPPORTED_FORMAT`. It exists only for testing:
   `-DPHASH_ENABLE_MOCK_BACKEND=ON`, never in a shipped build.
-- **Enabling both PNG backends (`PHASH_USE_LIBPNG` and `PHASH_USE_SPNG`) is a
-  configure-time error**; 1.x built and linked both and used libpng. Choose one.
+- **The spng PNG backend is removed.** A 1.x build configured with
+  `-DPHASH_USE_SPNG=ON -DPHASH_USE_LIBPNG=OFF` decoded PNG with spng; in 2.0
+  `-DPHASH_USE_SPNG=ON` stops the configure step. Drop the flag: the default build decodes
+  PNG with libpng (`-DPHASH_USE_LIBPNG=OFF` leaves it to `stb_image`).

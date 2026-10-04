@@ -210,9 +210,7 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
 
 - **`ph_can_use_libjpeg()`/`ph_can_use_libpng()` are renamed `ph_can_use_jpeg()`/
   `ph_can_use_png()`**, so all three capability checks, with `ph_can_use_webp()`, are named
-  after the format. `ph_can_use_libpng()` answered `1` in a build using spng, where libpng
-  is not linked at all; the new name says what it answers — whether a native PNG decoder,
-  libpng or spng, is compiled in.
+  after the format they answer for; `ph_get_build_info()` names the library behind each.
   *Restore the old behaviour:* rename the calls; the return values are unchanged.
 
 - **Public enums are 32 bits wide under `-fshort-enums`.** Each public enum ends in a
@@ -234,9 +232,14 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   default; it warns at configure time). It is for testing only and must not be enabled in
   a shipped build.
 
-- **Enabling both PNG backends is a configure-time error.** `PHASH_USE_LIBPNG` and
-  `PHASH_USE_SPNG` are mutually exclusive; 1.x built and linked both and used libpng.
-  *Restore the old behaviour:* not applicable — choose one backend explicitly.
+- **The spng PNG backend is removed; libpng is the native PNG decoder.** 1.x decoded PNG
+  with spng when configured with `-DPHASH_USE_SPNG=ON -DPHASH_USE_LIBPNG=OFF`. spng is no
+  faster than libpng — within a few percent on 8-bit color images, 30–70% slower on
+  16-bit and grayscale ones, on x86-64 and arm64 — and its last release is v0.7.4 of
+  May 2023. `-DPHASH_USE_SPNG=ON` stops the configure step and says so, rather than being
+  ignored.
+  *Restore the old behaviour:* not possible — drop the flag; the default build decodes PNG
+  with libpng, and `-DPHASH_USE_LIBPNG=OFF` decodes it with `stb_image`.
 
 - **The JPEG backend option is `PHASH_USE_LIBJPEG_TURBO`** (1.x: `PHASH_USE_TURBOJPEG`),
   named after the codec. Passing the old name stops the configure step and names the new
@@ -370,9 +373,9 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   CMake must define when linking libphash statically on Windows; the exported target and
   the `.pc` file set it automatically. `add_subdirectory()` works for static and shared
   parents and leaves the parent project's settings and cache as it found them.
-- **`PHASH_USE_ZLIB_NG` build option** to build libpng/spng against the vendored zlib-ng,
+- **`PHASH_USE_ZLIB_NG` build option** to build libpng against the vendored zlib-ng,
   safe for concurrent first decodes. The JPEG backend decodes through libjpeg-turbo's
-  libjpeg API, whose archive carries no zlib or spng of its own to compete with it.
+  libjpeg API, whose archive carries no zlib of its own to compete with it.
 - **`PHASH_STRICT_DEPS` build option** turning the "libjpeg-turbo not found, falling back
   to stb_image" and "zlib-ng submodule not found" warnings into configure-time errors, so a
   green build proves the vendored decoders were built and linked.
@@ -471,9 +474,8 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   (JPEG end-of-image marker, PNG `IEND`, the WebP RIFF size) and returns
   `PH_ERR_CORRUPT_DATA` otherwise. Data after that end is still accepted.
 - **A PNG with a damaged chunk checksum loaded successfully unless libpng decoded it.**
-  stb_image (the Makefile build) reads no checksum, and spng did not compare the one on
-  the last `IDAT` chunk, so a corrupted file got a hash in one build and an error in
-  another. A bad checksum on a critical chunk (`IHDR`, `PLTE`, `IDAT`, `IEND`) returns
+  stb_image (the Makefile build) reads no checksum, so a corrupted file got a hash in one
+  build and an error in another. A bad checksum on a critical chunk (`IHDR`, `PLTE`, `IDAT`, `IEND`) returns
   `PH_ERR_CORRUPT_DATA` in every build; an ancillary chunk with a bad checksum is
   dropped and the image decodes, as libpng does.
 - **An encoded buffer over 2 GiB was decoded from a truncated length.** On the `stb_image`
@@ -530,10 +532,6 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
 - PNG decoder: `setjmp` is armed *before* the info struct is created, so an early libpng
   error does not longjmp into an unprepared state; the `row_ptrs` allocation is checked for
   overflow; an error while reading the pixels frees every buffer the decoder allocated.
-- The spng backend could not decode to grayscale at all: it asked spng for an 8-bit gray
-  output format unconditionally, which spng only accepts for images that are already
-  grayscale. It converts when the source format requires it, byte for byte identically to
-  the libpng backend.
 - `add_subdirectory()` forced libpng's `PNG_SHARED`/`PNG_STATIC` into the parent project's
   cache; see Packaging under Added.
 - The vendored `stb_image_resize2` crashed or leaked when one of its internal allocations
