@@ -151,20 +151,26 @@ area drops below its minimum:
 
 | Area | Lines | Branches |
 |---|---|---|
-| `src/hashes/` | 95% | 90% |
+| `src/hashes/` | 95% | 91% |
 | `src/image/` | 95% | 86% |
 | `src/loaders/` | 92% | 74% |
-| `src/core.c` | 95% | 88% |
-| `src/batch.c` | 95% | 90% |
-| `src/loader.c` | 94% | 80% |
+| `src/core.c` | 96% | 90% |
+| `src/batch.c` | 97% | 91% |
+| `src/loader.c` | 93% | 77% |
 | `src/fileio.c` | 94% | 85% |
-| all of `src/` | 95% | 86% |
+| all of `src/` | 95% | 87% |
 
 The thresholds file is the one source of these numbers; the table repeats it. Each
-minimum is the measured coverage less one or two points: the threaded batch takes
-different branches from run to run, and the canonical runner compiles x86 code that an
-arm64 machine does not. Functions are not given a threshold -- one uncovered function
-out of two hundred is not a quantity worth steering by.
+minimum is the coverage measured on that job's toolchain (GCC, lcov) less one or two
+points: the threaded batch takes different branches from run to run, and the canonical
+runner compiles x86 code that an arm64 machine does not. The same tests give a
+different branch figure under clang: the two compilers split compound conditions
+(`&&`, `||`, `?:`) into branches differently, so an area's percentage can differ by a
+few points either way between them (`src/loader.c`: 78% under GCC, 82% under clang),
+and a local macOS run is only an approximation of the gate. Linux-only code (the
+cgroup and affinity reading in `src/batch.c`) is counted only on Linux. Functions are
+not given a threshold -- one uncovered function out of two hundred is not a quantity
+worth steering by.
 
 A line may be left out only when no test can reach it: a defensive check that
 validation upstream makes impossible, or a size check that can fail only where

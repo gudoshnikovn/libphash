@@ -5,11 +5,11 @@
 # says what may be marked and how the numbers were set.
 #
 # area          lines  branches
-src/hashes/       95      90
+src/hashes/       95      91
 src/image/        95      86
 src/loaders/      92      74
-src/core.c        95      88
-src/batch.c       95      90
-src/loader.c      94      80
+src/core.c        96      90
+src/batch.c       97      91
+src/loader.c      93      77
 src/fileio.c      94      85
-total             95      86
+total             95      87
