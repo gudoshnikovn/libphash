@@ -265,8 +265,10 @@ Trading the dead DC bit for one more row and column of higher-frequency coeffici
 a bit of width and loses more robustness than it gains, so the block is at (0,0), as in
 pHash.
 
-The DC term does not explain pHash's weaker robustness (mean intra-distance 0.177 against
-0.03–0.07 for the other structural hashes): neither treatment of DC moves that number.
+Both measurements take the threshold at the bare median, without the margin described
+below. The DC term does not explain pHash's weaker robustness there (mean intra-distance
+0.177 against 0.03–0.07 for the other structural hashes): neither treatment of DC moves
+that number.
 
 **Where the weakness is: coefficients crowding the median.** Every bit is a comparison
 with the median of the 63 AC coefficients, so a coefficient close to the median is decided
@@ -585,8 +587,8 @@ cross-correlation over cyclic shifts, against a threshold of 0.9 — pHash's
 `ph_crosscorr()`.
 
 Measured on the synthetic corpus of `tests/src/test_hash_properties.c` (distances
-normalised to [0,1]), compared by peak cross-correlation: mean intra-distance 0.032, mean
-inter-distance 0.263, separability **2.46**.
+normalised to [0,1]), compared by peak cross-correlation: mean intra-distance 0.021, mean
+inter-distance 0.261, separability **2.72**.
 
 The vector is standardised before the transform. Without that, DCT coefficient 0 is the
 sum of the variances: always the largest of the 40, always quantised to 255, so one byte

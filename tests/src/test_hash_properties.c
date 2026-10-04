@@ -21,9 +21,8 @@
  * photographs, so the numbers here describe behaviour on this corpus and are evidence
  * about regressions, not about real-world recall.
  *
- * Every threshold below was set from the measurement this file prints, with the observed
- * value quoted next to it. None was chosen by eye. When one needs changing, re-run,
- * paste the new numbers, and say why in the commit -- do not just widen it.
+ * The measurements are recorded in OBSERVED, and the bounds are derived from them by one
+ * written rule; see "Observations and the bounds derived from them" below.
  *
  * Complements tests/src/test_robustness.c, which checks the same two properties against
  * a real photograph with fixed per-algorithm distance caps. This file measures the
@@ -353,6 +352,9 @@ typedef enum {
 
 static const char *ALGO_NAMES[A_COUNT] = {"aHash", "dHash", "pHash",     "wHash",
                                           "mHash", "BMH",   "ColorHash", "Radial"};
+/* The designators of OBSERVED below, for the table a stale measurement prints. */
+static const char *ALGO_ENUM_NAMES[A_COUNT] = {"A_AHASH", "A_DHASH", "A_PHASH", "A_WHASH",
+                                               "A_MHASH", "A_BMH",   "A_COLOR", "A_RADIAL"};
 
 typedef struct {
     uint64_t bits;   /* the 64-bit algorithms */
@@ -460,60 +462,81 @@ static double separability(const stats_t *intra, const stats_t *inter) {
 }
 
 /* ---------------------------------------------------------------------------
- * Thresholds
+ * Observations and the bounds derived from them
  *
- * Measured on this corpus (24 bases x 7 transforms = 168 intra-pairs, 276 inter-pairs; for
- * Radial, less the pairs with a radially symmetric base, which have no score) at
- * IMG_W=160 with the numbers printed by this test, then floored well below
- * the observation so a genuine regression trips it and ordinary noise does not. Observed
- * values are in the comment beside each entry; re-measure rather than relax.
+ * OBSERVED holds what this test measures on this corpus (24 bases x 7 transforms = 168
+ * intra-pairs, 276 inter-pairs; for Radial, less the pairs with a radially symmetric
+ * base, which have no score) at IMG_W=160. It is the only place the numbers are written
+ * down, and it is checked: the test fails when a measurement does not round to its
+ * entry, and prints the table to paste in its place. The corpus is generated and every
+ * hash computes the same on every platform, so the numbers are the same everywhere.
+ *
+ * The bounds that guard against a regression are derived, not written: each lets the
+ * measured property lose PH_PROP_MARGIN (30%) of what it has --
+ *
+ *   separability     >= observed * (1 - margin)
+ *   mean intra       <= observed + margin * (observed inter - observed intra)
+ *   mean inter       >= observed - margin * (observed inter - observed intra)
+ *
+ * -- so the gap between "same image" and "different image" can shrink by 30% from either
+ * side before the test fails. Ordinary noise moves none of these: the corpus is fixed.
+ *
+ * A change that moves a measurement on purpose updates its row from the printed table
+ * and says why in the commit; the bounds follow.
  * ------------------------------------------------------------------------ */
 typedef struct {
-    double min_separability;
-    double max_mean_intra;
-    double min_mean_inter;
-} bounds_t;
+    double separability;
+    double mean_intra;
+    double mean_inter;
+} observed_t;
 
-static const bounds_t BOUNDS[A_COUNT] = {
-    /*             sep.  intra  inter        measured @ 160x160: sep / mean intra / mean inter */
-    [A_AHASH] = {2.90, 0.075, 0.360},  /* 3.63 / 0.054 / 0.472 */
-    [A_DHASH] = {2.40, 0.115, 0.370},  /* 3.49 / 0.063 / 0.460 */
-    [A_PHASH] = {1.80, 0.250, 0.390},  /* 2.69 / 0.163 / 0.480 */
-    [A_WHASH] = {2.80, 0.085, 0.390},  /* 4.10 / 0.038 / 0.484 */
-    [A_MHASH] = {1.80, 0.185, 0.380},  /* 2.62 / 0.151 / 0.490 -- but read the note */
-    [A_BMH] = {3.60, 0.080, 0.390},    /* 5.43 / 0.034 / 0.480 */
-    [A_COLOR] = {2.80, 0.120, 0.690},  /* 4.01 / 0.081 / 0.841 */
-    [A_RADIAL] = {1.65, 0.085, 0.175}, /* 2.72 / 0.021 / 0.261, by cross-correlation */
+/* One row per line, in the layout the stale-measurement message prints. */
+// clang-format off
+static const observed_t OBSERVED[A_COUNT] = {
+    /*            sep.  intra  inter */
+    [A_AHASH] = {4.55, 0.026, 0.471},
+    [A_DHASH] = {3.49, 0.063, 0.460},
+    [A_PHASH] = {3.17, 0.073, 0.425},
+    [A_WHASH] = {4.10, 0.038, 0.484},
+    [A_MHASH] = {2.62, 0.151, 0.490},
+    [A_BMH] = {5.43, 0.034, 0.480},
+    [A_COLOR] = {4.01, 0.081, 0.841},
+    [A_RADIAL] = {2.72, 0.021, 0.261},
 };
+// clang-format on
+
+#define PH_PROP_MARGIN 0.30
+
+/* A measurement matches its entry when it rounds to it: half a unit in the last
+ * recorded place (0.005 for separability, 0.0005 for distances), plus slack for the
+ * printing itself. */
+#define PH_PROP_SEP_TOLERANCE  0.0051
+#define PH_PROP_DIST_TOLERANCE 0.00051
 
 /* This corpus still understates any algorithm that normalises to a fixed size larger than
  * IMG_W. Feature sizes scale with IMG_W (via BASE_RES), so the bias is only about how far
  * a resize has to travel, not also about what it is resizing. mHash upsamples this
- * 160x160 corpus 3.2x to reach its 512 default, and it separates at 2.62 here -- the lowest,
- * with pHash (2.69) and Radial (2.72) close enough that the three are not meaningfully
- * ordered. Absolute numbers are only comparable within one run of this file with one corpus
- * resolution, which is what the thresholds above are for; docs/algorithm-provenance.md's
- * per-algorithm notes cite this same run's numbers where they describe current behaviour.
+ * 160x160 corpus 3.2x to reach its 512 default, and it separates the least here, with
+ * Radial close enough (OBSERVED) that the two are not meaningfully ordered. Absolute
+ * numbers are only comparable within one run of this file with one corpus resolution;
+ * docs/algorithm-provenance.md's per-algorithm notes cite OBSERVED where they describe
+ * current behaviour.
  *
  * Three things the measurement says that are worth reading off it rather than assuming.
  *
- * ColorHash's inter-distance is the highest here -- 0.841, where the structural hashes
- * sit near 0.46 -- because its distance is one minus a histogram intersection, and two
- * unrelated pictures share little colour. That is a different scale from a normalised
- * Hamming distance, whose expectation between unrelated hashes is 0.5 by construction.
- * Compare its separability with the others; do not compare its raw distances with
- * theirs.
+ * ColorHash's inter-distance is the highest here, where the structural hashes sit near
+ * 0.46, because its distance is one minus a histogram intersection, and two unrelated
+ * pictures share little colour. That is a different scale from a normalised Hamming
+ * distance, whose expectation between unrelated hashes is 0.5 by construction. Compare
+ * its separability with the others; do not compare its raw distances with theirs.
  *
  * Radial is compared by peak cross-correlation mapped onto [0, 1], so its row is on a
  * different footing from the rest; read its separability, and do not compare its
  * absolute distances with anyone else's. See docs/algorithm-provenance.md section 7.
  *
- * pHash has the worst robustness of the structural hashes here -- mean intra-distance
- * 0.163 against 0.02-0.06 for the others -- and separability level with Radial and
- * mHash (2.69 against their 2.72 and 2.62). The DC coefficient does not explain it:
- * removing DC from the median does not change the intra-distance, and removing it from the
- * hash (the 8x8 block at DCT(1,1)) makes it worse; docs/algorithm-provenance.md section 3
- * has the measurement. */
+ * mHash has the highest mean intra-distance, about twice pHash's, which is the highest of
+ * the 64-bit hashes. The per-transformation table this test prints shows where it comes
+ * from: a 4% crop and +/-12 levels of noise. */
 
 static void test_robustness_discrimination_separability(void) {
     image_t base[NUM_BASE];
@@ -592,9 +615,15 @@ static void test_robustness_discrimination_separability(void) {
     }
     printf("\n");
 
+    int stale = 0;
     for (int a = 0; a < A_COUNT; a++) {
         double sep = separability(&intra[a], &inter[a]);
         double mi = stats_mean(&intra[a]), me = stats_mean(&inter[a]);
+        const observed_t *o = &OBSERVED[a];
+        double gap = o->mean_inter - o->mean_intra;
+        double min_sep = o->separability * (1.0 - PH_PROP_MARGIN);
+        double max_intra = o->mean_intra + PH_PROP_MARGIN * gap;
+        double min_inter = o->mean_inter - PH_PROP_MARGIN * gap;
 
         if (mi >= me) {
             fprintf(stderr,
@@ -603,21 +632,41 @@ static void test_robustness_discrimination_separability(void) {
                     ALGO_NAMES[a], mi, me);
             exit(1);
         }
-        if (sep < BOUNDS[a].min_separability) {
+        if (sep < min_sep) {
             fprintf(stderr, "[FAIL] %s: separability %.2f below the floor %.2f\n", ALGO_NAMES[a],
-                    sep, BOUNDS[a].min_separability);
+                    sep, min_sep);
             exit(1);
         }
-        if (mi > BOUNDS[a].max_mean_intra) {
+        if (mi > max_intra) {
             fprintf(stderr, "[FAIL] %s: mean intra-distance %.3f above the ceiling %.3f\n",
-                    ALGO_NAMES[a], mi, BOUNDS[a].max_mean_intra);
+                    ALGO_NAMES[a], mi, max_intra);
             exit(1);
         }
-        if (me < BOUNDS[a].min_mean_inter) {
+        if (me < min_inter) {
             fprintf(stderr, "[FAIL] %s: mean inter-distance %.3f below the floor %.3f\n",
-                    ALGO_NAMES[a], me, BOUNDS[a].min_mean_inter);
+                    ALGO_NAMES[a], me, min_inter);
             exit(1);
         }
+        if (fabs(sep - o->separability) > PH_PROP_SEP_TOLERANCE ||
+            fabs(mi - o->mean_intra) > PH_PROP_DIST_TOLERANCE ||
+            fabs(me - o->mean_inter) > PH_PROP_DIST_TOLERANCE) {
+            fprintf(stderr,
+                    "[STALE] %s: measured %.2f / %.3f / %.3f, OBSERVED says %.2f / %.3f / %.3f\n",
+                    ALGO_NAMES[a], sep, mi, me, o->separability, o->mean_intra, o->mean_inter);
+            stale = 1;
+        }
+    }
+    if (stale) {
+        /* Every row, so the block replaces the table whole. */
+        fprintf(stderr, "\nOBSERVED does not match the measurement. If the change is "
+                        "intended, replace the rows with:\n\n");
+        for (int a = 0; a < A_COUNT; a++) {
+            fprintf(stderr, "    [%s] = {%.2f, %.3f, %.3f},\n", ALGO_ENUM_NAMES[a],
+                    separability(&intra[a], &inter[a]), stats_mean(&intra[a]),
+                    stats_mean(&inter[a]));
+        }
+        fprintf(stderr, "\nand say in the commit why the measurement moved.\n");
+        exit(1);
     }
 
     for (int i = 0; i < NUM_BASE; i++) {
