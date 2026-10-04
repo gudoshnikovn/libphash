@@ -927,6 +927,20 @@ if(PHASH_BUILD_TESTS)
         add_test(NAME ${test_name} COMMAND $<TARGET_FILE:${test_name}>)
     endforeach()
 
+    # Scheduling under `ctest -j`. The tests that start their own threads take every core
+    # (the batch pool defaults to one worker per core), so each is given all of them and
+    # runs alone: beside single-threaded tests both sides would slow down, on a runner
+    # whose four vCPUs are two cores. The longest tests start first, so none begins
+    # last and leaves the other slots idle; without COST, a fresh build directory has no
+    # timing history and ctest starts tests in number order.
+    cmake_host_system_information(RESULT PHASH_TEST_CORES QUERY NUMBER_OF_LOGICAL_CORES)
+    set_tests_properties(test_thread_safety test_batch_stress test_batch test_cold_parallel_decode
+        PROPERTIES PROCESSORS ${PHASH_TEST_CORES})
+    set_tests_properties(test_thread_safety PROPERTIES COST 100)
+    set_tests_properties(test_batch_stress test_hash_properties PROPERTIES COST 50)
+    set_tests_properties(test_mhash test_degenerate_inputs test_alloc_failure test_batch
+        PROPERTIES COST 20)
+
     # test_abi.c built again under -fshort-enums, which shrinks any public enum without
     # its width spacer. Header-only by design, so it is not linked against phash. MSVC has
     # no such flag (nor clang-cl, which MSVC also covers), and its enums are always int-sized.

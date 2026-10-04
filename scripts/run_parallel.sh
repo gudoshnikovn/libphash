@@ -5,9 +5,9 @@
 #
 # Usage: printf '%s\n' "./build/test_a" "valgrind ./build/test_b" | run_parallel.sh [jobs]
 #
-# For test binaries that run outside ctest (under Valgrind, or a hand-picked set under
-# TSan): they share no files and do not depend on timing, so running them side by side
-# checks exactly what running them one after another does.
+# For test binaries that run outside ctest (the subset under Valgrind, which runs each
+# process on one core): they share no files and do not depend on timing, so running them
+# side by side checks exactly what running them one after another does.
 set -euo pipefail
 
 JOBS="${1:-4}"
