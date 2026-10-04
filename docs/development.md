@@ -600,7 +600,7 @@ scripts/bench_regression_gate.sh build/bench_hash ../base/build/bench_hash 5 10 
 ```bash
 make debug        # rebuilds with -O0 -g -fsanitize=address,undefined
                   # NOTE: this cleans and rebuilds; it does NOT run the tests
-make test         # ...so always run the suite afterwards
+make test -j8     # ...so always run the suite afterwards
 ```
 
 CI runs the same pair through CMake in the `sanitizers` job, with

@@ -28,6 +28,11 @@ on:
         required: false
         default: main
 
+# Every ctest run executes four tests at a time: the runners have four cores, and the
+# tests share no files and do not depend on timing.
+env:
+  CTEST_PARALLEL_LEVEL: 4
+
 permissions:
   contents: read
   pull-requests: write
@@ -120,6 +125,8 @@ jobs:
 
     - uses: ./.github/actions/setup-build
       with:
+        ccache: 'true'
+        ccache-key: ${{ matrix.name }}
         apt-packages: cmake${{ matrix.needs_nasm && ' nasm' || '' }}${{ matrix.cc == 'clang' && ' clang' || '' }}
 
     # libjpeg-turbo doesn't like add_subdirectory (see CMakeLists.txt), so its
@@ -159,6 +166,8 @@ jobs:
 
     - uses: ./.github/actions/setup-build
       with:
+        ccache: 'true'
+        ccache-key: ${{ matrix.cc }}
         apt-packages: cmake nasm${{ matrix.cc == 'clang' && ' clang clang-tidy' || '' }}
 
     - name: Build vendored libjpeg-turbo
@@ -200,6 +209,7 @@ jobs:
 
     - uses: ./.github/actions/setup-build
       with:
+        ccache: 'true'
         apt-packages: cmake nasm lcov
 
     - name: Build vendored libjpeg-turbo
@@ -340,6 +350,7 @@ jobs:
     - name: Install 32-bit toolchain and zlib
       uses: ./.github/actions/setup-build
       with:
+        ccache: 'true'
         apt-architectures: i386
         apt-packages: cmake gcc-multilib g++-multilib zlib1g-dev:i386
 
@@ -414,6 +425,7 @@ jobs:
     - name: Set up head (submodules + dependencies)
       uses: ./pr/.github/actions/setup-build
       with:
+        ccache: 'true'
         path: pr
         apt-packages: cmake nasm jq
 
@@ -502,6 +514,7 @@ jobs:
 
     - uses: ./.github/actions/setup-build
       with:
+        ccache: 'true'
         apt-packages: cmake clang nasm
 
     - name: Build vendored libjpeg-turbo
@@ -564,6 +577,8 @@ jobs:
 
     - uses: ./.github/actions/setup-build
       with:
+        ccache: 'true'
+        ccache-key: ${{ matrix.name }}
         submodules: ${{ matrix.submodules }}
         apt-packages: cmake clang nasm
 
@@ -580,10 +595,8 @@ jobs:
 
     - name: Run the thread tests
       run: |
-        ./build/test_cold_parallel_decode
-        ./build/test_batch
-        ./build/test_batch_stress
-        ./build/test_thread_safety
+        printf './build/%s\n' test_cold_parallel_decode test_batch test_batch_stress \
+          test_thread_safety | scripts/run_parallel.sh 4
 
   # Independent of ASan/LSan above (Valgrind and ASan don't mix -- ASan's own
   # shadow memory looks like a leak to Valgrind and vice versa), and it catches a
@@ -616,9 +629,9 @@ jobs:
 
     - name: Run subset under Valgrind
       run: |
-        for t in test_alloc_failure test_api_guards test_core_extended test_loader test_batch test_pixel_count_overflow; do
-          valgrind --error-exitcode=1 --leak-check=full --errors-for-leak-kinds=all ./build/$t
-        done
+        printf 'valgrind --error-exitcode=1 --leak-check=full --errors-for-leak-kinds=all ./build/%s\n' \
+          test_alloc_failure test_api_guards test_core_extended test_loader test_batch \
+          test_pixel_count_overflow | scripts/run_parallel.sh 4
 
   fuzz:
     runs-on: ubuntu-24.04
@@ -631,6 +644,7 @@ jobs:
 
     - uses: ./.github/actions/setup-build
       with:
+        ccache: 'true'
         apt-packages: cmake clang nasm
 
     - name: Build vendored libjpeg-turbo
@@ -679,6 +693,7 @@ jobs:
 
     - uses: ./.github/actions/setup-build
       with:
+        ccache: 'true'
         apt-packages: cmake nasm pkg-config
 
     # -DCMAKE_POSITION_INDEPENDENT_CODE=ON: the smoke test below also builds a

@@ -36,10 +36,13 @@ Every one of these has to be run and green, on the affected build system(s) at
 minimum:
 
 ```bash
-make -j8 && make test     # portable build, every tests/src/test_*.c binary
-make format                # clang-format 23 -i; the diff after this must be empty
-make debug && make test    # -fsanitize=address,undefined rebuild, then rerun the suite
+make -j8 && make test -j8      # portable build, every tests/src/test_*.c binary
+make format                    # clang-format 23 -i; the diff after this must be empty
+make debug && make test -j8    # -fsanitize=address,undefined rebuild, then rerun the suite
 ```
+
+`make test -j8` runs the tests side by side, each test's output in `test_<name>.log`,
+printed when it fails; without `-j` they run one at a time.
 
 `make format` requires clang-format **23** and refuses to run with any other major
 version, because a different major formats the same code differently. Install the
@@ -55,7 +58,7 @@ Release build and `ctest`:
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
-ctest --test-dir build --output-on-failure
+ctest --test-dir build -j8 --output-on-failure
 ```
 
 CI runs a wider matrix than any of the above on its own (multiple platforms and

@@ -185,13 +185,25 @@ test_abi_short_enums: $(TEST_DIR)/test_abi.c $(GENERATED_DIR)/phash_version.h
 test_%: $(TEST_DIR)/test_%.c $(LIB_NAME)
 	$(CC) $(CFLAGS) $< $(LIB_NAME) -o $@ $(LDFLAGS)
 
-# Run all tests
-test: $(TEST_BINS)
-	@for test in $(TEST_BINS); do \
-		echo "Running $$test..."; \
-		./$$test || exit 1; \
-	done
+# Run all tests. Each test is its own target, so `make test -j8` runs them side by side:
+# they share no files (each names its own scratch files) and none depends on timing.
+# A test's output goes to <test>.log and is printed when it fails; make starts no new
+# test after a failure.
+TEST_RUNS = $(TEST_BINS:%=run-%)
+
+test: $(TEST_RUNS)
 	@echo "ALL TESTS PASSED"
+
+# Not .PHONY: make skips pattern rules for phony targets. No file named run-* is ever
+# made, so the recipe runs every time anyway.
+run-%: %
+	@if ./$* >$*.log 2>&1; then \
+		echo "PASS $*"; \
+	else \
+		cat $*.log; \
+		echo "FAIL $*"; \
+		exit 1; \
+	fi
 
 # Coverage build. Recursive for the same reason as `debug` above.
 # Note this inherits PHASH_ENABLE_THREADS=1, so the threaded batch path in

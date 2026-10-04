@@ -46,7 +46,10 @@ capture_run() {
     # `ctest` on their own. Warn instead of aborting so one flaky/environment-gapped
     # test (e.g. a golden-hash fixture missing for this decoder combo) doesn't blank
     # out the whole report.
-    (cd "$build_dir" && ctest --output-on-failure) || echo "WARNING: ctest reported failures in the '$label' run -- see above" >&2
+    # All cores unless CTEST_PARALLEL_LEVEL says otherwise: the tests share no files,
+    # and libgcov locks each .gcda while it merges counts into it.
+    (cd "$build_dir" && CTEST_PARALLEL_LEVEL="${CTEST_PARALLEL_LEVEL:-$(getconf _NPROCESSORS_ONLN)}" \
+        ctest --output-on-failure) || echo "WARNING: ctest reported failures in the '$label' run -- see above" >&2
 
     lcov --capture --directory "$build_dir" --output-file "$OUT_DIR/$label.info" "${LCOV_FLAGS[@]}"
     lcov --remove "$OUT_DIR/$label.info" '/usr/*' '*/vendor/*' '*/tests/*' \

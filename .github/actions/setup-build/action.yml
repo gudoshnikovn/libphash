@@ -27,6 +27,15 @@ inputs:
   brew-packages:
     description: Space-separated Homebrew formulae to install on macOS. Empty skips Homebrew.
     default: cmake
+  ccache:
+    description: >-
+      'true' compiles through ccache with a cache kept between runs (Linux only).
+      For jobs that build the vendored decoders or an instrumented tree, where the same
+      sources compile identically run after run.
+    default: 'false'
+  ccache-key:
+    description: Distinguishes the cache of each matrix leg of a job (the leg's name).
+    default: ''
 
 runs:
   using: composite
@@ -38,10 +47,10 @@ runs:
       run: git submodule update --init --recursive --depth 1
 
     - name: Install dependencies (Linux)
-      if: runner.os == 'Linux' && inputs.apt-packages != ''
+      if: runner.os == 'Linux' && (inputs.apt-packages != '' || inputs.ccache == 'true')
       shell: bash
       env:
-        APT_PACKAGES: ${{ inputs.apt-packages }}
+        APT_PACKAGES: ${{ inputs.apt-packages }}${{ inputs.ccache == 'true' && ' ccache' || '' }}
         APT_ARCHITECTURES: ${{ inputs.apt-architectures }}
       run: |
         for arch in $APT_ARCHITECTURES; do
@@ -59,3 +68,28 @@ runs:
         BREW_PACKAGES: ${{ inputs.brew-packages }}
       # shellcheck disable=SC2086
       run: brew install $BREW_PACKAGES
+
+    # ccache returns an object only for the same preprocessed source, compiler and flags,
+    # so a hit is the object a compile would have produced. Each run saves its own entry
+    # (the key ends in the commit) and restores the newest one of its job and leg; GitHub
+    # evicts the oldest entries past the repository's cache quota.
+    - name: Restore ccache
+      if: runner.os == 'Linux' && inputs.ccache == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.temp }}/ccache
+        key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ inputs.ccache-key }}-${{ github.sha }}
+        restore-keys: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ inputs.ccache-key }}-
+
+    - name: Compile through ccache
+      if: runner.os == 'Linux' && inputs.ccache == 'true'
+      shell: bash
+      # CMake takes its compiler launcher from these variables on first configure, in
+      # the vendored decoders' builds as well as the library's.
+      run: |
+        {
+          echo "CCACHE_DIR=$RUNNER_TEMP/ccache"
+          echo "CCACHE_MAXSIZE=500M"
+          echo "CMAKE_C_COMPILER_LAUNCHER=ccache"
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=ccache"
+        } >> "$GITHUB_ENV"
