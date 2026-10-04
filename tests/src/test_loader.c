@@ -124,7 +124,8 @@ void test_memory_loading() {
     long size = ftell(f);
     fseek(f, 0, SEEK_SET);
     unsigned char *buf = malloc(size);
-    fread(buf, 1, size, f);
+    ASSERT_PTR_NOT_NULL(buf);
+    ASSERT_MSG(fread(buf, 1, (size_t)size, f) == (size_t)size, "short read of photo.png");
     fclose(f);
 
     // Load from memory
