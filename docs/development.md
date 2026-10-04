@@ -557,7 +557,17 @@ commit is the base depends on the event:
 | manual run (*Run workflow*) | the `bench_base_ref` input — a branch, tag or commit, `main` by default |
 
 A push that creates the branch has no previous tip, and the job says so in a notice
-instead of comparing. GitHub offers the manual run only for workflows declared on the
+instead of comparing.
+
+The report lists every metric either side measured. Two rules flag a regression: one
+metric more than 10% slower, or the median change over all metrics both sides have more
+than 5% slower — an even slowdown of the whole pipeline that keeps each metric under 10%.
+The median is unmoved by one noisy metric, so its threshold can sit lower. A metric on
+one side only is shown as *new* or *gone* and is not a regression. The *spread* column
+is how far apart the runs of the noisier side landed, `(max - min) / median` of their
+`min_ms`; a flag on a metric with a spread near the change is worth a rerun before a
+search for the cause. When the two sides report different `schema` numbers the report
+says so and compares nothing. GitHub offers the manual run only for workflows declared on the
 default branch.
 
 Locally, build both versions and pass the two binaries, the one under test first:

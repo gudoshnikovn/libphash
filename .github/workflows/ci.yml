@@ -442,13 +442,16 @@ jobs:
     - name: Run Benchmarks
       if: steps.base.outputs.ref != ''
       run: |
-        echo "### Performance Benchmark" > benchmark_report.md
-        echo '```text' >> benchmark_report.md
-        ./pr/build/bench_hash smoke >> benchmark_report.md
-        echo '```' >> benchmark_report.md
-        echo >> benchmark_report.md
-        # 10% threshold: the harness's measured noise floor with min_ms is under
-        # 7% on an idle machine (see docs/development.md). STRICT=0: warning-only.
+        {
+          echo "### Performance Benchmark"
+          echo '```text'
+          ./pr/build/bench_hash smoke
+          echo '```'
+          echo
+        } > benchmark_report.md
+        # Thresholds: the script's defaults, 10% per metric and 5% on the median
+        # change; docs/development.md has the noise floor they sit above.
+        # STRICT=0: warning-only.
         # A base tree that does not build bench_hash has nothing to compare against.
         if [ -x base/build/bench_hash ]; then
           bash pr/scripts/bench_regression_gate.sh \
@@ -457,7 +460,7 @@ jobs:
         else
           echo "::notice::The base commit does not build bench_hash; no regression comparison."
         fi
-        cat benchmark_report.md >> $GITHUB_STEP_SUMMARY
+        cat benchmark_report.md >> "$GITHUB_STEP_SUMMARY"
 
     # Downloadable alongside the $GITHUB_STEP_SUMMARY copy above -- the summary
     # disappears once you're not looking at this specific run's page, an artifact
