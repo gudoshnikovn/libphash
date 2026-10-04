@@ -11,9 +11,9 @@
 #   AGG_THRESHOLD_PCT  aggregate threshold, default 5 (see below)
 #   STRICT=1           exit 1 when the report flags a regression
 #
-# Requires jq. Runs each binary's `--json smoke` <runs> times (default 5) and
-# compares the *median across runs* of each metric's *min_ms* (fastest single
-# iteration within a run).
+# Requires jq. Runs each binary's `--json smoke` <runs> times (default 5),
+# alternating between the two, and compares the *median across runs* of each
+# metric's *min_ms* (fastest single iteration within a run).
 #
 # Why min_ms and not avg_ms: avg_ms is a mean over the whole iteration loop, so
 # one scheduler preemption inside a run shifts it by tens of percent, and a
@@ -53,14 +53,24 @@ command -v jq >/dev/null || {
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
-collect_runs() {
+# The two binaries take turns, one run each, so both sample the same stretches of
+# time: a drift in the machine's speed while the gate runs (thermal throttling, a
+# neighbour on a shared runner, a clock settling) lands on both sides instead of
+# reading as a difference between them, which no number of runs would average out.
+run_smoke() {
     local bin="$1" out="$2"
-    : >"$out"
+    if ! "$bin" --json smoke >>"$out"; then
+        echo "bench_regression_gate: '$bin --json smoke' failed" >&2
+        exit 1
+    fi
+}
+
+collect_runs() {
+    : >"$WORK_DIR/pr_runs.jsonl"
+    : >"$WORK_DIR/base_runs.jsonl"
     for _ in $(seq 1 "$RUNS"); do
-        if ! "$bin" --json smoke >>"$out"; then
-            echo "bench_regression_gate: '$bin --json smoke' failed" >&2
-            exit 1
-        fi
+        run_smoke "$PR_BIN" "$WORK_DIR/pr_runs.jsonl"
+        run_smoke "$BASE_BIN" "$WORK_DIR/base_runs.jsonl"
     done
 }
 
@@ -91,8 +101,7 @@ def stats: (median) as $m |
 }
 '
 
-collect_runs "$PR_BIN" "$WORK_DIR/pr_runs.jsonl"
-collect_runs "$BASE_BIN" "$WORK_DIR/base_runs.jsonl"
+collect_runs
 
 jq -s "$REDUCE_JQ" "$WORK_DIR/pr_runs.jsonl" >"$WORK_DIR/pr.json"
 jq -s "$REDUCE_JQ" "$WORK_DIR/base_runs.jsonl" >"$WORK_DIR/base.json"

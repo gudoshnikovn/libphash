@@ -567,7 +567,17 @@ one side only is shown as *new* or *gone* and is not a regression. The *spread* 
 is how far apart the runs of the noisier side landed, `(max - min) / median` of their
 `min_ms`; a flag on a metric with a spread near the change is worth a rerun before a
 search for the cause. When the two sides report different `schema` numbers the report
-says so and compares nothing. GitHub offers the manual run only for workflows declared on the
+says so and compares nothing.
+
+The two binaries take turns, one run each, rather than all runs of one and then all of
+the other. A change in the machine's speed while the gate runs then falls on both sides.
+In blocks it would read as a difference in the code, and more runs would not average it
+out. Measured on arm64 macOS, a binary against itself, with every core loaded from the
+third second of each gate run, 10 gate runs per order: in blocks, the worst metric of
+every run was 13–31% off, always toward the side that ran under load, and the median
+change kept the same sign in all 10; taking turns, the worst metric stayed within 2.7%
+in 8 runs of 10 (15% and 18% in the other two) and the median change within 0.1%, its
+sign varying. GitHub offers the manual run only for workflows declared on the
 default branch.
 
 Locally, build both versions and pass the two binaries, the one under test first:
