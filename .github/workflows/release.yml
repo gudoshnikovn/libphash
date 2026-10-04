@@ -52,7 +52,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: build (${{ matrix.platform }})
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         submodules: recursive
 
@@ -74,7 +74,10 @@ jobs:
 
     - name: Install NASM (Windows)
       if: runner.os == 'Windows'
-      uses: ilammy/setup-nasm@v1
+      shell: bash
+      run: |
+        choco install nasm --no-progress -y
+        echo "C:\\Program Files\\NASM" >> "$GITHUB_PATH"
 
     # Same as ci.yml: libjpeg-turbo doesn't like add_subdirectory, so its
     # submodule is configured+built standalone; scripts/package_release.sh's
@@ -95,7 +98,7 @@ jobs:
       run: scripts/package_release.sh ${{ matrix.platform }} dist both
 
     - name: Upload archives
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: dist-${{ matrix.platform }}
         path: dist/*
@@ -121,10 +124,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: smoke (${{ matrix.platform }})
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Download archives
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: dist-${{ matrix.platform }}
         path: dist
@@ -152,7 +155,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - name: Download all archives
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         pattern: dist-*
         path: dist
@@ -165,7 +168,7 @@ jobs:
         cat SHA256SUMS.txt
 
     - name: Upload combined artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: dist-all
         path: |
@@ -180,10 +183,10 @@ jobs:
     needs: checksums
     runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Download all archives
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: dist-all
         path: dist

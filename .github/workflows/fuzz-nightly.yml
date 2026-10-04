@@ -21,7 +21,7 @@ jobs:
       ASAN_OPTIONS: halt_on_error=1
       UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
       with:
         submodules: recursive
 
@@ -44,7 +44,7 @@ jobs:
     # Same cache lineage as the fuzz job in ci.yml -- both read and write
     # fuzz-corpus-*, so a corpus entry either job finds benefits the other.
     - name: Restore fuzz corpus cache
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: tests/fuzz/corpus
         key: fuzz-corpus-${{ github.run_id }}
@@ -59,7 +59,7 @@ jobs:
 
     - name: Upload crash artifacts
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: fuzz-nightly-crashes
         path: /tmp/fuzz-artifacts/

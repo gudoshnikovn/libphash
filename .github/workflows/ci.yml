@@ -44,9 +44,9 @@ jobs:
   format-check:
     runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version: '3.x'
 
@@ -111,7 +111,7 @@ jobs:
     env:
       CC: ${{ matrix.cc }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - uses: ./.github/actions/setup-build
       with:
@@ -150,7 +150,7 @@ jobs:
     env:
       CC: ${{ matrix.cc }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - uses: ./.github/actions/setup-build
       with:
@@ -191,7 +191,7 @@ jobs:
   coverage-cmake:
     runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - uses: ./.github/actions/setup-build
       with:
@@ -211,7 +211,7 @@ jobs:
       run: python3 scripts/check_coverage.py docs/coverage/cmake/native.info
 
     - name: Upload coverage report
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: coverage-cmake-html
         path: docs/coverage/cmake/html/
@@ -226,7 +226,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: minimal-build (${{ matrix.os }})
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     # Nothing to install: cmake ships on all three runner images. The shared action
     # still fetches the submodules, although this stb-only build does not read vendor/.
@@ -278,7 +278,7 @@ jobs:
     env:
       CC: ${{ matrix.cc }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - uses: ./.github/actions/setup-build
       with:
@@ -330,7 +330,7 @@ jobs:
   build-and-test-32bit:
     runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - name: Install 32-bit toolchain and zlib
       uses: ./.github/actions/setup-build
@@ -363,7 +363,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - name: Checkout head
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         path: pr
 
@@ -383,7 +383,7 @@ jobs:
 
     - name: Checkout base commit
       if: steps.base.outputs.sha != ''
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         ref: ${{ steps.base.outputs.sha }}
         path: base
@@ -447,7 +447,7 @@ jobs:
     # survives to be diffed against a later run's or pulled into a script.
     - name: Upload benchmark report
       if: steps.base.outputs.sha != ''
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: benchmark-report
         path: benchmark_report.md
@@ -455,10 +455,14 @@ jobs:
 
     - name: Post Performance Report
       if: github.event_name == 'pull_request' && steps.base.outputs.sha != ''
-      uses: thollander/actions-comment-pull-request@v2
-      with:
-        filePath: benchmark_report.md
-        comment_tag: performance_report
+      # gh rather than a marketplace action: no third-party JavaScript runtime to
+      # keep current. The bot's previous report is edited in place, not stacked.
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: >
+        gh pr comment ${{ github.event.pull_request.number }}
+        --repo ${{ github.repository }} --body-file benchmark_report.md
+        --edit-last --create-if-none
 
   # LeakSanitizer is part of ASan by default on Linux (not on macOS, where it
   # doesn't exist); detect_leaks=1 states it explicitly instead of relying on an
@@ -470,7 +474,7 @@ jobs:
       ASAN_OPTIONS: halt_on_error=1:detect_leaks=1
       UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - uses: ./.github/actions/setup-build
       with:
@@ -532,7 +536,7 @@ jobs:
       CC: clang
       TSAN_OPTIONS: halt_on_error=1
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - uses: ./.github/actions/setup-build
       with:
@@ -568,7 +572,7 @@ jobs:
   valgrind:
     runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - uses: ./.github/actions/setup-build
       with:
@@ -599,7 +603,7 @@ jobs:
       ASAN_OPTIONS: halt_on_error=1
       UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - uses: ./.github/actions/setup-build
       with:
@@ -620,7 +624,7 @@ jobs:
     # most recently saved cache on the restore side -- the corpus only ever grows,
     # so each run picks up where the last one left off instead of starting from zero.
     - name: Restore fuzz corpus cache
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: tests/fuzz/corpus
         key: fuzz-corpus-${{ github.run_id }}
@@ -639,7 +643,7 @@ jobs:
 
     - name: Upload crash artifacts
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: fuzz-crashes
         path: /tmp/fuzz-artifacts/
@@ -647,7 +651,7 @@ jobs:
   install-smoke-test:
     runs-on: ubuntu-24.04
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     - uses: ./.github/actions/setup-build
       with:
