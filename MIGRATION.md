@@ -359,13 +359,15 @@ this is the "what do I call now" summary.
 ## `PHASH_USE_TURBOJPEG` is `PHASH_USE_LIBJPEG_TURBO`
 
 The CMake option that selects the native JPEG decoder is named after the codec,
-libjpeg-turbo. Configuring with the 1.x name stops with an error that gives the new one:
+libjpeg-turbo. CMake reports the 1.x name as an unused variable and otherwise ignores
+it, so `-DPHASH_USE_TURBOJPEG=OFF` builds *with* libjpeg-turbo; pass the new name:
 
 ```bash
 cmake -S . -B build -DPHASH_USE_LIBJPEG_TURBO=OFF   # 1.x: -DPHASH_USE_TURBOJPEG=OFF
 ```
 
-In an existing build directory, also drop the old cache entry with `-UPHASH_USE_TURBOJPEG`.
+In an existing build directory, the old cache entry can be dropped with
+`-UPHASH_USE_TURBOJPEG`.
 
 ## Shared library consumers must relink
 
@@ -406,6 +408,6 @@ that list tracked by hand.
   image; in 2.0 such a buffer is `PH_ERR_UNSUPPORTED_FORMAT`. It exists only for testing:
   `-DPHASH_ENABLE_MOCK_BACKEND=ON`, never in a shipped build.
 - **The spng PNG backend is removed.** A 1.x build configured with
-  `-DPHASH_USE_SPNG=ON -DPHASH_USE_LIBPNG=OFF` decoded PNG with spng; in 2.0
-  `-DPHASH_USE_SPNG=ON` stops the configure step. Drop the flag: the default build decodes
+  `-DPHASH_USE_SPNG=ON -DPHASH_USE_LIBPNG=OFF` decoded PNG with spng; in 2.0 CMake
+  reports `PHASH_USE_SPNG` as an unused variable. Drop the flag: the default build decodes
   PNG with libpng (`-DPHASH_USE_LIBPNG=OFF` leaves it to `stb_image`).
