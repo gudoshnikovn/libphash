@@ -15,6 +15,9 @@
 
 #include "libphash.h"
 
+/* Internal: ph_drop_gray_cache(), see benchmark_hashing(). */
+#include "image/image.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -76,6 +79,10 @@ static void closedir(DIR *d) {
 #else
 #    include <dirent.h>
 #endif
+
+/* Version of what the JSON metrics measure; see main(). 2: every hash row includes the
+ * grayscale conversion and the area-sum grid, recomputed for each iteration. */
+#define PH_BENCH_SCHEMA 2
 
 /* --- Global State --- */
 int g_json_output = 0;
@@ -194,28 +201,89 @@ static void ph_bench_print_row(const char *label, const ph_bench_stats *st, cons
 }
 
 /* --- Benchmark Data Types --- */
-typedef ph_error_t (*ph_hash_func_t)(ph_context_t *, uint64_t *);
+typedef ph_error_t (*ph_bench_hash_fn)(ph_context_t *);
 
 struct ph_hash_algo {
     const char *label;
-    ph_hash_func_t func;
+    ph_bench_hash_fn func;
+    int iter_divisor; /* digest algorithms an order of magnitude slower run 1/10 of the loop */
 };
 
-ph_error_t ph_compute_whash_fast_wrapper(ph_context_t *ctx, uint64_t *out_hash) {
-    ph_context_set_whash_mode(ctx, PH_WHASH_FAST);
-    return ph_compute_whash(ctx, out_hash);
+static ph_error_t bench_ahash(ph_context_t *ctx) {
+    uint64_t h;
+    return ph_compute_ahash(ctx, &h);
 }
 
-ph_error_t ph_compute_whash_full_wrapper(ph_context_t *ctx, uint64_t *out_hash) {
+static ph_error_t bench_dhash(ph_context_t *ctx) {
+    uint64_t h;
+    return ph_compute_dhash(ctx, &h);
+}
+
+static ph_error_t bench_phash(ph_context_t *ctx) {
+    uint64_t h;
+    return ph_compute_phash(ctx, &h);
+}
+
+static ph_error_t bench_whash_fast(ph_context_t *ctx) {
+    uint64_t h;
+    ph_context_set_whash_mode(ctx, PH_WHASH_FAST);
+    return ph_compute_whash(ctx, &h);
+}
+
+static ph_error_t bench_whash_full(ph_context_t *ctx) {
+    uint64_t h;
     ph_context_set_whash_mode(ctx, PH_WHASH_FULL);
-    return ph_compute_whash(ctx, out_hash);
+    return ph_compute_whash(ctx, &h);
+}
+
+static ph_error_t bench_bmh(ph_context_t *ctx) {
+    ph_digest_t d;
+    return ph_compute_bmh(ctx, &d);
+}
+
+static ph_error_t bench_color_moments(ph_context_t *ctx) {
+    ph_digest_t d;
+    return ph_compute_color_moments_hash(ctx, &d);
+}
+
+static ph_error_t bench_color_hash(ph_context_t *ctx) {
+    ph_digest_t d;
+    return ph_compute_color_hash(ctx, &d);
+}
+
+static ph_error_t bench_mhash(ph_context_t *ctx) {
+    ph_digest_t d;
+    return ph_compute_mhash(ctx, &d);
+}
+
+static ph_error_t bench_radial(ph_context_t *ctx) {
+    ph_digest_t d;
+    return ph_compute_radial_hash(ctx, &d);
 }
 
 /* --- Benchmark Functions --- */
+
+/* Each hashing iteration measures the first hash computed on a loaded image, which is
+ * what a caller who loads an image and hashes it pays: the grayscale conversion and the
+ * shared area-sum grid are part of the cost. The context caches both until the image
+ * changes, so they are dropped before every iteration, outside the timed region --
+ * otherwise every iteration after the first would time only the work left once they
+ * exist (for aHash, assembling 8x8 from a cached 32x32 grid: under a microsecond). */
 void benchmark_hashing(ph_context_t *ctx, int iterations) {
-    uint64_t hash;
-    ph_digest_t digest;
-    double start;
+    static const struct ph_hash_algo algos[] = {
+        {"aHash", bench_ahash, 1},
+        {"dHash", bench_dhash, 1},
+        {"pHash", bench_phash, 1},
+        {"wHash (Fast)", bench_whash_fast, 1},
+        {"wHash (Full)", bench_whash_full, 1},
+        {"BMH", bench_bmh, 1},
+        {"ColorHash", bench_color_hash, 1},
+        {"ColorMoments", bench_color_moments, 1},
+        {"mHash", bench_mhash, 10},
+        {"Radial", bench_radial, 10},
+    };
+    /* Taken from the full count for every algorithm: a cheap warmup on the slowest ones
+     * is the wrong place to save time. */
     int warmup = PH_BENCH_WARMUP(iterations);
     ph_bench_samples samples;
 
@@ -225,7 +293,9 @@ void benchmark_hashing(ph_context_t *ctx, int iterations) {
     }
 
     if (!g_json_output) {
-        printf("\n--- Hashing Performance (%d iterations, %d warmup) ---\n", iterations, warmup);
+        printf("\n--- Hashing: first hash on a loaded image, caches dropped each time "
+               "(%d iterations, %d warmup) ---\n",
+               iterations, warmup);
         printf("%-15s | %-12s | %-12s | %-12s | %-12s\n", "Algorithm", "Total Time", "Min (ms/op)",
                "Median", "p90");
         printf("----------------|--------------|--------------|--------------|--------------\n");
@@ -233,133 +303,44 @@ void benchmark_hashing(ph_context_t *ctx, int iterations) {
         printf("\"hashing\": [");
     }
 
-    struct ph_hash_algo uint64_algos[] = {{"aHash", ph_compute_ahash},
-                                          {"dHash", ph_compute_dhash},
-                                          {"pHash", ph_compute_phash},
-                                          {"wHash (Fast)", ph_compute_whash_fast_wrapper},
-                                          {"wHash (Full)", ph_compute_whash_full_wrapper},
-                                          {NULL, NULL}};
-
-    for (int i = 0; uint64_algos[i].label; i++) {
+    for (size_t i = 0; i < sizeof(algos) / sizeof(algos[0]); i++) {
+        int iters = iterations / algos[i].iter_divisor;
         ph_bench_stats st;
+
+        if (iters < 1) {
+            iters = 1;
+        }
 
         for (int j = 0; j < warmup; j++) {
-            uint64_algos[i].func(ctx, &hash);
+            ph_drop_gray_cache(ctx);
+            if (algos[i].func(ctx) != PH_SUCCESS) {
+                /* ignore for benchmark */
+            }
         }
 
         samples.n = 0;
-        for (int j = 0; j < iterations; j++) {
+        for (int j = 0; j < iters; j++) {
+            double start;
+            ph_drop_gray_cache(ctx);
             start = get_time_sec();
-            uint64_algos[i].func(ctx, &hash);
+            if (algos[i].func(ctx) != PH_SUCCESS) {
+                /* ignore for benchmark */
+            }
             ph_bench_add(&samples, get_time_sec() - start);
         }
         st = ph_bench_summarize(&samples);
 
         if (!g_json_output) {
-            ph_bench_print_row(uint64_algos[i].label, &st, "");
+            ph_bench_print_row(algos[i].label, &st,
+                               algos[i].iter_divisor > 1 ? " (1/10 iter)" : "");
         } else {
-            printf("%s{\"name\": \"%s\", ", i == 0 ? "" : ", ", uint64_algos[i].label);
+            printf("%s{\"name\": \"%s\", ", i == 0 ? "" : ", ", algos[i].label);
             ph_bench_print_json_stats(&st);
             printf("}");
         }
     }
-
-    /* Digest-based (mHash, Radial): an order of magnitude or more slower per op, so they
-     * get 1/10 of the iterations. Warmup is still taken from the full count -- a
-     * cheap warmup on the slowest algorithm is the wrong place to save time. */
-    {
-        ph_bench_stats st;
-        for (int i = 0; i < warmup; i++) {
-            if (ph_compute_color_hash(ctx, &digest) != PH_SUCCESS) {
-                /* ignore for benchmark */
-            }
-        }
-        samples.n = 0;
-        for (int i = 0; i < iterations; i++) {
-            start = get_time_sec();
-            if (ph_compute_color_hash(ctx, &digest) != PH_SUCCESS) {
-                /* ignore for benchmark */
-            }
-            ph_bench_add(&samples, get_time_sec() - start);
-        }
-        st = ph_bench_summarize(&samples);
-        if (!g_json_output) {
-            ph_bench_print_row("ColorHash", &st, "");
-        } else {
-            printf(", {\"name\": \"ColorHash\", ");
-            ph_bench_print_json_stats(&st);
-            printf("}");
-        }
-    }
-
-    {
-        int mh_iters = iterations / 10;
-        int mh_warmup;
-        ph_bench_stats st;
-
-        if (mh_iters < 1) {
-            mh_iters = 1;
-        }
-        mh_warmup = PH_BENCH_WARMUP(mh_iters);
-
-        for (int i = 0; i < mh_warmup; i++) {
-            if (ph_compute_mhash(ctx, &digest) != PH_SUCCESS) {
-                /* ignore for benchmark */
-            }
-        }
-
-        samples.n = 0;
-        for (int i = 0; i < mh_iters; i++) {
-            start = get_time_sec();
-            if (ph_compute_mhash(ctx, &digest) != PH_SUCCESS) {
-                /* ignore for benchmark */
-            }
-            ph_bench_add(&samples, get_time_sec() - start);
-        }
-        st = ph_bench_summarize(&samples);
-
-        if (!g_json_output) {
-            ph_bench_print_row("mHash", &st, " (1/10 iter)");
-        } else {
-            printf(", {\"name\": \"mHash\", ");
-            ph_bench_print_json_stats(&st);
-            printf("}");
-        }
-    }
-
-    {
-        int radial_iters = iterations / 10;
-        int radial_warmup;
-        ph_bench_stats st;
-
-        if (radial_iters < 1) {
-            radial_iters = 1;
-        }
-        radial_warmup = PH_BENCH_WARMUP(radial_iters);
-
-        for (int i = 0; i < radial_warmup; i++) {
-            if (ph_compute_radial_hash(ctx, &digest) != PH_SUCCESS) {
-                /* ignore for benchmark */
-            }
-        }
-
-        samples.n = 0;
-        for (int i = 0; i < radial_iters; i++) {
-            start = get_time_sec();
-            if (ph_compute_radial_hash(ctx, &digest) != PH_SUCCESS) {
-                /* ignore for benchmark */
-            }
-            ph_bench_add(&samples, get_time_sec() - start);
-        }
-        st = ph_bench_summarize(&samples);
-
-        if (!g_json_output) {
-            ph_bench_print_row("Radial", &st, " (1/10 iter)");
-        } else {
-            printf(", {\"name\": \"Radial\", ");
-            ph_bench_print_json_stats(&st);
-            printf("}]");
-        }
+    if (g_json_output) {
+        printf("]");
     }
 
     ph_bench_samples_free(&samples);
@@ -432,7 +413,8 @@ void benchmark_directory(const char *path, int grayscale) {
     closedir(dir);
 }
 
-void benchmark_loading(const char *img, int iterations, int grayscale) {
+/* `metric` names the JSON object: "loading_<metric>". */
+void benchmark_loading(const char *metric, const char *img, int iterations, int grayscale) {
     if (!g_json_output) {
         printf("\n--- Loading Performance (%s, %d iterations) ---\n", img, iterations);
         printf("Mode: %s\n", grayscale ? "Grayscale (Fast)" : "RGB (Full)");
@@ -472,7 +454,7 @@ void benchmark_loading(const char *img, int iterations, int grayscale) {
         printf("Total: %.4fs, Min: %.4fms, Median: %.4fms, p90: %.4fms per load\n", st.total_s,
                st.min_ms, st.median_ms, st.p90_ms);
     } else {
-        printf("\"loading_%s\": {\"image\": \"%s\", ", grayscale ? "grayscale" : "rgb", img);
+        printf("\"loading_%s\": {\"image\": \"%s\", ", metric, img);
         ph_bench_print_json_stats(&st);
         printf("}");
     }
@@ -481,16 +463,25 @@ void benchmark_loading(const char *img, int iterations, int grayscale) {
 }
 
 /* --- Main --- */
+
+/* Ends the JSON document. Every exit path goes through here, so a failed run still prints
+ * a valid document: `after_metrics` says whether a metric precedes the closing field. */
+static void ph_bench_json_close(int after_metrics) {
+    if (g_json_output) {
+        printf("%s\"schema\": %d}\n", after_metrics ? ", " : "", PH_BENCH_SCHEMA);
+    }
+}
+
 void print_usage(const char *prog) {
-    printf("Usage: %s [options] [command] [args]\n", prog);
-    printf("Options:\n");
-    printf("  --json                Output results in JSON format\n");
-    printf("Commands:\n");
-    printf("  hash [file] [iters]   Benchmark hashing algorithms for a single image\n");
-    printf("  dir  [path]           Benchmark loading performance for a directory\n");
-    printf("  full [file] [iters]   Benchmark both loading and hashing\n");
-    printf("  load [file] [iters]   Benchmark loading an image\n");
-    printf("  smoke                 Run a standard set of benchmarks for CI\n");
+    fprintf(stderr, "Usage: %s [options] [command] [args]\n", prog);
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  --json                Output results in JSON format\n");
+    fprintf(stderr, "Commands:\n");
+    fprintf(stderr, "  hash [file] [iters]   Benchmark hashing algorithms for a single image\n");
+    fprintf(stderr, "  dir  [path]           Benchmark loading performance for a directory\n");
+    fprintf(stderr, "  full [file] [iters]   Benchmark both loading and hashing\n");
+    fprintf(stderr, "  load [file] [iters]   Benchmark loading an image\n");
+    fprintf(stderr, "  smoke                 Run a standard set of benchmarks for CI\n");
 }
 
 int main(int argc, char **argv) {
@@ -516,13 +507,13 @@ int main(int argc, char **argv) {
 
         ph_context_t *ctx;
         if (ph_create(&ctx) != PH_SUCCESS) {
+            ph_bench_json_close(0);
             return 1;
         }
         if (ph_load_from_file(ctx, img) != PH_SUCCESS) {
-            if (!g_json_output) {
-                fprintf(stderr, "Failed to load %s\n", img);
-            }
+            fprintf(stderr, "Failed to load %s\n", img);
             ph_free(ctx);
+            ph_bench_json_close(0);
             return 1;
         }
         benchmark_hashing(ctx, iters);
@@ -546,6 +537,7 @@ int main(int argc, char **argv) {
 
         ph_context_t *ctx;
         if (ph_create(&ctx) != PH_SUCCESS) {
+            ph_bench_json_close(0);
             return 1;
         }
 
@@ -556,6 +548,7 @@ int main(int argc, char **argv) {
         if (!ph_bench_samples_init(&samples, iters)) {
             fprintf(stderr, "benchmark: out of memory for %d samples\n", iters);
             ph_free(ctx);
+            ph_bench_json_close(0);
             return 1;
         }
 
@@ -589,44 +582,64 @@ int main(int argc, char **argv) {
     } else if (strcmp(cmd, "load") == 0) {
         img = (arg_idx + 1 < argc) ? argv[arg_idx + 1] : TEST_DATA_DIR "/photo.jpeg";
         iters = (arg_idx + 2 < argc) ? atoi(argv[arg_idx + 2]) : 100;
-        benchmark_loading(img, iters, 1);
+        benchmark_loading("grayscale", img, iters, 1);
         if (g_json_output) {
             printf(", ");
         }
-        benchmark_loading(img, iters, 0);
+        benchmark_loading("rgb", img, iters, 0);
     } else if (strcmp(cmd, "smoke") == 0) {
         /* Standard CI smoke test. 200 iterations, not 50: at 50 the whole
          * measurement window for a load metric is ~35ms, short enough that a
          * single OS stall dominates it. See docs/development.md for the
-         * measured noise floor this number was chosen from. */
+         * measured noise floor this number was chosen from.
+         *
+         * One decode metric per format the build decodes natively or through
+         * stb_image (JPEG twice: the grayscale request takes a different decoder
+         * path), then every hash on a loaded JPEG. */
         img = TEST_DATA_DIR "/photo.jpeg";
         iters = 200;
 
-        benchmark_loading(img, iters, 1);
-        if (g_json_output) {
-            printf(", ");
+        ph_context_t *ctx;
+        if (ph_create(&ctx) != PH_SUCCESS) {
+            fprintf(stderr, "smoke: cannot create a context\n");
+            ph_bench_json_close(0);
+            return 1;
         }
-        benchmark_loading(img, iters, 0);
-        if (g_json_output) {
-            printf(", ");
+        if (ph_load_from_file(ctx, img) != PH_SUCCESS) {
+            fprintf(stderr, "smoke: cannot load %s\n", img);
+            ph_free(ctx);
+            ph_bench_json_close(0);
+            return 1;
         }
 
-        ph_context_t *ctx;
-        if (ph_create(&ctx) == PH_SUCCESS && ph_load_from_file(ctx, img) == PH_SUCCESS) {
-            benchmark_hashing(ctx, iters);
-            ph_free(ctx);
+        benchmark_loading("grayscale", img, iters, 1);
+        if (g_json_output) {
+            printf(", ");
         }
+        benchmark_loading("rgb", img, iters, 0);
+        if (g_json_output) {
+            printf(", ");
+        }
+        benchmark_loading("png_rgb", TEST_DATA_DIR "/photo_complex.png", iters, 0);
+        if (g_json_output) {
+            printf(", ");
+        }
+        /* stb_image has no WebP decoder: without libwebp there is nothing to time. */
+        if (ph_can_use_webp()) {
+            benchmark_loading("webp_rgb", TEST_DATA_DIR "/photo.webp", iters, 0);
+            if (g_json_output) {
+                printf(", ");
+            }
+        }
+
+        benchmark_hashing(ctx, iters);
+        ph_free(ctx);
     } else {
         print_usage(argv[0]);
-        if (g_json_output) {
-            printf("}");
-        }
+        ph_bench_json_close(0);
         return 1;
     }
 
-    if (g_json_output) {
-        printf("}\n");
-    }
-
+    ph_bench_json_close(1);
     return 0;
 }

@@ -942,11 +942,23 @@ if(PHASH_BUILD_TESTS)
     endif()
 
     # The benchmark is a measuring tool, not a test: it asserts nothing, so it is built
-    # with the tests (CI's benchmark job runs it) but not registered with ctest.
-    add_executable(bench_hash ${CMAKE_CURRENT_SOURCE_DIR}/tests/src/bench_hash.c)
-    target_link_libraries(bench_hash PRIVATE phash)
+    # with the tests (CI's benchmark job runs it) but not registered with ctest. It drops
+    # the context's grayscale cache through an internal function, so it links like the
+    # tests do.
+    if(PHASH_BUILD_SHARED)
+        add_executable(bench_hash ${CMAKE_CURRENT_SOURCE_DIR}/tests/src/bench_hash.c
+            $<TARGET_OBJECTS:phash>)
+        target_link_libraries(bench_hash PRIVATE
+            $<GENEX_EVAL:$<TARGET_PROPERTY:phash,LINK_LIBRARIES>>)
+        target_include_directories(bench_hash PRIVATE $<TARGET_PROPERTY:phash,INCLUDE_DIRECTORIES>)
+    else()
+        add_executable(bench_hash ${CMAKE_CURRENT_SOURCE_DIR}/tests/src/bench_hash.c)
+        target_link_libraries(bench_hash PRIVATE phash)
+    endif()
     target_compile_options(bench_hash PRIVATE ${PHASH_OWN_COMPILE_OPTIONS})
-    target_include_directories(bench_hash PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/src)
+    target_include_directories(bench_hash PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/src)
     target_compile_definitions(bench_hash PRIVATE
         TEST_DATA_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/data\")
     # Linked against the same instrumented library as the tests, so it takes the same

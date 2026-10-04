@@ -235,7 +235,7 @@ install-test:
 	./scripts/smoke_install.sh shared
 
 clean:
-	rm -rf $(OBJ_DIR) $(GENERATED_DIR) *.a *.o test_* bench_hash build .cache docs/coverage
+	rm -rf $(OBJ_DIR) $(GENERATED_DIR) *.a *.o test_* bench_hash bench_hash.dSYM build .cache docs/coverage
 	find . -name "*.gcda" -delete
 	find . -name "*.gcno" -delete
 	find . -name "*.gcov" -delete

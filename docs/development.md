@@ -488,11 +488,17 @@ nothing, and `make test`/`ctest` do not run it. `make benchmark` builds and runs
 run it directly with:
 
 ```bash
-./bench_hash hash tests/data/photo.jpeg 100    # hashing only, on a loaded image
+./bench_hash hash tests/data/photo.jpeg 100    # every algorithm, on a loaded image
 ./bench_hash load tests/data/photo.jpeg 100    # decode only, grayscale and RGB
 ./bench_hash full tests/data/photo.jpeg 100    # decode + pHash
 ./bench_hash --json smoke                      # fixed CI configuration
 ```
+
+`smoke` times one decode per format — `photo.jpeg` requested as grayscale and as RGB (two
+decoder paths), `photo_complex.png`, and `photo.webp` when the build has libwebp — then
+every algorithm on the loaded `photo.jpeg`. Its JSON carries a `schema` number that says
+what the metrics measure; it changes whenever a metric keeps its name but starts timing
+different work, so two runs are comparable only when their schemas match.
 
 #### Measurement methodology
 
@@ -507,6 +513,11 @@ reporting `min_ms`, `median_ms`, `p90_ms` and `avg_ms`:
   estimate of how fast the code can run with OS noise removed. `median_ms` shows
   the typical case; `p90_ms` shows how noisy the machine was during the run — a
   `p90_ms` far above `median_ms` means the environment, not the code, changed.
+- **A hashing row is the first hash computed on a loaded image**, the cost a caller pays
+  after a load: the grayscale conversion and the area-sum grid shared by aHash, pHash,
+  wHash and BMH are included. The context caches both until the image changes, so the
+  benchmark drops them before every iteration, outside the timed region; timing
+  repeated hashes on one context would measure only the work left once they exist.
 - **`avg_ms` should not be used for comparisons.** It is a mean over the whole
   loop, so a single scheduler preemption shifts it by tens of percent. It is
   kept in the JSON only for schema compatibility with older baselines.
