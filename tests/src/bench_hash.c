@@ -597,8 +597,8 @@ int main(int argc, char **argv) {
     } else if (strcmp(cmd, "smoke") == 0) {
         /* Standard CI smoke test. 200 iterations, not 50: at 50 the whole
          * measurement window for a load metric is ~35ms, short enough that a
-         * single OS stall dominates it. See docs/development.md for the
-         * measured noise floor this number was chosen from.
+         * single OS stall dominates it. docs/development.md has the noise
+         * floor measured with it.
          *
          * One decode metric per format the build decodes natively or through
          * stb_image (JPEG twice: the grayscale request takes a different decoder

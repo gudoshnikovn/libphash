@@ -450,7 +450,7 @@ jobs:
           echo
         } > benchmark_report.md
         # Thresholds: the script's defaults, 10% per metric and 5% on the median
-        # change; docs/development.md has the noise floor they sit above.
+        # change; docs/development.md has the noise floor they are read against.
         # STRICT=0: warning-only.
         # A base tree that does not build bench_hash has nothing to compare against.
         if [ -x base/build/bench_hash ]; then

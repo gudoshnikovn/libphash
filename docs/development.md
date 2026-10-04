@@ -525,24 +525,29 @@ reporting `min_ms`, `median_ms`, `p90_ms` and `avg_ms`:
 
 #### Measured noise floor
 
-The point of the above is that a benchmark number is only useful if its
-run-to-run spread is smaller than the regression it is supposed to detect.
-Measured on an idle arm64 macOS machine by running
-`scripts/bench_regression_gate.sh` with the **same binary as both sides** — a
-comparison whose true answer is 0% for every metric:
+A benchmark number is only useful if its run-to-run spread is smaller than the
+regression it is supposed to detect. The floor is measured by running
+`scripts/bench_regression_gate.sh` with the **same binary on both sides**, a comparison
+whose true answer is 0% for every metric, and reading it against the thresholds the gate
+ships with: 10% for one metric, 5% for the median change over all of them.
 
-| Comparison metric | Gate runs | False regressions at 25% | Max observed deviation |
-|---|---|---|---|
-| `avg_ms`, 50 iterations | 5 | **3 metrics in 1 run** | **45.3%** |
-| `min_ms`, 200 iterations (the gate's configuration) | 7 | 0 | 6.7% (typically under 4%) |
+| Machine | Gate runs | Worst single metric | Flags at 10% | Worst median change |
+|---|---|---|---|---|
+| Apple M3 Pro, macOS, desktop in use (2026-10-04) | 7 | 14.4% (`loading_png_rgb`; ColorHash and wHash Full about 7%, the rest under 3%) | 2 of 91 | 0.25% |
 
-`avg_ms` cannot tell a real regression from runner noise; `min_ms` over 200 iterations
-can.
+This is the only place these numbers are written; the gate script and the CI job refer
+here.
 
-The gate's default threshold is therefore **10%**: comfortably above the
-measured floor, still far below the cost of an accidental extra decode pass.
-The gate runs warning-only (`STRICT=0`) on CI, because a shared runner's floor
-is higher than measured here.
+On a desktop with performance and efficiency cores one metric can land a clock step
+apart between runs, so a lone per-metric flag whose *spread* is as large as its change is
+noise; the median change, unmoved by any one metric, stays far below 5% there. The gate
+compares `min_ms` for the same reason: a mean over the whole loop moves by tens of
+percent when the scheduler preempts one iteration, and a binary compared against itself
+on `avg_ms` shows false regressions of 40% and more.
+
+The thresholds sit far below what the gate exists to catch: an extra decode pass or a
+lost fast path costs far more than 10%, and an even slowdown of the whole pipeline by
+5% is a real one. The gate runs warning-only (`STRICT=0`).
 
 #### Running the gate
 

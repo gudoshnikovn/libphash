@@ -37,9 +37,9 @@ set -euo pipefail
 PR_BIN="$1"
 BASE_BIN="$2"
 RUNS="${3:-5}"
-# Both thresholds sit well above the measured noise floor (docs/development.md)
-# and well below what this gate exists to catch: an accidental extra decode pass
-# or a lost fast path costs far more than 10%.
+# The thresholds and the noise floor they are read against: docs/development.md.
+# Both sit far below what this gate exists to catch: an accidental extra decode
+# pass or a lost fast path costs far more than 10%.
 THRESHOLD_PCT="${4:-10}"
 OUT_MD="${5:-benchmark_regression.md}"
 AGG_THRESHOLD_PCT="${AGG_THRESHOLD_PCT:-5}"
