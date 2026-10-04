@@ -1,0 +1,49 @@
+name: PNG backend benchmark
+
+# A one-off measurement: decode time of the libpng backend against the spng backend
+# on Linux, x86-64 and arm64, from scripts/bench_png_backends.sh. It runs on a push
+# to its own branch only.
+on:
+  push:
+    branches: [ feature/png-backend-benchmark ]
+
+permissions:
+  contents: read
+
+jobs:
+  bench:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ ubuntu-latest, ubuntu-24.04-arm ]
+    runs-on: ${{ matrix.runner }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up build (submodules + dependencies)
+      uses: ./.github/actions/setup-build
+      with:
+        apt-packages: cmake jq zlib1g-dev
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Generate PNG corpus
+      run: |
+        pip install pillow numpy
+        python scripts/gen_png_corpus.py tests/data/photo_large.jpeg corpus
+
+    - name: Run benchmark
+      run: |
+        lscpu | grep -E 'Model name|^CPU\(s\)|Flags' | cut -c1-200 || true
+        bash scripts/bench_png_backends.sh corpus work 7 result.md
+        cat result.md >> "$GITHUB_STEP_SUMMARY"
+
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: png-bench-${{ matrix.runner }}
+        path: |
+          result.md
+          work/raw.tsv
