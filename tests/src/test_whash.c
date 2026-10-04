@@ -8,19 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-void test_haar_1d_unit() {
-    float data[2] = {100.0f, 50.0f};
-    float temp[2];
-    ph_haar_1d_float(data, 2, temp);
-
-    // (100+50)/sqrt(2) ≈ 106.066
-    // (100-50)/sqrt(2) ≈ 35.355
-    ASSERT_FLOAT_EQ(106.066, data[0], 0.01);
-    ASSERT_FLOAT_EQ(35.355, data[1], 0.01);
-
-    PASS("test_haar_1d_unit");
-}
-
 void test_whash_e2e() {
     ph_context_t *ctx = NULL;
     uint64_t hash1, hash2;
@@ -162,52 +149,6 @@ void test_remove_max_haar_ll_on_a_solid_fill() {
     PASS("test_remove_max_haar_ll_on_a_solid_fill");
 }
 
-/* The transform against its definition rather than against one worked example.
- *
- * Two properties settle whether ph_haar_1d_float() is the orthonormal Haar transform it
- * claims to be, and both are checkable without a reference implementation:
- *
- *   - on a step signal the answer is known exactly. Pairs of equal samples give a sum
- *     coefficient of sqrt(2) times the sample and a difference coefficient of zero, so
- *     [1,1,1,1,0,0,0,0] transforms to [sqrt(2), sqrt(2), 0, 0, 0, 0, 0, 0] -- the whole
- *     signal in the low band and nothing in the high one, which is the point of a wavelet;
- *   - orthonormality is exactly energy preservation, so the sum of squares must survive
- *     the transform for *any* input. That single check would catch a wrong scale factor
- *     (1/2 instead of 1/sqrt(2) is the usual one), which the step signal above would not:
- *     a wrong scale still puts zeros in the high band. */
-void test_haar_1d_matches_its_definition() {
-    float step[8] = {1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f};
-    float temp[8];
-    ph_haar_1d_float(step, 8, temp);
-
-    const double root2 = 1.4142135623730951;
-    ASSERT_FLOAT_EQ(root2, step[0], 1e-5);
-    ASSERT_FLOAT_EQ(root2, step[1], 1e-5);
-    for (int i = 2; i < 8; i++) {
-        ASSERT_FLOAT_EQ(0.0, step[i], 1e-5);
-    }
-
-    /* Energy preservation, at every size the cascade actually uses. */
-    for (int n = 2; n <= 64; n *= 2) {
-        float data[64], scratch[64];
-        unsigned seed = 12345u;
-        double before = 0.0;
-        for (int i = 0; i < n; i++) {
-            seed = seed * 1103515245u + 12345u;
-            data[i] = (float)((seed >> 16) & 0xFF) / 255.0f - 0.5f;
-            before += (double)data[i] * data[i];
-        }
-        ph_haar_1d_float(data, n, scratch);
-        double after = 0.0;
-        for (int i = 0; i < n; i++) {
-            after += (double)data[i] * data[i];
-        }
-        ASSERT_FLOAT_EQ(before, after, 1e-5);
-    }
-
-    PASS("test_haar_1d_matches_its_definition");
-}
-
 /* The FULL-mode cascade against an independent calculation of what it should be.
  *
  * After L levels of the orthonormal Haar transform, the LL coefficient at (i,j) is the
@@ -327,8 +268,6 @@ void test_whash_full_ll_band_is_the_block_mean() {
 }
 
 int main() {
-    test_haar_1d_unit();
-    test_haar_1d_matches_its_definition();
     test_whash_full_ll_band_is_the_block_mean();
     test_whash_e2e();
     test_remove_max_haar_ll_subtracts_the_mean();

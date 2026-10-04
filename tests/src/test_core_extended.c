@@ -339,6 +339,34 @@ void test_dimensions_follow_the_loaded_image(void) {
     PASS("test_dimensions_follow_the_loaded_image");
 }
 
+/* ph_set_err_msg() carries decoder messages (libjpeg, libpng, stb) into the context's
+ * buffer. A truncation must not split a UTF-8 character; what was not UTF-8 to begin with
+ * is passed through untouched. */
+static void test_err_msg_truncation_keeps_utf8(void) {
+    char buf[8];
+    /* "ab" + U+4E2D (3 bytes) + U+1F600 (4 bytes): 9 bytes, the buffer keeps 7. */
+    const char *msg = "ab\xE4\xB8\xAD\xF0\x9F\x98\x80";
+    for (size_t cap = 1; cap <= sizeof(buf); cap++) {
+        ph_set_err_msg(buf, cap, msg);
+        size_t n = strlen(buf);
+        /* Allowed cut points: 0, 1, 2 (before U+4E2D), 5 (before U+1F600). */
+        ASSERT_MSG(n == 0 || n == 1 || n == 2 || n == 5,
+                   "cap %zu: kept %zu bytes, splitting a character", cap, n);
+        ASSERT(n + 1 <= cap);
+        ASSERT(memcmp(buf, msg, n) == 0);
+    }
+    /* Not UTF-8 at all (a Latin-1 message): a byte that looks like a lead byte may be
+     * dropped at the cut -- the last byte cannot tell the two encodings apart -- but no
+     * more than that, and what is kept is still the start of the message. */
+    ph_set_err_msg(buf, 5, "a\xE9\xE9\xE9\xE9\xE9");
+    ASSERT_INT_EQ(3, (int)strlen(buf));
+    ASSERT(memcmp(buf, "a\xE9\xE9", 3) == 0);
+    /* A message that fits is copied whole, even one that ends in a lone lead byte. */
+    ph_set_err_msg(buf, sizeof(buf), "ab\xD1");
+    ASSERT_INT_EQ(3, (int)strlen(buf));
+    PASS("test_err_msg_truncation_keeps_utf8");
+}
+
 int main(void) {
     test_dimensions_follow_the_loaded_image();
     test_scratchpad_management();
@@ -347,6 +375,7 @@ int main(void) {
     test_setter_error_contract();
     test_gamma_nan_cannot_corrupt_hash();
     test_error_handling();
+    test_err_msg_truncation_keeps_utf8();
     printf("\nAll extended core tests passed.\n");
     return 0;
 }

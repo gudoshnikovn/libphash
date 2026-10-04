@@ -391,23 +391,24 @@ static void test_dct1_rejects_more_coefficients_than_it_has(void) {
 static void test_haar_is_orthonormal(void) {
     /* An orthonormal transform preserves energy. For the normalisation used here --
      * both the sum and the difference divided by sqrt(2) -- this holds exactly:
-     * ((a+b)^2 + (a-b)^2) / 2 == a^2 + b^2. */
-    float data[16], temp[16];
-    double before = 0.0, after = 0.0;
-
-    uint32_t state = 0x12345678u;
-    for (int i = 0; i < 16; i++) {
-        state = state * 1664525u + 1013904223u;
-        data[i] = (float)((state >> 24) / 255.0);
-        before += (double)data[i] * data[i];
+     * ((a+b)^2 + (a-b)^2) / 2 == a^2 + b^2. The check catches a wrong scale factor
+     * (1/2 instead of 1/sqrt(2) is the usual one), which the step signal below would
+     * not: a wrong scale still puts zeros in the high band. Every size the cascade
+     * uses. */
+    ph_test_rng_t rng = ph_test_rng(0x12345678u);
+    for (int n = 2; n <= 64; n *= 2) {
+        float data[64], temp[64];
+        double before = 0.0, after = 0.0;
+        for (int i = 0; i < n; i++) {
+            data[i] = (float)(ph_test_rng_byte(&rng) / 255.0);
+            before += (double)data[i] * data[i];
+        }
+        ph_haar_1d_float(data, n, temp);
+        for (int i = 0; i < n; i++) {
+            after += (double)data[i] * data[i];
+        }
+        assert_close(after, before, 1e-4, "Haar energy preservation");
     }
-
-    ph_haar_1d_float(data, 16, temp);
-    for (int i = 0; i < 16; i++) {
-        after += (double)data[i] * data[i];
-    }
-
-    assert_close(after, before, 1e-4, "Haar energy preservation");
     printf("test_haar_is_orthonormal: PASSED\n");
 }
 
@@ -427,6 +428,12 @@ static void test_haar_on_a_step_signal(void) {
     for (int i = 4; i < 8; i++) {
         assert_close(data[i], 0.0, 1e-6, "Haar step: detail within a constant pair");
     }
+
+    /* A pair that differs: the detail is the difference, first minus second, scaled. */
+    float pair[2] = {100.0f, 50.0f};
+    ph_haar_1d_float(pair, 2, temp);
+    assert_close(pair[0], 150.0 * s, 1e-4, "Haar pair: sum");
+    assert_close(pair[1], 50.0 * s, 1e-4, "Haar pair: difference, first minus second");
 
     printf("test_haar_on_a_step_signal: PASSED\n");
 }
