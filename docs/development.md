@@ -54,6 +54,7 @@ sync when you add or flip a switch.**
 | libFuzzer harnesses | `PHASH_BUILD_FUZZERS=OFF` | *n/a* | requires Clang |
 | Test-only mock decoder | `PHASH_ENABLE_MOCK_BACKEND=OFF` | `PHASH_ENABLE_MOCK_BACKEND=0` | must never be on in a shipped build |
 | Strict dependency handling | `PHASH_STRICT_DEPS=OFF` | *n/a* | |
+| Warnings as errors (own code only) | `PHASH_WARNINGS_AS_ERRORS=OFF` | *n/a* | for the `strict-warnings` CI job; never reaches the vendored decoders |
 | Coverage instrumentation | `PHASH_COVERAGE=OFF` | `PHASH_COVERAGE=0` | same flag name, independent implementations — see below for why one build alone isn't enough |
 
 **Architecture flags follow the target, not the host.** Both build systems read the
@@ -321,6 +322,7 @@ and on any pull request targeting either:
 |---|---|
 | `format-check` | `scripts/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`; `scripts/check_docs_coverage.sh`; `scripts/check_final_state_voice.sh`, which fails on tracker ids, paths into local planning notes and release-cycle wording (a feature "since" a version) in tracked text; and `shellcheck --severity=warning` over `scripts/*.sh`. Fast, no build, catches these before the slower jobs run. |
 | `build-and-test` | Full vendored build (libjpeg-turbo + libpng + libwebp + zlib-ng) across linux-x86_64 (gcc, clang), linux-arm64, macos-arm64. `PHASH_STRICT_DEPS=ON`, so a decoder silently falling back to stb_image is a hard configure failure, not a quiet pass. |
+| `strict-warnings` | The full vendored build with `PHASH_WARNINGS_AS_ERRORS=ON` (gcc, clang): any warning in libphash's own sources, tests or benchmark fails it. The only job with `-Werror`, so a newer compiler's new warning never breaks a build from source. |
 | `coverage-cmake` | `scripts/coverage_cmake.sh` — lcov report of the vendored decoder build; published as a downloadable artifact. |
 | `minimal-build` | Zero-dependency build (every `PHASH_USE_*` off, stb_image only) on ubuntu-latest, macos-latest, windows-latest. |
 | `c-standard-matrix` | Full test suite under `-DCMAKE_C_STANDARD=11/17/23`, gcc+clang, Linux+macOS (no Windows — see the Toolchains section above for why). |

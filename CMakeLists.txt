@@ -162,6 +162,12 @@ option(PHASH_ENABLE_THREADS "Let ph_hash_files()/ph_hash_buffers() spawn a pool 
 # CMake build instead, so a Release-equivalent config with the vendored decoders on
 # can be measured; scripts/coverage_cmake.sh drives it.
 option(PHASH_COVERAGE "Instrument phash and its tests with --coverage (gcov/lcov); see scripts/coverage_cmake.sh" OFF)
+# Warnings as errors on this project's own targets (the library, tests, fuzzer and
+# benchmark), never on the vendored decoders. For CI's strict-warnings job: a build from
+# source must not break because a newer compiler has a new warning, so it stays off by
+# default.
+option(PHASH_WARNINGS_AS_ERRORS "Treat warnings in libphash's own sources as errors (CI)" OFF)
+mark_as_advanced(PHASH_WARNINGS_AS_ERRORS)
 
 if(PHASH_IS_TOP_LEVEL)
     include(GNUInstallDirs)
@@ -216,12 +222,18 @@ if(MSVC)
     # multi-byte lead byte at the end of a // comment can swallow the newline and
     # comment out the next line of code.
     set(PHASH_OWN_COMPILE_OPTIONS /W3 /utf-8)
+    if(PHASH_WARNINGS_AS_ERRORS)
+        list(APPEND PHASH_OWN_COMPILE_OPTIONS /WX)
+    endif()
 else()
     # -fPIC stays directory-wide: the vendored decoders are linked into the same
     # library and need it as much as our own objects do.
     add_compile_options(-fPIC)
 
     set(PHASH_OWN_COMPILE_OPTIONS -Wall -Wextra)
+    if(PHASH_WARNINGS_AS_ERRORS)
+        list(APPEND PHASH_OWN_COMPILE_OPTIONS -Werror)
+    endif()
 
     # Floating-point contraction (fusing a*b+c into one FMA with a single rounding) is
     # off, explicitly. Left to the compiler, it depends on things that have nothing to

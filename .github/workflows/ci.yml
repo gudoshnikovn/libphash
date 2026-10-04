@@ -122,6 +122,44 @@ jobs:
     - name: Run Tests
       run: cd build && ctest --output-on-failure
 
+  # Warnings as errors on the project's own code -- library, tests, fuzzer, benchmark --
+  # and never on the vendored decoders (PHASH_WARNINGS_AS_ERRORS). A job of its own
+  # rather than a flag on every build: a build from source must not fail because a newer
+  # compiler warns about something new, so the other builds tolerate warnings and this
+  # is where a new one turns red. Both compilers, since each has warnings the other does
+  # not (GCC's -Wclobbered, for one).
+  strict-warnings:
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    runs-on: ubuntu-latest
+    name: strict-warnings (${{ matrix.cc }})
+    env:
+      CC: ${{ matrix.cc }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: ./.github/actions/setup-build
+      with:
+        apt-packages: cmake nasm${{ matrix.cc == 'clang' && ' clang' || '' }}
+
+    - name: Build vendored libjpeg-turbo
+      run: |
+        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
+        cmake --build vendor/libjpeg-turbo/build --target jpeg-static -j
+
+    - name: Configure CMake (full vendored build, -Werror on libphash's own targets)
+      run: >
+        cmake -B build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
+        -DPHASH_WARNINGS_AS_ERRORS=ON
+
+    - name: Build
+      run: cmake --build build -j
+
+    - name: Run Tests
+      run: cd build && ctest --output-on-failure
+
   # `make coverage` (Makefile) only measures the stb_image-only path -- none
   # of the native decoding code in src/loaders/ (jpeg.c and webp.c compile to nothing
   # there, and png_libpng.c is not built) exists in that binary. This job runs
