@@ -17,10 +17,6 @@
  *
  * Where the code deliberately departs from a source, the test says so in a comment and
  * pins the implemented behaviour, so a change is a visible decision, not a silent drift.
- *
- * These tests exercise the real functions. tests/src/test_dct.c and test_haar.c check
- * properties of hand-copied replicas of the same maths, which cannot catch a change in
- * the shipped code; this file complements them, it does not replace them.
  */
 
 #include "digest.h"

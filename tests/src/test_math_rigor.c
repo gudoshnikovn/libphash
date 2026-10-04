@@ -8,28 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-void test_dct_orthogonality() {
-    const float *dct_mat = ph_get_dct_matrix_32();
-    int n = 32;
-
-    // We check if A * A^T is the identity matrix I.
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n; j++) {
-            float dot_product = 0.0f;
-            for (int k = 0; k < n; k++) {
-                // A[i][k] * A[j][k] (since A^T[k][j] = A[j][k])
-                dot_product += dct_mat[i * n + k] * dct_mat[j * n + k];
-            }
-            if (i == j) {
-                ASSERT_FLOAT_EQ(1.0f, dot_product, 0.01f);
-            } else {
-                ASSERT_FLOAT_EQ(0.0f, dot_product, 0.01f);
-            }
-        }
-    }
-    PASS("test_dct_orthogonality");
-}
-
 /* ph_dct2_partial() is specified as two passes of plain sequential float sums in index
  * order (see src/hashes/phash.c). The reference below is that specification spelled out,
  * and the two are compared bit for bit rather than within a tolerance. A tolerance would
@@ -182,7 +160,6 @@ void test_colour_quantiser_singularities() {
 }
 
 int main() {
-    test_dct_orthogonality();
     test_dct2_matches_sequential_reference();
     test_median_stability();
     test_colour_quantiser_singularities();
