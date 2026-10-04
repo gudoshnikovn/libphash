@@ -79,6 +79,8 @@ static void closedir(DIR *d) {
 
 /* --- Global State --- */
 int g_json_output = 0;
+/* JPEG decode scale for the load benchmark, from PH_BENCH_DECODE_SCALE (0-3). */
+static ph_decode_scale_t g_decode_scale = PH_DECODE_SCALE_FULL;
 
 /* --- Timing Utilities --- */
 double get_time_sec() {
@@ -453,6 +455,7 @@ void benchmark_loading(const char *img, int iterations, int grayscale) {
         ph_context_t *ctx;
         if (ph_create(&ctx) == PH_SUCCESS) {
             ph_context_set_load_grayscale(ctx, grayscale);
+            ph_context_set_decode_scale(ctx, g_decode_scale);
             if (ph_load_from_file(ctx, img) == PH_SUCCESS) {
                 /* ignore for benchmark */
             }
@@ -492,6 +495,10 @@ void print_usage(const char *prog) {
 
 int main(int argc, char **argv) {
     int arg_idx = 1;
+    const char *scale_env = getenv("PH_BENCH_DECODE_SCALE");
+    if (scale_env) {
+        g_decode_scale = (ph_decode_scale_t)atoi(scale_env);
+    }
     if (argc > 1 && strcmp(argv[1], "--json") == 0) {
         g_json_output = 1;
         arg_idx++;
