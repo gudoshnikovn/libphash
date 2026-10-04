@@ -544,6 +544,28 @@ measured floor, still far below the cost of an accidental extra decode pass.
 The gate runs warning-only (`STRICT=0`) on CI, because a shared runner's floor
 is higher than measured here.
 
+#### Running the gate
+
+The CI `benchmark` job builds two trees in the same job and runs
+`scripts/bench_regression_gate.sh` on them, so runner noise lands on both sides. Which
+commit is the base depends on the event:
+
+| Event | Base |
+|---|---|
+| pull request | the PR's base commit |
+| push to `main` or `release/**` | the previous tip of the pushed branch: everything the push brought in is compared at once |
+| manual run (*Run workflow*) | the `bench_base_ref` input — a branch, tag or commit, `main` by default |
+
+A push that creates the branch has no previous tip, and the job says so in a notice
+instead of comparing. GitHub offers the manual run only for workflows declared on the
+default branch.
+
+Locally, build both versions and pass the two binaries, the one under test first:
+
+```bash
+scripts/bench_regression_gate.sh build/bench_hash ../base/build/bench_hash 5 10 report.md
+```
+
 ### 5. Sanitizers (ASan + UBSan)
 
 ```bash

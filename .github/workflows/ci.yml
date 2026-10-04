@@ -21,7 +21,12 @@ on:
     branches: [ main, 'release/**' ]
   pull_request:
     branches: [ main, 'release/**' ]
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      bench_base_ref:
+        description: Branch, tag or commit the benchmark job compares against
+        required: false
+        default: main
 
 permissions:
   contents: read
@@ -354,12 +359,16 @@ jobs:
     - name: Run Tests
       run: cd build && ctest --output-on-failure
 
-  # Compares the PR (or, on a plain push -- release branches are integrated by
-  # fast-forward, not via PRs -- the pushed commit) against its base commit built
-  # in this same job (not against hardcoded numbers) to keep GH-hosted-runner
-  # noise out of the comparison. Warning-only (STRICT unset below).
+  # Builds the head and a base commit in this same job and compares their
+  # benchmark numbers (scripts/bench_regression_gate.sh), so runner noise hits
+  # both sides alike instead of being measured against hardcoded numbers. The
+  # base is what the event offers as "before this change":
+  #  - pull_request: the PR's base commit;
+  #  - push: the previous tip of the pushed ref (release branches take
+  #    fast-forwarded feature branches, so this is the commit before the push);
+  #  - workflow_dispatch: the bench_base_ref input, `main` by default.
+  # A push that creates a ref has no previous tip and skips the comparison.
   benchmark:
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-24.04
     steps:
     - name: Checkout head
@@ -369,28 +378,36 @@ jobs:
 
     - name: Determine base commit
       id: base
+      env:
+        EVENT: ${{ github.event_name }}
+        PR_BASE: ${{ github.event.pull_request.base.sha }}
+        BEFORE: ${{ github.event.before }}
+        DISPATCH_BASE: ${{ inputs.bench_base_ref }}
       run: |
-        if [ "${{ github.event_name }}" = "pull_request" ]; then
-          echo "sha=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_OUTPUT"
-        elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
-          # First push of a new branch -- no prior commit on this ref to diff
-          # against (git rev-parse HEAD^ inside the shallow `pr` checkout
-          # would also fail here for the same reason: no parent was fetched).
-          echo "sha=" >> "$GITHUB_OUTPUT"
-        else
-          echo "sha=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
-        fi
+        case "$EVENT" in
+          pull_request) echo "ref=$PR_BASE" >> "$GITHUB_OUTPUT" ;;
+          workflow_dispatch) echo "ref=${DISPATCH_BASE:-main}" >> "$GITHUB_OUTPUT" ;;
+          *)
+            # A push that creates the ref reports an all-zero "before": there is
+            # no previous tip to compare against.
+            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              echo "ref=" >> "$GITHUB_OUTPUT"
+            else
+              echo "ref=$BEFORE" >> "$GITHUB_OUTPUT"
+            fi
+            ;;
+        esac
 
     - name: Checkout base commit
-      if: steps.base.outputs.sha != ''
+      if: steps.base.outputs.ref != ''
       uses: actions/checkout@v7
       with:
-        ref: ${{ steps.base.outputs.sha }}
+        ref: ${{ steps.base.outputs.ref }}
         path: base
 
     - name: No base commit available
-      if: steps.base.outputs.sha == ''
-      run: echo "::notice::Skipping benchmark regression gate -- no prior commit on this ref to diff against (first push of a new branch)."
+      if: steps.base.outputs.ref == ''
+      run: echo "::notice::Skipping benchmark regression gate -- this push created the ref, so there is no previous tip to compare against."
 
     # The head's copy of the action serves both trees: the base commit may predate
     # it, and the prologue is not what this job compares.
@@ -401,7 +418,7 @@ jobs:
         apt-packages: cmake nasm jq
 
     - name: Set up base (submodules)
-      if: steps.base.outputs.sha != ''
+      if: steps.base.outputs.ref != ''
       uses: ./pr/.github/actions/setup-build
       with:
         path: base
@@ -415,7 +432,7 @@ jobs:
         cmake --build pr/build --config Release -j
 
     - name: Build base
-      if: steps.base.outputs.sha != ''
+      if: steps.base.outputs.ref != ''
       run: |
         cmake -S base/vendor/libjpeg-turbo -B base/vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
         cmake --build base/vendor/libjpeg-turbo/build --target jpeg-static -j
@@ -423,7 +440,7 @@ jobs:
         cmake --build base/build --config Release -j
 
     - name: Run Benchmarks
-      if: steps.base.outputs.sha != ''
+      if: steps.base.outputs.ref != ''
       run: |
         echo "### Performance Benchmark" > benchmark_report.md
         echo '```text' >> benchmark_report.md
@@ -446,7 +463,7 @@ jobs:
     # disappears once you're not looking at this specific run's page, an artifact
     # survives to be diffed against a later run's or pulled into a script.
     - name: Upload benchmark report
-      if: steps.base.outputs.sha != ''
+      if: steps.base.outputs.ref != ''
       uses: actions/upload-artifact@v7
       with:
         name: benchmark-report
@@ -454,7 +471,7 @@ jobs:
         retention-days: 90
 
     - name: Post Performance Report
-      if: github.event_name == 'pull_request' && steps.base.outputs.sha != ''
+      if: github.event_name == 'pull_request' && steps.base.outputs.ref != ''
       # gh rather than a marketplace action: no third-party JavaScript runtime to
       # keep current. The bot's previous report is edited in place, not stacked.
       env:
