@@ -175,7 +175,13 @@ worth steering by.
 A line may be left out only when no test can reach it: a defensive check that
 validation upstream makes impossible, or a size check that can fail only where
 `size_t` is 32 bits. It is marked in the code with `LCOV_EXCL_START -- <reason>` and
-`LCOV_EXCL_STOP` around the block, and the reason says why it cannot run. Everything
+`LCOV_EXCL_STOP` around the block, and the reason says why it cannot run. One kind of
+branch is left out although tests do reach it: in a first-use initialisation behind a
+spinlock (the decoder warm-up and the PNG CRC table in `src/loader.c`, pHash's DCT matrix),
+waiting for the lock and finding the work already done happen only when two threads race
+for the first call, and whether a run takes them is the scheduler's choice. Counted, they
+would move the branch figure from run to run with no change in the code; they are marked
+`LCOV_EXCL_BR_LINE` with that reason, and the TSan tests exercise the race. Everything
 else that is uncovered is a missing test, not an exclusion.
 
 Coverage is measured on Linux and macOS only. Lines under `#ifdef _WIN32` (the CRT file

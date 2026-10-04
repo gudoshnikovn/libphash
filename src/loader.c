@@ -352,9 +352,12 @@ static void ph_warm_decoder_dispatch(void) {
     if (atomic_load(&s_warmup_done)) {
         return;
     }
-    while (atomic_flag_test_and_set(&s_warmup_lock)) {
+    /* Waiting, and finding the work done once the lock is ours, happen only when two
+     * threads race for the first decode; whether a run takes them is the scheduler's
+     * choice, so their branches are not counted (the TSan tests exercise the race). */
+    while (atomic_flag_test_and_set(&s_warmup_lock)) { // LCOV_EXCL_BR_LINE
     }
-    if (!atomic_load(&s_warmup_done)) {
+    if (!atomic_load(&s_warmup_done)) { // LCOV_EXCL_BR_LINE
         int w, h, ch;
         ph_error_t err = PH_SUCCESS;
         uint8_t *px = ph_decode_png_mem(ph_warmup_png, sizeof(ph_warmup_png), &w, &h, &ch, 0, 0,
@@ -463,9 +466,10 @@ static void ph_png_crc_init(void) {
     if (atomic_load(&s_png_crc_init)) {
         return;
     }
-    while (atomic_flag_test_and_set(&s_png_crc_lock)) {
+    /* Branches counted or not as for ph_warm_decoder_dispatch() above. */
+    while (atomic_flag_test_and_set(&s_png_crc_lock)) { // LCOV_EXCL_BR_LINE
     }
-    if (!atomic_load(&s_png_crc_init)) {
+    if (!atomic_load(&s_png_crc_init)) { // LCOV_EXCL_BR_LINE
         for (uint32_t n = 0; n < 256; n++) {
             uint32_t c = n;
             for (int k = 0; k < 8; k++) {

@@ -72,11 +72,14 @@ static void ph_init_dct_matrix(void) {
         return;
     }
 
-    // Simple spinlock
-    while (atomic_flag_test_and_set(&s_dct_32_lock)) {
+    // Simple spinlock. Waiting, and finding the matrix built once the lock is ours,
+    // happen only when two threads race for the first pHash; whether a run takes them is
+    // the scheduler's choice, so their branches are not counted (the TSan tests exercise
+    // the race).
+    while (atomic_flag_test_and_set(&s_dct_32_lock)) { // LCOV_EXCL_BR_LINE
     }
 
-    if (!atomic_load(&s_dct_32_init)) {
+    if (!atomic_load(&s_dct_32_init)) { // LCOV_EXCL_BR_LINE
         compute_dct_coefficients(s_dct_matrix_32, 32);
         atomic_store(&s_dct_32_init, true);
     }
