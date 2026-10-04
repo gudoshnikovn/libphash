@@ -212,9 +212,12 @@ coverage:
 coverage-cmake:
 	@./scripts/coverage_cmake.sh
 
-# Standalone benchmark target (internal use)
-benchmark: test_benchmark
-	./test_benchmark hash tests/data/photo.jpeg 100
+# The benchmark is a measuring tool, not a test: outside TEST_BINS, built and run here.
+bench_hash: $(TEST_DIR)/bench_hash.c $(LIB_NAME)
+	$(CC) $(CFLAGS) $< $(LIB_NAME) -o $@ $(LDFLAGS)
+
+benchmark: bench_hash
+	./bench_hash hash tests/data/photo.jpeg 100
 
 # Smoke-test install()/pkg-config/find_package(phash) packaging.
 # Builds+installs into a throwaway prefix, then builds a consumer against it.
@@ -223,7 +226,7 @@ install-test:
 	./scripts/smoke_install.sh shared
 
 clean:
-	rm -rf $(OBJ_DIR) $(GENERATED_DIR) *.a *.o test_* benchmark build .cache docs/coverage
+	rm -rf $(OBJ_DIR) $(GENERATED_DIR) *.a *.o test_* bench_hash build .cache docs/coverage
 	find . -name "*.gcda" -delete
 	find . -name "*.gcno" -delete
 	find . -name "*.gcov" -delete

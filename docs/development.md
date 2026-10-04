@@ -426,15 +426,17 @@ to catch a fast regression, not explore the input space) and a 30-minute run nig
 crash found this way through `SECURITY.md`'s reporting channel if it looks like a real
 memory-safety issue, not a public issue.
 
-### 4. Benchmarks (`tests/src/test_benchmark.c`)
+### 4. Benchmarks (`tests/src/bench_hash.c`)
 
-Used for performance regression testing. Run with:
+Used for performance regression testing. It is a measuring tool, not a test: it asserts
+nothing, and `make test`/`ctest` do not run it. `make benchmark` builds and runs it;
+run it directly with:
 
 ```bash
-./test_benchmark hash tests/data/photo.jpeg 100    # hashing only, on a loaded image
-./test_benchmark load tests/data/photo.jpeg 100    # decode only, grayscale and RGB
-./test_benchmark full tests/data/photo.jpeg 100    # decode + pHash
-./test_benchmark --json smoke                      # fixed CI configuration
+./bench_hash hash tests/data/photo.jpeg 100    # hashing only, on a loaded image
+./bench_hash load tests/data/photo.jpeg 100    # decode only, grayscale and RGB
+./bench_hash full tests/data/photo.jpeg 100    # decode + pHash
+./bench_hash --json smoke                      # fixed CI configuration
 ```
 
 #### Measurement methodology

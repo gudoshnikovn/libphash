@@ -4,7 +4,7 @@
 # runner noise out of the comparison) and render a Markdown regression report.
 #
 # Usage:
-#   bench_regression_gate.sh <pr_test_benchmark_bin> <base_test_benchmark_bin> \
+#   bench_regression_gate.sh <pr_bench_hash_bin> <base_bench_hash_bin> \
 #       [runs] [threshold_pct] [out_md]
 #
 # Requires jq. Runs each binary's `--json smoke` <runs> times (default 5) and

@@ -929,6 +929,12 @@ if(PHASH_BUILD_TESTS)
         add_test(NAME test_abi_short_enums COMMAND $<TARGET_FILE:test_abi_short_enums>)
     endif()
 
-    # Add benchmark as a smoke test (verifies loading and hashing works)
-    add_test(NAME benchmark_smoke COMMAND $<TARGET_FILE:test_benchmark> hash ${CMAKE_CURRENT_SOURCE_DIR}/tests/data/photo.jpeg 10)
+    # The benchmark is a measuring tool, not a test: it asserts nothing, so it is built
+    # with the tests (CI's benchmark job runs it) but not registered with ctest.
+    add_executable(bench_hash ${CMAKE_CURRENT_SOURCE_DIR}/tests/src/bench_hash.c)
+    target_link_libraries(bench_hash PRIVATE phash)
+    target_compile_options(bench_hash PRIVATE ${PHASH_OWN_COMPILE_OPTIONS})
+    target_include_directories(bench_hash PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/src)
+    target_compile_definitions(bench_hash PRIVATE
+        TEST_DATA_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/data\")
 endif()

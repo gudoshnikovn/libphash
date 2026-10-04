@@ -9,7 +9,7 @@
 # that macro, while Darwin's libc hides nothing. So a file that reaches for M_PI,
 # clock_gettime() or openat() compiles clean on macOS and fails to compile on Linux,
 # and nothing on the author's machine would notice. A TU that genuinely needs POSIX asks for it with an explicit
-# _POSIX_C_SOURCE (see tests/src/test_benchmark.c); this script is what notices when
+# _POSIX_C_SOURCE (see tests/src/bench_hash.c); this script is what notices when
 # a new one forgets.
 #
 # Usage: check_strict_iso.sh [std]        # std: 11 | 17 | 23 (or c11/c17/c23), default 17

@@ -1,8 +1,8 @@
 /* clock_gettime()/CLOCK_MONOTONIC (below) and opendir()/readdir() (the non-MSVC
  * branch further down) are POSIX, not ISO C. The project compiles as strict ISO
  * (-std=c17, not -std=gnu17), so the compiler defines __STRICT_ANSI__ and glibc
- * hides every non-ISO declaration behind it -- this translation unit is one of the
- * two that genuinely need POSIX and therefore asks for it explicitly, rather than
+ * hides every non-ISO declaration behind it -- this translation unit genuinely needs
+ * POSIX and therefore asks for it explicitly, rather than
  * the whole project switching to a GNU dialect. Darwin declares these regardless
  * and additionally needs mach_absolute_time(), which _POSIX_C_SOURCE would hide,
  * so the request is scoped to the libcs that require it.
@@ -394,7 +394,10 @@ void benchmark_directory(const char *path, int grayscale) {
         if (strstr(ent->d_name, ".jpg") || strstr(ent->d_name, ".jpeg") ||
             strstr(ent->d_name, ".png")) {
             char full_path[512];
-            snprintf(full_path, sizeof(full_path), "%s/%s", path, ent->d_name);
+            int len = snprintf(full_path, sizeof(full_path), "%s/%s", path, ent->d_name);
+            if (len < 0 || (size_t)len >= sizeof(full_path)) {
+                continue; /* a path this long would be truncated into a different file */
+            }
             if (ph_load_from_file(ctx, full_path) == PH_SUCCESS) {
                 count++;
                 if (!g_json_output && count % 100 == 0) {
