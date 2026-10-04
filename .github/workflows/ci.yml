@@ -579,13 +579,13 @@ jobs:
 
     - name: Build
       run: >
-        cmake --build build --target test_alloc_failure --target test_core
+        cmake --build build --target test_alloc_failure --target test_api_guards
         --target test_core_extended --target test_loader --target test_batch
         --target test_pixel_count_overflow -j
 
     - name: Run subset under Valgrind
       run: |
-        for t in test_alloc_failure test_core test_core_extended test_loader test_batch test_pixel_count_overflow; do
+        for t in test_alloc_failure test_api_guards test_core_extended test_loader test_batch test_pixel_count_overflow; do
           valgrind --error-exitcode=1 --leak-check=full --errors-for-leak-kinds=all ./build/$t
         done
 
