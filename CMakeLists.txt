@@ -163,31 +163,6 @@ option(PHASH_ENABLE_THREADS "Let ph_hash_files()/ph_hash_buffers() spawn a pool 
 # can be measured; scripts/coverage_cmake.sh drives it.
 option(PHASH_COVERAGE "Instrument phash and its tests with --coverage (gcov/lcov); see scripts/coverage_cmake.sh" OFF)
 
-# The native PNG backend is libpng. CMake silently ignores an unknown -D, so a script
-# asking for spng with PHASH_USE_SPNG=ON would get a libpng build without being told;
-# it is refused instead. spng would be no faster than libpng: within a few percent on
-# 8-bit color images and 30-70% slower on 16-bit and grayscale ones, on x86-64 and
-# arm64 alike. OFF asks for nothing and passes.
-if(PHASH_USE_SPNG)
-    message(FATAL_ERROR
-        "PHASH_USE_SPNG is not an option of this project: the native PNG backend is "
-        "libpng (PHASH_USE_LIBPNG, ON by default). Drop the flag, and remove the entry "
-        "from an existing build directory's cache:\n"
-        "  cmake -S . -B build -UPHASH_USE_SPNG")
-endif()
-
-# The JPEG option is named after the codec, libjpeg-turbo. CMake silently ignores an
-# unknown -D, and PHASH_USE_TURBOJPEG is the name a build script is likely to pass for
-# it; ignoring that would quietly build the default backend set instead of the one the
-# script asks for, so it is refused with the right name.
-if(DEFINED PHASH_USE_TURBOJPEG)
-    message(FATAL_ERROR
-        "PHASH_USE_TURBOJPEG is not an option of this project; the JPEG backend is "
-        "selected with PHASH_USE_LIBJPEG_TURBO. Pass that instead, and remove the old "
-        "entry from an existing build directory's cache:\n"
-        "  cmake -S . -B build -UPHASH_USE_TURBOJPEG -DPHASH_USE_LIBJPEG_TURBO=${PHASH_USE_TURBOJPEG}")
-endif()
-
 if(PHASH_IS_TOP_LEVEL)
     include(GNUInstallDirs)
     include(CMakePackageConfigHelpers)

@@ -236,14 +236,13 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   with spng when configured with `-DPHASH_USE_SPNG=ON -DPHASH_USE_LIBPNG=OFF`. spng is no
   faster than libpng — within a few percent on 8-bit color images, 30–70% slower on
   16-bit and grayscale ones, on x86-64 and arm64 — and its last release is v0.7.4 of
-  May 2023. `-DPHASH_USE_SPNG=ON` stops the configure step and says so, rather than being
-  ignored.
+  May 2023. CMake reports `-DPHASH_USE_SPNG` as an unused variable.
   *Restore the old behaviour:* not possible — drop the flag; the default build decodes PNG
   with libpng, and `-DPHASH_USE_LIBPNG=OFF` decodes it with `stb_image`.
 
 - **The JPEG backend option is `PHASH_USE_LIBJPEG_TURBO`** (1.x: `PHASH_USE_TURBOJPEG`),
-  named after the codec. Passing the old name stops the configure step and names the new
-  one, rather than being ignored and building the default backend set.
+  named after the codec. CMake reports the old name as an unused variable and builds the
+  default backend set, so `-DPHASH_USE_TURBOJPEG=OFF` builds with libjpeg-turbo.
   *Restore the old behaviour:* not applicable — pass `-DPHASH_USE_LIBJPEG_TURBO=…`.
 
 ### Added
