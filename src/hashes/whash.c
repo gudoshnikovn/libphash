@@ -142,7 +142,7 @@ static ph_error_t ph_compute_whash_fast(ph_context_t *ctx, uint64_t *out_hash) {
 
     float d[256];
     for (int i = 0; i < 256; i++) {
-        d[i] = (float)hash_input[i] / 255.0f;
+        d[i] = hash_input[i] / 255.0f;
     }
 
     float temp_haar[16];
@@ -221,7 +221,7 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
 
     for (int i = 0; i < image_scale; i++) {
         for (int j = 0; j < image_scale; j++) {
-            d[i * image_scale + j] = (float)scaled_img[i * image_scale + j] / 255.0f;
+            d[i * image_scale + j] = scaled_img[i * image_scale + j] / 255.0f;
         }
     }
 

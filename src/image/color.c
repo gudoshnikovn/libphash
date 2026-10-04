@@ -13,7 +13,7 @@
 
 uint8_t *ph_get_gray(ph_context_t *ctx) {
     if (ctx->image.channels == 1) {
-        return (uint8_t *)ctx->image.raw_rgb;
+        return ctx->image.raw_rgb;
     }
     if (!ctx->image.gray_cache && ctx->image.raw_rgb) {
         /* One byte per pixel. The size must be computed in size_t: an int product
@@ -21,7 +21,7 @@ uint8_t *ph_get_gray(ph_context_t *ctx) {
          * i.e. huge after conversion) size while ph_to_grayscale() still writes
          * w * h bytes -- a heap overflow. */
         size_t gray_size;
-        if (!ph_safe_image_alloc_size((uint64_t)ctx->image.width, (uint64_t)ctx->image.height, 1,
+        if (!ph_safe_image_alloc_size(ph_size(ctx->image.width), ph_size(ctx->image.height), 1,
                                       &gray_size)) {
             return NULL;
         }
@@ -40,6 +40,7 @@ void ph_resolve_alpha(uint8_t **pixels, size_t num_pixels, int *channels, ph_alp
         return;
     }
     const int out = in - 1;
+    const size_t in_px = ph_size(in), out_px = ph_size(out);
     unsigned int bg = 0;
     switch (mode) {
         case PH_ALPHA_BLEND_WHITE:
@@ -61,10 +62,11 @@ void ph_resolve_alpha(uint8_t **pixels, size_t num_pixels, int *channels, ph_alp
      * out < in, so no write ever lands on a byte not yet read. */
     uint8_t *px = *pixels;
     for (size_t i = 0; i < num_pixels; i++) {
-        const uint8_t *s = px + i * (size_t)in;
-        uint8_t *d = px + i * (size_t)out;
-        const unsigned int a = s[out];
-        for (int c = 0; c < out; c++) {
+        const uint8_t *s = px + i * in_px;
+        uint8_t *d = px + i * out_px;
+        const unsigned int a = s[out_px];
+        for (size_t c = 0; c < out_px; c++) {
+            /* A rounded weighted mean of two bytes: at most 255. */
             d[c] = (mode == PH_ALPHA_IGNORE)
                        ? s[c]
                        : (uint8_t)((s[c] * a + bg * (255u - a) + 127u) / 255u);
@@ -72,7 +74,7 @@ void ph_resolve_alpha(uint8_t **pixels, size_t num_pixels, int *channels, ph_alp
     }
     *channels = out;
 
-    uint8_t *shrunk = realloc(px, num_pixels ? num_pixels * (size_t)out : 1);
+    uint8_t *shrunk = realloc(px, num_pixels ? num_pixels * out_px : 1);
     if (shrunk) {
         *pixels = shrunk;
     }
@@ -91,7 +93,8 @@ static void grayscale_scalar_range(const uint8_t *s, uint8_t *d, size_t count, i
                                    int r_w, int g_w, int b_w) {
     for (size_t i = 0; i < count; i++) {
         /* int: the weights are non-negative ints summing to PH_GRAY_WEIGHT_SCALE, so the
-         * weighted sum stays small, non-negative and signed throughout. */
+         * weighted sum stays small, non-negative and signed throughout, and shifted back
+         * down it fits a byte. */
         int r = s[0];
         int g = s[1];
         int b = s[2];
@@ -105,7 +108,7 @@ void ph_to_grayscale_scalar(const ph_context_t *ctx, const uint8_t *src, int w, 
     if (w <= 0 || h <= 0) {
         return;
     }
-    size_t num_pixels = (size_t)w * (size_t)h;
+    size_t num_pixels = ph_size(w) * ph_size(h);
 
     int r_w = ctx ? ctx->config.gray_r : PH_GRAY_R;
     int g_w = ctx ? ctx->config.gray_g : PH_GRAY_G;
@@ -125,7 +128,7 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
         return;
     }
     /* size_t, not int: w * h overflows int above ~46340x46340. */
-    size_t num_pixels = (size_t)w * (size_t)h;
+    size_t num_pixels = ph_size(w) * ph_size(h);
     const uint8_t *s = src;
     uint8_t *d = dst;
     size_t i = 0;
@@ -141,6 +144,8 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
     }
 
 #if defined(__ARM_NEON)
+    /* Each weight is at most PH_GRAY_WEIGHT_SCALE (128), the sum of all three, so it fits
+     * the 8-bit lanes vmull_u8() multiplies by. */
     if (channels == 3) {
         uint8x8_t r_weight = vdup_n_u8((uint8_t)r_w);
         uint8x8_t g_weight = vdup_n_u8((uint8_t)g_w);
@@ -194,7 +199,7 @@ void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h) {
         return;
     }
     // size_t: w * h overflows int.
-    size_t num_pixels = (size_t)w * (size_t)h;
+    size_t num_pixels = ph_size(w) * ph_size(h);
 
     // gamma == 1.0 (the default) is an identity transform regardless of the buffer's
     // content -- skip the scan and the LUT build entirely, the common case by far. The
@@ -222,9 +227,9 @@ void ph_apply_gamma(const ph_context_t *ctx, uint8_t *data, int w, int h) {
 
     uint8_t lut[256];
     double gamma = (double)ctx->config.gamma;
-    double max_d = (double)max_val;
-    for (int i = 0; i <= (int)max_val; i++) {
-        double normalized = (double)i / max_d;
+    double max_d = max_val;
+    for (int i = 0; i <= max_val; i++) {
+        double normalized = i / max_d;
         double res = pow(normalized, gamma) * max_d;
         lut[i] = (uint8_t)(res < 0.0 ? 0.0 : res > 255.0 ? 255.0 : res);
     }

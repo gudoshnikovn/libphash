@@ -49,15 +49,15 @@
 #include <stdlib.h>
 
 static void compute_dct_coefficients(float *matrix, int n) {
-    float c = (float)sqrt(1.0 / (double)n);
+    float c = (float)sqrt(1.0 / n);
     for (int j = 0; j < n; j++) {
         matrix[j] = c;
     }
 
-    c = (float)sqrt(2.0 / (double)n);
+    c = (float)sqrt(2.0 / n);
     for (int i = 1; i < n; i++) {
         for (int j = 0; j < n; j++) {
-            matrix[i * n + j] = (float)((double)c * cos(M_PI * i * (j + 0.5) / (double)n));
+            matrix[i * n + j] = (float)((double)c * cos(M_PI * i * (j + 0.5) / n));
         }
     }
 }

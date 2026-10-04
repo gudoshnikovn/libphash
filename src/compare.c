@@ -16,7 +16,7 @@ static inline int popcount64(uint64_t x) {
 #if defined(__GNUC__) || defined(__clang__)
     return __builtin_popcountll(x);
 #elif defined(_MSC_VER) && defined(_M_X64)
-    return (int)__popcnt64(x);
+    return (int)__popcnt64(x); /* at most 64 */
 #else
     int count = 0;
     while (x) {
@@ -104,8 +104,8 @@ PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b) {
 
         double sum = 0;
         for (int i = 0; i + 1 < a->size; i += 2) {
-            double va = (double)ph_read_i16_be(&a->data[i]) / (double)PH_VECTOR16_SCALE;
-            double vb = (double)ph_read_i16_be(&b->data[i]) / (double)PH_VECTOR16_SCALE;
+            double va = ph_read_i16_be(&a->data[i]) / (double)PH_VECTOR16_SCALE;
+            double vb = ph_read_i16_be(&b->data[i]) / (double)PH_VECTOR16_SCALE;
             double diff = va - vb;
             sum += diff * diff;
         }
@@ -118,7 +118,7 @@ PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b) {
 
     double sum = 0;
     for (int i = 0; i < a->size; i++) {
-        double diff = (double)a->data[i] - (double)b->data[i];
+        double diff = a->data[i] - b->data[i];
         sum += diff * diff;
     }
     return sqrt(sum);
@@ -126,7 +126,7 @@ PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b) {
 
 PH_API double ph_similarity(uint64_t a, uint64_t b) {
     int dist = ph_hamming_distance(a, b);
-    return 1.0 - ((double)dist / 64.0);
+    return 1.0 - (dist / 64.0);
 }
 
 PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b) {
@@ -139,8 +139,8 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b) {
         return -1.0;
     }
 
-    double total_bits = (double)a->size * 8.0;
-    return 1.0 - ((double)dist / total_bits);
+    double total_bits = a->size * 8.0;
+    return 1.0 - (dist / total_bits);
 }
 
 /* Peak of cross-correlation, the comparison the radial hash's source specifies.
@@ -173,8 +173,8 @@ PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *
     const int n = a->size;
     double sum_a = 0.0, sum_b = 0.0;
     for (int i = 0; i < n; i++) {
-        sum_a += (double)a->data[i];
-        sum_b += (double)b->data[i];
+        sum_a += a->data[i];
+        sum_b += b->data[i];
     }
     const double mean_a = sum_a / n;
     const double mean_b = sum_b / n;
@@ -185,8 +185,8 @@ PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *
      * rather than three times that. */
     double var_a = 0.0, var_b = 0.0;
     for (int i = 0; i < n; i++) {
-        double da = (double)a->data[i] - mean_a;
-        double db = (double)b->data[i] - mean_b;
+        double da = a->data[i] - mean_a;
+        double db = b->data[i] - mean_b;
         var_a += da * da;
         var_b += db * db;
     }
@@ -201,7 +201,7 @@ PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *
         double num = 0.0;
         for (int i = 0; i < n; i++) {
             int j = (n + i - d) % n;
-            num += ((double)a->data[i] - mean_a) * ((double)b->data[j] - mean_b);
+            num += (a->data[i] - mean_a) * (b->data[j] - mean_b);
         }
         double r = num / denom;
         if (r > peak) {
@@ -246,7 +246,7 @@ PH_API ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out, size_t out_s
 
     const char *name = PH_DIGEST_KIND_NAMES[d->kind];
     size_t name_len = strlen(name);
-    size_t needed = name_len + 1 + (size_t)d->size * 2 + 1;
+    size_t needed = name_len + 1 + d->size * 2u + 1;
     if (out_size < needed) {
         return PH_ERR_INVALID_ARGUMENT;
     }
@@ -284,7 +284,7 @@ PH_API ph_error_t ph_digest_from_hex(const char *text, ph_digest_t *out) {
     if (!colon) {
         return PH_ERR_INVALID_ARGUMENT;
     }
-    size_t name_len = (size_t)(colon - text);
+    size_t name_len = (size_t)(colon - text); /* colon is within text */
     size_t kind = 0;
     while (kind < PH_DIGEST_KIND_COUNT &&
            !(strlen(PH_DIGEST_KIND_NAMES[kind]) == name_len &&

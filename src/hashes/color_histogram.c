@@ -41,6 +41,7 @@
 #include "context.h"
 #include "digest.h"
 #include "hashes/hashes.h"
+#include "safety.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -91,8 +92,8 @@ PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_dige
 
     /* size_t and uint64_t throughout: width * height overflows int above ~46340x46340,
      * and so does a per-bin counter on an image that large. */
-    size_t total_pixels = (size_t)ctx->image.width * (size_t)ctx->image.height;
-    size_t channels = (size_t)ctx->image.channels;
+    size_t total_pixels = ph_size(ctx->image.width) * ph_size(ctx->image.height);
+    size_t channels = ph_size(ctx->image.channels);
     const uint8_t *src = ctx->image.raw_rgb;
 
     uint64_t counts[PH_COLOR_BINS] = {0};

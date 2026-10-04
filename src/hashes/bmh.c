@@ -60,7 +60,7 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
      * write, not a clean allocation failure. ph_safe_image_alloc_size() does the check
      * width-independently (uint64_t arithmetic, checked against SIZE_MAX). */
     size_t total_pixels;
-    if (!ph_safe_image_alloc_size((uint64_t)block_size, (uint64_t)block_size, 1, &total_pixels)) {
+    if (!ph_safe_image_alloc_size(ph_size(block_size), ph_size(block_size), 1, &total_pixels)) {
         return PH_ERR_ALLOCATION_FAILED;
     }
 
@@ -114,7 +114,7 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
         }
     }
 
-    size_t max_bits = (size_t)out_digest->size * 8;
+    size_t max_bits = out_digest->size * 8u;
     for (size_t i = 0; i < total_pixels && i < max_bits; i++) {
         if (block_data[i] >= median) {
             out_digest->data[i / 8] |= (1 << (i % 8));

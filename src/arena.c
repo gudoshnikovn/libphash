@@ -14,10 +14,10 @@
  * posix_memalign() and _aligned_malloc() both accept. */
 static uint8_t *ph_aligned_alloc(size_t size) {
 #if defined(_WIN32)
-    return (uint8_t *)_aligned_malloc(size, PH_ARENA_ALIGNMENT);
+    return _aligned_malloc(size, PH_ARENA_ALIGNMENT);
 #else
     void *p = NULL;
-    return posix_memalign(&p, PH_ARENA_ALIGNMENT, size) == 0 ? (uint8_t *)p : NULL;
+    return posix_memalign(&p, PH_ARENA_ALIGNMENT, size) == 0 ? p : NULL;
 #endif
 }
 

@@ -272,7 +272,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
         return NULL;
     }
 
-    unsigned char *data = (unsigned char *)malloc(alloc_size);
+    unsigned char *data = malloc(alloc_size);
     if (!data) {
         if (out_err) {
             *out_err = PH_ERR_ALLOCATION_FAILED;
@@ -298,7 +298,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
         return NULL;
     }
 
-    png_bytep *row_ptrs = (png_bytep *)malloc(row_ptrs_size);
+    png_bytep *row_ptrs = malloc(row_ptrs_size);
     if (!row_ptrs) {
         if (out_err) {
             *out_err = PH_ERR_ALLOCATION_FAILED;
@@ -323,14 +323,16 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
          * overwrites a byte it has yet to read. Rows are tightly packed (rowbytes is
          * w * out_channels for 8-bit samples). */
         const int gray_channels = out_channels - 2;
-        const size_t num_pixels = (size_t)w * (size_t)h;
+        const size_t num_pixels = (size_t)w * h; /* in size_t: a png_uint_32 product wraps */
+        const size_t in_px = ph_size(out_channels), out_px = ph_size(gray_channels);
         for (size_t i = 0; i < num_pixels; i++) {
-            const unsigned char *src = data + i * (size_t)out_channels;
-            unsigned char *dst = data + i * (size_t)gray_channels;
+            const unsigned char *src = data + i * in_px;
+            unsigned char *dst = data + i * out_px;
             const unsigned char alpha = (out_channels == 4) ? src[3] : 0;
-            dst[0] = (unsigned char)((PH_GRAY_R * (unsigned)src[0] + PH_GRAY_G * (unsigned)src[1] +
-                                      PH_GRAY_B * (unsigned)src[2]) >>
-                                     7);
+            /* The weights sum to 128, so the shifted sum is at most 255. */
+            dst[0] =
+                (unsigned char)((PH_GRAY_R * src[0] + PH_GRAY_G * src[1] + PH_GRAY_B * src[2]) >>
+                                7);
             if (out_channels == 4) {
                 dst[1] = alpha;
             }
@@ -338,6 +340,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
         out_channels = gray_channels;
     }
 
+    /* Both within PH_MAX_IMAGE_DIMENSION, checked before the decode. */
     *width = (int)w;
     *height = (int)h;
     *channels = out_channels;

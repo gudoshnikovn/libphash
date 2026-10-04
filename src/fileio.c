@@ -125,7 +125,7 @@ static ph_error_t ph_check_open_file(int fd, const char *filepath, long long *ou
         return PH_ERR_IO;
     }
     if (out_size) {
-        *out_size = (long long)st.st_size;
+        *out_size = st.st_size;
     }
     return PH_SUCCESS;
 }
@@ -136,6 +136,8 @@ void ph_release_file_bytes(ph_file_bytes_t *fb) {
     }
 #ifdef PH_HAVE_MMAP
     if (fb->mapped) {
+        /* The bytes are read-only to every reader; this layer owns them and drops the
+         * const to release them. */
         munmap((void *)(uintptr_t)fb->data, fb->length);
         fb->data = NULL;
         fb->length = 0;
@@ -152,9 +154,11 @@ void ph_release_file_bytes(ph_file_bytes_t *fb) {
  * an error -- the file may legitimately have shrunk since the fstat() above, and
  * whatever bytes did arrive are handed to the decoder, which is the one that gets
  * to say whether they form an image. */
+#define PH_READ_CHUNK ((size_t)16 * 1024 * 1024)
+
 static ph_error_t ph_read_open_file(int fd, const char *filepath, size_t size, ph_file_bytes_t *out,
                                     char *err_buf, size_t err_len) {
-    uint8_t *buf = (uint8_t *)malloc(size);
+    uint8_t *buf = malloc(size);
     if (!buf) {
         ph_format_err_msg(err_buf, err_len, "Cannot read '%s': out of memory for %llu bytes",
                           filepath, (unsigned long long)size);
@@ -166,10 +170,10 @@ static ph_error_t ph_read_open_file(int fd, const char *filepath, size_t size, p
         size_t want = size - got;
         /* One chunk stays well inside the signed return type of read()/_read()
          * on every platform, including a 32-bit one. */
-        if (want > (size_t)16 * 1024 * 1024) {
-            want = (size_t)16 * 1024 * 1024;
+        if (want > PH_READ_CHUNK) {
+            want = PH_READ_CHUNK;
         }
-        long long n = (long long)PH_FILE_READ(fd, buf + got, want);
+        long long n = PH_FILE_READ(fd, buf + got, want);
         if (n < 0) {
             if (errno == EINTR) {
                 continue;
@@ -181,7 +185,7 @@ static ph_error_t ph_read_open_file(int fd, const char *filepath, size_t size, p
         if (n == 0) {
             break; /* EOF earlier than fstat() promised */
         }
-        got += (size_t)n;
+        got += (size_t)n; /* n > 0 here */
     }
 
     if (got == 0) {
@@ -234,24 +238,25 @@ ph_error_t ph_open_file_bytes(const char *filepath, ph_file_bytes_t *out, char *
         PH_FILE_CLOSE(fd);
         return PH_ERR_IO;
     }
+    const size_t length = (size_t)size; /* positive and at most SIZE_MAX, checked above */
 
 #ifdef PH_HAVE_MMAP
-    void *mapped = mmap(NULL, (size_t)size, PROT_READ, MAP_PRIVATE, fd, 0);
+    void *mapped = mmap(NULL, length, PROT_READ, MAP_PRIVATE, fd, 0);
     if (mapped != MAP_FAILED) {
 #    if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__)
-        posix_madvise(mapped, (size_t)size, POSIX_MADV_SEQUENTIAL);
+        posix_madvise(mapped, length, POSIX_MADV_SEQUENTIAL);
 #    endif
         /* The mapping keeps the file alive on its own; the descriptor is not
          * needed past this point. */
         PH_FILE_CLOSE(fd);
-        out->data = (const uint8_t *)mapped;
-        out->length = (size_t)size;
+        out->data = mapped;
+        out->length = length;
         out->mapped = 1;
         return PH_SUCCESS;
     }
 #endif
 
-    err = ph_read_open_file(fd, filepath, (size_t)size, out, err_buf, err_len);
+    err = ph_read_open_file(fd, filepath, length, out, err_buf, err_len);
     PH_FILE_CLOSE(fd);
     return err;
 }

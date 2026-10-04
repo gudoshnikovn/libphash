@@ -8,6 +8,7 @@
 
 #include "context.h"
 #include "hashes/hashes.h"
+#include "safety.h"
 
 /* MSVC only ships <stdatomic.h> under /std:c11 or later (VS 17.5+); the CMake
  * build gets that flag from CMAKE_C_STANDARD (see CMakeLists.txt), but a build invoking
@@ -191,11 +192,11 @@ static int ph_batch_should_stop(const ph_batch_hooks_t *hooks) {
 }
 
 static void process_file_item_v(ph_context_t *ctx, void *item, uint32_t flags) {
-    process_file_item(ctx, (ph_batch_item_t *)item, flags);
+    process_file_item(ctx, item, flags);
 }
 
 static void process_buffer_item_v(ph_context_t *ctx, void *item, uint32_t flags) {
-    process_buffer_item(ctx, (ph_batch_buffer_item_t *)item, flags);
+    process_buffer_item(ctx, item, flags);
 }
 
 #if defined(PH_ENABLE_THREADS)
@@ -254,12 +255,12 @@ static void ph_batch_worker_run(ph_batch_shared_t *shared) {
 
 #    if defined(_WIN32)
 static DWORD WINAPI ph_batch_worker_win(LPVOID arg) {
-    ph_batch_worker_run((ph_batch_shared_t *)arg);
+    ph_batch_worker_run(arg);
     return 0;
 }
 #    else
 static void *ph_batch_worker_pthread(void *arg) {
-    ph_batch_worker_run((ph_batch_shared_t *)arg);
+    ph_batch_worker_run(arg);
     return NULL;
 }
 #    endif
@@ -286,12 +287,12 @@ static int ph_detect_num_cores(void) { return ph_available_cpus(); }
 /* Runs the batch on `nthreads` workers. On return, *out_started is the number of items
  * that were started -- the prefix [0, *out_started) -- which is n unless the batch was
  * cancelled or no worker ever ran. */
-static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, size_t n,
+static ph_error_t ph_batch_run_threaded(uint8_t *items_base, size_t item_stride, size_t n,
                                         uint32_t flags, ph_batch_process_fn process, int nthreads,
                                         const ph_batch_hooks_t *hooks, size_t *out_started) {
     *out_started = 0;
     ph_batch_shared_t shared = {
-        .items_base = (uint8_t *)items_base,
+        .items_base = items_base,
         .item_stride = item_stride,
         .n = n,
         .flags = flags,
@@ -309,10 +310,11 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
      * of allocating a wrapped-around, too-small handle array. */
     /* Spelled out rather than via a SIZE_MAX-vs-ULLONG_MAX helper: such a helper is a
      * tautology wherever the two are equal, i.e. on every 64-bit build. */
-    if ((size_t)nthreads > SIZE_MAX / sizeof(HANDLE)) {
+    const size_t n_threads = ph_size(nthreads);
+    if (n_threads > SIZE_MAX / sizeof(HANDLE)) {
         return PH_ERR_ALLOCATION_FAILED;
     }
-    HANDLE *handles = malloc(sizeof(HANDLE) * (size_t)nthreads);
+    HANDLE *handles = malloc(sizeof(HANDLE) * n_threads);
     if (!handles) {
         return PH_ERR_ALLOCATION_FAILED;
     }
@@ -338,6 +340,8 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
      * never wait on each other or on us, so by the time the last chunk returns every
      * worker has terminated. */
     for (int i = 0; i < spawned;) {
+        /* spawned - i > 0, and chunk ends up at most MAXIMUM_WAIT_OBJECTS (64), so the
+         * conversions between DWORD and int below are exact. */
         DWORD chunk = (DWORD)(spawned - i);
         if (chunk > MAXIMUM_WAIT_OBJECTS) {
             chunk = MAXIMUM_WAIT_OBJECTS;
@@ -361,10 +365,11 @@ static ph_error_t ph_batch_run_threaded(void *items_base, size_t item_stride, si
     /* Same overflow guard as the Windows branch above. */
     /* Spelled out rather than via a SIZE_MAX-vs-ULLONG_MAX helper: such a helper is a
      * tautology wherever the two are equal, i.e. on every 64-bit build. */
-    if ((size_t)nthreads > SIZE_MAX / sizeof(pthread_t)) {
+    const size_t n_threads = ph_size(nthreads);
+    if (n_threads > SIZE_MAX / sizeof(pthread_t)) {
         return PH_ERR_ALLOCATION_FAILED;
     }
-    pthread_t *threads_arr = malloc(sizeof(pthread_t) * (size_t)nthreads);
+    pthread_t *threads_arr = malloc(sizeof(pthread_t) * n_threads);
     if (!threads_arr) {
         return PH_ERR_ALLOCATION_FAILED;
     }
@@ -410,8 +415,8 @@ static int ph_resolve_thread_count(int threads, size_t n) {
     (void)threads;
     int count = 1;
 #endif
-    if ((size_t)count > n) {
-        count = (int)n;
+    if (ph_size(count) > n) {
+        count = (int)n; /* n < count, an int */
     }
     if (count < 1) {
         count = 1;
@@ -421,7 +426,7 @@ static int ph_resolve_thread_count(int threads, size_t n) {
 
 /* The single-threaded path: the calling thread, one context, items in order. Same
  * *out_started contract as ph_batch_run_threaded(). */
-static ph_error_t ph_batch_run_sequential(void *items_base, size_t item_stride, size_t n,
+static ph_error_t ph_batch_run_sequential(uint8_t *items_base, size_t item_stride, size_t n,
                                           uint32_t flags, ph_batch_process_fn process,
                                           const ph_batch_hooks_t *hooks, size_t *out_started) {
     *out_started = 0;
@@ -431,7 +436,7 @@ static ph_error_t ph_batch_run_sequential(void *items_base, size_t item_stride, 
     }
     size_t started = 0;
     while (started < n && !ph_batch_should_stop(hooks)) {
-        process(ctx, (uint8_t *)items_base + started * item_stride, flags);
+        process(ctx, items_base + started * item_stride, flags);
         started++;
         if (hooks->on_progress) {
             hooks->on_progress(started, n, hooks->user_data);
@@ -485,8 +490,10 @@ static ph_error_t ph_hash_batch(void *items_base, size_t item_stride, size_t n, 
         hooks.config = &config;
     }
 
+    /* The items as bytes, so that item i is at base + i * item_stride. */
+    uint8_t *const base = items_base;
     for (size_t i = 0; i < n; i++) {
-        reset((uint8_t *)items_base + i * item_stride, PH_ERR_ALLOCATION_FAILED);
+        reset(base + i * item_stride, PH_ERR_ALLOCATION_FAILED);
     }
 
     int nthreads = ph_resolve_thread_count(options->threads, n);
@@ -495,11 +502,11 @@ static ph_error_t ph_hash_batch(void *items_base, size_t item_stride, size_t n, 
     ph_error_t err;
 #if defined(PH_ENABLE_THREADS)
     if (nthreads > 1) {
-        err = ph_batch_run_threaded(items_base, item_stride, n, flags, process, nthreads, &hooks,
-                                    &started);
+        err =
+            ph_batch_run_threaded(base, item_stride, n, flags, process, nthreads, &hooks, &started);
     } else
 #endif
-        err = ph_batch_run_sequential(items_base, item_stride, n, flags, process, &hooks, &started);
+        err = ph_batch_run_sequential(base, item_stride, n, flags, process, &hooks, &started);
     if (err != PH_SUCCESS) {
         return err;
     }
@@ -507,19 +514,19 @@ static ph_error_t ph_hash_batch(void *items_base, size_t item_stride, size_t n, 
         return PH_SUCCESS;
     }
     for (size_t i = started; i < n; i++) {
-        reset((uint8_t *)items_base + i * item_stride, PH_ERR_CANCELLED);
+        reset(base + i * item_stride, PH_ERR_CANCELLED);
     }
     return PH_ERR_CANCELLED;
 }
 
 static void reset_file_item(void *item, ph_error_t status) {
-    ph_batch_item_t *i = (ph_batch_item_t *)item;
+    ph_batch_item_t *i = item;
     clear_hashes(i->hashes);
     i->status = status;
 }
 
 static void reset_buffer_item(void *item, ph_error_t status) {
-    ph_batch_buffer_item_t *i = (ph_batch_buffer_item_t *)item;
+    ph_batch_buffer_item_t *i = item;
     clear_hashes(i->hashes);
     i->status = status;
 }

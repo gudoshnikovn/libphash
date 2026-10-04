@@ -30,7 +30,7 @@ PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma) {
      * is applied per image, normalised by the buffer's own maximum; see ph_apply_gamma()
      * in src/image/color.c). The upper bound keeps it inside a range symmetric about
      * 1.0; see PH_GAMMA_MAX. */
-    if (!isfinite((double)gamma) || gamma <= PH_GAMMA_EPSILON || gamma > PH_GAMMA_MAX) {
+    if (!isfinite(gamma) || gamma <= PH_GAMMA_EPSILON || gamma > PH_GAMMA_MAX) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 
@@ -80,13 +80,14 @@ PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, i
         return PH_ERR_INVALID_ARGUMENT;
     }
 
-    long long sum = (long long)r + (long long)g + (long long)b;
+    long long sum = (long long)r + g + b; /* three ints can overflow an int */
     /* sum == 0 is an error, not a silent reset to the BT.601 defaults: "0, 0, 0" must not
      * install a configuration the caller never asked for. */
     if (sum <= 0 || sum > PH_GRAY_WEIGHT_MAX_SUM) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 
+    /* Each share is at most PH_GRAY_WEIGHT_SCALE: an int. */
     ctx->config.gray_r = (int)(((long long)r * PH_GRAY_WEIGHT_SCALE) / sum);
     ctx->config.gray_g = (int)(((long long)g * PH_GRAY_WEIGHT_SCALE) / sum);
     ctx->config.gray_b = PH_GRAY_WEIGHT_SCALE - ctx->config.gray_r - ctx->config.gray_g;
@@ -129,7 +130,7 @@ PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projection
      * PH_RADIAL_MIN_SAMPLES / PH_RADIAL_MAX_SAMPLES / PH_RADIAL_MAX_SIGMA. */
     if (!ctx || projections < PH_RADIAL_MIN_PROJECTIONS ||
         projections > PH_RADIAL_MAX_PROJECTIONS || samples < PH_RADIAL_MIN_SAMPLES ||
-        samples > PH_RADIAL_MAX_SAMPLES || !isfinite((double)sigma) || !(sigma > 0.0f) ||
+        samples > PH_RADIAL_MAX_SAMPLES || !isfinite(sigma) || !(sigma > 0.0f) ||
         sigma > PH_RADIAL_MAX_SIGMA) {
         return PH_ERR_INVALID_ARGUMENT;
     }
@@ -153,7 +154,7 @@ PH_API ph_error_t ph_context_set_mhash_params(ph_context_t *ctx, float alpha, fl
     }
 
     double sigma = 4.0 * pow((double)alpha, (double)level);
-    if (!(sigma >= 1.0) || 2.0 * sigma + 1.0 > (double)PH_MH_MAX_KERNEL_SIDE) {
+    if (!(sigma >= 1.0) || 2.0 * sigma + 1.0 > PH_MH_MAX_KERNEL_SIDE) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 

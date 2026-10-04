@@ -49,7 +49,7 @@ typedef struct {
 } ph_jpeg_error_t;
 
 static void ph_jpeg_error_exit(j_common_ptr cinfo) {
-    ph_jpeg_error_t *err = (ph_jpeg_error_t *)cinfo->err;
+    ph_jpeg_error_t *err = (ph_jpeg_error_t *)cinfo->err; /* `pub` is its first member */
     err->pub.format_message(cinfo, err->message);
     /* By code, not by the wording of the message: libjpeg's memory manager reports every
      * failed allocation as JERR_OUT_OF_MEMORY. */
@@ -149,8 +149,7 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
      * dimensions, not the requested decode size: it exists to reject decompression
      * bombs, which a scale request does not make safe -- the header can still claim an
      * enormous image regardless of what the caller asked to receive. */
-    if (ph_exceeds_pixel_limit((uint64_t)cinfo.image_width, (uint64_t)cinfo.image_height,
-                               max_pixels)) {
+    if (ph_exceeds_pixel_limit(cinfo.image_width, cinfo.image_height, max_pixels)) {
         jpeg_destroy_decompress(&cinfo);
         if (jerr.out_err) {
             *jerr.out_err = PH_ERR_IMAGE_TOO_LARGE;
@@ -182,8 +181,8 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
     const JDIMENSION w = cinfo.output_width, h = cinfo.output_height;
     size_t stride, total;
     if (w > INT_MAX || h > INT_MAX ||
-        !ph_safe_image_alloc_size((uint64_t)w, (uint64_t)out_channels, 1, &stride) ||
-        !ph_safe_image_alloc_size((uint64_t)stride, (uint64_t)h, 1, &total)) {
+        !ph_safe_image_alloc_size(w, ph_size(out_channels), 1, &stride) ||
+        !ph_safe_image_alloc_size(stride, h, 1, &total)) {
         jpeg_destroy_decompress(&cinfo);
         if (jerr.out_err) {
             *jerr.out_err = PH_ERR_IMAGE_TOO_LARGE;
@@ -193,8 +192,8 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
         return NULL;
     }
 
-    output = (unsigned char *)malloc(total);
-    rows = (JSAMPROW *)malloc(sizeof(JSAMPROW) * (size_t)h);
+    output = malloc(total);
+    rows = malloc(sizeof(JSAMPROW) * h);
     if (!output || !rows) {
         jpeg_destroy_decompress(&cinfo);
         free(output);
@@ -206,7 +205,7 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
         return NULL;
     }
     for (JDIMENSION y = 0; y < h; y++) {
-        rows[y] = output + (size_t)y * stride;
+        rows[y] = output + y * stride;
     }
 
     /* Every row pointer at once: libjpeg writes straight into the output instead of
@@ -218,7 +217,7 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
     jpeg_destroy_decompress(&cinfo);
     free(rows);
 
-    *width = (int)w;
+    *width = (int)w; /* both at most INT_MAX, checked above */
     *height = (int)h;
     *channels = out_channels;
     return output;

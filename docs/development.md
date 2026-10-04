@@ -301,10 +301,19 @@ preference:
    evident from the check directly above it. A cast whose only purpose is to make a
    warning go away is a defect: it hides exactly the value the warning is about.
 
+Warnings see implicit conversions, not explicit ones, so two checks watch the casts.
+`scripts/check_casts.py` counts the explicit casts in each file under `src/` (the stb
+instantiations and `(void)` discards aside) against `scripts/explicit_casts.txt`; any
+difference fails `format-check` until the list is updated with
+`scripts/check_casts.py --update` in the same change, so an added cast is always in
+the diff for review. And clang-tidy's `bugprone-misplaced-widening-cast`, in the
+`strict-warnings` job, catches a cast that widens the result of an arithmetic which has
+already overflowed in the narrower type, such as `(uint64_t)(a * b)` on two ints.
+
 ## Headers and includes
 
 - `include/libphash.h` is the whole public API. Everything under `src/` is internal and
-  split by subsystem: `context.h`, `arena.h`, `safety.h`, `digest.h`, `fileio.h`,
+  split by subsystem: `context.h`, `arena.h`, `safety.h`, `bytes.h`, `digest.h`, `fileio.h`,
   `batch.h`, `loader.h`, `image/image.h`, `hashes/hashes.h`, `loaders/backends.h`.
 - A file includes the headers whose names it uses, spelled by their path from `src/`
   (`#include "image/image.h"`), never through a sibling's includes and never with `../`.
@@ -320,9 +329,9 @@ and on any pull request targeting either:
 
 | Job | What it checks |
 |---|---|
-| `format-check` | `scripts/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`; `scripts/check_docs_coverage.sh`; `scripts/check_final_state_voice.sh`, which fails on tracker ids, paths into local planning notes and release-cycle wording (a feature "since" a version) in tracked text; and `shellcheck --severity=warning` over `scripts/*.sh`. Fast, no build, catches these before the slower jobs run. |
+| `format-check` | `scripts/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`; `scripts/check_docs_coverage.sh`; `scripts/check_final_state_voice.sh`, which fails on tracker ids, paths into local planning notes and release-cycle wording (a feature "since" a version) in tracked text; `shellcheck --severity=warning` over `scripts/*.sh`; and `scripts/check_casts.py`, the explicit-cast count per file in `src/` against `scripts/explicit_casts.txt`. Fast, no build, catches these before the slower jobs run. |
 | `build-and-test` | Full vendored build (libjpeg-turbo + libpng + libwebp + zlib-ng) across linux-x86_64 (gcc, clang), linux-arm64, macos-arm64. `PHASH_STRICT_DEPS=ON`, so a decoder silently falling back to stb_image is a hard configure failure, not a quiet pass. |
-| `strict-warnings` | The full vendored build with `PHASH_WARNINGS_AS_ERRORS=ON` (gcc, clang): any warning in libphash's own sources, tests or benchmark fails it. The only job with `-Werror`, so a newer compiler's new warning never breaks a build from source. |
+| `strict-warnings` | The full vendored build with `PHASH_WARNINGS_AS_ERRORS=ON` (gcc, clang): any warning in libphash's own sources, tests or benchmark fails it. The only job with `-Werror`, so a newer compiler's new warning never breaks a build from source. Its clang leg also runs clang-tidy's `bugprone-misplaced-widening-cast` over `src/`. |
 | `coverage-cmake` | `scripts/coverage_cmake.sh` — lcov report of the vendored decoder build; published as a downloadable artifact. |
 | `minimal-build` | Zero-dependency build (every `PHASH_USE_*` off, stb_image only) on ubuntu-latest, macos-latest, windows-latest. |
 | `c-standard-matrix` | Full test suite under `-DCMAKE_C_STANDARD=11/17/23`, gcc+clang, Linux+macOS (no Windows — see the Toolchains section above for why). |

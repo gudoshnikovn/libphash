@@ -33,11 +33,11 @@ static inline int ph_safe_image_alloc_size(uint64_t w, uint64_t h, uint64_t chan
     if (w == 0 || h == 0 || channels == 0) {
         return 0;
     }
-    if (w > (uint64_t)SIZE_MAX / h) {
+    if (w > SIZE_MAX / h) {
         return 0;
     }
     uint64_t wh = w * h;
-    if (wh > (uint64_t)SIZE_MAX / channels) {
+    if (wh > SIZE_MAX / channels) {
         return 0;
     }
     *out = (size_t)(wh * channels);

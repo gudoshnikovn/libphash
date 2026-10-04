@@ -28,6 +28,8 @@ _Static_assert(PH_ALGO_COLOR_MOMENTS + 1 == PH_ALGORITHM_COUNT,
                "PH_ALGORITHM_COUNT must follow the last algorithm");
 
 static int ph_algorithm_is_valid(ph_algorithm_t algo) {
+    /* Through int: an enum's underlying type may be unsigned, which would make the first
+     * comparison vacuous for a negative value passed in. */
     return (int)algo >= 0 && (int)algo < PH_ALGORITHM_COUNT;
 }
 
@@ -55,19 +57,19 @@ void ph_digest_shape(const struct ph_context_config *config, ph_algorithm_t algo
             return;
         }
         case PH_ALGO_MHASH:
-            *size = (uint8_t)PH_MH_BYTES; /* always a 31x31 grid, whatever the preset */
+            *size = PH_MH_BYTES; /* always a 31x31 grid, whatever the preset */
             *kind = PH_DIGEST_KIND_BITS;
             return;
         case PH_ALGO_RADIAL:
-            *size = (uint8_t)PH_RADIAL_COEFFS; /* DCT coefficients, not one per angle */
+            *size = PH_RADIAL_COEFFS; /* DCT coefficients, not one per angle */
             *kind = PH_DIGEST_KIND_COEFFICIENTS;
             return;
         case PH_ALGO_COLOR_HASH:
-            *size = (uint8_t)PH_COLOR_BINS;
+            *size = PH_COLOR_BINS;
             *kind = PH_DIGEST_KIND_HISTOGRAM;
             return;
         case PH_ALGO_COLOR_MOMENTS:
-            *size = (uint8_t)PH_COLOR_MOMENTS_DIGEST_BYTES;
+            *size = PH_COLOR_MOMENTS_DIGEST_BYTES;
             *kind = PH_DIGEST_KIND_VECTOR16;
             return;
         case PH_ALGO_FORCE_INT32_:

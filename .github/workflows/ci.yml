@@ -68,6 +68,12 @@ jobs:
     - name: shellcheck scripts/
       run: shellcheck --severity=warning scripts/*.sh
 
+    # Explicit casts per file in src/ against scripts/explicit_casts.txt: an added or
+    # removed cast fails until the list is updated in the same change, so every one is
+    # visible in review (docs/development.md, "Conversions and casts").
+    - name: Explicit casts as recorded
+      run: python3 scripts/check_casts.py
+
   # Full vendored build (all bundled decoders) across the platforms/arches we
   # actually ship for. PHASH_STRICT_DEPS=ON turns a silent decoder fallback
   # (e.g. libjpeg-turbo not found) into a hard configure failure, so a CI green
@@ -142,7 +148,7 @@ jobs:
 
     - uses: ./.github/actions/setup-build
       with:
-        apt-packages: cmake nasm${{ matrix.cc == 'clang' && ' clang' || '' }}
+        apt-packages: cmake nasm${{ matrix.cc == 'clang' && ' clang clang-tidy' || '' }}
 
     - name: Build vendored libjpeg-turbo
       run: |
@@ -152,13 +158,23 @@ jobs:
     - name: Configure CMake (full vendored build, -Werror on libphash's own targets)
       run: >
         cmake -B build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
-        -DPHASH_WARNINGS_AS_ERRORS=ON
+        -DPHASH_WARNINGS_AS_ERRORS=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
     - name: Build
       run: cmake --build build -j
 
     - name: Run Tests
       run: cd build && ctest --output-on-failure
+
+    # A cast applied to the result of an arithmetic that has already overflowed in the
+    # narrower type -- (uint64_t)(a * b) on ints -- widens nothing. No compiler warning
+    # sees it; this clang-tidy check does.
+    - name: clang-tidy bugprone-misplaced-widening-cast
+      if: matrix.cc == 'clang'
+      run: >
+        git ls-files 'src/*.c' | grep -v '/stb_' |
+        xargs clang-tidy -p build --quiet --checks='-*,bugprone-misplaced-widening-cast'
+        --warnings-as-errors='*'
 
   # `make coverage` (Makefile) only measures the stb_image-only path -- none
   # of the native decoding code in src/loaders/ (jpeg.c and webp.c compile to nothing

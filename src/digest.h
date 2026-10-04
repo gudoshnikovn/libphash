@@ -6,6 +6,8 @@
 
 #include "libphash.h"
 
+#include "bytes.h"
+
 #include <stdint.h>
 
 /* Structural validity of a caller-supplied ph_digest_t.
@@ -29,16 +31,12 @@ static inline int ph_digest_is_comparable(const ph_digest_t *d) {
  * one lets PH_DIGEST_KIND_UNSPECIFIED through, which is right for permitting a metric and
  * wrong for choosing between two encodings. */
 static inline int ph_digest_kind_is(const ph_digest_t *d, ph_digest_kind_t kind) {
-    return d != NULL && d->kind == (uint8_t)kind;
+    return d != NULL && d->kind == kind;
 }
 
-/* Reads one big-endian signed 16-bit feature out of a PH_DIGEST_KIND_VECTOR16 digest.
- * Assembled in unsigned arithmetic and converted at the end, because shifting a value
- * into the sign bit of an int is undefined. */
-static inline int16_t ph_read_i16_be(const uint8_t *p) {
-    uint16_t bits = (uint16_t)(((uint16_t)p[0] << 8) | (uint16_t)p[1]);
-    return (int16_t)bits;
-}
+/* Reads one big-endian signed 16-bit feature out of a PH_DIGEST_KIND_VECTOR16 digest:
+ * the two's-complement bits, assembled unsigned and reinterpreted at the end. */
+static inline int16_t ph_read_i16_be(const uint8_t *p) { return (int16_t)ph_load_be16(p); }
 
 /* Whether a digest may be compared with a metric meant for `kind`.
  *
@@ -48,7 +46,7 @@ static inline int16_t ph_read_i16_be(const uint8_t *p) {
  * coefficients -- a plausible number that means nothing -- is refused rather than
  * returned. The tag never selects a metric; it only rules one out. */
 static inline int ph_digest_kind_allows(const ph_digest_t *d, ph_digest_kind_t kind) {
-    return d->kind == (uint8_t)PH_DIGEST_KIND_UNSPECIFIED || d->kind == (uint8_t)kind;
+    return d->kind == PH_DIGEST_KIND_UNSPECIFIED || d->kind == kind;
 }
 
 /* Both digests valid, non-empty, of equal size, and compatible with `kind`. */

@@ -121,7 +121,7 @@ int ph_area_downscale(ph_context_t *ctx, int dw, int dh, uint8_t *dst) {
     }
     const size_t sw = ph_size(ctx->image.width), sh = ph_size(ctx->image.height);
     const size_t w = ph_size(dw), h = ph_size(dh);
-    const uint64_t den = (uint64_t)sw * (uint64_t)sh;
+    const uint64_t den = (uint64_t)sw * sh; /* in 64 bits: it can overflow a 32-bit size_t */
 
     if (sw >= PH_AREA_GRID && sh >= PH_AREA_GRID && PH_AREA_GRID % dw == 0 &&
         PH_AREA_GRID % dh == 0) {

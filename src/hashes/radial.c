@@ -61,6 +61,7 @@
 #include "context.h"
 #include "hashes/hashes.h"
 #include "image/image.h"
+#include "safety.h"
 
 #include <math.h>
 #include <stdlib.h>
@@ -171,12 +172,13 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     if (projections < PH_RADIAL_COEFFS || samples <= 0) {
         return PH_ERR_INVALID_ARGUMENT;
     }
+    const size_t n_projections = ph_size(projections);
 
     /* projections * sizeof(double) does not overflow size_t on a 64-bit target, but it
      * does on a 32-bit one. ph_context_set_radial_params() caps projections
      * at PH_RADIAL_MAX_PROJECTIONS, so this cannot trigger through the public API either;
      * kept as defence in depth. Refuse rather than wrap. */
-    if ((size_t)projections > SIZE_MAX / sizeof(double)) {
+    if (n_projections > SIZE_MAX / sizeof(double)) {
         return PH_ERR_ALLOCATION_FAILED;
     }
 
@@ -184,7 +186,7 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
      * compare with ph_radial_similarity(). */
     ph_digest_begin(out_digest, ctx, PH_ALGO_RADIAL);
 
-    size_t img_size = (size_t)ctx->image.width * (size_t)ctx->image.height;
+    size_t img_size = ph_size(ctx->image.width) * ph_size(ctx->image.height);
 
     uint8_t *gray = ph_get_gray(ctx);
     if (!gray) {
@@ -194,8 +196,8 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     /* `blurred` and `blur_scratch` -- five bytes per source pixel -- are plain heap
      * allocations, not arena blocks, for the reason given in mhash.c: the arena would keep
      * them for the life of the context and the call would be no faster. */
-    uint8_t *blurred = (uint8_t *)malloc(img_size);
-    float *blur_scratch = (float *)malloc(img_size * sizeof(float));
+    uint8_t *blurred = malloc(img_size);
+    float *blur_scratch = malloc(img_size * sizeof(float));
     if (!blurred || !blur_scratch) {
         free(blurred);
         free(blur_scratch);
@@ -207,7 +209,7 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     ph_apply_gamma(ctx, blurred, ctx->image.width, ctx->image.height);
 
     ph_arena_mark_t arena_mark = ph_arena_mark(ctx);
-    uint8_t *block = ph_get_scratchpad(ctx, (size_t)projections * sizeof(double));
+    uint8_t *block = ph_get_scratchpad(ctx, n_projections * sizeof(double));
     if (!block) {
         free(blurred);
         return PH_ERR_ALLOCATION_FAILED;

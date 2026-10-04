@@ -13,20 +13,19 @@
 #include "loader.h"
 #include "safety.h"
 
+#include "bytes.h"
+
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
+/* TIFF fields in the byte order the "II"/"MM" marker announced. */
 static uint16_t ph_rd16(const uint8_t *p, int little_endian) {
-    return little_endian ? (uint16_t)(p[0] | (p[1] << 8)) : (uint16_t)((p[0] << 8) | p[1]);
+    return little_endian ? ph_load_le16(p) : ph_load_be16(p);
 }
 
 static uint32_t ph_rd32(const uint8_t *p, int little_endian) {
-    if (little_endian) {
-        return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
-               ((uint32_t)p[3] << 24);
-    }
-    return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | (uint32_t)p[3];
+    return little_endian ? ph_load_le32(p) : ph_load_be32(p);
 }
 
 /* `tiff` points at the "II"/"MM" byte-order marker; `len` is the remaining
@@ -52,20 +51,20 @@ static int ph_parse_tiff_orientation(const uint8_t *tiff, size_t len) {
     }
 
     uint32_t ifd0_off = ph_rd32(tiff + 4, le);
-    if (ifd0_off > len || (uint64_t)ifd0_off + 2 > (uint64_t)len) {
+    if (ifd0_off > len || len - ifd0_off < 2) {
         return 1;
     }
 
-    uint16_t count = ph_rd16(tiff + ifd0_off, le);
-    uint64_t entries_end = (uint64_t)ifd0_off + 2 + (uint64_t)count * 12;
-    if (entries_end > (uint64_t)len) {
+    size_t count = ph_rd16(tiff + ifd0_off, le);
+    const size_t entries_avail = len - ifd0_off - 2;
+    if (count * 12 > entries_avail) {
         /* Truncated IFD: only look at however many whole 12-byte entries
          * actually fit, instead of rejecting the whole thing outright. */
-        count = (uint16_t)(((uint64_t)len - ifd0_off - 2) / 12);
+        count = entries_avail / 12;
     }
 
-    for (uint16_t i = 0; i < count; i++) {
-        const uint8_t *entry = tiff + ifd0_off + 2 + (size_t)i * 12;
+    for (size_t i = 0; i < count; i++) {
+        const uint8_t *entry = tiff + ifd0_off + 2 + i * 12;
         if (ph_rd16(entry, le) != 0x0112) { /* Orientation tag */
             continue;
         }
@@ -75,7 +74,7 @@ static int ph_parse_tiff_orientation(const uint8_t *tiff, size_t len) {
             continue; // Non-conforming tag: ignore rather than misinterpret.
         }
         uint16_t value = ph_rd16(entry + 8, le);
-        return (value >= 1 && value <= 8) ? (int)value : 1;
+        return (value >= 1 && value <= 8) ? value : 1;
     }
     return 1;
 }
@@ -105,7 +104,7 @@ int ph_exif_orientation_from_jpeg(const uint8_t *data, size_t len) {
             break; // SOS: entropy-coded scan data follows, nothing left to scan.
         }
 
-        uint16_t seg_len = (uint16_t)((data[i + 2] << 8) | data[i + 3]);
+        uint16_t seg_len = ph_load_be16(data + i + 2);
         if (seg_len < 2 || i + 2 + seg_len > len) {
             break; // Malformed length: stop rather than read out of bounds.
         }
@@ -130,8 +129,7 @@ int ph_exif_orientation_from_webp(const uint8_t *data, size_t len) {
     size_t i = 12;
     while (i + 8 <= len) {
         const uint8_t *fourcc = data + i;
-        uint32_t chunk_size = (uint32_t)data[i + 4] | ((uint32_t)data[i + 5] << 8) |
-                              ((uint32_t)data[i + 6] << 16) | ((uint32_t)data[i + 7] << 24);
+        uint32_t chunk_size = ph_load_le32(data + i + 4);
         size_t payload_off = i + 8;
         if (chunk_size > len - payload_off) {
             break; // Malformed size: stop rather than read out of bounds.
@@ -162,8 +160,7 @@ int ph_exif_orientation_from_png(const uint8_t *data, size_t len) {
 
     size_t i = 8;
     while (i + 8 <= len) {
-        uint32_t chunk_len = ((uint32_t)data[i] << 24) | ((uint32_t)data[i + 1] << 16) |
-                             ((uint32_t)data[i + 2] << 8) | (uint32_t)data[i + 3];
+        uint32_t chunk_len = ph_load_be32(data + i);
         const uint8_t *type = data + i + 4;
         size_t payload_off = i + 8;
         if (chunk_len > len - payload_off) {
@@ -188,7 +185,7 @@ int ph_exif_orientation_from_png(const uint8_t *data, size_t len) {
 
         // Advance past this chunk's payload and its 4-byte CRC trailer; bail
         // rather than wrap past the end of the buffer on a truncated chunk.
-        if (payload_off + (size_t)chunk_len > len - 4) {
+        if (payload_off + chunk_len > len - 4) {
             break;
         }
         i = payload_off + chunk_len + 4;
@@ -199,7 +196,7 @@ int ph_exif_orientation_from_png(const uint8_t *data, size_t len) {
 /* Copy one pixel. The common channel counts are spelled out so the compiler
  * emits inline loads/stores instead of a call into memcpy with a runtime size:
  * this runs once per pixel, so a call here costs more than the copy itself. */
-static inline void ph_orient_copy_px(uint8_t *dst, const uint8_t *src, int channels) {
+static inline void ph_orient_copy_px(uint8_t *dst, const uint8_t *src, size_t channels) {
     switch (channels) {
         case 1:
             dst[0] = src[0];
@@ -220,7 +217,7 @@ static inline void ph_orient_copy_px(uint8_t *dst, const uint8_t *src, int chann
             dst[3] = src[3];
             return;
         default:
-            memcpy(dst, src, (size_t)channels);
+            memcpy(dst, src, channels);
             return;
     }
 }
@@ -242,54 +239,51 @@ ph_error_t ph_apply_exif_orientation(uint8_t **data, int *width, int *height, in
         return PH_SUCCESS; // Orientation 1 (and anything unknown) needs no transform at all.
     }
 
-    int W = *width, H = *height;
-    int Wd, Hd;
-    if (orientation >= 5) {
-        Wd = H;
-        Hd = W;
-    } else {
-        Wd = W;
-        Hd = H;
+    if (*width < 0 || *height < 0) {
+        return PH_ERR_INVALID_ARGUMENT;
     }
+    const int out_width = (orientation >= 5) ? *height : *width;
+    const int out_height = (orientation >= 5) ? *width : *height;
+    const size_t W = ph_size(*width), H = ph_size(*height), px = ph_size(channels);
+    const size_t Wd = (orientation >= 5) ? H : W;
+    const size_t Hd = (orientation >= 5) ? W : H;
 
     size_t out_size;
-    if (!ph_safe_image_alloc_size((uint64_t)Wd, (uint64_t)Hd, (uint64_t)channels, &out_size)) {
+    if (!ph_safe_image_alloc_size(Wd, Hd, px, &out_size)) {
         return PH_ERR_IMAGE_TOO_LARGE; // Can't safely size the output; image untouched.
     }
 
-    uint8_t *out = (uint8_t *)malloc(out_size);
+    uint8_t *out = malloc(out_size);
     if (!out) {
         return PH_ERR_ALLOCATION_FAILED;
     }
 
     const uint8_t *src = *data;
-    const size_t px = (size_t)channels;
-    const size_t src_stride = (size_t)W * px;
-    const size_t dst_stride = (size_t)Wd * px;
+    const size_t src_stride = W * px;
+    const size_t dst_stride = Wd * px;
 
     /* Same mapping as a per-pixel `dst(ox,oy) = src(sx,sy)` switch, but with the
      * case analysis hoisted out of the pixel loops and the memory walk shaped to
      * the access pattern each case actually has. */
     if (orientation == 4) {
         /* Flip vertically: rows are copied whole, in reverse order. */
-        for (int oy = 0; oy < Hd; oy++) {
-            memcpy(out + (size_t)oy * dst_stride, src + (size_t)(H - 1 - oy) * src_stride,
-                   src_stride);
+        for (size_t oy = 0; oy < Hd; oy++) {
+            memcpy(out + oy * dst_stride, src + (H - 1 - oy) * src_stride, src_stride);
         }
     } else if (orientation == 2 || orientation == 3) {
         /* Mirror horizontally (2), plus the vertical flip for the 180° rotation
          * (3). Either way one destination row comes from exactly one source row,
          * so both pointers stay within a single row's worth of cache lines. */
         const int flip_rows = (orientation == 3);
-        for (int oy = 0; oy < Hd; oy++) {
-            const uint8_t *row = src + (size_t)(flip_rows ? H - 1 - oy : oy) * src_stride;
-            uint8_t *d = out + (size_t)oy * dst_stride;
+        for (size_t oy = 0; oy < Hd; oy++) {
+            const uint8_t *row = src + (flip_rows ? H - 1 - oy : oy) * src_stride;
+            uint8_t *d = out + oy * dst_stride;
             /* Walk the source row backwards. Offsets rather than a moving
              * pointer: a pointer would step one pixel before the row on the
              * final iteration, which is undefined even when never dereferenced. */
-            size_t soff = (size_t)(W - 1) * px;
-            for (int ox = 0; ox < W; ox++, d += px, soff -= px) {
-                ph_orient_copy_px(d, row + soff, channels);
+            size_t soff = (W - 1) * px;
+            for (size_t ox = 0; ox < W; ox++, d += px, soff -= px) {
+                ph_orient_copy_px(d, row + soff, px);
             }
         }
     } else {
@@ -300,22 +294,24 @@ ph_error_t ph_apply_exif_orientation(uint8_t **data, int *width, int *height, in
          * the cache. */
         const int flip_x = (orientation == 7 || orientation == 8); // sx = W-1-oy
         const int flip_y = (orientation == 6 || orientation == 7); // sy = H-1-ox
-        const ptrdiff_t row_step = flip_y ? -(ptrdiff_t)src_stride : (ptrdiff_t)src_stride;
+        /* One source row down, or up when mirrored: unsigned arithmetic wraps modulo
+         * SIZE_MAX + 1, so adding 0 - src_stride steps back exactly one row. */
+        const size_t row_step = flip_y ? 0 - src_stride : src_stride;
 
-        for (int oy0 = 0; oy0 < Hd; oy0 += PH_ORIENT_TILE) {
-            const int oy1 = (oy0 + PH_ORIENT_TILE < Hd) ? oy0 + PH_ORIENT_TILE : Hd;
-            for (int ox0 = 0; ox0 < Wd; ox0 += PH_ORIENT_TILE) {
-                const int ox1 = (ox0 + PH_ORIENT_TILE < Wd) ? ox0 + PH_ORIENT_TILE : Wd;
-                for (int oy = oy0; oy < oy1; oy++) {
-                    const int sx = flip_x ? W - 1 - oy : oy;
-                    const int sy0 = flip_y ? H - 1 - ox0 : ox0;
+        for (size_t oy0 = 0; oy0 < Hd; oy0 += PH_ORIENT_TILE) {
+            const size_t oy1 = (oy0 + PH_ORIENT_TILE < Hd) ? oy0 + PH_ORIENT_TILE : Hd;
+            for (size_t ox0 = 0; ox0 < Wd; ox0 += PH_ORIENT_TILE) {
+                const size_t ox1 = (ox0 + PH_ORIENT_TILE < Wd) ? ox0 + PH_ORIENT_TILE : Wd;
+                for (size_t oy = oy0; oy < oy1; oy++) {
+                    const size_t sx = flip_x ? W - 1 - oy : oy;
+                    const size_t sy0 = flip_y ? H - 1 - ox0 : ox0;
                     /* Offset, not a moving pointer: on the last iteration of a
                      * mirrored walk a pointer would step off the front of the
                      * buffer, which is undefined even if never dereferenced. */
-                    size_t soff = (size_t)sy0 * src_stride + (size_t)sx * px;
-                    uint8_t *d = out + (size_t)oy * dst_stride + (size_t)ox0 * px;
-                    for (int ox = ox0; ox < ox1; ox++, d += px, soff += (size_t)row_step) {
-                        ph_orient_copy_px(d, src + soff, channels);
+                    size_t soff = sy0 * src_stride + sx * px;
+                    uint8_t *d = out + oy * dst_stride + ox0 * px;
+                    for (size_t ox = ox0; ox < ox1; ox++, d += px, soff += row_step) {
+                        ph_orient_copy_px(d, src + soff, px);
                     }
                 }
             }
@@ -324,7 +320,7 @@ ph_error_t ph_apply_exif_orientation(uint8_t **data, int *width, int *height, in
 
     ph_free_image(*data);
     *data = out;
-    *width = Wd;
-    *height = Hd;
+    *width = out_width;
+    *height = out_height;
     return PH_SUCCESS;
 }

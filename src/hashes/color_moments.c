@@ -30,6 +30,7 @@
  */
 #include "context.h"
 #include "hashes/hashes.h"
+#include "safety.h"
 
 #include <math.h>
 #include <stdint.h>
@@ -59,7 +60,7 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
     ph_digest_begin(out_digest, ctx, PH_ALGO_COLOR_MOMENTS);
 
     /* size_t, not int: width * height overflows int above ~46340x46340. */
-    size_t num_pixels = (size_t)ctx->image.width * (size_t)ctx->image.height;
+    size_t num_pixels = ph_size(ctx->image.width) * ph_size(ctx->image.height);
 
     for (int c = 0; c < PH_COLOR_CHANNELS; c++) {
         ph_channel_moments_t m =
@@ -77,8 +78,9 @@ PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx, ph_digest_t *
                 scaled = INT16_MIN;
             }
 
+            /* In int16_t range after the clamp; stored as its two's-complement bits. */
             uint16_t bits = (uint16_t)(int16_t)scaled;
-            size_t at = ((size_t)c * PH_COLOR_MOMENTS + (size_t)k) * PH_COLOR_MOMENT_BYTES;
+            size_t at = (ph_size(c) * PH_COLOR_MOMENTS + ph_size(k)) * PH_COLOR_MOMENT_BYTES;
             out_digest->data[at + 0] = (uint8_t)(bits >> 8);
             out_digest->data[at + 1] = (uint8_t)(bits & 0xFF);
         }
@@ -95,18 +97,19 @@ ph_channel_moments_t ph_compute_moments(const uint8_t *data, size_t num_pixels, 
     }
 
     /* `i * ch` in size_t: an int index would overflow well before num_pixels does. */
-    size_t ch = (size_t)channels;
+    const size_t ch = ph_size(channels);
+    const size_t off = (channels >= 3) ? ph_size(channel_index) : 0;
 
     /* Step 1: Calculate the Arithmetic Mean */
     for (size_t i = 0; i < num_pixels; i++) {
-        uint8_t val = (channels >= 3) ? data[i * ch + (size_t)channel_index] : data[i * ch];
+        uint8_t val = data[i * ch + off];
         m.mean += val;
     }
     m.mean /= (double)num_pixels;
 
     /* Step 2: Calculate Standard Deviation (2nd moment) and Skewness (3rd moment) */
     for (size_t i = 0; i < num_pixels; i++) {
-        uint8_t val = (channels >= 3) ? data[i * ch + (size_t)channel_index] : data[i * ch];
+        uint8_t val = data[i * ch + off];
         double diff = val - m.mean;
         m.std_dev += diff * diff;
         m.skew += diff * diff * diff;

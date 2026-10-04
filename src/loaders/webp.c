@@ -39,7 +39,7 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
 
     int w = features.width;
     int h = features.height;
-    if (ph_exceeds_pixel_limit((uint64_t)w, (uint64_t)h, max_pixels)) {
+    if (ph_exceeds_pixel_limit(ph_size(w), ph_size(h), max_pixels)) {
         if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
         }
@@ -53,7 +53,7 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
     int out_channels = features.has_alpha ? 4 : 3;
 
     size_t out_size;
-    if (!ph_safe_image_alloc_size((uint64_t)w, (uint64_t)h, (uint64_t)out_channels, &out_size)) {
+    if (!ph_safe_image_alloc_size(ph_size(w), ph_size(h), ph_size(out_channels), &out_size)) {
         if (out_err) {
             *out_err = PH_ERR_IMAGE_TOO_LARGE;
         }
@@ -63,7 +63,7 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
     /* int, the type libwebp takes: WebP caps a dimension at 16383, so w * 4 fits. */
     int stride = w * out_channels;
 
-    unsigned char *output = (unsigned char *)malloc(out_size);
+    unsigned char *output = malloc(out_size);
     if (!output) {
         if (out_err) {
             *out_err = PH_ERR_ALLOCATION_FAILED;

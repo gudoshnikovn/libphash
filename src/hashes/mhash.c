@@ -99,7 +99,7 @@ int ph_mh_kernel(float alpha, float level, float *out, int max_side) {
  * `scratch` must hold ph_mh_block_sums_scratch(n, half) bytes. Returns nothing; `out` is
  * PH_MH_GRID * PH_MH_GRID floats. */
 size_t ph_mh_block_sums_scratch(int n, int half) {
-    size_t pad_n = (size_t)n + 2 * (size_t)half;
+    size_t pad_n = ph_size(n) + 2 * ph_size(half);
     return (pad_n + 1) * (pad_n + 1) * sizeof(int64_t) + pad_n * pad_n;
 }
 
@@ -186,7 +186,7 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
     /* The grid is always 31x31, so the digest is always 576 bits whatever the preset;
      * the block size follows from the preset instead. */
     const int block = n / PH_MH_GRID;
-    const size_t npix = (size_t)n * (size_t)n;
+    const size_t npix = ph_size(n) * ph_size(n);
 
     ph_digest_begin(out_digest, ctx, PH_ALGO_MHASH);
 
@@ -201,9 +201,9 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
      * so on a 20-megapixel image it would hold another ~100 MB after the call (on glibc,
      * RSS after the call 177 MB against 98 MB), and it buys no time -- the call measures
      * the same with either (35.7 ms). */
-    size_t src_pixels = (size_t)ctx->image.width * (size_t)ctx->image.height;
-    uint8_t *blurred = (uint8_t *)malloc(src_pixels);
-    float *blur_scratch = (float *)malloc(src_pixels * sizeof(float));
+    size_t src_pixels = ph_size(ctx->image.width) * ph_size(ctx->image.height);
+    uint8_t *blurred = malloc(src_pixels);
+    float *blur_scratch = malloc(src_pixels * sizeof(float));
     if (!blurred || !blur_scratch) {
         free(blurred);
         free(blur_scratch);

@@ -1,0 +1,28 @@
+# Explicit casts per file under src/ -- maintained by scripts/check_casts.py.
+# Edit only through `scripts/check_casts.py --update`, after reviewing each new
+# cast against docs/development.md, "Conversions and casts".
+1 src/arena.h
+8 src/batch.c
+10 src/bytes.h
+9 src/compare.c
+7 src/config.c
+1 src/digest.h
+10 src/fileio.c
+1 src/hashes/ahash.c
+8 src/hashes/algorithm.c
+1 src/hashes/bmh.c
+5 src/hashes/color_histogram.c
+7 src/hashes/color_moments.c
+9 src/hashes/mhash.c
+1 src/hashes/multi.c
+4 src/hashes/phash.c
+35 src/hashes/radial.c
+2 src/hashes/whash.c
+10 src/image/color.c
+12 src/image/filters.c
+1 src/image/image.h
+4 src/image/resize.c
+5 src/loader.c
+4 src/loaders/jpeg.c
+6 src/loaders/png_libpng.c
+8 src/safety.h

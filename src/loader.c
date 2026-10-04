@@ -5,6 +5,7 @@
 #include "safety.h"
 
 #include "../vendor/stb_image.h"
+#include "bytes.h"
 
 #include <stdatomic.h>
 #include <stdbool.h>
@@ -46,7 +47,10 @@ static int ph_can_read_stb(const uint8_t *magic, size_t len) {
  * top-down BMP legitimately has a negative height in its header -- casting
  * that straight to uint64_t for the pixel-limit check would wrap to a huge
  * value and reject a perfectly small image. Take the magnitude first. */
-static uint64_t ph_abs_dim(int v) { return (v < 0) ? (uint64_t)(-(int64_t)v) : (uint64_t)v; }
+static uint64_t ph_abs_dim(int v) {
+    /* Negated in 64 bits: -INT_MIN does not fit an int. */
+    return (v < 0) ? (uint64_t)(-(int64_t)v) : (uint64_t)v;
+}
 
 /* stb_image has no error codes: a failure leaves a bare English sentence in
  * stbi_failure_reason(), so mapping one back to a ph_error_t means comparing against
@@ -157,16 +161,16 @@ static uint8_t *ph_stb_normalise_channels(uint8_t *px, size_t num_pixels, int na
         *out_channels = native;
         return px;
     }
+    const size_t in_px = ph_size(native), out_px = ph_size(want);
     if (gray) {
         /* RGB(A) -> gray(+alpha): pixel i shrinks from `native` to `want` bytes, so a
          * forward pass never overwrites a byte it has yet to read. */
         for (size_t i = 0; i < num_pixels; i++) {
-            const uint8_t *s = px + i * (size_t)native;
-            uint8_t *d = px + i * (size_t)want;
+            const uint8_t *s = px + i * in_px;
+            uint8_t *d = px + i * out_px;
             const uint8_t alpha = has_alpha ? s[3] : 0;
-            d[0] = (uint8_t)((PH_GRAY_R * (unsigned)s[0] + PH_GRAY_G * (unsigned)s[1] +
-                              PH_GRAY_B * (unsigned)s[2]) >>
-                             7);
+            /* The weights sum to 128, so the shifted sum is at most 255. */
+            d[0] = (uint8_t)((PH_GRAY_R * s[0] + PH_GRAY_G * s[1] + PH_GRAY_B * s[2]) >> 7);
             if (has_alpha) {
                 d[1] = alpha;
             }
@@ -177,8 +181,8 @@ static uint8_t *ph_stb_normalise_channels(uint8_t *px, size_t num_pixels, int na
     /* gray(+alpha) -> RGB(+alpha) */
     size_t bytes;
     uint8_t *out = NULL;
-    if (ph_safe_image_alloc_size(num_pixels, (uint64_t)want, 1, &bytes)) {
-        out = (uint8_t *)malloc(bytes ? bytes : 1);
+    if (ph_safe_image_alloc_size(num_pixels, out_px, 1, &bytes)) {
+        out = malloc(bytes ? bytes : 1);
     }
     if (!out) {
         stbi_image_free(px);
@@ -189,8 +193,8 @@ static uint8_t *ph_stb_normalise_channels(uint8_t *px, size_t num_pixels, int na
         return NULL;
     }
     for (size_t i = 0; i < num_pixels; i++) {
-        const uint8_t *s = px + i * (size_t)native;
-        uint8_t *d = out + i * (size_t)want;
+        const uint8_t *s = px + i * in_px;
+        uint8_t *d = out + i * out_px;
         d[0] = d[1] = d[2] = s[0];
         if (has_alpha) {
             d[3] = s[1];
@@ -213,8 +217,11 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
      * costs a header parse, which is negligible against the decode that follows. If
      * stbi_info() cannot parse it, there is nothing to judge -- stbi_load() below fails
      * on the same data and reports why. */
+    /* stb_image takes the length as an int; ph_decode_buffer() has refused anything over
+     * PH_MAX_ENCODED_SIZE (INT_MAX) before a backend is called. */
+    const int stb_len = (int)len;
     int iw, ih, icomp;
-    if (stbi_info_from_memory(data, (int)len, &iw, &ih, &icomp)) {
+    if (stbi_info_from_memory(data, stb_len, &iw, &ih, &icomp)) {
         uint64_t w64 = ph_abs_dim(iw), h64 = ph_abs_dim(ih);
         if (ph_exceeds_dimension_limit(w64, h64)) {
             if (out_err) {
@@ -239,7 +246,7 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
      * weights, as the libpng backend does, so a build's choice of PNG decoder
      * does not change what gets hashed. */
     int native = 0;
-    uint8_t *decoded = stbi_load_from_memory(data, (int)len, w, h, &native, 0);
+    uint8_t *decoded = stbi_load_from_memory(data, stb_len, w, h, &native, 0);
     if (!decoded) {
         const char *reason = stbi_failure_reason();
         if (reason) {
@@ -258,7 +265,7 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
         }
         return NULL;
     }
-    return ph_stb_normalise_channels(decoded, (size_t)*w * (size_t)*h, native, req_comp == 1, ch,
+    return ph_stb_normalise_channels(decoded, ph_size(*w) * ph_size(*h), native, req_comp == 1, ch,
                                      out_err, err_msg, err_msg_cap);
 }
 
@@ -395,7 +402,7 @@ static int ph_jpeg_reaches_eoi(const uint8_t *p, size_t n) {
         if (n - pos < 2) {
             return 0;
         }
-        size_t seglen = ((size_t)p[pos] << 8) | p[pos + 1];
+        size_t seglen = ph_load_be16(p + pos);
         if (seglen < 2 || seglen > n - pos) {
             return 0;
         }
@@ -472,8 +479,7 @@ static uint32_t ph_png_crc(const uint8_t *p, size_t n) {
     const uint32_t (*t)[256] = s_png_crc_table;
     uint32_t c = 0xFFFFFFFFu;
     for (; n >= 8; n -= 8, p += 8) {
-        c ^= (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
-             ((uint32_t)p[3] << 24);
+        c ^= ph_load_le32(p);
         c = t[7][c & 0xFFu] ^ t[6][(c >> 8) & 0xFFu] ^ t[5][(c >> 16) & 0xFFu] ^ t[4][c >> 24] ^
             t[3][p[4]] ^ t[2][p[5]] ^ t[1][p[6]] ^ t[0][p[7]];
     }
@@ -498,8 +504,7 @@ static const char *ph_png_check_chunks(const uint8_t *p, size_t n) {
 #endif
     size_t pos = 8;
     while (n - pos >= 12) {
-        size_t len = ((size_t)p[pos] << 24) | ((size_t)p[pos + 1] << 16) |
-                     ((size_t)p[pos + 2] << 8) | p[pos + 3];
+        size_t len = ph_load_be32(p + pos);
         if (len > 0x7FFFFFFFu || len > n - pos - 12) {
             break;
         }
@@ -507,8 +512,7 @@ static const char *ph_png_check_chunks(const uint8_t *p, size_t n) {
 #if PH_PNG_CHECK_CRC
         if ((type[0] & 0x20u) == 0) {
             const uint8_t *c = type + 4 + len;
-            const uint32_t stored = ((uint32_t)c[0] << 24) | ((uint32_t)c[1] << 16) |
-                                    ((uint32_t)c[2] << 8) | (uint32_t)c[3];
+            const uint32_t stored = ph_load_be32(c);
             if (ph_png_crc(type, len + 4) != stored) {
                 return "PNG chunk CRC mismatch";
             }
@@ -527,9 +531,7 @@ static int ph_webp_riff_complete(const uint8_t *p, size_t n) {
     if (n < 12) {
         return 0;
     }
-    uint32_t riff =
-        (uint32_t)p[4] | ((uint32_t)p[5] << 8) | ((uint32_t)p[6] << 16) | ((uint32_t)p[7] << 24);
-    return (uint64_t)riff + 8 <= (uint64_t)n;
+    return ph_load_le32(p + 4) <= n - 8;
 }
 
 /* NULL when the container is complete (or not one of the three formats), otherwise the

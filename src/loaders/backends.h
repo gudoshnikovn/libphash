@@ -7,6 +7,8 @@
 #include "loader.h"
 #include "safety.h"
 
+#include "bytes.h"
+
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h> // memcmp, for the PNG signature check
@@ -39,10 +41,8 @@ static inline int ph_png_dimensions_within_limit(const unsigned char *buffer, si
         return 1; /* Not an IHDR where the spec requires one; let the backend say so. */
     }
 
-    uint32_t w = ((uint32_t)buffer[16] << 24) | ((uint32_t)buffer[17] << 16) |
-                 ((uint32_t)buffer[18] << 8) | (uint32_t)buffer[19];
-    uint32_t h = ((uint32_t)buffer[20] << 24) | ((uint32_t)buffer[21] << 16) |
-                 ((uint32_t)buffer[22] << 8) | (uint32_t)buffer[23];
+    uint32_t w = ph_load_be32(buffer + 16);
+    uint32_t h = ph_load_be32(buffer + 20);
 
     return !ph_exceeds_dimension_limit(w, h);
 }

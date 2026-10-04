@@ -53,7 +53,7 @@ PH_API ph_error_t ph_create(ph_context_t **out_ctx) {
     }
 
     /* calloc: no image, an empty arena and an empty diagnostic message are all zero. */
-    ph_context_t *ctx = (ph_context_t *)calloc(1, sizeof(ph_context_t));
+    ph_context_t *ctx = calloc(1, sizeof(ph_context_t));
     if (!ctx) {
         return PH_ERR_ALLOCATION_FAILED;
     }
@@ -225,7 +225,7 @@ PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels, 
 
     /* Decompression-bomb protection applies here too, with the same check and the same
      * error code as the file and buffer paths; max_pixels == 0 means "no caller limit". */
-    if (ph_exceeds_pixel_limit((uint64_t)width, (uint64_t)height, ctx->config.max_pixels)) {
+    if (ph_exceeds_pixel_limit(ph_size(width), ph_size(height), ctx->config.max_pixels)) {
         return PH_ERR_IMAGE_TOO_LARGE;
     }
 
