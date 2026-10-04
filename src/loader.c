@@ -362,8 +362,10 @@ static void ph_warm_decoder_dispatch(void) {
  * plausible hash of half a picture in another. They give every build the same answer: after a
  * successful decode, the container must reach its own end -- EOI for JPEG, IEND for PNG, the RIFF
  * size for WebP. Bytes after that end are allowed (camera trailers, appended data); a missing end
- * is PH_ERR_CORRUPT_DATA. They run after the decoder, not before, so a decoder's own and
- * more specific verdict (too large, out of memory, its own corruption message) wins. */
+ * is PH_ERR_CORRUPT_DATA, and so, in a build whose PNG decoder is stb_image, is a bad
+ * checksum on a critical PNG chunk. They run after the decoder, not before, so a decoder's
+ * own and more specific verdict (too large, out of memory, its own corruption message)
+ * wins. */
 
 /* Walks the JPEG marker structure: segments are skipped by their length (so an EOI inside
  * an embedded EXIF thumbnail does not count), entropy-coded data after SOS is scanned for
@@ -423,21 +425,101 @@ static int ph_jpeg_reaches_eoi(const uint8_t *p, size_t n) {
     }
 }
 
-/* Walks the PNG chunks from the signature: every chunk must fit, and IEND must come. */
-static int ph_png_reaches_iend(const uint8_t *p, size_t n) {
+#if !defined(PH_USE_LIBPNG) && !defined(PH_USE_SPNG)
+/* stb_image, the only PNG decoder in a build without libpng or spng, reads no chunk
+ * checksum at all; ph_png_check_chunks() compares them, so a damaged critical chunk is
+ * refused as libpng and spng refuse it. A build with a native PNG decoder leaves the
+ * comparison to it. */
+#    define PH_PNG_CHECK_CRC 1
+
+/* CRC-32 of the PNG specification (ISO 3309, reflected polynomial 0xEDB88320),
+ * computed eight bytes per step ("slice-by-8"): table k maps a byte to its CRC
+ * contribution k bytes further on. A byte-at-a-time table runs at about a tenth of the
+ * speed, and on an incompressible PNG stb_image inflates faster than that, so the
+ * checksum pass would cost several times the decode. The 8 KiB of tables are built on
+ * first use, under the same once-only spinlock as the DCT matrix, rather than spelled
+ * out as 2048 constants. */
+static uint32_t s_png_crc_table[8][256];
+static atomic_flag s_png_crc_lock = ATOMIC_FLAG_INIT;
+static atomic_bool s_png_crc_init = false;
+
+static void ph_png_crc_init(void) {
+    if (atomic_load(&s_png_crc_init)) {
+        return;
+    }
+    while (atomic_flag_test_and_set(&s_png_crc_lock)) {
+    }
+    if (!atomic_load(&s_png_crc_init)) {
+        for (uint32_t n = 0; n < 256; n++) {
+            uint32_t c = n;
+            for (int k = 0; k < 8; k++) {
+                c = (c & 1u) ? 0xEDB88320u ^ (c >> 1) : c >> 1;
+            }
+            s_png_crc_table[0][n] = c;
+        }
+        for (int t = 1; t < 8; t++) {
+            for (int n = 0; n < 256; n++) {
+                const uint32_t prev = s_png_crc_table[t - 1][n];
+                s_png_crc_table[t][n] = s_png_crc_table[0][prev & 0xFFu] ^ (prev >> 8);
+            }
+        }
+        atomic_store(&s_png_crc_init, true);
+    }
+    atomic_flag_clear(&s_png_crc_lock);
+}
+
+static uint32_t ph_png_crc(const uint8_t *p, size_t n) {
+    const uint32_t (*t)[256] = s_png_crc_table;
+    uint32_t c = 0xFFFFFFFFu;
+    for (; n >= 8; n -= 8, p += 8) {
+        c ^= (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) |
+             ((uint32_t)p[3] << 24);
+        c = t[7][c & 0xFFu] ^ t[6][(c >> 8) & 0xFFu] ^ t[5][(c >> 16) & 0xFFu] ^ t[4][c >> 24] ^
+            t[3][p[4]] ^ t[2][p[5]] ^ t[1][p[6]] ^ t[0][p[7]];
+    }
+    for (; n > 0; n--, p++) {
+        c = t[0][(c ^ *p) & 0xFFu] ^ (c >> 8);
+    }
+    return c ^ 0xFFFFFFFFu;
+}
+
+#else
+#    define PH_PNG_CHECK_CRC 0
+#endif
+
+/* Walks the PNG chunks from the signature: every chunk must fit, and IEND must come.
+ * When PH_PNG_CHECK_CRC is set it also compares the checksum of every critical chunk (IHDR,
+ * PLTE, IDAT, IEND -- an upper-case first letter). An ancillary chunk with a bad
+ * checksum is left alone, because both native decoders drop such a chunk and decode
+ * the image. NULL when the file is whole, otherwise the diagnostic. */
+static const char *ph_png_check_chunks(const uint8_t *p, size_t n) {
+#if PH_PNG_CHECK_CRC
+    ph_png_crc_init();
+#endif
     size_t pos = 8;
     while (n - pos >= 12) {
         size_t len = ((size_t)p[pos] << 24) | ((size_t)p[pos + 1] << 16) |
                      ((size_t)p[pos + 2] << 8) | p[pos + 3];
         if (len > 0x7FFFFFFFu || len > n - pos - 12) {
-            return 0;
+            break;
         }
-        if (memcmp(p + pos + 4, "IEND", 4) == 0) {
-            return 1;
+        const uint8_t *type = p + pos + 4;
+#if PH_PNG_CHECK_CRC
+        if ((type[0] & 0x20u) == 0) {
+            const uint8_t *c = type + 4 + len;
+            const uint32_t stored = ((uint32_t)c[0] << 24) | ((uint32_t)c[1] << 16) |
+                                    ((uint32_t)c[2] << 8) | (uint32_t)c[3];
+            if (ph_png_crc(type, len + 4) != stored) {
+                return "PNG chunk CRC mismatch";
+            }
+        }
+#endif
+        if (memcmp(type, "IEND", 4) == 0) {
+            return NULL;
         }
         pos += 12 + len;
     }
-    return 0;
+    return "PNG is truncated: no IEND chunk";
 }
 
 /* The RIFF header states the file size; a truncated file is shorter than it says. */
@@ -457,7 +539,7 @@ static const char *ph_container_truncation(const uint8_t *p, size_t n) {
         return ph_jpeg_reaches_eoi(p, n) ? NULL : "JPEG is truncated: no end-of-image marker";
     }
     if (ph_magic_is_png(p, n)) {
-        return ph_png_reaches_iend(p, n) ? NULL : "PNG is truncated: no IEND chunk";
+        return ph_png_check_chunks(p, n);
     }
     if (ph_magic_is_webp(p, n)) {
         return ph_webp_riff_complete(p, n) ? NULL : "WebP is truncated: shorter than its RIFF size";

@@ -9,8 +9,8 @@
  * converts a format differently fails here, not in a golden file three steps later.
  *
  * The broken files fail at different stages -- the header, truncated image data, a bad
- * checksum -- and each must come back as PH_ERR_CORRUPT_DATA with a diagnostic, whichever
- * decoder reads it.
+ * checksum on IHDR or on IDAT -- and each must come back as PH_ERR_CORRUPT_DATA with a diagnostic,
+ * whichever decoder reads it.
  */
 
 #include "context.h"
@@ -142,6 +142,8 @@ static void test_valid_variants(void) {
     /* Alpha dropped: the stored colour, under transparency too. */
     check_fixture(FIXTURE("rgba8.png"), expect_rgb8, PH_ALPHA_IGNORE);
     check_fixture(FIXTURE("palette_trns.png"), expect_palette, PH_ALPHA_IGNORE);
+    /* A tEXt chunk with a wrong checksum: dropped, the image decodes. */
+    check_fixture(FIXTURE("ancillary_bad_crc.png"), expect_rgb8, PH_ALPHA_BLEND_GREY);
     PASS("test_valid_variants");
 }
 
@@ -165,14 +167,10 @@ static void check_broken(const char *path, ph_error_t expected) {
 static void test_broken_files(void) {
     check_broken(FIXTURE("broken_header.png"), PH_ERR_CORRUPT_DATA);
     check_broken(FIXTURE("broken_truncated.png"), PH_ERR_CORRUPT_DATA);
-#ifdef PH_USE_LIBPNG
+    /* A damaged checksum on the last IDAT, whose zlib stream ends exactly at the end of
+     * the chunk: every PNG decoder refuses it. */
     check_broken(FIXTURE("broken_crc.png"), PH_ERR_CORRUPT_DATA);
-#else
-    /* stb_image skips chunk checksums, and spng returns the image without reporting the
-     * bad IDAT checksum: both decode this file where libpng refuses it. */
-    printf("  broken_crc.png: SKIPPED (this build's PNG decoder does not verify the IDAT "
-           "checksum)\n");
-#endif
+    check_broken(FIXTURE("broken_crc_ihdr.png"), PH_ERR_CORRUPT_DATA);
 #ifdef PH_USE_WEBP
     const ph_error_t webp = PH_ERR_CORRUPT_DATA;
 #else

@@ -101,8 +101,20 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
      * same bytes for the same input. Alpha comes back as the last channel, as from every
      * backend, for the caller to resolve (ph_resolve_alpha()); a tRNS chunk counts as
      * alpha, as libpng's png_set_tRNS_to_alpha() makes it. */
+    /* spng_get_trns() reads every chunk ahead of the image data, so its error is the
+     * first report of a damaged chunk there -- a bad IHDR checksum among them -- and
+     * is returned as such; only SPNG_ECHUNKAVAIL means "no tRNS". */
     struct spng_trns trns;
-    const int has_trns = spng_get_trns(ctx, &trns) == 0;
+    ret = spng_get_trns(ctx, &trns);
+    if (ret != 0 && ret != SPNG_ECHUNKAVAIL) {
+        if (out_err) {
+            *out_err = ph_spng_err(ret);
+        }
+        ph_set_err_msg(err_msg, err_msg_cap, spng_strerror(ret));
+        spng_ctx_free(ctx);
+        return NULL;
+    }
+    const int has_trns = ret == 0;
     const int has_alpha = has_trns || ihdr.color_type == SPNG_COLOR_TYPE_GRAYSCALE_ALPHA ||
                           ihdr.color_type == SPNG_COLOR_TYPE_TRUECOLOR_ALPHA;
     const int gray_native =
@@ -142,6 +154,23 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     if (ret != 0) {
         if (out_err) {
             *out_err = ph_spng_err(ret);
+        }
+        ph_set_err_msg(err_msg, err_msg_cap, spng_strerror(ret));
+        free(data);
+        spng_ctx_free(ctx);
+        return NULL;
+    }
+
+    /* spng checks a chunk's CRC when it reads the header of the chunk after it, and
+     * spng_decode_image() returns once the image is complete, before reading anything
+     * past the last IDAT: a damaged checksum on that IDAT goes unseen, where libpng
+     * refuses the file. Reading on through the trailing chunks makes spng check it. Only
+     * a checksum error counts here: whether the file reaches IEND is judged after the
+     * decode, for every decoder alike (ph_decode_buffer()). */
+    ret = spng_decode_chunks(ctx);
+    if (ret == SPNG_ECHUNK_CRC) {
+        if (out_err) {
+            *out_err = PH_ERR_CORRUPT_DATA;
         }
         ph_set_err_msg(err_msg, err_msg_cap, spng_strerror(ret));
         free(data);

@@ -4,7 +4,8 @@
 Each valid PNG exercises one pixel-format conversion the decoders must make, and its
 pixels follow a formula that tests/src/test_png_variants.c recomputes, so the test checks
 decoded values rather than only a return code. The broken files cover the stages at which
-a decoder can fail: a bad header, truncated image data, a bad checksum.
+a decoder can fail: a bad header, truncated image data, a bad checksum on a critical
+chunk. A bad checksum on an ancillary chunk is not a failure: the chunk is dropped.
 
 Standard library only; the output is deterministic. Run from the repository root:
 
@@ -112,6 +113,15 @@ def main():
     bad = bytearray(good)
     bad[crc_at] ^= 0xFF
     write("broken_crc.png", bytes(bad))
+    # (d) the IHDR checksum wrong, a critical chunk ahead of the image data.
+    bad = bytearray(good)
+    bad[8 + 8 + 13] ^= 0xFF
+    write("broken_crc_ihdr.png", bytes(bad))
+    # Not broken: an ancillary chunk with a wrong checksum is dropped and the image
+    # decodes, the same pixels as rgb8.png.
+    text = bytearray(chunk(b"tEXt", b"Comment\x00checksum is wrong"))
+    text[-1] ^= 0xFF
+    write("ancillary_bad_crc.png", good[:33] + bytes(text) + good[33:])
 
     # Broken WebP, from the valid fixture: (a) the RIFF/WEBP header intact and the
     # bitstream replaced with garbage, (b) the file cut after its first 256 bytes, which
