@@ -949,4 +949,13 @@ if(PHASH_BUILD_TESTS)
     target_include_directories(bench_hash PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/src)
     target_compile_definitions(bench_hash PRIVATE
         TEST_DATA_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/data\")
+    # Linked against the same instrumented library as the tests, so it takes the same
+    # link-time flags (the profiling runtime, the sanitizer coverage hooks).
+    if(PHASH_BUILD_FUZZERS)
+        target_compile_options(bench_hash PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS})
+        target_link_options(bench_hash PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS})
+    endif()
+    if(PHASH_COVERAGE)
+        target_link_options(bench_hash PRIVATE --coverage)
+    endif()
 endif()
