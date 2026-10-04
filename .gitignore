@@ -48,6 +48,7 @@ src/**/*.gcno
 
 # Internal planning/review material — kept locally, never committed
 tasks/
+tmp/
 CLAUDE.md
 REVIEW_v2.0.0.md
 
