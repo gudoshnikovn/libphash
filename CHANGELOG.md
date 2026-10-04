@@ -470,6 +470,12 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   decoders rejected the same bytes. Every build requires the file to reach its own end
   (JPEG end-of-image marker, PNG `IEND`, the WebP RIFF size) and returns
   `PH_ERR_CORRUPT_DATA` otherwise. Data after that end is still accepted.
+- **A PNG with a damaged chunk checksum loaded successfully unless libpng decoded it.**
+  stb_image (the Makefile build) reads no checksum, and spng did not compare the one on
+  the last `IDAT` chunk, so a corrupted file got a hash in one build and an error in
+  another. A bad checksum on a critical chunk (`IHDR`, `PLTE`, `IDAT`, `IEND`) returns
+  `PH_ERR_CORRUPT_DATA` in every build; an ancillary chunk with a bad checksum is
+  dropped and the image decodes, as libpng does.
 - **An encoded buffer over 2 GiB was decoded from a truncated length.** On the `stb_image`
   path the length was cut to an `int`: a valid image in a 2 GiB + 4 KiB buffer was reported
   as not an image, and past 4 GiB the length wrapped and the start of the buffer was
