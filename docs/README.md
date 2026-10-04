@@ -16,6 +16,9 @@ Welcome to the internal technical documentation for `libphash`. This directory c
 - [**References**](references.md)
   The bibliography: full citations and links for every source the algorithms rest on,
   with how far each one can be trusted and whether it was read directly.
+- [**Benchmark Records**](benchmarks/README.md)
+  Dated measurements behind the choice of decoders and build defaults, with the exact
+  commit, machines and method of each.
 
 ---
 
