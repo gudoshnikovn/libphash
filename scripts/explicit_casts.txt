@@ -11,13 +11,13 @@
 1 src/hashes/ahash.c
 8 src/hashes/algorithm.c
 1 src/hashes/bmh.c
-5 src/hashes/color_histogram.c
-7 src/hashes/color_moments.c
+8 src/hashes/color_histogram.c
+6 src/hashes/color_moments.c
 9 src/hashes/mhash.c
 1 src/hashes/multi.c
 4 src/hashes/phash.c
 35 src/hashes/radial.c
-2 src/hashes/whash.c
+3 src/hashes/whash.c
 10 src/image/color.c
 12 src/image/filters.c
 1 src/image/image.h

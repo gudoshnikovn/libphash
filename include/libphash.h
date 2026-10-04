@@ -528,7 +528,10 @@ PH_API ph_error_t ph_context_set_mhash_params(ph_context_t *ctx, float alpha, fl
  * @brief Sets the operating mode for Wavelet Hash (wHash).
  *
  * @param ctx The context.
- * @param mode PH_WHASH_FAST (0) for 15x speedup, PH_WHASH_FULL (1) for maximum accuracy.
+ * @param mode PH_WHASH_FAST (0, the default): a fixed 16x16 scale and one Haar level, a
+ *             cost independent of the image beyond the shared downscale. PH_WHASH_FULL (1):
+ *             the largest power-of-two scale that fits the image, cascaded down to 8x8 --
+ *             closer to ImageHash, and its cost grows with the image.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or a @p mode that
  *         is not one of the declared enumerators.
  */

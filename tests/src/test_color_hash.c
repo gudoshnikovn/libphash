@@ -420,8 +420,86 @@ void test_color_histogram_counts_are_scaled_against_the_largest_bin() {
     PASS("test_color_histogram_counts_are_scaled_against_the_largest_bin");
 }
 
+/* ph_compute_color_hash() bins through per-axis tables; the contract is that the tables
+ * give ph_color_histogram_bin()'s bin for every one of the 2^24 colours. */
+void test_color_bin_table_matches_every_colour() {
+    ph_color_bin_table_t table;
+    ph_color_bin_table_init(&table);
+    long mismatches = 0;
+    int first_r = -1, first_g = -1, first_b = -1;
+    for (int r = 0; r < 256; r++) {
+        for (int g = 0; g < 256; g++) {
+            for (int b = 0; b < 256; b++) {
+                if (ph_color_bin_lookup(&table, r, g, b) != ph_color_histogram_bin(r, g, b)) {
+                    if (mismatches++ == 0) {
+                        first_r = r;
+                        first_g = g;
+                        first_b = b;
+                    }
+                }
+            }
+        }
+    }
+    ASSERT_MSG(mismatches == 0, "%ld colours binned differently, first (%d, %d, %d)", mismatches,
+               first_r, first_g, first_b);
+    PASS("test_color_bin_table_matches_every_colour");
+}
+
+/* The digest against a histogram counted the plain way, one ph_color_histogram_bin() per
+ * pixel into one array, and scaled exactly as the library scales it. Pixel counts that are
+ * not a multiple of four exercise the tail after the library's four-pixel stride. */
+void test_color_hash_matches_plain_count() {
+    static const int dims[][2] = {{1, 1}, {1, 3}, {2, 3}, {5, 7}, {64, 64}, {101, 37}, {333, 211}};
+    static const int channels[] = {3, 4};
+    ph_test_rng_t rng = ph_test_rng(0xC0105u);
+    for (unsigned di = 0; di < sizeof(dims) / sizeof(dims[0]); di++) {
+        for (unsigned ci = 0; ci < sizeof(channels) / sizeof(channels[0]); ci++) {
+            for (int pattern = 0; pattern < 3; pattern++) {
+                const int w = dims[di][0], h = dims[di][1], ch = channels[ci];
+                const size_t n = (size_t)w * h;
+                uint8_t *px = (uint8_t *)malloc(n * (size_t)ch);
+                ASSERT_PTR_NOT_NULL(px);
+                for (size_t i = 0; i < n * (size_t)ch; i++) {
+                    const size_t p = i / (size_t)ch;
+                    px[i] = pattern == 0   ? ph_test_rng_byte(&rng)
+                            : pattern == 1 ? (uint8_t)((p / 3) % 2 ? 255 : 0)
+                                           : (uint8_t)((p * 13 + i % (size_t)ch * 101) % 256);
+                }
+                uint64_t counts[PH_COLOR_BINS] = {0};
+                for (size_t p = 0; p < n; p++) {
+                    const uint8_t *q = px + p * (size_t)ch;
+                    counts[ph_color_histogram_bin(q[0], q[1], q[2])]++;
+                }
+                uint64_t max_count = 0;
+                for (int b = 0; b < PH_COLOR_BINS; b++) {
+                    max_count = counts[b] > max_count ? counts[b] : max_count;
+                }
+
+                ph_context_t *ctx = NULL;
+                ASSERT_OK(ph_create(&ctx));
+                /* PH_ALPHA_IGNORE drops a fourth channel on load without touching the
+                 * colour under it, so the plain count above sees the same colours. */
+                ASSERT_OK(ph_context_set_alpha_mode(ctx, PH_ALPHA_IGNORE));
+                ASSERT_OK(ph_load_from_pixels(ctx, px, w, h, ch, 0));
+                ph_digest_t d;
+                ASSERT_OK(ph_compute_color_hash(ctx, &d));
+                for (int b = 0; b < PH_COLOR_BINS; b++) {
+                    const uint8_t want = (uint8_t)((counts[b] * 255 + max_count / 2) / max_count);
+                    ASSERT_MSG(d.data[b] == want, "%dx%d c=%d pattern %d bin %d: got %u, want %u",
+                               w, h, ch, pattern, b, d.data[b], want);
+                }
+                ph_free(ctx);
+                free(px);
+            }
+        }
+    }
+    PASS("test_color_hash_matches_plain_count");
+}
+
 int main() {
     test_color_histogram_bin_unit();
+    test_color_bin_table_matches_every_colour();
+    test_color_hash_matches_plain_count();
     test_color_histogram_counts_are_scaled_against_the_largest_bin();
     test_histogram_intersection_unit();
     test_histogram_intersection_is_exact();

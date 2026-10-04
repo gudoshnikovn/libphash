@@ -619,7 +619,9 @@ static void test_colour_moments_match_the_definitions(void) {
      *   skew = cbrt(93750) = 45.428835...  (positive: the tail is to the right) */
     uint8_t rgb[4 * 3] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0};
 
-    ph_channel_moments_t m = ph_compute_moments(rgb, 4, 3, 0);
+    ph_channel_moments_t all[PH_COLOR_CHANNELS];
+    ph_compute_moments(rgb, 4, 3, all);
+    ph_channel_moments_t m = all[0];
     assert_close(m.mean, 25.0, 1e-9, "colour moment 1 (mean)");
     assert_close(m.std_dev, sqrt(1875.0), 1e-9, "colour moment 2 (standard deviation)");
     assert_close(m.skew, cbrt(93750.0), 1e-9, "colour moment 3 (skewness)");
@@ -627,7 +629,8 @@ static void test_colour_moments_match_the_definitions(void) {
     /* The mirrored distribution {100, 100, 100, 0} must give the same magnitude of skew
      * with the opposite sign. cbrt(), not pow(x, 1/3), is what makes this work. */
     uint8_t mirrored[4 * 3] = {100, 0, 0, 100, 0, 0, 100, 0, 0, 0, 0, 0};
-    ph_channel_moments_t n = ph_compute_moments(mirrored, 4, 3, 0);
+    ph_compute_moments(mirrored, 4, 3, all);
+    ph_channel_moments_t n = all[0];
     assert_close(n.mean, 75.0, 1e-9, "mirrored mean");
     assert_close(n.std_dev, sqrt(1875.0), 1e-9, "mirrored standard deviation");
     assert_close(n.skew, -cbrt(93750.0), 1e-9, "mirrored skewness is negative");
@@ -699,8 +702,10 @@ static void test_colour_moments_digest_round_trips_the_values(void) {
     ph_digest_t d;
     ASSERT_OK(ph_compute_color_moments_hash(ctx, &d));
 
+    ph_channel_moments_t all[PH_COLOR_CHANNELS];
+    ph_compute_moments(px, W * H, 3, all);
     for (int c = 0; c < PH_COLOR_CHANNELS; c++) {
-        ph_channel_moments_t m = ph_compute_moments(px, W * H, 3, c);
+        const ph_channel_moments_t m = all[c];
         const double expected[PH_COLOR_MOMENTS] = {m.mean, m.std_dev, m.skew};
         for (int k = 0; k < PH_COLOR_MOMENTS; k++) {
             int at = (c * PH_COLOR_MOMENTS + k) * PH_COLOR_MOMENT_BYTES;

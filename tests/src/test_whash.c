@@ -267,8 +267,110 @@ void test_whash_full_ll_band_is_the_block_mean() {
     PASS("test_whash_full_ll_band_is_the_block_mean");
 }
 
+/* The FULL cascade written with the complete ph_haar_2d_level() at every level -- all four
+ * bands, column passes included -- from the same box-resized gray image. The library keeps
+ * only each level's LL band; this is the contract that it is the same LL band, bit for bit,
+ * so the reference is compared with ==, not with a tolerance. */
+static uint64_t whash_full_with_complete_levels(ph_context_t *ctx, int remove_max_haar_ll) {
+    int w = 0, h = 0, c = 0;
+    ph_context_get_dimensions(ctx, &w, &h, &c);
+    const int min_dim = w < h ? w : h;
+    int scale = 1;
+    while (scale * 2 <= min_dim) {
+        scale *= 2;
+    }
+    if (scale < PH_CORE_HASH_SIZE) {
+        scale = PH_CORE_HASH_SIZE;
+    }
+
+    uint8_t *gray = ph_get_gray(ctx);
+    ASSERT_PTR_NOT_NULL(gray);
+    uint8_t *img = (uint8_t *)malloc((size_t)scale * scale);
+    float *d = (float *)malloc((size_t)scale * scale * sizeof(float));
+    float *ta = (float *)malloc((size_t)scale * sizeof(float));
+    float *tb = (float *)malloc((size_t)scale * sizeof(float));
+    ASSERT(img && d && ta && tb);
+    ASSERT(ph_resize_box(gray, w, h, img, scale, scale));
+    for (size_t i = 0; i < (size_t)scale * scale; i++) {
+        d[i] = img[i] / 255.0f;
+    }
+
+    if (remove_max_haar_ll) {
+        int cur = scale;
+        while (cur > 1) {
+            ph_haar_2d_level(d, cur, scale, ta, tb);
+            cur /= 2;
+        }
+        d[0] = 0.0f;
+        while (cur < scale) {
+            cur *= 2;
+            ph_haar_2d_level_inverse(d, cur, scale, ta, tb);
+        }
+    }
+    for (int cur = scale; cur > PH_CORE_HASH_SIZE; cur /= 2) {
+        ph_haar_2d_level(d, cur, scale, ta, tb);
+    }
+
+    float ll[PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE];
+    for (int y = 0; y < PH_CORE_HASH_SIZE; y++) {
+        for (int x = 0; x < PH_CORE_HASH_SIZE; x++) {
+            ll[y * PH_CORE_HASH_SIZE + x] = d[(size_t)y * scale + x];
+        }
+    }
+    free(img);
+    free(d);
+    free(ta);
+    free(tb);
+    return ph_median_bitpack(ll, PH_CORE_HASH_SIZE * PH_CORE_HASH_SIZE);
+}
+
+void test_whash_full_matches_complete_levels() {
+    /* Sides around every power of two the cascade starts from (8 ... 512), non-square and
+     * odd, 1, 3 and 4 channels, pseudo-random and structured content. */
+    static const int dims[][2] = {{1, 1},     {7, 5},     {8, 8},     {9, 13},
+                                  {16, 17},   {33, 31},   {64, 100},  {127, 129},
+                                  {200, 256}, {257, 300}, {511, 513}, {640, 480}};
+    static const int channels[] = {1, 3, 4};
+    ph_test_rng_t rng = ph_test_rng(0x5EED1u);
+    for (unsigned di = 0; di < sizeof(dims) / sizeof(dims[0]); di++) {
+        for (unsigned ci = 0; ci < sizeof(channels) / sizeof(channels[0]); ci++) {
+            for (int pattern = 0; pattern < 3; pattern++) {
+                const int w = dims[di][0], h = dims[di][1], ch = channels[ci];
+                const size_t n = (size_t)w * h * ch;
+                uint8_t *px = (uint8_t *)malloc(n);
+                ASSERT_PTR_NOT_NULL(px);
+                for (size_t i = 0; i < n; i++) {
+                    const size_t p = i / (size_t)ch, x = p % (size_t)w, y = p / (size_t)w;
+                    px[i] = pattern == 0   ? ph_test_rng_byte(&rng)
+                            : pattern == 1 ? (uint8_t)((x * 37 + y * 91 + x * y) % 256)
+                                           : (uint8_t)(((x / 3 + y / 5) % 2) ? 255 : 0);
+                }
+                for (int remove = 0; remove <= 1; remove++) {
+                    ph_context_t *ctx = NULL;
+                    ASSERT_OK(ph_create(&ctx));
+                    ASSERT_OK(ph_load_from_pixels(ctx, px, w, h, ch, 0));
+                    ASSERT_OK(ph_context_set_whash_mode(ctx, PH_WHASH_FULL));
+                    ASSERT_OK(ph_context_set_whash_remove_max_haar_ll(ctx, remove));
+                    uint64_t got = 0;
+                    ASSERT_OK(ph_compute_whash(ctx, &got));
+                    const uint64_t want = whash_full_with_complete_levels(ctx, remove);
+                    ASSERT_MSG(got == want,
+                               "whash FULL %dx%d c=%d pattern %d remove_max_haar_ll %d: got "
+                               "%016llx, complete levels give %016llx",
+                               w, h, ch, pattern, remove, (unsigned long long)got,
+                               (unsigned long long)want);
+                    ph_free(ctx);
+                }
+                free(px);
+            }
+        }
+    }
+    PASS("test_whash_full_matches_complete_levels");
+}
+
 int main() {
     test_whash_full_ll_band_is_the_block_mean();
+    test_whash_full_matches_complete_levels();
     test_whash_e2e();
     test_remove_max_haar_ll_subtracts_the_mean();
     test_remove_max_haar_ll_leaves_the_hash_alone();

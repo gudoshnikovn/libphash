@@ -41,6 +41,7 @@
 #include "safety.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 void ph_haar_1d_float(float *data, int n, float *temp) {
     int h = n / 2;
@@ -110,6 +111,29 @@ void ph_haar_2d_level_inverse(float *data, int size, int stride, float *temp_row
         for (int j = 0; j < size; j++) {
             data[i * stride + j] = temp_row[j];
         }
+    }
+}
+
+/* One level of ph_haar_2d_level() reduced to the part the cascade reads: the low band of
+ * both passes, written to the top-left size/2 x size/2 corner. Each output is the same two
+ * float operations in the same order -- the horizontal low pass of rows 2i and 2i+1, then
+ * the vertical low pass of those two results -- so the LL band is bit for bit the one the
+ * full level leaves there. Skipping the three detail bands drops three quarters of the
+ * stores, and walking rows instead of columns keeps the reads sequential; a column pass
+ * over a 2048-wide float image strides 8 KiB per sample. temp holds size/2 floats. */
+static void ph_haar_2d_level_ll(float *data, int size, int stride, float *temp) {
+    const int h = size / 2;
+    const float inv_haar = (float)(1.0 / PH_HAAR_SCALE);
+    for (int i = 0; i < h; i++) {
+        const float *a = data + ph_size(2 * i) * ph_size(stride);
+        const float *b = a + stride;
+        for (int j = 0; j < h; j++) {
+            float ra = (a[2 * j] + a[2 * j + 1]) * inv_haar;
+            float rb = (b[2 * j] + b[2 * j + 1]) * inv_haar;
+            temp[j] = (ra + rb) * inv_haar;
+        }
+        /* Row i's only reader is output row i/2: this one (read above) or one done. */
+        memcpy(data + ph_size(i) * ph_size(stride), temp, ph_size(h) * sizeof(float));
     }
 }
 
@@ -230,9 +254,9 @@ static ph_error_t ph_compute_whash_full(ph_context_t *ctx, uint64_t *out_hash) {
     }
 
     int current_size = image_scale;
-    // DWT cascade down to 8x8. We just call it on the top-left quadrant over and over.
+    // DWT cascade down to 8x8, each level on the previous level's LL band.
     while (current_size > PH_CORE_HASH_SIZE) {
-        ph_haar_2d_level(d, current_size, image_scale, temp_a, temp_b);
+        ph_haar_2d_level_ll(d, current_size, image_scale, temp_a);
         current_size /= 2;
     }
 

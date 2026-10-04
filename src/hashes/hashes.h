@@ -59,10 +59,13 @@ typedef struct {
     double skew;
 } ph_channel_moments_t;
 
-/* num_pixels is a size_t on purpose: it is width * height, which does not fit an
- * int for images above ~46340x46340. */
-ph_channel_moments_t ph_compute_moments(const uint8_t *data, size_t num_pixels, int channels,
-                                        int channel_index);
+/* The mean, standard deviation and skewness of each of the first three channels of an
+ * interleaved image with `channels` bytes per pixel (3 or more; any further channel is
+ * skipped), into out[0..PH_COLOR_CHANNELS - 1]. All zero when data is NULL, num_pixels is
+ * 0 or channels < 3. num_pixels is a size_t on purpose: it is width * height, which does
+ * not fit an int for images above ~46340x46340. */
+void ph_compute_moments(const uint8_t *data, size_t num_pixels, int channels,
+                        ph_channel_moments_t out[]);
 
 /* Partial 2D DCT: computes the top-left reduction_size x reduction_size block.
  *
@@ -368,5 +371,25 @@ _Static_assert(255 * PH_COLOR_MOMENT_SCALE <= INT16_MAX,
 _Static_assert(PH_COLOR_BINS <= PH_DIGEST_MAX_BYTES,
                "the colour histogram must fit a digest, one byte per bin");
 #endif
+
+/* ph_color_histogram_bin() as a sum of three per-axis terms, one table per axis indexed by
+ * the shifted axis value: rg[] holds a * BINS_BY * BINS_WB, by[] holds c * BINS_WB, wb[]
+ * holds w. ph_color_bin_lookup() equals ph_color_histogram_bin() for every 8-bit colour. */
+typedef struct {
+    uint8_t rg[PH_COLOR_RG_VALUES];
+    uint8_t by[PH_COLOR_BY_VALUES];
+    uint8_t wb[PH_COLOR_WB_VALUES];
+} ph_color_bin_table_t;
+
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+_Static_assert(PH_COLOR_BINS <= 256, "a bin index must fit the tables' uint8_t entries");
+#endif
+
+void ph_color_bin_table_init(ph_color_bin_table_t *t);
+
+static inline int ph_color_bin_lookup(const ph_color_bin_table_t *t, int r, int g, int b) {
+    return t->rg[r - g + PH_COLOR_RG_OFFSET] + t->by[2 * b - r - g + PH_COLOR_BY_OFFSET] +
+           t->wb[r + g + b];
+}
 
 #endif /* PH_HASHES_HASHES_H */

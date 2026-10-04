@@ -47,26 +47,36 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* One axis: its value shifted to start at 0, out of `values` distinct ones, onto `bins`. */
+static int ph_color_axis_bin(int shifted, int bins, int values) {
+    int k = shifted * bins / values;
+    return k < bins ? k : bins - 1;
+}
+
 int ph_color_histogram_bin(int r, int g, int b) {
     /* Opponent axes, each mapped from its own full span (see PH_COLOR_RG_VALUES). */
-    int rg = r - g;
-    int by = 2 * b - r - g;
-    int wb = r + g + b;
-
-    int a = (rg + PH_COLOR_RG_OFFSET) * PH_COLOR_BINS_RG / PH_COLOR_RG_VALUES;
-    if (a >= PH_COLOR_BINS_RG) {
-        a = PH_COLOR_BINS_RG - 1;
-    }
-    int c = (by + PH_COLOR_BY_OFFSET) * PH_COLOR_BINS_BY / PH_COLOR_BY_VALUES;
-    if (c >= PH_COLOR_BINS_BY) {
-        c = PH_COLOR_BINS_BY - 1;
-    }
-    int w = wb * PH_COLOR_BINS_WB / PH_COLOR_WB_VALUES;
-    if (w >= PH_COLOR_BINS_WB) {
-        w = PH_COLOR_BINS_WB - 1;
-    }
+    int a = ph_color_axis_bin(r - g + PH_COLOR_RG_OFFSET, PH_COLOR_BINS_RG, PH_COLOR_RG_VALUES);
+    int c =
+        ph_color_axis_bin(2 * b - r - g + PH_COLOR_BY_OFFSET, PH_COLOR_BINS_BY, PH_COLOR_BY_VALUES);
+    int w = ph_color_axis_bin(r + g + b, PH_COLOR_BINS_WB, PH_COLOR_WB_VALUES);
 
     return (a * PH_COLOR_BINS_BY + c) * PH_COLOR_BINS_WB + w;
+}
+
+/* Every entry is a term of a bin index below PH_COLOR_BINS, which hashes/hashes.h asserts
+ * is at most 256, so each fits the table's uint8_t. */
+void ph_color_bin_table_init(ph_color_bin_table_t *t) {
+    for (int v = 0; v < PH_COLOR_RG_VALUES; v++) {
+        t->rg[v] = (uint8_t)(ph_color_axis_bin(v, PH_COLOR_BINS_RG, PH_COLOR_RG_VALUES) *
+                             PH_COLOR_BINS_BY * PH_COLOR_BINS_WB);
+    }
+    for (int v = 0; v < PH_COLOR_BY_VALUES; v++) {
+        t->by[v] = (uint8_t)(ph_color_axis_bin(v, PH_COLOR_BINS_BY, PH_COLOR_BY_VALUES) *
+                             PH_COLOR_BINS_WB);
+    }
+    for (int v = 0; v < PH_COLOR_WB_VALUES; v++) {
+        t->wb[v] = (uint8_t)ph_color_axis_bin(v, PH_COLOR_BINS_WB, PH_COLOR_WB_VALUES);
+    }
 }
 
 PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_digest) {
@@ -96,10 +106,36 @@ PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_dige
     size_t channels = ph_size(ctx->image.channels);
     const uint8_t *src = ctx->image.raw_rgb;
 
-    uint64_t counts[PH_COLOR_BINS] = {0};
-    for (size_t i = 0; i < total_pixels; i++) {
-        counts[ph_color_histogram_bin(src[i * channels], src[i * channels + 1],
-                                      src[i * channels + 2])]++;
+    /* Three table lookups per pixel instead of three divisions: each axis depends on one
+     * value. Built per call -- 2298 entries, nothing next to a single image's pixels -- so
+     * there is no shared state to initialise across threads. */
+    ph_color_bin_table_t table;
+    ph_color_bin_table_init(&table);
+
+    /* Four histograms, pixel i into lane i % 4, added up afterwards. Neighbouring pixels
+     * mostly share a bin, and with one histogram every increment would wait for the
+     * previous one's store to the same counter. */
+    enum {
+        LANES = 4,
+    };
+
+    uint64_t lanes[LANES][PH_COLOR_BINS];
+    memset(lanes, 0, sizeof(lanes));
+    size_t px = 0;
+    for (; px + LANES <= total_pixels; px += LANES) {
+        const uint8_t *p = src + px * channels;
+        for (size_t k = 0; k < LANES; k++, p += channels) {
+            lanes[k][ph_color_bin_lookup(&table, p[0], p[1], p[2])]++;
+        }
+    }
+    for (; px < total_pixels; px++) {
+        const uint8_t *p = src + px * channels;
+        lanes[0][ph_color_bin_lookup(&table, p[0], p[1], p[2])]++;
+    }
+
+    uint64_t counts[PH_COLOR_BINS];
+    for (int b = 0; b < PH_COLOR_BINS; b++) {
+        counts[b] = lanes[0][b] + lanes[1][b] + lanes[2][b] + lanes[3][b];
     }
 
     /* Scaled by the largest bin rather than by the pixel count. With 108 bins the average
