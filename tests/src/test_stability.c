@@ -13,8 +13,13 @@
  * JPEG through libjpeg-turbo is the one real difference: asked for grayscale, it returns
  * the luma it decoded from YCbCr, not a gray computed from the RGB it would otherwise have
  * produced, so a pixel can land a level apart. That moves a hash only where values sit
- * next to its threshold -- measured on photo.jpeg: aHash 1 bit, dHash 1, pHash 0 -- and
- * the bound for it is 3 bits.
+ * next to its threshold. Measured on photo.jpeg with the vendored libjpeg-turbo
+ * (2026-10-04): at most 1 bit over the four hashes, from dHash. The bound is 3 bits:
+ * above the measurement, and still a small fraction of the ~30 bits between unrelated
+ * images.
+ *
+ * The test prints ph_get_build_info() first, so a log shows which decoder gave which
+ * distance.
  */
 
 #include "libphash.h"
@@ -63,6 +68,7 @@ int main(void) {
 #endif
 
     printf("--- Checking Consistency: colour load vs grayscale load ---\n");
+    printf("build: %s\n", ph_get_build_info());
 
     struct {
         const char *name;
