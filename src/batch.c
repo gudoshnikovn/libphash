@@ -65,13 +65,26 @@ int ph_cpu_quota_limit(const char *cpu_max) {
     if (sscanf(cpu_max, "%lld %lld", &quota, &period) != 2 || quota <= 0 || period <= 0) {
         return 0;
     }
-    long long cpus = (quota + period - 1) / period;
+    /* Rounded up without forming quota + period - 1, which overflows near LLONG_MAX. */
+    long long cpus = quota / period + (quota % period != 0);
     return cpus > INT_MAX ? INT_MAX : (int)cpus;
 }
 
+#if !defined(_WIN32)
+static int ph_online_cpus(void) {
+    long online = sysconf(_SC_NPROCESSORS_ONLN);
+    return online > 0 ? (online > INT_MAX ? INT_MAX : (int)online) : 1;
+}
+#endif
+
 #if defined(__linux__)
-/* Reads at most `cap - 1` bytes of a small text file; 1 on success. */
-static int ph_read_small_file(const char *path, char *buf, size_t cap) {
+/* Reads at most `cap - 1` bytes of a small text file under `dir`; 1 on success. */
+static int ph_read_small_file(const char *dir, const char *name, char *buf, size_t cap) {
+    char path[512];
+    int len = snprintf(path, sizeof(path), "%s/%s", dir, name);
+    if (len < 0 || ph_size(len) >= sizeof(path)) {
+        return 0;
+    }
     FILE *f = fopen(path, "r");
     if (!f) {
         return 0;
@@ -82,20 +95,34 @@ static int ph_read_small_file(const char *path, char *buf, size_t cap) {
     return n > 0;
 }
 
-/* The CPU quota of the cgroup the process sees at the conventional mount point -- inside
- * a container that is the container's own. 0 when there is none or it cannot be read. */
-static int ph_cgroup_cpu_limit(void) {
+int ph_cgroup_cpu_limit(const char *root) {
     char buf[128];
-    if (ph_read_small_file("/sys/fs/cgroup/cpu.max", buf, sizeof(buf))) {
+    if (ph_read_small_file(root, "cpu.max", buf, sizeof(buf))) {
         return ph_cpu_quota_limit(buf); /* cgroup v2 */
     }
     char quota[64], period[64];
-    if (ph_read_small_file("/sys/fs/cgroup/cpu/cpu.cfs_quota_us", quota, sizeof(quota)) &&
-        ph_read_small_file("/sys/fs/cgroup/cpu/cpu.cfs_period_us", period, sizeof(period))) {
+    if (ph_read_small_file(root, "cpu/cpu.cfs_quota_us", quota, sizeof(quota)) &&
+        ph_read_small_file(root, "cpu/cpu.cfs_period_us", period, sizeof(period))) {
         snprintf(buf, sizeof(buf), "%lld %lld", atoll(quota), atoll(period));
         return ph_cpu_quota_limit(buf); /* cgroup v1: quota -1 means none */
     }
     return 0;
+}
+
+int ph_available_cpus_at(const char *cgroup_root) {
+    int n = ph_online_cpus();
+    cpu_set_t set;
+    if (sched_getaffinity(0, sizeof(set), &set) == 0) {
+        int allowed = CPU_COUNT(&set);
+        if (allowed > 0 && allowed < n) {
+            n = allowed;
+        }
+    }
+    int quota = ph_cgroup_cpu_limit(cgroup_root);
+    if (quota > 0 && quota < n) {
+        n = quota;
+    }
+    return n;
 }
 #endif
 
@@ -118,22 +145,12 @@ int ph_available_cpus(void) {
             n = allowed;
         }
     }
+#elif defined(__linux__)
+    /* The cgroup of the process, at the conventional mount point -- inside a container,
+     * the container's own. */
+    n = ph_available_cpus_at("/sys/fs/cgroup");
 #else
-    long online = sysconf(_SC_NPROCESSORS_ONLN);
-    n = online > 0 ? (online > INT_MAX ? INT_MAX : (int)online) : 1;
-#    if defined(__linux__)
-    cpu_set_t set;
-    if (sched_getaffinity(0, sizeof(set), &set) == 0) {
-        int allowed = CPU_COUNT(&set);
-        if (allowed > 0 && allowed < n) {
-            n = allowed;
-        }
-    }
-    int quota = ph_cgroup_cpu_limit();
-    if (quota > 0 && quota < n) {
-        n = quota;
-    }
-#    endif
+    n = ph_online_cpus();
 #endif
     return n > 0 ? n : 1;
 }

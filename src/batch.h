@@ -12,4 +12,15 @@ int ph_available_cpus(void);
  * cpu.max; 0 for "max ..." (no quota) or anything unparseable. */
 int ph_cpu_quota_limit(const char *cpu_max);
 
+#if defined(__linux__)
+/* The CPU quota of the cgroup mounted at `root` (cgroup v2's cpu.max, else v1's
+ * cpu/cpu.cfs_quota_us and cpu/cpu.cfs_period_us); 0 when there is none or it cannot be
+ * read. */
+int ph_cgroup_cpu_limit(const char *root);
+
+/* ph_available_cpus() with the cgroup mounted at `cgroup_root`; ph_available_cpus()
+ * passes /sys/fs/cgroup. */
+int ph_available_cpus_at(const char *cgroup_root);
+#endif
+
 #endif /* PH_BATCH_H */
