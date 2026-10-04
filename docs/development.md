@@ -534,6 +534,7 @@ ships with: 10% for one metric, 5% for the median change over all of them.
 | Machine | Gate runs | Worst single metric | Flags at 10% | Worst median change |
 |---|---|---|---|---|
 | Apple M3 Pro, macOS, desktop in use (2026-10-04) | 7 | 14.4% (`loading_png_rgb`; ColorHash and wHash Full about 7%, the rest under 3%) | 2 of 91 | 0.25% |
+| GitHub-hosted `ubuntu-24.04` x86-64, the CI `benchmark` job ([run 37198168665](https://github.com/gudoshnikovn/libphash/actions/runs/37198168665), 2026-10-04, a documentation-only push) | 1 | 0.49% (`loading_grayscale`; runs at most 2.1% apart) | 0 of 14 | 0.02% |
 
 This is the only place these numbers are written; the gate script and the CI job refer
 here.
@@ -547,7 +548,10 @@ on `avg_ms` shows false regressions of 40% and more.
 
 The thresholds sit far below what the gate exists to catch: an extra decode pass or a
 lost fast path costs far more than 10%, and an even slowdown of the whole pipeline by
-5% is a real one. The gate runs warning-only (`STRICT=0`).
+5% is a real one. On the CI runner they are twenty times its worst single metric, so
+the job runs the gate with `STRICT=1`: a flagged regression fails it, after the report
+has been published to the run summary and the `benchmark-report` artifact. Run without
+`STRICT`, the script only reports.
 
 #### Running the gate
 

@@ -451,22 +451,26 @@ jobs:
         } > benchmark_report.md
         # Thresholds: the script's defaults, 10% per metric and 5% on the median
         # change; docs/development.md has the noise floor they are read against.
-        # STRICT=0: warning-only.
+        # STRICT=1: a flagged regression fails the job, after the report is
+        # published below -- a red job without its table would say nothing.
         # A base tree that does not build bench_hash has nothing to compare against.
+        gate=0
         if [ -x base/build/bench_hash ]; then
-          bash pr/scripts/bench_regression_gate.sh \
-            pr/build/bench_hash base/build/bench_hash 5 10 regression.md
+          STRICT=1 bash pr/scripts/bench_regression_gate.sh \
+            pr/build/bench_hash base/build/bench_hash 5 10 regression.md || gate=$?
           cat regression.md >> benchmark_report.md
         else
           echo "::notice::The base commit does not build bench_hash; no regression comparison."
         fi
         cat benchmark_report.md >> "$GITHUB_STEP_SUMMARY"
+        exit "$gate"
 
     # Downloadable alongside the $GITHUB_STEP_SUMMARY copy above -- the summary
     # disappears once you're not looking at this specific run's page, an artifact
-    # survives to be diffed against a later run's or pulled into a script.
+    # survives to be diffed against a later run's or pulled into a script. It
+    # runs after a failed gate too: the report is what explains the failure.
     - name: Upload benchmark report
-      if: steps.base.outputs.ref != ''
+      if: ${{ !cancelled() && steps.base.outputs.ref != '' && hashFiles('benchmark_report.md') != '' }}
       uses: actions/upload-artifact@v7
       with:
         name: benchmark-report
@@ -474,7 +478,7 @@ jobs:
         retention-days: 90
 
     - name: Post Performance Report
-      if: github.event_name == 'pull_request' && steps.base.outputs.ref != ''
+      if: ${{ !cancelled() && github.event_name == 'pull_request' && steps.base.outputs.ref != '' && hashFiles('benchmark_report.md') != '' }}
       # gh rather than a marketplace action: no third-party JavaScript runtime to
       # keep current. The bot's previous report is edited in place, not stacked.
       env:
