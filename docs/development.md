@@ -114,11 +114,19 @@ under `-jN` (`clean` deleting object files other jobs are compiling). Prefer the
   `-DPHASH_COVERAGE=ON` + `ctest` pass with the default vendored decoder set
   (libjpeg-turbo + libpng + libwebp + zlib-ng, i.e. what CI's `build-and-test` job
   and releases ship) and renders its `lcov` trace under
-  `docs/coverage/cmake/html/index.html`. This is what actually exercises the
-  `max_pixels` checks, `png_error_fn`/`png_warning_fn` + the `longjmp` that carries
-  libpng's error message out, and the `pitch`/
-  `alloc_size` overflow guards in `jpeg.c` — overflow-hardening code that no coverage
-  number from the Makefile-only target ever measured.
+  `docs/coverage/cmake/html/index.html`. It is the only measurement of the native
+  backends' own limit checks: each backend's `max_pixels` check
+  (`test_decode_limits.c`, every format at its exact boundary), the libpng backend's
+  per-dimension cap and the JPEG backend's encoded-length check (called directly, since
+  the dispatcher answers the same inputs first), and `png_error_fn`/`png_warning_fn`
+  with the `longjmp` that carries libpng's error message out.
+
+  The row-buffer size checks behind `max_pixels` (`alloc_size`/stride in each backend)
+  fail only where `size_t` is 32 bits: an image within `PH_MAX_SUPPORTED_PIXELS` needs
+  at most 8 GiB, which a 64-bit `size_t` holds. libpng's is run by CI's 32-bit job; the
+  JPEG one has no 32-bit libjpeg-turbo build to run in, and the WebP one cannot fail
+  at all (VP8 caps a side at 16383 pixels). On a 64-bit coverage run these lines stay
+  uncovered by construction.
 
 Neither target subsumes the other — always read the two side by side, and treat a
 report that only ran one of them as measuring at most half the decoder surface.

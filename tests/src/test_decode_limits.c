@@ -1,4 +1,6 @@
 #include "libphash.h"
+#include "loader.h"
+#include "safety.h"
 #include "test_macros.h"
 
 #include <stdint.h>
@@ -194,6 +196,127 @@ void test_encoded_length_limit() {
     printf("test_encoded_length_limit: PASSED\n");
 }
 
+/* The caller's max_pixels at its exact boundary, for every format. Each format reaches
+ * the limit through its own decoder -- the dispatcher judges only PNG dimensions -- so
+ * this is what runs the check inside libjpeg-turbo's, libpng's and libwebp's backends
+ * in a native build, and stb_image's otherwise. */
+static void check_max_pixels_boundary(const char *path) {
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ph_error_t err = ph_load_from_file(ctx, path);
+    if (err == PH_ERR_DECODER_UNAVAILABLE) {
+        printf("  %s: SKIPPED (no decoder in this build)\n", path);
+        ph_free(ctx);
+        return;
+    }
+    ASSERT_MSG(err == PH_SUCCESS, "%s: load returned %d", path, err);
+    int w = 0, h = 0;
+    ph_context_get_dimensions(ctx, &w, &h, NULL);
+    const uint64_t pixels = (uint64_t)w * (uint64_t)h;
+
+    ASSERT_OK(ph_context_set_max_pixels(ctx, pixels));
+    err = ph_load_from_file(ctx, path);
+    ASSERT_MSG(err == PH_SUCCESS, "%s: max_pixels = w*h = %llu refused with %d", path,
+               (unsigned long long)pixels, err);
+
+    ASSERT_OK(ph_context_set_max_pixels(ctx, pixels - 1));
+    err = ph_load_from_file(ctx, path);
+    ASSERT_MSG(err == PH_ERR_IMAGE_TOO_LARGE, "%s: max_pixels = w*h - 1 returned %d", path, err);
+    ASSERT_INT_EQ(0, ph_is_loaded(ctx));
+    ph_free(ctx);
+}
+
+void test_max_pixels_boundary_every_format() {
+    check_max_pixels_boundary(TEST_DATA_DIR "/photo.jpeg");
+    check_max_pixels_boundary(TEST_DATA_DIR "/photo.png");
+    check_max_pixels_boundary(TEST_DATA_DIR "/photo.webp");
+    printf("test_max_pixels_boundary_every_format: PASSED\n");
+}
+
+/* The checks below are inside the native backends and sit behind a dispatcher check
+ * that answers the same input first, so they are reached by calling the backend
+ * directly. They keep the backend safe on its own: it is the one that hands the length
+ * and the dimensions to the third-party decoder. */
+
+#ifdef PH_USE_LIBJPEG_TURBO
+/* jpeg_mem_src() takes the length as unsigned long, 32 bits on Windows x64. The length
+ * is refused before a byte is read, so a short buffer is enough. */
+static void test_jpeg_backend_refuses_long_input(void) {
+    static const unsigned char soi[4] = {0xFF, 0xD8, 0xFF, 0xD9};
+    int w, h, ch;
+    ph_error_t err = PH_SUCCESS;
+    char msg[128];
+    unsigned char *px = ph_decode_jpeg_mem(soi, PH_MAX_ENCODED_SIZE + (size_t)1, &w, &h, &ch, 0, 0,
+                                           PH_DECODE_SCALE_FULL, &err, msg, sizeof(msg));
+    ASSERT_PTR_NULL(px);
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, err);
+    printf("test_jpeg_backend_refuses_long_input: PASSED\n");
+}
+#endif
+
+#ifdef PH_USE_LIBPNG
+static uint32_t crc32_of(const uint8_t *p, size_t n) {
+    uint32_t c = 0xFFFFFFFFu;
+    for (size_t i = 0; i < n; i++) {
+        c ^= p[i];
+        for (int k = 0; k < 8; k++) {
+            c = (c >> 1) ^ (0xEDB88320u & (0u - (c & 1u)));
+        }
+    }
+    return c ^ 0xFFFFFFFFu;
+}
+
+static void put_be32(uint8_t *p, uint32_t v) {
+    p[0] = (uint8_t)(v >> 24);
+    p[1] = (uint8_t)(v >> 16);
+    p[2] = (uint8_t)(v >> 8);
+    p[3] = (uint8_t)v;
+}
+
+/* Signature, IHDR with a valid CRC, and the header of an empty IDAT: enough for libpng to
+ * finish png_read_info() and report the dimensions, nothing to decode. */
+static size_t build_png_stub(uint8_t out[45], uint32_t w, uint32_t h) {
+    build_png_header(out, w, h);
+    put_be32(out + 29, crc32_of(out + 12, 17));
+    put_be32(out + 33, 0);
+    memcpy(out + 37, "IDAT", 4);
+    put_be32(out + 41, crc32_of(out + 37, 4));
+    return 45;
+}
+
+static ph_error_t decode_png_stub(uint32_t w, uint32_t h, uint64_t max_pixels) {
+    uint8_t png[45];
+    size_t n = build_png_stub(png, w, h);
+    int ow, oh, ch;
+    ph_error_t err = PH_SUCCESS;
+    char msg[128];
+    unsigned char *px = ph_decode_png_mem(png, n, &ow, &oh, &ch, 0, max_pixels,
+                                          PH_DECODE_SCALE_FULL, &err, msg, sizeof(msg));
+    ASSERT_PTR_NULL(px);
+    return err;
+}
+
+static void test_png_backend_limits(void) {
+    /* The backend's own per-dimension cap, the same one the dispatcher applies first. */
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, decode_png_stub(268435456u, 1u, 0));
+
+    /* 46340 x 46340 RGB is just under PH_MAX_SUPPORTED_PIXELS (INT_MAX), so with no limit
+     * of the caller's own it passes the pixel check, and its 46340 * 3 * 46340 bytes
+     * (6.4 GB) are refused by the row-buffer size check -- reachable only where size_t
+     * is 32 bits. Where it is not, the stub with max_pixels one short of w*h shows the
+     * header is read as far as the check right before that one. */
+    const uint32_t side = 46340u;
+    ASSERT((uint64_t)side * side <= PH_MAX_SUPPORTED_PIXELS);
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, decode_png_stub(side, side, (uint64_t)side * side - 1));
+#    if SIZE_MAX <= 0xFFFFFFFFu
+    ASSERT_INT_EQ(PH_ERR_IMAGE_TOO_LARGE, decode_png_stub(side, side, 0));
+    printf("test_png_backend_limits: PASSED (32-bit row-buffer check included)\n");
+#    else
+    printf("test_png_backend_limits: PASSED\n");
+#    endif
+}
+#endif
+
 int main() {
     test_encoded_length_limit();
     test_default_limit_rejects_bomb_from_file();
@@ -202,6 +325,13 @@ int main() {
     test_custom_lower_limit_rejects_normal_image();
     test_custom_higher_limit_allows_normal_image();
     test_extreme_aspect_ratio_rejected();
+    test_max_pixels_boundary_every_format();
+#ifdef PH_USE_LIBJPEG_TURBO
+    test_jpeg_backend_refuses_long_input();
+#endif
+#ifdef PH_USE_LIBPNG
+    test_png_backend_limits();
+#endif
     printf("ALL DECODE LIMIT TESTS PASSED\n");
     return 0;
 }
