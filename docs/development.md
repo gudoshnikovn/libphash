@@ -490,6 +490,7 @@ run it directly with:
 ```bash
 ./bench_hash hash tests/data/photo.jpeg 100    # every algorithm, on a loaded image
 ./bench_hash load tests/data/photo.jpeg 100    # decode only, grayscale and RGB
+./bench_hash load tests/data/photo.jpeg 100 3  # the same at PH_DECODE_SCALE_EIGHTH
 ./bench_hash full tests/data/photo.jpeg 100    # decode + pHash
 ./bench_hash --json smoke                      # fixed CI configuration
 ```

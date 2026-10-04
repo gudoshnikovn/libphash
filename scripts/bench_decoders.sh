@@ -8,8 +8,9 @@
 #   native   libjpeg-turbo + libpng + zlib-ng
 #   syszlib  libpng + the system zlib (PNG only)
 #   stb      every native decoder off: stb_image decodes both formats
-# PNG files run on all three, JPEG files on native and stb. For every file the order of
-# the builds rotates each round so machine drift lands on all of them alike; each run
+# PNG files run on all three; JPEG files on native at full scale, native at
+# PH_DECODE_SCALE_EIGHTH (libjpeg's DCT-domain downscale, which stb_image does not have),
+# and stb. For every file the order of the variants rotates each round so machine drift lands on all of them alike; each run
 # reports min_ms over its iterations and the table shows the median of those across
 # rounds (the estimator of bench_regression_gate.sh). Also reported: the stripped size of
 # each bench_hash binary and the peak RSS of one decode of the largest file of each
@@ -58,7 +59,12 @@ links syszlib png_create_read_struct && ! links syszlib jpeg_start_decompress ||
 ! links stb jpeg_start_decompress && ! links stb png_create_read_struct ||
     { echo "error: stb build links a native decoder" >&2; exit 1; }
 
-run_variant() { "$WORK/build-$1/bench_hash" --json load "$2" "$3"; }
+run_variant() { # <variant> <file> <iters>
+    case "$1" in
+        native-eighth) "$WORK/build-native/bench_hash" --json load "$2" "$3" 3 ;;
+        *) "$WORK/build-$1/bench_hash" --json load "$2" "$3" ;;
+    esac
+}
 
 RAW="$WORK/raw.tsv"
 : >"$RAW"
@@ -86,7 +92,7 @@ measure() { # <format> <budget_bytes> <variants...>
     done
 }
 measure png 150000000 native syszlib stb
-measure jpeg 100000000 native stb
+measure jpeg 100000000 native native-eighth stb
 
 median() { sort -g | awk '{a[NR]=$1} END {print (NR % 2) ? a[(NR+1)/2] : (a[NR/2]+a[NR/2+1])/2}'; }
 med() { awk -F'\t' -v n="$1" -v c="$2" -v col="$3" '$1==n && $2==c {print $col}' "$RAW" | median; }
@@ -94,13 +100,13 @@ ms() { awk -v x="$1" 'BEGIN {printf "%.2f", x}'; }
 # How many times faster the native variant is than stb.
 x() { awk -v s="$1" -v n="$2" 'BEGIN {printf "%.2f×", s / n}'; }
 
-peak_rss_kb() { # <build> <file>
+peak_rss_kb() { # <build> <file> [scale]
     local out
     if [[ "$(uname)" == Darwin ]]; then
-        out="$(/usr/bin/time -l "$WORK/build-$1/bench_hash" load "$2" 1 2>&1 >/dev/null)"
+        out="$(/usr/bin/time -l "$WORK/build-$1/bench_hash" load "$2" 1 "${3:-0}" 2>&1 >/dev/null)"
         awk '/maximum resident set size/ {printf "%d", $1 / 1024}' <<<"$out"
     else
-        out="$(/usr/bin/time -f '%M' "$WORK/build-$1/bench_hash" load "$2" 1 2>&1 >/dev/null)"
+        out="$(/usr/bin/time -f '%M' "$WORK/build-$1/bench_hash" load "$2" 1 "${3:-0}" 2>&1 >/dev/null)"
         tail -1 <<<"$out"
     fi
 }
@@ -131,12 +137,12 @@ largest() { ls -S "$CORPUS/$1" | head -1; }
         echo
         echo "#### JPEG, load to $mode"
         echo
-        echo "| file | libjpeg-turbo | stb | turbo vs stb |"
-        echo "| :--- | ---: | ---: | ---: |"
+        echo "| file | libjpeg-turbo | libjpeg-turbo 1/8 | stb | turbo vs stb | turbo 1/8 vs stb |"
+        echo "| :--- | ---: | ---: | ---: | ---: | ---: |"
         for f in "$CORPUS"/jpeg/*; do
             n="$(basename "$f")"
-            a="$(med "$n" native $col)" s="$(med "$n" stb $col)"
-            echo "| $n | $(ms "$a") | $(ms "$s") | $(x "$s" "$a") |"
+            a="$(med "$n" native $col)" e="$(med "$n" native-eighth $col)" s="$(med "$n" stb $col)"
+            echo "| $n | $(ms "$a") | $(ms "$e") | $(ms "$s") | $(x "$s" "$a") | $(x "$s" "$e") |"
         done
     done
     echo
@@ -145,7 +151,7 @@ largest() { ls -S "$CORPUS/$1" | head -1; }
     echo "| build | stripped bench_hash | peak RSS, largest PNG | peak RSS, largest JPEG |"
     echo "| :--- | ---: | ---: | ---: |"
     lp="$CORPUS/png/$(largest png)" lj="$CORPUS/jpeg/$(largest jpeg)"
-    echo "| native | $(stripped_kb native) KB | $(peak_rss_kb native "$lp") KB | $(peak_rss_kb native "$lj") KB |"
+    echo "| native | $(stripped_kb native) KB | $(peak_rss_kb native "$lp") KB | $(peak_rss_kb native "$lj") KB (1/8: $(peak_rss_kb native "$lj" 3) KB) |"
     echo "| syszlib | $(stripped_kb syszlib) KB | $(peak_rss_kb syszlib "$lp") KB | — |"
     echo "| stb | $(stripped_kb stb) KB | $(peak_rss_kb stb "$lp") KB | $(peak_rss_kb stb "$lj") KB |"
 } | tee "${OUT_MD:-/dev/null}"

@@ -413,8 +413,10 @@ void benchmark_directory(const char *path, int grayscale) {
     closedir(dir);
 }
 
-/* `metric` names the JSON object: "loading_<metric>". */
-void benchmark_loading(const char *metric, const char *img, int iterations, int grayscale) {
+/* `metric` names the JSON object: "loading_<metric>". `scale` is the JPEG decode scale
+ * (ph_context_set_decode_scale()); other formats ignore it. */
+void benchmark_loading(const char *metric, const char *img, int iterations, int grayscale,
+                       ph_decode_scale_t scale) {
     if (!g_json_output) {
         printf("\n--- Loading Performance (%s, %d iterations) ---\n", img, iterations);
         printf("Mode: %s\n", grayscale ? "Grayscale (Fast)" : "RGB (Full)");
@@ -438,6 +440,7 @@ void benchmark_loading(const char *metric, const char *img, int iterations, int 
         ph_context_t *ctx;
         if (ph_create(&ctx) == PH_SUCCESS) {
             ph_context_set_load_grayscale(ctx, grayscale);
+            ph_context_set_decode_scale(ctx, scale);
             if (ph_load_from_file(ctx, img) == PH_SUCCESS) {
                 /* ignore for benchmark */
             }
@@ -480,7 +483,9 @@ void print_usage(const char *prog) {
     fprintf(stderr, "  hash [file] [iters]   Benchmark hashing algorithms for a single image\n");
     fprintf(stderr, "  dir  [path]           Benchmark loading performance for a directory\n");
     fprintf(stderr, "  full [file] [iters]   Benchmark both loading and hashing\n");
-    fprintf(stderr, "  load [file] [iters]   Benchmark loading an image\n");
+    fprintf(stderr, "  load [file] [iters] [scale]\n"
+                    "                        Benchmark loading an image; scale 0-3 is the\n"
+                    "                        JPEG decode scale (full, 1/2, 1/4, 1/8)\n");
     fprintf(stderr, "  smoke                 Run a standard set of benchmarks for CI\n");
 }
 
@@ -582,11 +587,13 @@ int main(int argc, char **argv) {
     } else if (strcmp(cmd, "load") == 0) {
         img = (arg_idx + 1 < argc) ? argv[arg_idx + 1] : TEST_DATA_DIR "/photo.jpeg";
         iters = (arg_idx + 2 < argc) ? atoi(argv[arg_idx + 2]) : 100;
-        benchmark_loading("grayscale", img, iters, 1);
+        ph_decode_scale_t scale = (arg_idx + 3 < argc) ? (ph_decode_scale_t)atoi(argv[arg_idx + 3])
+                                                       : PH_DECODE_SCALE_FULL;
+        benchmark_loading("grayscale", img, iters, 1, scale);
         if (g_json_output) {
             printf(", ");
         }
-        benchmark_loading("rgb", img, iters, 0);
+        benchmark_loading("rgb", img, iters, 0, scale);
     } else if (strcmp(cmd, "smoke") == 0) {
         /* Standard CI smoke test. 200 iterations, not 50: at 50 the whole
          * measurement window for a load metric is ~35ms, short enough that a
@@ -612,21 +619,23 @@ int main(int argc, char **argv) {
             return 1;
         }
 
-        benchmark_loading("grayscale", img, iters, 1);
+        benchmark_loading("grayscale", img, iters, 1, PH_DECODE_SCALE_FULL);
         if (g_json_output) {
             printf(", ");
         }
-        benchmark_loading("rgb", img, iters, 0);
+        benchmark_loading("rgb", img, iters, 0, PH_DECODE_SCALE_FULL);
         if (g_json_output) {
             printf(", ");
         }
-        benchmark_loading("png_rgb", TEST_DATA_DIR "/photo_complex.png", iters, 0);
+        benchmark_loading("png_rgb", TEST_DATA_DIR "/photo_complex.png", iters, 0,
+                          PH_DECODE_SCALE_FULL);
         if (g_json_output) {
             printf(", ");
         }
         /* stb_image has no WebP decoder: without libwebp there is nothing to time. */
         if (ph_can_use_webp()) {
-            benchmark_loading("webp_rgb", TEST_DATA_DIR "/photo.webp", iters, 0);
+            benchmark_loading("webp_rgb", TEST_DATA_DIR "/photo.webp", iters, 0,
+                              PH_DECODE_SCALE_FULL);
             if (g_json_output) {
                 printf(", ");
             }
