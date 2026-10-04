@@ -400,6 +400,246 @@ static void scen_load_oriented(int recording) {
     ph_free(ctx);
 }
 
+/* ---- one algorithm on a fresh context -----------------------------------
+ * The battery above runs every algorithm on one context, so the grey cache that
+ * ph_get_gray() builds lazily is allocated by the first algorithm only, and the
+ * allocation-failure branch after ph_get_gray() in every later one is unreachable from
+ * it. Here each algorithm gets its own context, the load runs with the shim disarmed,
+ * and the sweep covers the allocations of that one call. */
+
+typedef struct {
+    const char *name;
+    ph_error_t (*u64)(ph_context_t *, uint64_t *);
+    ph_error_t (*digest)(ph_context_t *, ph_digest_t *);
+    ph_whash_mode_t whash_mode;
+    int allocates; /* 0: works on the decoded pixels in place, nothing to sweep */
+} algo_t;
+
+static const algo_t ALGOS[] = {
+    {"aHash", ph_compute_ahash, NULL, PH_WHASH_FAST, 1},
+    {"dHash", ph_compute_dhash, NULL, PH_WHASH_FAST, 1},
+    {"pHash", ph_compute_phash, NULL, PH_WHASH_FAST, 1},
+    {"wHash fast", ph_compute_whash, NULL, PH_WHASH_FAST, 1},
+    {"wHash full", ph_compute_whash, NULL, PH_WHASH_FULL, 1},
+    {"BMH", NULL, ph_compute_bmh, PH_WHASH_FAST, 1},
+    {"mHash", NULL, ph_compute_mhash, PH_WHASH_FAST, 1},
+    {"Radial", NULL, ph_compute_radial_hash, PH_WHASH_FAST, 1},
+    {"ColorHash", NULL, ph_compute_color_hash, PH_WHASH_FAST, 0},
+    {"ColorMoments", NULL, ph_compute_color_moments_hash, PH_WHASH_FAST, 0},
+};
+#define NUM_ALGOS (sizeof(ALGOS) / sizeof(ALGOS[0]))
+
+static const algo_t *g_algo;
+static uint64_t g_algo_ref_u64[NUM_ALGOS];
+static ph_digest_t g_algo_ref_digest[NUM_ALGOS];
+
+static int run_algo(ph_context_t *ctx, const algo_t *a, uint64_t *u, ph_digest_t *d) {
+    guarded_u64_t gu;
+    guarded_digest_t gd;
+    ph_error_t err;
+    if (a->u64) {
+        guard_init(&gu, sizeof(gu));
+        err = a->u64(ctx, &gu.v);
+        guard_check(gu.front, gu.back, a->name);
+        *u = gu.v;
+    } else {
+        guard_init(&gd, sizeof(gd));
+        memset(&gd.d, 0, sizeof(gd.d));
+        err = a->digest(ctx, &gd.d);
+        guard_check(gd.front, gd.back, a->name);
+        *d = gd.d;
+    }
+    return check(a->name, err, ALLOW_ALLOC);
+}
+
+static int same_as_reference(size_t i, uint64_t u, const ph_digest_t *d) {
+    if (ALGOS[i].u64) {
+        return u == g_algo_ref_u64[i];
+    }
+    return d->size == g_algo_ref_digest[i].size &&
+           memcmp(d->data, g_algo_ref_digest[i].data, d->size) == 0;
+}
+
+static void scen_one_hash(int recording) {
+    const size_t i = (size_t)(g_algo - ALGOS);
+    ph_context_t *ctx = NULL;
+
+    /* Set-up outside the sweep: re-arming resets the counter, so only the hash call's
+     * allocations are counted and failed. */
+    ph_shim_disarm();
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_context_set_whash_mode(ctx, g_algo->whash_mode));
+    ASSERT_OK(ph_load_from_memory(ctx, g_png.data, g_png.size));
+    ph_shim_arm(g_fail_at);
+
+    uint64_t u = 0;
+    ph_digest_t d;
+    memset(&d, 0, sizeof(d));
+    int ok = run_algo(ctx, g_algo, &u, &d);
+    if (recording) {
+        if (!ok) {
+            defect("%s failed with nothing injected", g_algo->name);
+        }
+        g_algo_ref_u64[i] = u;
+        g_algo_ref_digest[i] = d;
+    } else if (ok && !same_as_reference(i, u, &d)) {
+        defect("%s reported success but differs from the un-injected result", g_algo->name);
+    }
+
+    /* The context survives: the same call, nothing injected, gives the reference. */
+    ph_shim_disarm();
+    if (!recording) {
+        ok = run_algo(ctx, g_algo, &u, &d);
+        if (!ok || !same_as_reference(i, u, &d)) {
+            defect("%s: the same context does not give the reference after the failure",
+                   g_algo->name);
+        }
+    }
+    ph_free(ctx);
+}
+
+/* ---- other loads -------------------------------------------------------- */
+
+static uint64_t g_pixels_ahash, g_scaled_ahash;
+
+/* ph_load_from_pixels() is the one load that does not go through the decoder. */
+static void scen_load_pixels(int recording) {
+    static uint8_t rgb[48 * 32 * 3];
+    for (size_t i = 0; i < sizeof(rgb); i++) {
+        rgb[i] = (uint8_t)((i * 7u) ^ (i >> 5));
+    }
+    ph_context_t *ctx = NULL;
+    if (ph_create(&ctx) != PH_SUCCESS) {
+        return;
+    }
+    ph_error_t err = ph_load_from_pixels(ctx, rgb, 48, 32, 3, 48 * 3);
+    check("ph_load_from_pixels", err, ALLOW_ALLOC);
+    if (err == PH_SUCCESS) {
+        uint64_t ahash = 0;
+        ph_shim_disarm();
+        ASSERT_OK(ph_compute_ahash(ctx, &ahash));
+        if (recording) {
+            g_pixels_ahash = ahash;
+        } else if (ahash != g_pixels_ahash) {
+            defect("ph_load_from_pixels reported success but the image hashes differently");
+        }
+    } else if (ph_is_loaded(ctx)) {
+        defect("ph_load_from_pixels failed but the context reports an image is loaded");
+    }
+    ph_free(ctx);
+}
+
+/* A grey PNG loaded for colour: the decoder output is expanded from one channel to three,
+ * which in the stb_image path takes a second buffer. */
+static void scen_load_gray_as_colour(int recording) {
+    (void)recording;
+    ph_context_t *ctx = NULL;
+    if (ph_create(&ctx) != PH_SUCCESS) {
+        return;
+    }
+    ASSERT_OK(ph_context_set_load_grayscale(ctx, 0));
+    ph_error_t err = ph_load_from_file(ctx, TEST_DATA_DIR "/png/gray8.png");
+    check("ph_load_from_file(grey PNG as colour)", err, ALLOW_ALLOC);
+    if (err != PH_SUCCESS && ph_is_loaded(ctx)) {
+        defect("the grey-as-colour load failed but the context reports an image is loaded");
+    }
+    ph_free(ctx);
+}
+
+/* Decoding at reduced resolution takes its own allocation path in the JPEG backend. */
+static void scen_load_scaled(int recording) {
+    ph_context_t *ctx = NULL;
+    if (ph_create(&ctx) != PH_SUCCESS) {
+        return;
+    }
+    ASSERT_OK(ph_context_set_decode_scale(ctx, PH_DECODE_SCALE_HALF));
+    ph_error_t err = ph_load_from_memory(ctx, g_jpeg.data, g_jpeg.size);
+    check("ph_load_from_memory(decode scale 1/2)", err, ALLOW_ALLOC | ALLOW_DECODE);
+    if (err == PH_SUCCESS) {
+        uint64_t ahash = 0;
+        ph_shim_disarm();
+        ASSERT_OK(ph_compute_ahash(ctx, &ahash));
+        if (recording) {
+            g_scaled_ahash = ahash;
+        } else if (ahash != g_scaled_ahash) {
+            defect("the scaled load reported success but the image hashes differently");
+        }
+    } else if (ph_is_loaded(ctx)) {
+        defect("the scaled load failed but the context reports an image is loaded");
+    }
+    ph_free(ctx);
+}
+
+/* ---- the batch API -----------------------------------------------------
+ * Sequential (threads = 1): the shim's counter is not thread-safe, and with one
+ * thread the allocation order is deterministic. The threaded path's own allocation is
+ * covered by test_threaded_batch_thread_array_oom() below. */
+
+#define BATCH_FLAGS (PH_HASH_AHASH | PH_HASH_PHASH)
+static uint64_t g_batch_ref[2][2];
+
+static void scen_batch_api(int recording) {
+    ph_batch_buffer_item_t items[2];
+    memset(items, 0, sizeof(items));
+    items[0].buffer = g_png.data;
+    items[0].length = g_png.size;
+    items[1].buffer = g_jpeg.data;
+    items[1].length = g_jpeg.size;
+
+    ph_error_t err = ph_hash_buffers(items, 2, BATCH_FLAGS, 1);
+    check("ph_hash_buffers", err, ALLOW_ALLOC);
+    for (int i = 0; i < 2; i++) {
+        if (err != PH_SUCCESS) {
+            if (items[i].status != PH_ERR_ALLOCATION_FAILED) {
+                defect("ph_hash_buffers failed but item %d has status %d", i, items[i].status);
+            }
+            continue;
+        }
+        if (!check("ph_hash_buffers item", items[i].status, ALLOW_ALLOC | ALLOW_DECODE) ||
+            items[i].status != PH_SUCCESS) {
+            continue;
+        }
+        if (recording) {
+            g_batch_ref[i][0] = items[i].hashes[0];
+            g_batch_ref[i][1] = items[i].hashes[1];
+        } else if (items[i].hashes[0] != g_batch_ref[i][0] ||
+                   items[i].hashes[1] != g_batch_ref[i][1]) {
+            defect("batch item %d reported success but its hashes differ", i);
+        }
+    }
+}
+
+/* The first allocation of a threaded batch is the thread array, made on the calling
+ * thread before any worker exists -- so it can be failed deterministically. The call
+ * fails and every item says so. */
+static void test_threaded_batch_thread_array_oom(void) {
+#if defined(PH_ENABLE_THREADS)
+    g_scenario = "threaded batch, thread array";
+    g_fail_at = 1;
+    ph_batch_buffer_item_t items[2];
+    memset(items, 0, sizeof(items));
+    items[0].buffer = items[1].buffer = g_png.data;
+    items[0].length = items[1].length = g_png.size;
+
+    ph_shim_arm(1);
+    ph_error_t err = ph_hash_buffers(items, 2, BATCH_FLAGS, 2);
+    ph_shim_disarm();
+    if (ph_shim_live() != 0) {
+        defect("%ld allocation(s) leaked", ph_shim_live());
+    }
+    ph_shim_reset();
+    if (err != PH_ERR_ALLOCATION_FAILED) {
+        defect("ph_hash_buffers(threads=2) returned %d with its first allocation failed", (int)err);
+    }
+    for (int i = 0; i < 2; i++) {
+        if (items[i].status != PH_ERR_ALLOCATION_FAILED) {
+            defect("item %d has status %d after the batch failed", i, items[i].status);
+        }
+    }
+    printf("  %-24s checked\n", "threaded batch, OOM");
+#endif
+}
+
 typedef void (*scenario_fn)(int recording);
 
 typedef struct {
@@ -414,6 +654,10 @@ static const scenario_t SCENARIOS[] = {
     {"load + every hash", scen_hash_all},
     {"batch over one context", scen_batch},
     {"load, EXIF orientation", scen_load_oriented},
+    {"load_from_pixels", scen_load_pixels},
+    {"load, grey PNG as colour", scen_load_gray_as_colour},
+    {"load, decode scale 1/2", scen_load_scaled},
+    {"batch API, sequential", scen_batch_api},
 };
 
 /* ---- driver ------------------------------------------------------------ */
@@ -550,6 +794,22 @@ static void test_stb_oom_reason_pinned(void) {
     }
 }
 
+/* Pass 1: no injection -- counts the allocations and records the reference results.
+ * Pass 2: fail allocation #k, for every k. Returns the number of failure points. */
+static long sweep(const scenario_t *s) {
+    long n = run_scenario(s, 0, 1);
+    if (n <= 0) {
+        fprintf(stderr, "[FAIL] scenario '%s' made no allocations at all\n", s->name);
+        g_failures++;
+        return 0;
+    }
+    for (long k = 1; k <= n; k++) {
+        (void)run_scenario(s, k, 0);
+    }
+    printf("  %-24s %3ld allocation(s), %3ld failure point(s) exercised\n", s->name, n, n);
+    return n;
+}
+
 int main(void) {
     printf("Running allocation-failure tests...\n");
 
@@ -565,26 +825,24 @@ int main(void) {
 
     test_stb_oom_reason_pinned();
 
+    test_threaded_batch_thread_array_oom();
+
     long total_points = 0;
     for (size_t i = 0; i < sizeof(SCENARIOS) / sizeof(SCENARIOS[0]); i++) {
-        const scenario_t *s = &SCENARIOS[i];
-
-        /* Pass 1: no injection. Counts the allocations and, for the hash
-         * scenario, records the reference hashes. */
-        long n = run_scenario(s, 0, 1);
-        if (n <= 0) {
-            fprintf(stderr, "[FAIL] scenario '%s' made no allocations at all\n", s->name);
+        total_points += sweep(&SCENARIOS[i]);
+    }
+    for (size_t i = 0; i < NUM_ALGOS; i++) {
+        char name[48];
+        snprintf(name, sizeof(name), "%s alone", ALGOS[i].name);
+        const scenario_t s = {name, scen_one_hash};
+        g_algo = &ALGOS[i];
+        if (ALGOS[i].allocates) {
+            total_points += sweep(&s);
+        } else if (run_scenario(&s, 0, 1) != 0) {
+            /* Pinned so that an allocation added later is swept, not silently skipped. */
+            fprintf(stderr, "[FAIL] %s allocates; set `allocates` in ALGOS\n", name);
             g_failures++;
-            continue;
         }
-
-        /* Pass 2: fail allocation #k, for every k. */
-        for (long k = 1; k <= n; k++) {
-            (void)run_scenario(s, k, 0);
-        }
-
-        total_points += n;
-        printf("  %-24s %3ld allocation(s), %3ld failure point(s) exercised\n", s->name, n, n);
     }
 
     free(g_png.data);
