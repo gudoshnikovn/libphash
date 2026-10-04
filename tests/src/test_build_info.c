@@ -7,18 +7,15 @@
 /* The build-introspection answers are checked against the same PH_USE_* / PH_ENABLE_*
  * macros that selected the code: the tests are compiled with the library's own
  * definitions (the Makefile shares CFLAGS; CMake copies phash's COMPILE_DEFINITIONS), so
- * a mismatch here means the library reports a backend it does not have. The spng build
- * matters most: png=spng there, with no libpng linked at all. */
+ * a mismatch here means the library reports a backend it does not have. */
 
 #if defined(PH_USE_LIBPNG)
 #    define EXPECT_PNG "libpng"
-#elif defined(PH_USE_SPNG)
-#    define EXPECT_PNG "spng"
 #else
 #    define EXPECT_PNG "stb"
 #endif
 
-#if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
+#if defined(PH_USE_LIBPNG)
 #    define EXPECT_NATIVE_PNG 1
 #else
 #    define EXPECT_NATIVE_PNG 0

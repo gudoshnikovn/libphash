@@ -1,6 +1,5 @@
-/* The PNG backend on libpng (PHASH_USE_LIBPNG). The build compiles this file or
- * png_spng.c, never both: they are two implementations of the same backend and both
- * define ph_decode_png_mem(). */
+/* The native PNG backend, on libpng (PHASH_USE_LIBPNG). Without it, stb_image decodes
+ * PNG. */
 #include "image/image.h"
 #include "loader.h"
 #include "loaders/backends.h"
@@ -101,8 +100,8 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
         return NULL;
     }
 
-    /* Checked before the buffer reaches libpng/spng so both backends agree on the
-     * verdict and the error code, and so an absurd dimension is refused before any
+    /* Checked before the buffer reaches libpng so this backend and stb_image agree on
+     * the verdict and the error code, and so an absurd dimension is refused before any
      * row buffer is sized. */
     if (!ph_png_dimensions_within_limit(buffer, size)) {
         if (out_err) {
@@ -248,7 +247,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     // Alpha is resolved by the caller (ph_resolve_alpha()), the same for every backend.
     //
     // A colour image asked for as gray is decoded to 8-bit RGB(A) and folded below with
-    // the library's own weights, as the spng and stb_image paths do. libpng's
+    // the library's own weights, as the stb_image path does. libpng's
     // png_set_rgb_to_gray_fixed() would run before the 16 -> 8 bit reduction, at 16-bit
     // precision, and land a level away from the other backends on a 16-bit PNG.
     const int fold_to_gray = (req_comp == 1) && (color_type & PNG_COLOR_MASK_COLOR);

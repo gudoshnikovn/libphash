@@ -20,7 +20,7 @@ Two build systems exist and are not interchangeable — see
 full comparison:
 
 ```bash
-# CMake -- vendored SIMD decoders (libjpeg-turbo, libpng/spng, libwebp, zlib-ng)
+# CMake -- vendored SIMD decoders (libjpeg-turbo, libpng, libwebp, zlib-ng)
 mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)

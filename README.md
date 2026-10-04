@@ -42,7 +42,7 @@ and [`docs/algorithm-provenance.md`](docs/algorithm-provenance.md).
 ## Core Features
 
 * **Multiple Algorithms**: `aHash`, `dHash`, `pHash` (DCT-based), `wHash` (Wavelet), `mHash`, `BMH`, `Radial`, `ColorHash`, and `ColorMoments`. Every one of them is traced to its source in [`docs/references.md`](docs/references.md), and every known divergence from that source is written down in [`docs/algorithm-provenance.md`](docs/algorithm-provenance.md).
-* **High-Performance Decoders**: Built-in support for `libjpeg-turbo`, `libpng`, `spng`, and `libwebp` with SIMD acceleration (NEON/SSE) and `mmap` optimization.
+* **High-Performance Decoders**: Built-in support for `libjpeg-turbo`, `libpng`, and `libwebp` with SIMD acceleration (NEON/SSE) and `mmap` optimization.
 * **Broad Format Fallback**: JPEG/PNG/WebP are decoded by the SIMD-accelerated native backends above; anything else — BMP, GIF, TGA, PSD, HDR, PIC, PNM — falls back to the bundled `stb_image` decoder automatically, no configuration needed. Not covered: TIFF (unsupported by `stb_image`) and animated GIF beyond the first frame (only the first frame is hashed). Animated WebP is rejected outright (not decoded to a frame) when the native WebP backend is in use.
 * **Fast Grayscale Loading**: Native decoders can perform grayscale conversion during decompression, significantly reducing CPU cycles and memory overhead.
 * **Zero-Fragmentation Arena**: Optimized context-based **Arena Allocator** for internal operations, ensuring predictable performance in high-load environments.
@@ -62,7 +62,7 @@ and [`docs/algorithm-provenance.md`](docs/algorithm-provenance.md).
 
 | Mode | Decoders | Dependencies | Best For |
 | --- | --- | --- | --- |
-| **High Performance** (Default) | `libjpeg-turbo`, `libpng`/`spng`, `libwebp` | Self-contained (vendor submodules) | Production, massive datasets, server-side processing |
+| **High Performance** (Default) | `libjpeg-turbo`, `libpng`, `libwebp` | Self-contained (vendor submodules) | Production, massive datasets, server-side processing |
 | **Minimal** | `stb_image` (fallback) | Zero | Embedded systems, quick scripts, simple builds |
 
 ---
@@ -191,7 +191,6 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 * **libjpeg-turbo (v3.2.0)**: IJG, BSD-3-Clause, zlib.
 * **libpng (v1.6.58)**: libpng License 2.0.
 * **libwebp (v1.6.0)**: WebP License (BSD 3-Clause).
-* **spng (v0.7.4)**: BSD 2-Clause License.
 * **zlib-ng (v2.3.3)**: zlib License.
 * **stb_image (v2.30)**: Public Domain / MIT.
 * **stb_image_resize2 (v2.18)**: Public Domain / MIT.

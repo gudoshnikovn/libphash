@@ -10,9 +10,9 @@
 
 /* The vendored libjpeg-turbo, through its libjpeg API (the jpeg-static archive). The
  * TurboJPEG archive would bring its own copies of zlib and spng with global symbols -- for
- * tj3LoadImage()/tj3SaveImage(), which this library never calls -- and on macOS libpng and
- * spng would bind to those copies instead of the vendored zlib-ng and spng. jpeg-static is
- * the codec alone.
+ * tj3LoadImage()/tj3SaveImage(), which this library never calls -- and on macOS libpng
+ * would bind to that zlib instead of the vendored zlib-ng. jpeg-static is the codec
+ * alone.
  *
  * Decode settings: the fast integer IDCT, fancy (smooth) chroma upsampling, DCT-domain
  * scaling for decode_scale, and any libjpeg warning (a truncated stream, stray bytes

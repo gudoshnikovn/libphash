@@ -8,7 +8,7 @@
  * whatever the encoder happened to write -- cannot reach the hash. PH_ALPHA_IGNORE drops
  * alpha instead and hashes that stored colour, as ImageHash does. Every decoder hands
  * alpha back the same way and the core resolves it once, so the PNGs below must give the
- * same answer in every build (stb_image, libpng, spng) and the same answer as the same
+ * same answer in every build (stb_image, libpng) and the same answer as the same
  * pixels given to ph_load_from_pixels().
  *
  * The PNGs are 16x16, built for this test: a checkerboard of 4x4 cells, opaque colour in

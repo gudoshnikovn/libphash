@@ -2,18 +2,13 @@
 # `make coverage` (Makefile) measures only the stb_image-only path -- the
 # native decoders in src/loaders/ compile to nothing or are not built there, so their
 # max_pixels checks, error-callback plumbing (png_error_fn/png_warning_fn + the
-# longjmp that carries libpng's message out,
-# spng_strerror() branches) and the pitch/alloc_size overflow guards in jpeg.c are
-# never exercised or measured by that flow.
+# longjmp that carries libpng's message out) and the pitch/alloc_size overflow guards
+# in jpeg.c are never exercised or measured by that flow.
 #
-# This script drives two separate CMake+ctest runs with PHASH_COVERAGE=ON:
-#   - "native": the default vendored decoder set (libjpeg-turbo + libpng + libwebp +
-#     zlib-ng), i.e. the config CI's build-and-test job and releases actually ship.
-#   - "spng": the alternative PNG backend (PHASH_USE_SPNG=ON, PHASH_USE_LIBPNG=OFF)
-#     -- a separate run because the two PNG backends are mutually exclusive within
-#     one configure and spng's own error-path code is otherwise never measured.
-# Each run's lcov trace is filtered to this project's own sources, then the two are
-# merged (`lcov -a`) into one report so the published number reflects both.
+# This script runs CMake+ctest with PHASH_COVERAGE=ON on the default vendored decoder
+# set (libjpeg-turbo + libpng + libwebp + zlib-ng), i.e. the config CI's
+# build-and-test job and releases actually ship, filters the lcov trace to this
+# project's own sources and renders it.
 #
 # Usage: scripts/coverage_cmake.sh [output_dir]
 # Requires: cmake, ctest, lcov, genhtml.
@@ -58,16 +53,10 @@ capture_run() {
 }
 
 capture_run "$OUT_DIR/build-native" native \
-    -DPHASH_USE_LIBJPEG_TURBO=ON -DPHASH_USE_LIBPNG=ON -DPHASH_USE_SPNG=OFF \
+    -DPHASH_USE_LIBJPEG_TURBO=ON -DPHASH_USE_LIBPNG=ON \
     -DPHASH_USE_WEBP=ON -DPHASH_USE_ZLIB_NG=ON
 
-capture_run "$OUT_DIR/build-spng" spng \
-    -DPHASH_USE_LIBJPEG_TURBO=ON -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_SPNG=ON \
-    -DPHASH_USE_WEBP=ON -DPHASH_USE_ZLIB_NG=ON
-
-lcov -a "$OUT_DIR/native.info" -a "$OUT_DIR/spng.info" -o "$OUT_DIR/merged.info" \
-    --ignore-errors unused,inconsistent
-genhtml "$OUT_DIR/merged.info" --output-directory "$OUT_DIR/html"
+genhtml "$OUT_DIR/native.info" --output-directory "$OUT_DIR/html"
 
 echo "Coverage report: $OUT_DIR/html/index.html"
-lcov --summary "$OUT_DIR/merged.info"
+lcov --summary "$OUT_DIR/native.info"

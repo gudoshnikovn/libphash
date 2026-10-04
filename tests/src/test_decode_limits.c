@@ -91,7 +91,7 @@ void test_custom_higher_limit_allows_normal_image() {
  * default of 1000000 to 268435456, telling libpng such a width is acceptable.
  *
  * The dimensions are read straight out of the IHDR, before the buffer reaches
- * libpng/spng, so the header below needs no valid CRC or pixel data: it must be
+ * libpng, so the header below needs no valid CRC or pixel data: it must be
  * rejected long before anything looks at either. */
 static void build_png_header(uint8_t *out, uint32_t w, uint32_t h) {
     static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
@@ -123,7 +123,7 @@ void test_extreme_aspect_ratio_rejected() {
     ASSERT_OK(ph_create(&ctx));
 
     /* No branching on the compiled-in backend: the per-dimension cap is applied by the
-     * dispatcher for PNG, so libpng, spng and stb_image builds all answer the same
+     * dispatcher for PNG, so libpng and stb_image builds both answer the same
      * input with PH_ERR_IMAGE_TOO_LARGE. */
 
     /* Exactly the default area limit, but 268435456 pixels wide. */

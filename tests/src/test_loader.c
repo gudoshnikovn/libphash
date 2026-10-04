@@ -336,7 +336,7 @@ void test_stb_extended_fallback_formats() {
 // Only the channel count is asserted against a reference: stb_image converts to gray with
 // its own coefficients, so its pixel values are deliberately not compared with
 // ph_to_grayscale()'s -- see check_png_backend_parity() for why that exactness is asked of
-// libpng/spng and not of stb.
+// libpng and not of stb.
 void test_grayscale_via_stb_fallback() {
     struct {
         const char *name;
@@ -658,17 +658,9 @@ static unsigned char *read_whole_file(const char *path, size_t *out_size) {
     return buf;
 }
 
-// The PNG decoder is one of two interchangeable implementations (libpng or spng),
-// chosen at configure time, and only one of them is ever linked into a given build.
-// A cross-backend comparison therefore cannot be made inside a single binary; what
-// this test does instead is pin BOTH backends to the same reference, which makes
-// them equal to each other by construction. The reference is the library's own
-// ph_to_grayscale() applied to the RGB decode of the same file.
-//
-// Guards against requesting SPNG_FMT_G8 for a non-grayscale PNG: spng accepts that
-// format only for color type 0 and fails any other file with SPNG_EFMT, which would
-// turn every valid PNG into PH_ERR_CORRUPT_DATA under ph_context_set_load_grayscale(ctx,
-// 1) while the libpng backend decodes the very same file.
+// A PNG asked for as gray decodes, with the requested channel count, and the native
+// backend's gray is the library's own ph_to_grayscale() applied to the RGB decode of the
+// same file, byte for byte -- so a build's PNG decoder does not change what gets hashed.
 static void check_png_backend_parity(const char *path) {
     size_t size = 0;
     unsigned char *buf = read_whole_file(path, &size);
@@ -694,9 +686,9 @@ static void check_png_backend_parity(const char *path) {
     ASSERT_INT_EQ(1, gc);
 
     if (ph_can_use_png()) {
-        // Both native backends must reproduce the library's own conversion
+        // The native backend must reproduce the library's own conversion
         // byte for byte. (stb_image, the fallback backend, converts with its
-        // own coefficients, so this exactness is only required of libpng/spng.)
+        // own coefficients, so this exactness is only required of libpng.)
         size_t num_pixels = (size_t)rw * (size_t)rh;
         uint8_t *reference = (uint8_t *)malloc(num_pixels);
         ASSERT_PTR_NOT_NULL(reference);

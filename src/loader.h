@@ -12,10 +12,8 @@
 //
 //   PH_USE_LIBJPEG_TURBO — vendored libjpeg-turbo, through its libjpeg API
 //   PH_USE_LIBPNG        — vendored libpng
-//   PH_USE_SPNG          — vendored spng
 //   PH_USE_WEBP          — vendored libwebp
 //
-// PH_USE_LIBPNG and PH_USE_SPNG are mutually exclusive.
 // When none are defined: stb_image handles everything (zero dependencies).
 // =====================================================================
 
@@ -54,13 +52,6 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
 
 #ifdef PH_USE_LIBPNG
 // --- PNG: Static libpng (memory-based reading, ARM NEON optimized) ---
-// PNG has no format-level scaled decode; decode_scale is accepted and ignored.
-unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *width, int *height,
-                                 int *channels, int req_comp, uint64_t max_pixels,
-                                 ph_decode_scale_t decode_scale, ph_error_t *out_err, char *err_msg,
-                                 size_t err_msg_cap);
-#elif defined(PH_USE_SPNG)
-// --- PNG: Static spng (single-call API, fast on x86) ---
 // PNG has no format-level scaled decode; decode_scale is accepted and ignored.
 unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *width, int *height,
                                  int *channels, int req_comp, uint64_t max_pixels,
