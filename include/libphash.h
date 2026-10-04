@@ -704,22 +704,20 @@ PH_API ph_error_t ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixe
  *       image's content, not on the scale alone.** Measured as the Hamming distance
  *       between the hash of the same file decoded in full versus decoded at each scale
  *       (aHash/dHash/pHash/wHash out of 64 bits, BMH out of 256, mHash out of 576),
- *       against this library's own same-scene-transform contract
- *       (`tests/src/test_robustness.c`, `MAX_SIMILAR_DIST`: aHash <=15.6%, dHash <=21.9%,
- *       pHash <=28.1%, wHash <=21.9%, mHash <=37.5%):
+ *       against the distance this library allows a same-scene transform
+ *       (`tests/src/test_robustness.c`: aHash 17.2%, dHash 23.4%, pHash 25.0%,
+ *       wHash 18.8% of the bits; mHash has no such limit):
  *       - On photographic content (smooth gradients, mixed low/mid/high frequency
- *         detail), the shift stays within that contract at every scale, with one
+ *         detail), the shift stays within those limits at every scale, with one
  *         exception: mHash grows with coarser scale even on ordinary photos --
- *         measured 6.6% / 16.0% / 26.7% at half/quarter/eighth on a real-photo fixture,
- *         still inside its 37.5% contract but with shrinking headroom.
+ *         measured 6.6% / 16.0% / 26.7% at half/quarter/eighth on a real-photo fixture.
  *       - On fine periodic/textured content (fabric, brickwork, screens, grilles --
- *         not a rare case in real photos), pHash and mHash can exceed their own
- *         contract outright: measured 43.75% for pHash at every scale from half
- *         downward on a fine checkerboard, and mHash reaching 50.9% at
- *         @c PH_DECODE_SCALE_EIGHTH -- statistically indistinguishable from comparing
- *         against an unrelated image. wHash was also seen to exceed its contract
- *         (39.1% vs. 21.9%) on pure high-frequency noise, which is not representative
- *         of real photos but establishes an upper bound.
+ *         not a rare case in real photos), pHash can exceed its limit outright:
+ *         measured 43.75% at every scale from half downward on a fine checkerboard;
+ *         mHash reaches 50.9% at @c PH_DECODE_SCALE_EIGHTH -- statistically
+ *         indistinguishable from comparing against an unrelated image. wHash was also
+ *         seen to exceed its limit (39.1% vs. 18.8%) on pure high-frequency noise,
+ *         which is not representative of real photos but establishes an upper bound.
  *
  * @note **Radial, ColorMoments and ColorHash are not resize-based** — they compute
  *       directly over the decoded buffer, so at any setting other than

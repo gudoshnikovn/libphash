@@ -24,9 +24,10 @@
  * The measurements are recorded in OBSERVED, and the bounds are derived from them by one
  * written rule; see "Observations and the bounds derived from them" below.
  *
- * Complements tests/src/test_robustness.c, which checks the same two properties against
- * a real photograph with fixed per-algorithm distance caps. This file measures the
- * distributions instead of spot-checking them.
+ * Complements tests/src/test_robustness.c, which checks the same two properties on a
+ * real photograph and two other fixtures, with limits derived the same way from its own
+ * recorded measurement. This file measures the distributions instead of spot-checking
+ * them.
  */
 
 #include "hashes/hashes.h"

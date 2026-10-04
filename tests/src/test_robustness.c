@@ -165,109 +165,191 @@ static void hashes_of(const rgb_image_t *img, uint64_t out[PH_HASH_FLAGS_COUNT])
 // warning elsewhere.
 static const char *ALGO_NAMES[PH_HASH_FLAGS_COUNT] = {"aHash", "dHash", "pHash", "wHash"};
 
-// Contract thresholds (out of 64 bits), per algorithm: a same-scene transform
-// must stay at or under MAX_SIMILAR_DIST[algo], distinct images must clear
-// MIN_DIFFERENT_DIST. Not uniform on purpose -- algorithms genuinely differ
-// in robustness. Each threshold has headroom over the distances measured on
-// these fixtures and transforms; MIN_DIFFERENT_DIST is comfortably
-// below the weakest observed different-image separation.
-static const int MAX_SIMILAR_DIST[PH_HASH_FLAGS_COUNT] = {
-    10, // aHash
-    14, // dHash
-    18, // pHash
-    14, // wHash
+typedef rgb_image_t (*transform_fn)(const rgb_image_t *);
+
+static rgb_image_t t_half(const rgb_image_t *s) { return resize_nn(s, 0.5); }
+
+static rgb_image_t t_double(const rgb_image_t *s) { return resize_nn(s, 2.0); }
+
+static rgb_image_t t_crop5(const rgb_image_t *s) { return crop_pct(s, 5); }
+
+static rgb_image_t t_gamma_up(const rgb_image_t *s) { return apply_gamma(s, 1.2); }
+
+static rgb_image_t t_gamma_down(const rgb_image_t *s) { return apply_gamma(s, 0.8); }
+
+static const struct {
+    const char *name;
+    transform_fn fn;
+} TRANSFORMS[] = {
+    {"resize 50%", t_half},       {"resize 200%", t_double},    {"crop 5%", t_crop5},
+    {"gamma +20%", t_gamma_up},   {"gamma -20%", t_gamma_down}, {"light blur", box_blur3},
+    {"watermark", add_watermark},
 };
-#define MIN_DIFFERENT_DIST 8
 
-static void assert_similar(const char *label, const uint64_t base[PH_HASH_FLAGS_COUNT],
-                           const uint64_t variant[PH_HASH_FLAGS_COUNT]) {
-    for (int i = 0; i < PH_HASH_FLAGS_COUNT; i++) {
-        int dist = ph_hamming_distance(base[i], variant[i]);
-        if (dist > MAX_SIMILAR_DIST[i]) {
-            fprintf(stderr,
-                    "[FAIL] test_robustness - %s: %s distance %d exceeds contract (max %d)\n",
-                    label, ALGO_NAMES[i], dist, MAX_SIMILAR_DIST[i]);
-            exit(1);
-        }
-    }
-    printf("  %s: OK (all algorithms within contract)\n", label);
+#define NUM_TRANSFORMS ((int)(sizeof(TRANSFORMS) / sizeof(TRANSFORMS[0])))
+
+// Pairwise different pictures: a photograph, a smooth colour gradient and a synthetic
+// wave texture.
+static const char *DIFFERENT[] = {
+    TEST_DATA_DIR "/photo.jpeg",
+    TEST_DATA_DIR "/photo_complex.png",
+    TEST_DATA_DIR "/photo_large.jpeg",
+};
+#define NUM_DIFFERENT ((int)(sizeof(DIFFERENT) / sizeof(DIFFERENT[0])))
+#define NUM_PAIRS     (NUM_DIFFERENT * (NUM_DIFFERENT - 1) / 2)
+
+// What this test measures, in bits out of 64, per algorithm: the largest distance
+// between photo.jpeg and any transform of it, and the smallest between two different
+// pictures. The test checks that its measurement still equals these numbers and prints
+// the replacement rows when it does not: decoding goes through stb_image and every hash
+// computes the same on every platform, so the numbers are exact everywhere.
+//
+// The contract is derived from them: a transform may land PH_ROB_MARGIN (30%) of the
+// gap further out than measured, two different pictures 30% of the gap closer, and the
+// two limits never meet -- a distance cannot satisfy both "the same picture" and "a
+// different picture".
+typedef struct {
+    int max_similar;
+    int min_different;
+} observed_t;
+
+// One row per line, in the layout the stale-measurement message prints.
+// clang-format off
+static const observed_t OBSERVED[PH_HASH_FLAGS_COUNT] = {
+    {7, 21},  // aHash
+    {9, 29},  // dHash
+    {11, 30}, // pHash
+    {9, 22},  // wHash
+};
+// clang-format on
+
+#define PH_ROB_MARGIN 0.30
+
+static void hashes_of_file(const char *path, uint64_t out[PH_HASH_FLAGS_COUNT]) {
+    rgb_image_t img = load_base(path);
+    hashes_of(&img, out);
+    free_image(&img);
 }
 
-void test_transform_robustness(void) {
-    rgb_image_t base = load_base(TEST_DATA_DIR "/photo.jpeg");
-    uint64_t base_hashes[PH_HASH_FLAGS_COUNT];
+static void test_similar_and_different_separate(void) {
+    int similar[NUM_TRANSFORMS][PH_HASH_FLAGS_COUNT];
+    int different[NUM_PAIRS][PH_HASH_FLAGS_COUNT];
+    int max_similar[PH_HASH_FLAGS_COUNT], min_different[PH_HASH_FLAGS_COUNT];
+    uint64_t base_hashes[PH_HASH_FLAGS_COUNT], h[PH_HASH_FLAGS_COUNT];
+
+    rgb_image_t base = load_base(DIFFERENT[0]);
     hashes_of(&base, base_hashes);
-
-    printf("test_transform_robustness:\n");
-
-    rgb_image_t v;
-
-    v = resize_nn(&base, 0.5);
-    uint64_t h1[PH_HASH_FLAGS_COUNT];
-    hashes_of(&v, h1);
-    assert_similar("resize 50%", base_hashes, h1);
-    free_image(&v);
-
-    v = resize_nn(&base, 2.0);
-    hashes_of(&v, h1);
-    assert_similar("resize 200%", base_hashes, h1);
-    free_image(&v);
-
-    v = crop_pct(&base, 5);
-    hashes_of(&v, h1);
-    assert_similar("crop 5%", base_hashes, h1);
-    free_image(&v);
-
-    v = apply_gamma(&base, 1.2);
-    hashes_of(&v, h1);
-    assert_similar("gamma +20%", base_hashes, h1);
-    free_image(&v);
-
-    v = apply_gamma(&base, 0.8);
-    hashes_of(&v, h1);
-    assert_similar("gamma -20%", base_hashes, h1);
-    free_image(&v);
-
-    v = box_blur3(&base);
-    hashes_of(&v, h1);
-    assert_similar("light blur", base_hashes, h1);
-    free_image(&v);
-
-    v = add_watermark(&base);
-    hashes_of(&v, h1);
-    assert_similar("watermark", base_hashes, h1);
-    free_image(&v);
-
+    for (int t = 0; t < NUM_TRANSFORMS; t++) {
+        rgb_image_t v = TRANSFORMS[t].fn(&base);
+        hashes_of(&v, h);
+        free_image(&v);
+        for (int a = 0; a < PH_HASH_FLAGS_COUNT; a++) {
+            similar[t][a] = ph_hamming_distance(base_hashes[a], h[a]);
+        }
+    }
     free_image(&base);
-    printf("test_transform_robustness: PASSED\n");
-}
 
-void test_different_images_diverge(void) {
-    rgb_image_t a = load_base(TEST_DATA_DIR "/photo.jpeg");
-    rgb_image_t b = load_base(TEST_DATA_DIR "/photo_complex.png");
-
-    uint64_t ha[PH_HASH_FLAGS_COUNT], hb[PH_HASH_FLAGS_COUNT];
-    hashes_of(&a, ha);
-    hashes_of(&b, hb);
-
-    for (int i = 0; i < PH_HASH_FLAGS_COUNT; i++) {
-        int dist = ph_hamming_distance(ha[i], hb[i]);
-        if (dist < MIN_DIFFERENT_DIST) {
-            fprintf(stderr,
-                    "[FAIL] test_different_images_diverge - %s distance %d is below contract "
-                    "(min %d) for genuinely different images\n",
-                    ALGO_NAMES[i], dist, MIN_DIFFERENT_DIST);
-            exit(1);
+    uint64_t picture[NUM_DIFFERENT][PH_HASH_FLAGS_COUNT];
+    for (int i = 0; i < NUM_DIFFERENT; i++) {
+        hashes_of_file(DIFFERENT[i], picture[i]);
+    }
+    int pair = 0;
+    for (int i = 0; i < NUM_DIFFERENT; i++) {
+        for (int j = i + 1; j < NUM_DIFFERENT; j++, pair++) {
+            for (int a = 0; a < PH_HASH_FLAGS_COUNT; a++) {
+                different[pair][a] = ph_hamming_distance(picture[i][a], picture[j][a]);
+            }
         }
     }
 
-    free_image(&a);
-    free_image(&b);
-    printf("test_different_images_diverge: PASSED\n");
+    printf("  bits out of 64    ");
+    for (int a = 0; a < PH_HASH_FLAGS_COUNT; a++) {
+        printf("%7s", ALGO_NAMES[a]);
+    }
+    printf("\n");
+    for (int t = 0; t < NUM_TRANSFORMS; t++) {
+        printf("  %-18s", TRANSFORMS[t].name);
+        for (int a = 0; a < PH_HASH_FLAGS_COUNT; a++) {
+            printf("%7d", similar[t][a]);
+        }
+        printf("\n");
+    }
+    pair = 0;
+    for (int i = 0; i < NUM_DIFFERENT; i++) {
+        for (int j = i + 1; j < NUM_DIFFERENT; j++, pair++) {
+            printf("  different %d-%d     ", i, j);
+            for (int a = 0; a < PH_HASH_FLAGS_COUNT; a++) {
+                printf("%7d", different[pair][a]);
+            }
+            printf("\n");
+        }
+    }
+
+    int stale = 0;
+    for (int a = 0; a < PH_HASH_FLAGS_COUNT; a++) {
+        max_similar[a] = 0;
+        min_different[a] = 64;
+        for (int t = 0; t < NUM_TRANSFORMS; t++) {
+            if (similar[t][a] > max_similar[a]) {
+                max_similar[a] = similar[t][a];
+            }
+        }
+        for (int p = 0; p < NUM_PAIRS; p++) {
+            if (different[p][a] < min_different[a]) {
+                min_different[a] = different[p][a];
+            }
+        }
+
+        const observed_t *o = &OBSERVED[a];
+        int gap = o->min_different - o->max_similar;
+        int allowance = (int)(PH_ROB_MARGIN * gap); /* rounds down: the stricter side */
+        int similar_limit = o->max_similar + allowance;
+        int different_limit = o->min_different - allowance;
+
+        if (gap <= 0 || similar_limit >= different_limit) {
+            fprintf(stderr,
+                    "[FAIL] test_robustness - %s: recorded transforms reach %d bits and "
+                    "different pictures come as close as %d; the two do not separate\n",
+                    ALGO_NAMES[a], o->max_similar, o->min_different);
+            exit(1);
+        }
+        if (max_similar[a] > similar_limit) {
+            fprintf(stderr,
+                    "[FAIL] test_robustness - %s: a transform moves the hash %d bits, "
+                    "beyond the limit %d\n",
+                    ALGO_NAMES[a], max_similar[a], similar_limit);
+            exit(1);
+        }
+        if (min_different[a] < different_limit) {
+            fprintf(stderr,
+                    "[FAIL] test_robustness - %s: two different pictures hash %d bits apart, "
+                    "under the limit %d\n",
+                    ALGO_NAMES[a], min_different[a], different_limit);
+            exit(1);
+        }
+        if (max_similar[a] != o->max_similar || min_different[a] != o->min_different) {
+            fprintf(stderr, "[STALE] %s: measured {%d, %d}, OBSERVED says {%d, %d}\n",
+                    ALGO_NAMES[a], max_similar[a], min_different[a], o->max_similar,
+                    o->min_different);
+            stale = 1;
+        }
+    }
+    if (stale) {
+        fprintf(stderr, "\nOBSERVED does not match the measurement. If the change is "
+                        "intended, replace the rows with:\n\n");
+        for (int a = 0; a < PH_HASH_FLAGS_COUNT; a++) {
+            char row[32];
+            snprintf(row, sizeof(row), "{%d, %d},", max_similar[a], min_different[a]);
+            fprintf(stderr, "    %-10s// %s\n", row, ALGO_NAMES[a]);
+        }
+        fprintf(stderr, "\nand say in the commit why the measurement moved.\n");
+        exit(1);
+    }
+
+    printf("test_similar_and_different_separate: PASSED\n");
 }
 
 int main(void) {
-    test_transform_robustness();
-    test_different_images_diverge();
+    test_similar_and_different_separate();
     return 0;
 }
