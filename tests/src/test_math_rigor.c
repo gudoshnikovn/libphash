@@ -30,56 +30,83 @@ void test_dct_orthogonality() {
     PASS("test_dct_orthogonality");
 }
 
-void test_dct2_scalar_reference_parity() {
-    int n = 32;
-    int reduce = 8;
+/* ph_dct2_partial() is specified as two passes of plain sequential float sums in index
+ * order (see src/hashes/phash.c). The reference below is that specification spelled out,
+ * and the two are compared bit for bit rather than within a tolerance. A tolerance would
+ * be the wrong check: on a flat block the 63 AC coefficients are rounding noise around
+ * zero and decide pHash's bits, so two summation orders that agree to 1e-3 still give
+ * different hashes. Bit-exact coefficients are what keeps a pHash identical on every
+ * build. */
+static void dct2_sequential_reference(const float *dct_mat, const uint8_t *input, float *out) {
+    float temp[32 * 8];
+    for (int i = 0; i < 32; i++) {
+        for (int j = 0; j < 8; j++) {
+            float sum = 0.0f;
+            for (int k = 0; k < 32; k++) {
+                sum += dct_mat[j * 32 + k] * input[i * 32 + k];
+            }
+            temp[i * 8 + j] = sum;
+        }
+    }
+    for (int j = 0; j < 8; j++) {
+        for (int i = 0; i < 8; i++) {
+            float sum = 0.0f;
+            for (int k = 0; k < 32; k++) {
+                sum += dct_mat[i * 32 + k] * temp[k * 8 + j];
+            }
+            out[i * 8 + j] = sum;
+        }
+    }
+}
 
-    // Pseudo-random 32x32 uint8 matrix, the same on every platform
-    ph_test_rng_t rng = ph_test_rng(42u);
+static void check_dct2_bit_exact(const char *label, const uint8_t *input) {
+    const float *dct_mat = ph_get_dct_matrix_32();
+    float lib[64], ref[64];
+
+    ASSERT_OK(ph_dct2_partial(dct_mat, input, 32, 8, lib));
+    dct2_sequential_reference(dct_mat, input, ref);
+
+    for (int i = 0; i < 64; i++) {
+        ASSERT_MSG(memcmp(&lib[i], &ref[i], sizeof(float)) == 0,
+                   "%s: coefficient %d: library %a, reference %a", label, i, (double)lib[i],
+                   (double)ref[i]);
+    }
+    /* What the caller sees. Implied by the loop above; kept so that a change to the
+     * threshold step cannot hide behind identical coefficients. */
+    uint64_t lib_hash = ph_median_bitpack_margin(lib, 64, 1, PH_PHASH_MEDIAN_MARGIN);
+    uint64_t ref_hash = ph_median_bitpack_margin(ref, 64, 1, PH_PHASH_MEDIAN_MARGIN);
+    ASSERT_MSG(lib_hash == ref_hash, "%s: hash library %016llx, reference %016llx", label,
+               (unsigned long long)lib_hash, (unsigned long long)ref_hash);
+}
+
+void test_dct2_matches_sequential_reference() {
     uint8_t input[32 * 32];
-    for (int i = 0; i < n * n; i++) {
+
+    ph_test_rng_t rng = ph_test_rng(42u);
+    for (int i = 0; i < 32 * 32; i++) {
         input[i] = ph_test_rng_byte(&rng);
     }
+    check_dct2_bit_exact("random", input);
 
-    const float *dct_mat = ph_get_dct_matrix_32();
-    float optimized_out[8 * 8] = {0};
-
-    // Call the library function which might be SIMD-accelerated
-    ASSERT_OK(ph_dct2_partial(dct_mat, input, n, reduce, optimized_out));
-
-    // Compute naive scalar reference DCT2 partial
-    float reference_out[8 * 8] = {0};
-    float temp[32 * 8] = {0};
-
-    // First pass (rows)
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < reduce; j++) {
-            float sum = 0.0f;
-            for (int k = 0; k < n; k++) {
-                sum += dct_mat[j * n + k] * input[i * n + k];
-            }
-            temp[i * reduce + j] = sum;
+    for (int y = 0; y < 32; y++) {
+        for (int x = 0; x < 32; x++) {
+            input[y * 32 + x] = (uint8_t)(x * 5 + y * 3);
         }
     }
+    check_dct2_bit_exact("gradient", input);
 
-    // Second pass (cols)
-    for (int j = 0; j < reduce; j++) {
-        for (int i = 0; i < reduce; i++) {
-            float sum = 0.0f;
-            for (int k = 0; k < n; k++) {
-                sum += dct_mat[i * n + k] * temp[k * reduce + j];
-            }
-            reference_out[i * reduce + j] = sum;
-        }
+    for (int i = 0; i < 32 * 32; i++) {
+        input[i] = (uint8_t)((((i / 32) / 4 + (i % 32) / 4) % 2) ? 230 : 20);
     }
+    check_dct2_bit_exact("checkerboard", input);
 
-    // The optimized and reference outputs should be nearly identical (allowing for tiny fp order
-    // differences)
-    for (int i = 0; i < reduce * reduce; i++) {
-        ASSERT_FLOAT_EQ(reference_out[i], optimized_out[i], 0.05f);
-    }
+    /* The degenerate case: AC is pure rounding noise and pHash's bits depend on it. */
+    memset(input, 128, sizeof(input));
+    check_dct2_bit_exact("flat 128", input);
+    memset(input, 255, sizeof(input));
+    check_dct2_bit_exact("flat 255", input);
 
-    PASS("test_dct2_scalar_reference_parity");
+    PASS("test_dct2_matches_sequential_reference");
 }
 
 void test_median_stability() {
@@ -156,7 +183,7 @@ void test_colour_quantiser_singularities() {
 
 int main() {
     test_dct_orthogonality();
-    test_dct2_scalar_reference_parity();
+    test_dct2_matches_sequential_reference();
     test_median_stability();
     test_colour_quantiser_singularities();
 

@@ -39,11 +39,8 @@
  * accumulated error is compared relative to the magnitude of the terms, not absolutely. */
 static void assert_close(double got, double want, double tol, const char *what) {
     double diff = fabs(got - want);
-    if (diff > tol) {
-        fprintf(stderr, "[FAIL] %s: got %.6f, want %.6f (|diff| %.6g > tol %.6g)\n", what, got,
-                want, diff, tol);
-        exit(1);
-    }
+    ASSERT_MSG(diff <= tol, "%s: got %.6f, want %.6f (|diff| %.6g > tol %.6g)", what, got, want,
+               diff, tol);
 }
 
 /* ============================================================================
@@ -103,29 +100,45 @@ static double dct2_direct(const uint8_t *input, int N, int u, int v) {
     return sum;
 }
 
-static void test_dct2_partial_matches_direct_definition(void) {
+static void check_dct2_against_definition(const char *label, const uint8_t *input) {
     const int N = 32, R = 8;
-    uint8_t input[32 * 32];
-
-    /* Deterministic pseudo-random input: no seed, no dependence on the platform's RNG. */
-    uint32_t state = 0x9E3779B9u;
-    for (int i = 0; i < N * N; i++) {
-        state = state * 1664525u + 1013904223u;
-        input[i] = (uint8_t)(state >> 24);
-    }
-
-    float out[8 * 8];
+    float out[8 * 8], exact[8 * 8];
     ASSERT_OK(ph_dct2_partial(ph_get_dct_matrix_32(), input, N, R, out));
 
     for (int u = 0; u < R; u++) {
         for (int v = 0; v < R; v++) {
-            /* Single-precision accumulation over 32 terms of magnitude ~255, twice.
-             * A tolerance of 0.05 is far below the spacing between coefficients that
-             * decides any hash bit. */
-            assert_close(out[u * R + v], dct2_direct(input, N, u, v), 0.05,
-                         "ph_dct2_partial vs the 2-D definition");
+            double want = dct2_direct(input, N, u, v);
+            /* Single-precision accumulation over 32 terms of magnitude ~255, twice. */
+            assert_close(out[u * R + v], want, 0.05, "ph_dct2_partial vs the 2-D definition");
+            exact[u * R + v] = (float)want;
         }
     }
+    /* The tolerance is in coefficient units, and alone it says nothing about the hash: on
+     * a block without structure, differences far inside it flip bits. For these inputs
+     * the single-precision transform must give the hash of the exact one. */
+    uint64_t got = ph_median_bitpack_margin(out, R * R, 1, PH_PHASH_MEDIAN_MARGIN);
+    uint64_t want = ph_median_bitpack_margin(exact, R * R, 1, PH_PHASH_MEDIAN_MARGIN);
+    ASSERT_MSG(got == want, "%s: hash %016llx, from the definition %016llx", label,
+               (unsigned long long)got, (unsigned long long)want);
+}
+
+static void test_dct2_partial_matches_direct_definition(void) {
+    const int N = 32;
+    uint8_t input[32 * 32];
+
+    ph_test_rng_t rng = ph_test_rng(0x9E3779B9u);
+    for (int i = 0; i < N * N; i++) {
+        input[i] = ph_test_rng_byte(&rng);
+    }
+    check_dct2_against_definition("random", input);
+
+    for (int y = 0; y < N; y++) {
+        for (int x = 0; x < N; x++) {
+            input[y * N + x] = (uint8_t)(x * 5 + y * 3);
+        }
+    }
+    check_dct2_against_definition("gradient", input);
+
     printf("test_dct2_partial_matches_direct_definition: PASSED\n");
 }
 
@@ -198,12 +211,9 @@ static void test_dct_dc_coefficient_dominates_and_its_bit_is_constant(void) {
 
         ASSERT(out[0] > 0.0f);
         for (int i = 1; i < R * R; i++) {
-            if (fabs(out[i]) >= (double)out[0]) {
-                fprintf(stderr,
-                        "[FAIL] variant %d: AC coefficient %d (%.3f) is not below DC (%.3f)\n",
-                        variant, i, (double)out[i], (double)out[0]);
-                exit(1);
-            }
+            ASSERT_MSG(fabs(out[i]) < (double)out[0],
+                       "variant %d: AC coefficient %d (%.3f) is not below DC (%.3f)", variant, i,
+                       (double)out[i], (double)out[0]);
         }
 
         uint64_t hash = ph_median_bitpack_from(out, R * R, 1);
@@ -263,14 +273,11 @@ static void test_dct_median_ignores_dc_without_changing_the_hash(void) {
         for (uint64_t d = diff; d; d &= d - 1) {
             changed++;
         }
-        if (changed > 1) {
-            fprintf(stderr,
-                    "[FAIL] variant %d: leaving DC out of the median moved %d bits (%016llx vs "
-                    "%016llx). At most one bit can move, and only on a tie between the two "
-                    "middle coefficients -- check whether DC is still the maximum\n",
-                    variant, changed, (unsigned long long)with_dc, (unsigned long long)without_dc);
-            exit(1);
-        }
+        ASSERT_MSG(changed <= 1,
+                   "variant %d: leaving DC out of the median moved %d bits (%016llx vs "
+                   "%016llx). At most one bit can move, and only on a tie between the two "
+                   "middle coefficients -- check whether DC is still the maximum",
+                   variant, changed, (unsigned long long)with_dc, (unsigned long long)without_dc);
         /* Whatever moved, it was not the DC bit: DC is above either threshold. */
         ASSERT((diff & 1u) == 0);
     }
@@ -306,11 +313,9 @@ static void test_dct2_concentrates_a_single_cosine(void) {
             if (u == 0 && v == 0) {
                 continue; /* DC carries the offset of the cosine */
             }
-            if (fabs(out[u * R + v]) > target * 0.01) {
-                fprintf(stderr, "[FAIL] energy leaked to coefficient (%d,%d): %.3f vs %.3f\n", u, v,
-                        (double)out[u * R + v], target);
-                exit(1);
-            }
+            ASSERT_MSG(fabs(out[u * R + v]) <= target * 0.01,
+                       "energy leaked to coefficient (%d,%d): %.3f vs %.3f", u, v,
+                       (double)out[u * R + v], target);
         }
     }
     printf("test_dct2_concentrates_a_single_cosine: PASSED\n");
@@ -528,13 +533,10 @@ static void test_block_means_on_a_non_multiple(void) {
                 double want = exact_fractional_block_mean(src, w, h, bx, by, G);
                 /* Half a level: the resampler rounds the same mean into a byte. Note this
                  * holds no less tightly for 401x239 than for 64x64. */
-                if (fabs((double)got[by * G + bx] - want) > 0.51) {
-                    fprintf(stderr,
-                            "[FAIL] %dx%d block (%d,%d): box resample gave %d, the exact "
-                            "area-weighted block mean is %.3f\n",
-                            w, h, bx, by, got[by * G + bx], want);
-                    exit(1);
-                }
+                ASSERT_MSG(fabs((double)got[by * G + bx] - want) <= 0.51,
+                           "%dx%d block (%d,%d): box resample gave %d, the exact "
+                           "area-weighted block mean is %.3f",
+                           w, h, bx, by, got[by * G + bx], want);
             }
         }
         free(src);
@@ -580,11 +582,7 @@ static void test_bmh_thresholds_on_the_median(void) {
         }
     }
     int bits = bmh_bits_set(pixels, W, H, 8);
-    if (bits != 32) {
-        fprintf(stderr, "[FAIL] BMH set %d of 64 bits on distinct block values, expected 32\n",
-                bits);
-        exit(1);
-    }
+    ASSERT_MSG(bits == 32, "BMH set %d of 64 bits on distinct block values, expected 32", bits);
 
     /* 2. An input where mean and median differ: the top 8 rows white, the rest near-black.
      * The mean is dragged to about 40 by the 8 bright blocks and only those 8 clear it.
@@ -600,13 +598,10 @@ static void test_bmh_thresholds_on_the_median(void) {
         }
     }
     bits = bmh_bits_set(pixels, W, H, 8);
-    if (bits != 64) {
-        fprintf(stderr,
-                "[FAIL] BMH set %d of 64 bits on the tie-heavy image; the median rule sets all "
-                "64, the arithmetic mean would set 8\n",
-                bits);
-        exit(1);
-    }
+    ASSERT_MSG(bits == 64,
+               "BMH set %d of 64 bits on the tie-heavy image; the median rule sets all "
+               "64, the arithmetic mean would set 8",
+               bits);
 
     free(pixels);
     printf("test_bmh_thresholds_on_the_median: PASSED\n");
