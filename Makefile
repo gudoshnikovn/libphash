@@ -123,10 +123,10 @@ LDFLAGS += $(EXTRA_LDFLAGS)
 # Sources and Objects
 LOADER_DIR = $(SRC_DIR)/loaders
 IMAGE_DIR = $(SRC_DIR)/image
-# The libpng and spng backends need their vendored libraries, which only the CMake build
-# provides; this flow decodes PNG through stb_image.
+# The libpng backend needs its vendored library, which only the CMake build provides;
+# this flow decodes PNG through stb_image.
 SRCS = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(HASH_DIR)/*.c) $(wildcard $(IMAGE_DIR)/*.c) \
-       $(filter-out $(LOADER_DIR)/png_libpng.c $(LOADER_DIR)/png_spng.c,$(wildcard $(LOADER_DIR)/*.c))
+       $(filter-out $(LOADER_DIR)/png_libpng.c,$(wildcard $(LOADER_DIR)/*.c))
 OBJS = $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 
 # Tests
@@ -207,7 +207,7 @@ coverage:
 	@genhtml docs/coverage/coverage.info --output-directory docs/coverage/html
 	@echo "Coverage report generated at docs/coverage/html/index.html"
 
-# Coverage for the CMake build's native decoders (libjpeg-turbo/libpng-or-spng/
+# Coverage for the CMake build's native decoders (libjpeg-turbo/libpng/
 # libwebp/zlib-ng) -- `coverage` above only ever measures the stb_image-only
 # Makefile flow. See scripts/coverage_cmake.sh for what this actually runs.
 coverage-cmake:

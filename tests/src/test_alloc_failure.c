@@ -79,26 +79,14 @@ static void guard_check(const uint8_t *front, const uint8_t *back, const char *t
 #define ALLOW_DECODE  0x2 /* PH_ERR_DECODER_UNAVAILABLE: e.g. WebP with no decoder built in */
 #define ALLOW_EMPTY   0x4 /* PH_ERR_EMPTY_IMAGE: the load before the hash failed */
 /* PH_ERR_CORRUPT_DATA, but ONLY for the decode checks below that opt into this
- * flag -- NOT a blanket allowance. Two vendored decoders have a specific internal
- * allocation whose failure they cannot cleanly distinguish from a genuinely broken
- * bitstream, with no way for this wrapper to tell them apart:
- *   - libwebp: one specific decode-time allocation failure surfaces as
- *     VP8_STATUS_BITSTREAM_ERROR, a status WebPDecode() also uses for real
- *     corruption -- its status code doesn't distinguish the two here either.
- *   - spng (the PHASH_USE_SPNG PNG backend, not libpng): zlib's inflateInit2()
- *     failing -- for any reason, including its own internal allocation failing --
- *     is collapsed by spng's zlib_init() into one generic SPNG_EZLIB_INIT ("zlib
- *     init error"), with no separate code or message for the OOM case specifically
- *     (src/loaders/png_spng.c's ph_spng_err() has no SPNG_EMEM to check for here, unlike
- *     every other spng failure site, which do get a precise check).
- * These are real, narrow limitations of each library's own error reporting, not a
- * libphash bug. The libpng PNG backend has no such gap -- ph_png_message_is_oom()
- * in src/loaders/png_libpng.c covers every OOM wording it can produce precisely -- so on a
- * libpng build this flag never actually triggers on scen_load_file()/
- * scen_hash_all(), and a real future libpng misclassification regression still
- * fails loudly there; it only matters for a PHASH_USE_SPNG build. Nor does the
- * libjpeg-turbo JPEG backend: libjpeg reports every failed allocation as
- * JERR_OUT_OF_MEMORY, so scen_load_memory() never takes this allowance either. */
+ * flag -- NOT a blanket allowance. libwebp reports one specific decode-time
+ * allocation failure as VP8_STATUS_BITSTREAM_ERROR, the status WebPDecode() also
+ * uses for real corruption, so this wrapper cannot tell the two apart. That is a
+ * narrow limitation of libwebp's own error reporting, not a libphash bug, and only
+ * the WebP load in scen_batch() needs this flag. The other decoders report an
+ * allocation failure precisely -- libpng through ph_png_message_is_oom() in
+ * src/loaders/png_libpng.c, libjpeg as JERR_OUT_OF_MEMORY -- so the PNG and JPEG
+ * loads do not take it, and a misclassified OOM there fails loudly. */
 #define ALLOW_CORRUPT 0x8
 
 static int check(const char *tag, ph_error_t err, int allowed) {
@@ -283,7 +271,7 @@ static void scen_load_file(int recording) {
         return;
     }
     ph_error_t err = ph_load_from_file(ctx, PNG_PATH);
-    check("ph_load_from_file", err, ALLOW_ALLOC | ALLOW_DECODE | ALLOW_CORRUPT);
+    check("ph_load_from_file", err, ALLOW_ALLOC | ALLOW_DECODE);
     if (err != PH_SUCCESS && ph_is_loaded(ctx)) {
         defect("ph_load_from_file failed but the context reports an image is loaded");
     }
@@ -297,7 +285,7 @@ static void scen_load_memory(int recording) {
         return;
     }
     ph_error_t err = ph_load_from_memory(ctx, g_jpeg.data, g_jpeg.size);
-    check("ph_load_from_memory", err, ALLOW_ALLOC | ALLOW_DECODE | ALLOW_CORRUPT);
+    check("ph_load_from_memory", err, ALLOW_ALLOC | ALLOW_DECODE);
     if (err != PH_SUCCESS && ph_is_loaded(ctx)) {
         defect("ph_load_from_memory failed but the context reports an image is loaded");
     }
@@ -310,7 +298,7 @@ static void scen_hash_all(int recording) {
         return;
     }
     ph_error_t err = ph_load_from_memory(ctx, g_png.data, g_png.size);
-    check("ph_load_from_memory", err, ALLOW_ALLOC | ALLOW_DECODE | ALLOW_CORRUPT);
+    check("ph_load_from_memory", err, ALLOW_ALLOC | ALLOW_DECODE);
 
     hash_battery(ctx, recording ? &g_golden : NULL, recording ? NULL : &g_golden);
     if (!recording) {
@@ -385,7 +373,7 @@ static void scen_load_oriented(int recording) {
         return;
     }
     ph_error_t err = ph_load_from_memory(ctx, g_oriented.data, g_oriented.size);
-    check("ph_load_from_memory(oriented)", err, ALLOW_ALLOC | ALLOW_DECODE | ALLOW_CORRUPT);
+    check("ph_load_from_memory(oriented)", err, ALLOW_ALLOC | ALLOW_DECODE);
     if (err != PH_SUCCESS) {
         if (ph_is_loaded(ctx)) {
             defect("the oriented load failed but the context reports an image is loaded");

@@ -60,21 +60,7 @@ portions hereof, for any purpose, without fee, subject to the following restrict
 
 ---
 
-## 3. spng (Simple PNG)
-
-* **Project:** [https://github.com/randy408/libspng](https://github.com/randy408/libspng)
-* **License:** BSD 2-Clause "Simplified" License
-
-Copyright (c) 2018-2023, Randy Shin. All rights reserved.
-
-Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
-2. Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
-
----
-
-## 4. stb_image.h
+## 3. stb_image.h
 
 * **Project:** [https://github.com/nothings/stb](https://github.com/nothings/stb)
 * **License:** Public Domain / MIT / Unlicense
@@ -88,7 +74,7 @@ Copyright (c) 2017 Sean Barrett.
 
 ---
 
-## 5. libwebp
+## 4. libwebp
 
 * **Project:** [https://developers.google.com/speed/webp/](https://developers.google.com/speed/webp/)
 * **License:** BSD 3-Clause License
@@ -103,7 +89,7 @@ Redistribution and use in source and binary forms, with or without modification,
 
 ---
 
-## 6. stb_image_resize2.h
+## 5. stb_image_resize2.h
 
 * **Project:** [https://github.com/nothings/stb](https://github.com/nothings/stb)
 * **License:** Public Domain / MIT / Unlicense
@@ -117,7 +103,7 @@ Copyright (c) 2023 Jeff Roberts and Jorge L Rodriguez.
 
 ---
 
-## 7. zlib-ng
+## 6. zlib-ng
 
 * **Project:** [https://github.com/zlib-ng/zlib-ng](https://github.com/zlib-ng/zlib-ng)
 * **License:** zlib License
@@ -137,7 +123,6 @@ Permission is granted to anyone to use this software for any purpose, including 
 | **libjpeg-turbo** | `vendor/libjpeg-turbo` | IJG (zlib for SIMD) |
 | **libpng** | `vendor/libpng` | libpng License 2.0 |
 | **libwebp** | `vendor/libwebp` | BSD 3-Clause |
-| **spng** | `vendor/spng` | BSD 2-Clause |
 | **stb_image** | `vendor/stb_image.h` | Public Domain (MIT) |
 | **stb_image_resize2** | `vendor/stb_image_resize2.h` | Public Domain (MIT) |
 | **zlib-ng** | `vendor/zlib-ng` | zlib License |

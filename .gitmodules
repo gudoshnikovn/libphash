@@ -11,9 +11,6 @@
 [submodule "vendor/libpng"]
 	path = vendor/libpng
 	url = https://github.com/pnggroup/libpng.git
-[submodule "vendor/spng"]
-	path = vendor/spng
-	url = https://github.com/randy408/libspng.git
 [submodule "vendor/libwebp"]
 	path = vendor/libwebp
 	url = https://github.com/webmproject/libwebp.git

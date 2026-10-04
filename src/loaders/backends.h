@@ -26,7 +26,7 @@ static inline int ph_magic_is_png(const uint8_t *magic, size_t len) {
  * header dimensions, then check them -- is not available for it: stb_image refuses a
  * dimension above its own STBI_MAX_DIMENSIONS (2^24) from stbi_info() itself, and would
  * answer an absurdly wide PNG with "corrupt" instead of "too large". Reading the IHDR
- * ourselves keeps the verdict and the error code identical across libpng, spng and
+ * ourselves keeps the verdict and the error code identical across libpng and
  * stb_image builds. Layout is fixed by the PNG spec: 8-byte signature, 4-byte length,
  * "IHDR", then width and height as big-endian uint32. Returns 1 when the header is too
  * short to judge -- the backend will report the truncation itself, with a better

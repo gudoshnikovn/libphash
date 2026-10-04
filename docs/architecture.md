@@ -12,8 +12,7 @@ dispatches across a small table of `{can_read, decode}` pairs (`backends[]`), tr
 order:
 
 1. **Native backends**, each compiled in only when its `PH_USE_*` flag is set:
-   `jpeg.c` (libjpeg-turbo, libjpeg API), `png_libpng.c` *or* `png_spng.c` (two
-   implementations of the one PNG backend; the build compiles one of them), `webp.c`
+   `jpeg.c` (libjpeg-turbo, libjpeg API), `png_libpng.c` (libpng), `webp.c`
    (libwebp).
 2. **`stb_image`** (`src/loaders/stb_image_impl.c`, wrapping the vendored
    `vendor/stb_image.h`) — always registered last, **unconditionally**, not behind any
@@ -145,11 +144,10 @@ contract.
   comparable integer (major×1000000 + minor×1000 + patch).
 - `ph_can_use_jpeg()`/`ph_can_use_png()`/`ph_can_use_webp()` — whether this build
   was compiled with the corresponding native decoder, for a caller that wants to know
-  without triggering a `PH_ERR_DECODER_UNAVAILABLE` first. `ph_can_use_png()` answers
-  for either native PNG backend (libpng or spng).
+  without triggering a `PH_ERR_DECODER_UNAVAILABLE` first.
 - `ph_get_build_info()` — one line describing the build (`version=… jpeg=… png=… webp=…
-  zlib=… threads=… simd=… mock=…`), for logs and bug reports; it is what tells libpng and
-  spng apart, and whether a batch can use threads at all.
+  zlib=… threads=… simd=… mock=…`), for logs and bug reports; it also tells whether a batch can use
+  threads at all.
 - `ph_is_loaded()`/`ph_context_get_dimensions()` — whether an image is currently loaded
   on a context, and its width/height/channel count.
 - `ph_get_last_error_message(ctx)` — a short diagnostic string for the most recent

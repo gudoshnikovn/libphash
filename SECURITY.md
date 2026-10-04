@@ -25,7 +25,7 @@ issue. Please include:
 - What you observed (crash, sanitizer report, hang, wrong output with a security
   implication) versus what you expected.
 - Which decoder backend(s) it reproduces under, if known (native libjpeg-turbo/libpng/
-  spng/libwebp, or the `stb_image` fallback) — see `docs/development.md` for how to
+  libwebp, or the `stb_image` fallback) — see `docs/development.md` for how to
   build each configuration.
 
 **Response SLA:** an acknowledgment within 7 days, and a fix or a mitigation plan
@@ -51,7 +51,7 @@ In scope:
   correctly rejected is not a vulnerability; a crafted file that evades a documented
   limit is.
 - A vulnerability in a vendored decoder (`vendor/libjpeg-turbo`, `vendor/libpng`,
-  `vendor/spng`, `vendor/libwebp`, `vendor/zlib-ng`, or the copied-in
+  `vendor/libwebp`, `vendor/zlib-ng`, or the copied-in
   `vendor/stb_image.h`/`vendor/stb_image_resize2.h`) that this project ships and
   that isn't already fixed upstream. Please also report it upstream. See
   "Vendored dependencies" below for how updates to each are tracked.
@@ -107,8 +107,8 @@ suite).
 
 ## Vendored dependencies
 
-This library bundles five decoder libraries as git submodules
-(`libjpeg-turbo`, `libpng`, `spng`, `libwebp`, `zlib-ng`) plus two files copied
+This library bundles four decoder libraries as git submodules
+(`libjpeg-turbo`, `libpng`, `libwebp`, `zlib-ng`) plus two files copied
 directly into the tree rather than submoduled (`vendor/stb_image.h`,
 `vendor/stb_image_resize2.h` — both locally patched; see `THIRD-PARTY-NOTICES.md`
 for their exact pinned versions and hashes, and `docs/development.md` for the local
@@ -116,7 +116,7 @@ patches they carry).
 
 - **Submoduled dependencies:** [Dependabot](https://docs.github.com/en/code-security/dependabot)
   is configured (`.github/dependabot.yml`, `gitsubmodule` ecosystem) to open a pull
-  request when any of the five submodules has a newer upstream tag. A submodule bump
+  request when any of the four submodules has a newer upstream tag. A submodule bump
   still needs a human to review it against this project's own test suite before
   merging — a newer decoder version is not merged blindly.
 - **The two copied-in stb headers** are not something Dependabot can see, since they

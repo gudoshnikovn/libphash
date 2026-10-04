@@ -31,7 +31,7 @@ though every toolchain this project tests on Linux/macOS handles it (the
 There are two build systems, and they are not interchangeable:
 
 - **CMake** — the high-performance build. Vendored SIMD decoders (libjpeg-turbo,
-  libpng/spng, libwebp, zlib-ng) from `vendor/`, `install()`/`find_package(phash)`
+  libpng, libwebp, zlib-ng) from `vendor/`, `install()`/`find_package(phash)`
   packaging, `ctest`. This is what CI builds and what releases ship.
 - **Makefile** — the portable/minimal build. No vendored decoders: `stb_image` only,
   one test binary per `tests/src/test_*.c`, plus the `debug`/`coverage` flows.
@@ -44,8 +44,7 @@ sync when you add or flip a switch.**
 | Knob | CMake default | Makefile default | Notes |
 |---|---|---|---|
 | Bundled libjpeg-turbo | `PHASH_USE_LIBJPEG_TURBO=ON` | *n/a* (stb only) | Makefile has no native JPEG path |
-| Bundled libpng | `PHASH_USE_LIBPNG=ON` | *n/a* (stb only) | mutually exclusive with `PHASH_USE_SPNG` |
-| spng instead of libpng | `PHASH_USE_SPNG=OFF` | *n/a* | mutually exclusive with `PHASH_USE_LIBPNG` (configure-time error if both are on) |
+| Bundled libpng | `PHASH_USE_LIBPNG=ON` | *n/a* (stb only) | Makefile has no native PNG path |
 | libwebp | `PHASH_USE_WEBP=ON` | `USE_WEBP=0` | Makefile path expects a system libwebp |
 | zlib-ng instead of system zlib | `PHASH_USE_ZLIB_NG=ON` | *n/a* | |
 | **Batch thread pool** | `PHASH_ENABLE_THREADS=ON` | `PHASH_ENABLE_THREADS=1` | matches CMake's default |
@@ -107,19 +106,17 @@ under `-jN` (`clean` deleting object files other jobs are compiling). Prefer the
 
 - **`make coverage`** runs the Makefile's stb_image-only build. Every line inside
   native decoder code in `src/loaders/` doesn't exist in that binary at all — `jpeg.c`
-  and `webp.c` compile to nothing without their `PH_USE_*` flag, and `png_libpng.c`/
-  `png_spng.c` are not built. The overall
+  and `webp.c` compile to nothing without their `PH_USE_*` flag, and `png_libpng.c`
+  is not built. The overall
   percentage this target reports (currently ~95% lines) does **not** include the
   native decoders, no matter how high it reads.
-- **`make coverage-cmake`** (`scripts/coverage_cmake.sh`) runs two separate CMake
-  `-DPHASH_COVERAGE=ON` + `ctest` passes — one with the default vendored decoder
-  set (libjpeg-turbo + libpng + libwebp + zlib-ng, i.e. what CI's `build-and-test` job
-  and releases ship), one with `PHASH_USE_SPNG=ON`/`PHASH_USE_LIBPNG=OFF` (the
-  alternative PNG backend, mutually exclusive with libpng so it needs its own
-  configure) — then merges both `lcov` traces into one report under
+- **`make coverage-cmake`** (`scripts/coverage_cmake.sh`) runs a CMake
+  `-DPHASH_COVERAGE=ON` + `ctest` pass with the default vendored decoder set
+  (libjpeg-turbo + libpng + libwebp + zlib-ng, i.e. what CI's `build-and-test` job
+  and releases ship) and renders its `lcov` trace under
   `docs/coverage/cmake/html/index.html`. This is what actually exercises the
   `max_pixels` checks, `png_error_fn`/`png_warning_fn` + the `longjmp` that carries
-  libpng's error message out, `spng_strerror()` branches, and the `pitch`/
+  libpng's error message out, and the `pitch`/
   `alloc_size` overflow guards in `jpeg.c` — overflow-hardening code that no coverage
   number from the Makefile-only target ever measured.
 
@@ -315,8 +312,8 @@ and on any pull request targeting either:
 | Job | What it checks |
 |---|---|
 | `format-check` | `scripts/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`; `scripts/check_docs_coverage.sh`; `scripts/check_final_state_voice.sh`, which fails on tracker ids, paths into local planning notes and release-cycle wording (a feature "since" a version) in tracked text; and `shellcheck --severity=warning` over `scripts/*.sh`. Fast, no build, catches these before the slower jobs run. |
-| `build-and-test` | Full vendored build (libjpeg-turbo + libpng/spng + libwebp + zlib-ng) across linux-x86_64 (gcc, clang, and a spng variant), linux-arm64, macos-arm64. `PHASH_STRICT_DEPS=ON`, so a decoder silently falling back to stb_image is a hard configure failure, not a quiet pass. |
-| `coverage-cmake` | `scripts/coverage_cmake.sh` — merged lcov report across the vendored and spng decoder sets; published as a downloadable artifact. |
+| `build-and-test` | Full vendored build (libjpeg-turbo + libpng + libwebp + zlib-ng) across linux-x86_64 (gcc, clang), linux-arm64, macos-arm64. `PHASH_STRICT_DEPS=ON`, so a decoder silently falling back to stb_image is a hard configure failure, not a quiet pass. |
+| `coverage-cmake` | `scripts/coverage_cmake.sh` — lcov report of the vendored decoder build; published as a downloadable artifact. |
 | `minimal-build` | Zero-dependency build (every `PHASH_USE_*` off, stb_image only) on ubuntu-latest, macos-latest, windows-latest. |
 | `c-standard-matrix` | Full test suite under `-DCMAKE_C_STANDARD=11/17/23`, gcc+clang, Linux+macOS (no Windows — see the Toolchains section above for why). |
 | `build-and-test-32bit` | The native PNG backend (libpng) built `-m32`, catching `size_t`/`int`-width overflow bugs a 64-bit build can't reach. |

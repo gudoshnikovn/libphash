@@ -6,7 +6,7 @@
 // One file per JPEG decoder: tests/data/golden_hashes.<jpeg>.txt, <jpeg> being
 // "libjpegturbo" or "stbjpeg". The two round their IDCT differently, so the same JPEG
 // reaches the hash functions as different pixels; nothing else in the build changes a
-// value. Measured across macOS and Linux on arm64 and x86-64, clang and gcc, libpng, spng
+// value. Measured across macOS and Linux on arm64 and x86-64, clang and gcc, libpng
 // and stb_image for PNG: the files of one JPEG decoder are byte for byte identical. That
 // holds because the library computes the same way everywhere -- -ffp-contract=off, one
 // plain loop for pHash's DCT, integer area averaging and gray conversion, exact histogram

@@ -82,7 +82,7 @@ endmacro()
 #
 # $<TARGET_FILE_NAME:...> looks like the obvious tool for this, but doesn't
 # work inside INSTALL_INTERFACE here: these targets (zlib-ng, png_static,
-# spng_static, webpdecoder) are deliberately not part of phash's export set
+# webpdecoder) are deliberately not part of phash's export set
 # (see the comment above target_link_libraries(phash PRIVATE
 # $<BUILD_INTERFACE:png_static> ...) below), so by the time a consumer's
 # CMake evaluates that generator expression, the target it names doesn't
@@ -148,7 +148,6 @@ option(PHASH_BUILD_TESTS "Build tests" ON)
 option(PHASH_BUILD_SHARED "Build shared library" OFF)
 option(PHASH_USE_LIBJPEG_TURBO "Use bundled libjpeg-turbo for fast JPEG decoding" ON)
 option(PHASH_USE_LIBPNG "Use bundled libpng for fast PNG decoding" ON)
-option(PHASH_USE_SPNG "Use bundled spng (single-file, low-level) instead of libpng for PNG decoding" OFF)
 option(PHASH_USE_WEBP "Use external libwebp for WebP decoding" ON)
 option(PHASH_USE_ZLIB_NG "Use bundled zlib-ng (zlib-compat) instead of system zlib for PNG inflate" ON)
 option(PHASH_OPTIMIZE_NATIVE "Optimize for host CPU architecture (-march=native)" OFF)
@@ -161,21 +160,20 @@ option(PHASH_ENABLE_THREADS "Let ph_hash_files()/ph_hash_buffers() spawn a pool 
 # so their max_pixels checks, error-callback plumbing and overflow guards are
 # invisible to it. This option instruments *this*
 # CMake build instead, so a Release-equivalent config with the vendored decoders on
-# can be measured; scripts/coverage_cmake.sh drives it (also for the spng variant)
-# and merges both into one report.
+# can be measured; scripts/coverage_cmake.sh drives it.
 option(PHASH_COVERAGE "Instrument phash and its tests with --coverage (gcov/lcov); see scripts/coverage_cmake.sh" OFF)
 
-# libpng and spng are two alternative implementations of the *same* PNG backend,
-# src/loaders/png_libpng.c and src/loaders/png_spng.c, and the library compiles one of
-# them. Both would define ph_decode_png_mem() twice and link two PNG libraries.
-# Refuse the configuration instead of picking a winner behind the user's back.
-if(PHASH_USE_LIBPNG AND PHASH_USE_SPNG)
+# The native PNG backend is libpng. CMake silently ignores an unknown -D, so a script
+# asking for spng with PHASH_USE_SPNG=ON would get a libpng build without being told;
+# it is refused instead. spng would be no faster than libpng: within a few percent on
+# 8-bit color images and 30-70% slower on 16-bit and grayscale ones, on x86-64 and
+# arm64 alike. OFF asks for nothing and passes.
+if(PHASH_USE_SPNG)
     message(FATAL_ERROR
-        "PHASH_USE_LIBPNG and PHASH_USE_SPNG are mutually exclusive: they are two "
-        "alternative implementations of the single PNG backend, and only one can be "
-        "compiled in. PHASH_USE_LIBPNG defaults to ON, so selecting spng means turning "
-        "libpng off explicitly:\n"
-        "  cmake -S . -B build -DPHASH_USE_SPNG=ON -DPHASH_USE_LIBPNG=OFF")
+        "PHASH_USE_SPNG is not an option of this project: the native PNG backend is "
+        "libpng (PHASH_USE_LIBPNG, ON by default). Drop the flag, and remove the entry "
+        "from an existing build directory's cache:\n"
+        "  cmake -S . -B build -UPHASH_USE_SPNG")
 endif()
 
 # The JPEG option is named after the codec, libjpeg-turbo. CMake silently ignores an
@@ -340,8 +338,8 @@ endif()
 
 # --- Library ---
 file(GLOB_RECURSE SOURCES "src/*.c")
-# The two PNG backends are added by their options below, at most one of them.
-list(FILTER SOURCES EXCLUDE REGEX "/src/loaders/png_(libpng|spng)\\.c$")
+# The libpng backend is added by its option below.
+list(FILTER SOURCES EXCLUDE REGEX "/src/loaders/png_libpng\\.c$")
 
 # The vendored stb_image_resize2 packs filter coefficients with deliberately
 # unaligned 64-bit moves (STBIR_MOVE_2 casts float* -> stbir_uint64*) on its own
@@ -476,7 +474,7 @@ if(PHASH_USE_LIBJPEG_TURBO)
     # The libjpeg API archive (jpeg-static), not the TurboJPEG one (turbojpeg-static):
     # libjpeg-turbo 3.x compiles its own zlib and spng into the TurboJPEG archive, with
     # global symbols, for image-file I/O this library never uses -- and on macOS libpng
-    # and spng would then bind to those copies instead of the vendored zlib-ng and spng.
+    # would then bind to that zlib instead of the vendored zlib-ng.
     # jpeg-static is the codec alone.
     #
     # libjpeg-turbo doesn't like add_subdirectory, so we point to the pre-built lib.
@@ -556,7 +554,7 @@ if(PHASH_USE_LIBJPEG_TURBO)
     endif()
 endif()
 
-# --- Bundled zlib-ng (zlib-compat inflate/deflate used by libpng/spng) ---
+# --- Bundled zlib-ng (zlib-compat inflate/deflate used by libpng) ---
 set(PHASH_ZLIB_TARGET z)
 # When libphash is pulled in via add_subdirectory(), the parent project owns its own
 # build settings and its own zlib. Forcing ours into the cache would silently reconfigure
@@ -701,28 +699,6 @@ if(PHASH_USE_LIBPNG)
         list(APPEND PHASH_INSTALL_LINK_LIBS
             $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/${PHASH_PNG_LIB_FILENAME}>)
         list(APPEND PHASH_PC_LIBS_PRIVATE "-l${PHASH_PNG_LIB_NAME}")
-        set(PHASH_ZLIB_NEEDED ON)
-    endif()
-endif()
-
-# --- Bundled spng ---
-if(PHASH_USE_SPNG)
-    target_compile_definitions(phash PRIVATE PH_USE_SPNG)
-    target_sources(phash PRIVATE src/loaders/png_spng.c)
-    add_library(spng_static STATIC vendor/spng/spng/spng.c)
-    target_include_directories(spng_static PUBLIC vendor/spng/spng)
-    # spng calls zlib: it compiles against the headers of the zlib it is linked with
-    # (zlib-ng's are generated at build time) and is built after it. Without this it would
-    # pick up whatever system zlib.h the compiler finds, or none.
-    target_link_libraries(spng_static PRIVATE ${PHASH_ZLIB_TARGET})
-    target_link_libraries(phash PRIVATE $<BUILD_INTERFACE:spng_static> $<BUILD_INTERFACE:${PHASH_ZLIB_TARGET}>)
-    target_include_directories(phash PRIVATE vendor/spng/spng)
-    if(PHASH_INSTALL_PRIVATE_DEPS)
-        install(TARGETS spng_static ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-        phash_static_lib_filename(PHASH_SPNG_LIB_FILENAME spng_static)
-        list(APPEND PHASH_INSTALL_LINK_LIBS
-            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/${PHASH_SPNG_LIB_FILENAME}>)
-        list(APPEND PHASH_PC_LIBS_PRIVATE "-lspng_static")
         set(PHASH_ZLIB_NEEDED ON)
     endif()
 endif()

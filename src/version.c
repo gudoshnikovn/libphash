@@ -16,8 +16,6 @@ PH_API int ph_version_number(void) { return PH_VERSION_NUMBER; }
 #endif
 #if defined(PH_USE_LIBPNG)
 #    define PH_BUILD_PNG "libpng"
-#elif defined(PH_USE_SPNG)
-#    define PH_BUILD_PNG "spng"
 #else
 #    define PH_BUILD_PNG "stb"
 #endif
@@ -28,7 +26,7 @@ PH_API int ph_version_number(void) { return PH_VERSION_NUMBER; }
 #endif
 #if defined(PH_USE_ZLIB_NG)
 #    define PH_BUILD_ZLIB "zlib-ng"
-#elif defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
+#elif defined(PH_USE_LIBPNG)
 #    define PH_BUILD_ZLIB "zlib"
 #else
 #    define PH_BUILD_ZLIB "none"
@@ -64,7 +62,7 @@ PH_API int ph_can_use_jpeg(void) {
 }
 
 PH_API int ph_can_use_png(void) {
-#if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
+#if defined(PH_USE_LIBPNG)
     return 1;
 #else
     return 0;

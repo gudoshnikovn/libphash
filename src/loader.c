@@ -236,7 +236,7 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
     /* Always the native channel count: only that one reports alpha from a tRNS chunk,
      * which stbi_info() does not see. The channel layout every backend hands back -- gray
      * (1) or RGB (3), each plus alpha -- is produced below, with the library's own gray
-     * weights, as the libpng and spng backends do, so a build's choice of PNG decoder
+     * weights, as the libpng backend does, so a build's choice of PNG decoder
      * does not change what gets hashed. */
     int native = 0;
     uint8_t *decoded = stbi_load_from_memory(data, (int)len, w, h, &native, 0);
@@ -300,7 +300,7 @@ static const ph_image_backend_t backends[] = {
 #ifdef PH_USE_LIBJPEG_TURBO
     {ph_can_read_jpeg, ph_decode_jpeg_mem},
 #endif
-#if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
+#ifdef PH_USE_LIBPNG
     {ph_magic_is_png, ph_decode_png_mem},
 #endif
 #ifdef PH_USE_WEBP
@@ -311,8 +311,8 @@ static const ph_image_backend_t backends[] = {
 #endif
     {ph_can_read_stb, ph_decode_stb_mem},   {NULL, NULL}};
 
-#if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
-/* zlib-ng -- the inflate under both native PNG backends -- picks its CPU-specific
+#ifdef PH_USE_LIBPNG
+/* zlib-ng -- the inflate under the native PNG backend -- picks its CPU-specific
  * routines on first use by writing a global function table that other threads then read
  * without synchronisation. All writers store the same pointers, so nothing observable goes
  * wrong, but it is a data race under the C memory model, and ThreadSanitizer reports it
@@ -425,10 +425,10 @@ static int ph_jpeg_reaches_eoi(const uint8_t *p, size_t n) {
     }
 }
 
-#if !defined(PH_USE_LIBPNG) && !defined(PH_USE_SPNG)
-/* stb_image, the only PNG decoder in a build without libpng or spng, reads no chunk
+#ifndef PH_USE_LIBPNG
+/* stb_image, the only PNG decoder in a build without libpng, reads no chunk
  * checksum at all; ph_png_check_chunks() compares them, so a damaged critical chunk is
- * refused as libpng and spng refuse it. A build with a native PNG decoder leaves the
+ * refused as libpng refuses it. A build with a native PNG decoder leaves the
  * comparison to it. */
 #    define PH_PNG_CHECK_CRC 1
 
@@ -566,7 +566,7 @@ uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int 
         return NULL;
     }
 
-#if defined(PH_USE_LIBPNG) || defined(PH_USE_SPNG)
+#ifdef PH_USE_LIBPNG
     ph_warm_decoder_dispatch();
 #endif
 

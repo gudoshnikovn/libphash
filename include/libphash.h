@@ -1491,8 +1491,7 @@ PH_API int ph_can_use_jpeg(void);
  * @brief Whether this build has a native PNG decoder, decided when the library was
  * compiled.
  *
- * Native means either of the two alternative PNG backends, libpng or spng; which one is
- * named by ph_get_build_info().
+ * Native means libpng.
  * @return 1 if PNG is decoded natively, 0 if it goes through the stb_image fallback.
  */
 PH_API int ph_can_use_png(void);
@@ -1510,10 +1509,10 @@ PH_API int ph_can_use_webp(void);
  * bug reports.
  *
  * Space-separated `key=value` pairs, for example:
- * `version=2.0.0 jpeg=libjpeg-turbo png=spng webp=libwebp zlib=zlib-ng threads=on simd=neon
+ * `version=2.0.0 jpeg=libjpeg-turbo png=libpng webp=libwebp zlib=zlib-ng threads=on simd=neon
  * mock=off`
  *
- * - `jpeg`: `libjpeg-turbo` or `stb`; `png`: `libpng`, `spng` or `stb`; `webp`: `libwebp` or
+ * - `jpeg`: `libjpeg-turbo` or `stb`; `png`: `libpng` or `stb`; `webp`: `libwebp` or
  *   `none`; `zlib`: `zlib-ng`, `zlib` or `none` (stb_image inflates PNG itself);
  * - `threads`: `on` if the batch functions can use worker threads, `off` if they always
  *   run sequentially;
