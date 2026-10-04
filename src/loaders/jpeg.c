@@ -21,9 +21,13 @@
 #    include <setjmp.h>
 #    include <string.h>
 
-/* jpeglib.h first: it pulls in jconfig.h, whose JPEG_LIB_VERSION jerror.h tests. */
-#    include "jerror.h"
+/* jpeglib.h first: it pulls in jconfig.h, whose JPEG_LIB_VERSION jerror.h tests to
+ * decide which message codes exist. Sorted, jerror.h would come first and see the macro
+ * undefined (-Wundef), so the include sorter is kept off this pair. */
+// clang-format off
 #    include "jpeglib.h"
+#    include "jerror.h"
+// clang-format on
 
 int ph_can_read_jpeg(const uint8_t *magic, size_t len) {
     return len >= 2 && magic[0] == 0xFF && magic[1] == 0xD8;
