@@ -261,10 +261,8 @@ void free(void *p) {
     ph_real_free(p);
 }
 
+/* `out` is declared nonnull by the C library, so it is not checked here. */
 int posix_memalign(void **out, size_t align, size_t n) {
-    if (!out) {
-        return EINVAL;
-    }
     if (ph_shim_should_fail()) {
         return ENOMEM;
     }

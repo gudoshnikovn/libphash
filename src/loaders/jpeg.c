@@ -40,6 +40,12 @@ typedef struct {
     jmp_buf escape;
     char message[JMSG_LENGTH_MAX];
     int out_of_memory;
+    /* The caller's outputs, read through here everywhere after setjmp(): a parameter used
+     * past that point may live in a register that longjmp() does not restore (GCC:
+     * -Wclobbered), while this struct is in memory, its address handed to libjpeg. */
+    ph_error_t *out_err;
+    char *err_msg;
+    size_t err_msg_cap;
 } ph_jpeg_error_t;
 
 static void ph_jpeg_error_exit(j_common_ptr cinfo) {
@@ -110,6 +116,9 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
     JSAMPROW *volatile rows = NULL;
 
     cinfo.err = jpeg_std_error(&jerr.pub);
+    jerr.out_err = out_err;
+    jerr.err_msg = err_msg;
+    jerr.err_msg_cap = err_msg_cap;
     jerr.pub.error_exit = ph_jpeg_error_exit;
     jerr.pub.emit_message = ph_jpeg_emit_message;
     jerr.pub.output_message = ph_jpeg_output_message;
@@ -117,10 +126,10 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
         jpeg_destroy_decompress(&cinfo);
         free(output);
         free(rows);
-        if (out_err) {
-            *out_err = jerr.out_of_memory ? PH_ERR_ALLOCATION_FAILED : PH_ERR_CORRUPT_DATA;
+        if (jerr.out_err) {
+            *jerr.out_err = jerr.out_of_memory ? PH_ERR_ALLOCATION_FAILED : PH_ERR_CORRUPT_DATA;
         }
-        ph_set_err_msg(err_msg, err_msg_cap, jerr.message);
+        ph_set_err_msg(jerr.err_msg, jerr.err_msg_cap, jerr.message);
         return NULL;
     }
 
@@ -129,10 +138,10 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
     if (jpeg_read_header(&cinfo, TRUE) != JPEG_HEADER_OK) {
         /* A tables-only stream: valid JPEG syntax, no image in it. */
         jpeg_destroy_decompress(&cinfo);
-        if (out_err) {
-            *out_err = PH_ERR_CORRUPT_DATA;
+        if (jerr.out_err) {
+            *jerr.out_err = PH_ERR_CORRUPT_DATA;
         }
-        ph_set_err_msg(err_msg, err_msg_cap, "JPEG stream contains no image");
+        ph_set_err_msg(jerr.err_msg, jerr.err_msg_cap, "JPEG stream contains no image");
         return NULL;
     }
 
@@ -143,10 +152,11 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
     if (ph_exceeds_pixel_limit((uint64_t)cinfo.image_width, (uint64_t)cinfo.image_height,
                                max_pixels)) {
         jpeg_destroy_decompress(&cinfo);
-        if (out_err) {
-            *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        if (jerr.out_err) {
+            *jerr.out_err = PH_ERR_IMAGE_TOO_LARGE;
         }
-        ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
+        ph_set_err_msg(jerr.err_msg, jerr.err_msg_cap,
+                       "Image exceeds the configured maximum pixel count");
         return NULL;
     }
 
@@ -162,10 +172,10 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
         /* Should not happen for the two colour spaces requested above; checked because
          * the buffer below is sized by out_channels, not by what libjpeg writes. */
         jpeg_destroy_decompress(&cinfo);
-        if (out_err) {
-            *out_err = PH_ERR_CORRUPT_DATA;
+        if (jerr.out_err) {
+            *jerr.out_err = PH_ERR_CORRUPT_DATA;
         }
-        ph_set_err_msg(err_msg, err_msg_cap, "Unexpected JPEG output component count");
+        ph_set_err_msg(jerr.err_msg, jerr.err_msg_cap, "Unexpected JPEG output component count");
         return NULL;
     }
 
@@ -175,10 +185,11 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
         !ph_safe_image_alloc_size((uint64_t)w, (uint64_t)out_channels, 1, &stride) ||
         !ph_safe_image_alloc_size((uint64_t)stride, (uint64_t)h, 1, &total)) {
         jpeg_destroy_decompress(&cinfo);
-        if (out_err) {
-            *out_err = PH_ERR_IMAGE_TOO_LARGE;
+        if (jerr.out_err) {
+            *jerr.out_err = PH_ERR_IMAGE_TOO_LARGE;
         }
-        ph_set_err_msg(err_msg, err_msg_cap, "Image exceeds the configured maximum pixel count");
+        ph_set_err_msg(jerr.err_msg, jerr.err_msg_cap,
+                       "Image exceeds the configured maximum pixel count");
         return NULL;
     }
 
@@ -188,10 +199,10 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
         jpeg_destroy_decompress(&cinfo);
         free(output);
         free(rows);
-        if (out_err) {
-            *out_err = PH_ERR_ALLOCATION_FAILED;
+        if (jerr.out_err) {
+            *jerr.out_err = PH_ERR_ALLOCATION_FAILED;
         }
-        ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
+        ph_set_err_msg(jerr.err_msg, jerr.err_msg_cap, "Memory allocation failed");
         return NULL;
     }
     for (JDIMENSION y = 0; y < h; y++) {

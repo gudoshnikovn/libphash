@@ -37,6 +37,7 @@
 #    pragma GCC diagnostic ignored "-Wdouble-promotion"
 #    pragma GCC diagnostic ignored "-Wconversion"
 #    pragma GCC diagnostic ignored "-Wsign-conversion"
+#    pragma GCC diagnostic ignored "-Wundef" /* x86: tests __ARM_NEON_FP without defined() */
 #endif
 
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
