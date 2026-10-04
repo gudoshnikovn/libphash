@@ -266,8 +266,8 @@ static uint8_t *ph_decode_stb_mem(const uint8_t *data, size_t len, int *w, int *
 /* Mock backend for exercising the dispatcher loop without real decoders.
  *
  * Guarded by its own opt-in flag (CMake: PHASH_ENABLE_MOCK_BACKEND, Makefile:
- * PHASH_ENABLE_MOCK_BACKEND=1), deliberately NOT by PH_TESTING/PHASH_BUILD_TESTS:
- * those are ON in the recommended Release build, and a shipped library must not
+ * PHASH_ENABLE_MOCK_BACKEND=1), deliberately NOT by PHASH_BUILD_TESTS: that option
+ * is ON in the recommended Release build, and a shipped library must not
  * "decode" any buffer starting with DE AD into a 1x1 image. This backend
  * is registered ahead of the stb catch-all, so it really does intercept input --
  * it must never end up in a shipped artifact. */

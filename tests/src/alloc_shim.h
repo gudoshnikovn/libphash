@@ -35,6 +35,8 @@
  * ASan report to show for it.
  */
 
+#include "test_macros.h"
+
 #include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -281,9 +283,12 @@ int posix_memalign(void **out, size_t align, size_t n) {
 
 /* ---- control API ------------------------------------------------------- */
 
+/* Each including test uses only the part of this API it needs; PH_TEST_UNUSED keeps
+ * -Wunused-function quiet for the rest. */
+
 /* Forget all accounting. Any pointer allocated before this call becomes
  * foreign, so it is never reported as a leak. */
-static void ph_shim_reset(void) {
+PH_TEST_UNUSED static void ph_shim_reset(void) {
     memset(ph_shim.slots, 0, sizeof(ph_shim.slots));
     ph_shim.counter = 0;
     ph_shim.fail_at = 0;
@@ -294,20 +299,20 @@ static void ph_shim_reset(void) {
 }
 
 /* fail_at == 0 counts allocations without failing any. */
-static void ph_shim_arm(long fail_at) {
+PH_TEST_UNUSED static void ph_shim_arm(long fail_at) {
     ph_shim_reset();
     ph_shim.fail_at = fail_at;
     ph_shim.armed = 1;
 }
 
-static void ph_shim_disarm(void) { ph_shim.armed = 0; }
+PH_TEST_UNUSED static void ph_shim_disarm(void) { ph_shim.armed = 0; }
 
-static long ph_shim_count(void) { return ph_shim.counter; }
+PH_TEST_UNUSED static long ph_shim_count(void) { return ph_shim.counter; }
 
-static long ph_shim_live(void) { return ph_shim.live; }
+PH_TEST_UNUSED static long ph_shim_live(void) { return ph_shim.live; }
 
-static long ph_shim_injected(void) { return ph_shim.injected; }
+PH_TEST_UNUSED static long ph_shim_injected(void) { return ph_shim.injected; }
 
-static int ph_shim_overflowed(void) { return ph_shim.overflow; }
+PH_TEST_UNUSED static int ph_shim_overflowed(void) { return ph_shim.overflow; }
 
 #endif /* PH_TEST_ALLOC_SHIM_H */

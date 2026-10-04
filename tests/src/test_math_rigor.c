@@ -31,16 +31,14 @@ void test_dct_orthogonality() {
 }
 
 void test_dct2_scalar_reference_parity() {
-    // Ensure deterministic random numbers for the test
-    srand(42);
-
     int n = 32;
     int reduce = 8;
 
-    // Generate a random 32x32 uint8 matrix
+    // Pseudo-random 32x32 uint8 matrix, the same on every platform
+    ph_test_rng_t rng = ph_test_rng(42u);
     uint8_t input[32 * 32];
     for (int i = 0; i < n * n; i++) {
-        input[i] = (uint8_t)(rand() % 256);
+        input[i] = ph_test_rng_byte(&rng);
     }
 
     const float *dct_mat = ph_get_dct_matrix_32();
@@ -146,11 +144,9 @@ void test_colour_quantiser_singularities() {
         for (int g = 0; g < 256; g += 5) {
             for (int b = 0; b < 256; b += 5) {
                 int bin = ph_color_histogram_bin(r, g, b);
-                if (bin < 0 || bin >= PH_COLOR_BINS) {
-                    fprintf(stderr, "[FAIL] rgb(%d,%d,%d) -> bin %d, outside 0..%d\n", r, g, b, bin,
-                            PH_COLOR_BINS - 1);
-                    exit(1);
-                }
+                ASSERT_MSG(bin >= 0 && bin < PH_COLOR_BINS,
+                           "rgb(%d,%d,%d) -> bin %d, outside 0..%d", r, g, b, bin,
+                           PH_COLOR_BINS - 1);
             }
         }
     }

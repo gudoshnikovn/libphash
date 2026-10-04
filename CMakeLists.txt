@@ -897,7 +897,6 @@ if(PHASH_BUILD_TESTS)
         )
         target_compile_definitions(${test_name} PRIVATE
             TEST_DATA_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/data\"
-            PH_TESTING
             $<TARGET_PROPERTY:phash,COMPILE_DEFINITIONS>
         )
         if(PHASH_BUILD_FUZZERS)

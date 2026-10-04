@@ -30,27 +30,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Small deterministic PRNG so the test corpus is identical across runs/platforms --
- * no dependency on the C library's rand() implementation. */
-static uint32_t g_rng_state;
-
-static void rng_seed(uint32_t seed) { g_rng_state = seed ? seed : 1; }
-
-static uint32_t rng_next(void) {
-    /* xorshift32 */
-    uint32_t x = g_rng_state;
-    x ^= x << 13;
-    x ^= x >> 17;
-    x ^= x << 5;
-    g_rng_state = x;
-    return x;
-}
-
-static uint8_t rng_byte(void) { return (uint8_t)rng_next(); }
+/* The generator is shared from test_macros.h, so the corpus is identical across runs and
+ * platforms. fill_random() has the same signature as the other fillers, hence the
+ * file-scope state. */
+static ph_test_rng_t g_rng;
 
 static void fill_random(uint8_t *buf, size_t n) {
     for (size_t i = 0; i < n; i++) {
-        buf[i] = rng_byte();
+        buf[i] = ph_test_rng_byte(&g_rng);
     }
 }
 
@@ -86,13 +73,9 @@ static void run_grayscale_case(const char *label, int w, int h, int channels,
 
     if (memcmp(dst_simd, dst_scalar, num_pixels) != 0) {
         for (size_t i = 0; i < num_pixels; i++) {
-            if (dst_simd[i] != dst_scalar[i]) {
-                fprintf(stderr,
-                        "[FAIL] ph_to_grayscale/%s (%dx%d, %d ch): byte %zu differs: "
-                        "simd=%u scalar=%u\n",
-                        label, w, h, channels, i, dst_simd[i], dst_scalar[i]);
-                exit(1);
-            }
+            ASSERT_MSG(dst_simd[i] == dst_scalar[i],
+                       "ph_to_grayscale/%s (%dx%d, %d ch): byte %zu: simd=%u scalar=%u", label, w,
+                       h, channels, i, dst_simd[i], dst_scalar[i]);
         }
     }
 
@@ -114,7 +97,7 @@ static void test_grayscale_equivalence(void) {
 
     for (int channels = 3; channels <= 4; channels++) {
         for (size_t s = 0; s < n_shapes; s++) {
-            rng_seed(0x1234u + (uint32_t)s * 7u + (uint32_t)channels * 101u);
+            g_rng = ph_test_rng(0x1234u + (uint32_t)s * 7u + (uint32_t)channels * 101u);
             run_grayscale_case("random", shapes[s].w, shapes[s].h, channels, fill_random);
             run_grayscale_case("gradient", shapes[s].w, shapes[s].h, channels, fill_gradient);
         }
@@ -156,18 +139,15 @@ static ph_digest_t make_bits_digest(uint8_t size, void (*fill)(uint8_t *, size_t
 }
 
 static void run_hamming_case(uint8_t size) {
-    rng_seed(0x1111u + size);
+    g_rng = ph_test_rng(0x1111u + size);
     ph_digest_t a = make_bits_digest(size, fill_random);
-    rng_seed(0x2222u + size);
+    g_rng = ph_test_rng(0x2222u + size);
     ph_digest_t b = make_bits_digest(size, fill_random);
 
     int simd = ph_hamming_distance_digest(&a, &b);
     int scalar = ph_hamming_distance_digest_scalar(&a, &b);
-    if (simd != scalar) {
-        fprintf(stderr, "[FAIL] ph_hamming_distance_digest (size=%u): simd=%d scalar=%d\n",
-                (unsigned)size, simd, scalar);
-        exit(1);
-    }
+    ASSERT_MSG(simd == scalar, "ph_hamming_distance_digest (size=%u): simd=%d scalar=%d",
+               (unsigned)size, simd, scalar);
 
     /* Self-distance is 0 on both paths -- except size 0, which both entry points reject
      * as incomparable (ph_digest_is_comparable() requires size > 0) rather than reporting

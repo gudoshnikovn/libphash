@@ -44,7 +44,7 @@ mkdir -p "$WORK_DIR/generated"
 
 LIB_FLAGS=(-I "$ROOT_DIR/include" -I "$ROOT_DIR/src" -I "$WORK_DIR/generated")
 TEST_FLAGS=("${LIB_FLAGS[@]}" -I "$ROOT_DIR/tests/src"
-            "-DTEST_DATA_DIR=\"$ROOT_DIR/tests/data\"" -DPH_TESTING)
+            "-DTEST_DATA_DIR=\"$ROOT_DIR/tests/data\"")
 
 # GCC accepts the -std=c23 spelling from 14; 13 and earlier call the same
 # dialect -std=c2x. Probe rather than version-sniff, so the check keeps working on

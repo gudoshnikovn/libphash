@@ -2,9 +2,11 @@
 #define PH_TEST_MACROS_H
 
 #include <math.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 /* Same reason as src/hashes/hashes.h's copy: M_PI is POSIX, not ISO, and the tests build
  * under the same strict -std=c17 as the library. Defined here rather than in each
@@ -44,7 +46,59 @@ static __inline int ph_test_popcount(unsigned int x) {
 #    define PH_TEST_POPCOUNT(x) ph_test_popcount((unsigned int)(x))
 #endif
 
-/* Simple assertion macros for testing */
+/* Deterministic xorshift32 generator. Tests that need pseudo-random input use this
+ * instead of rand(): the C library's sequence differs between glibc, Apple libc and
+ * MSVC, so a fixed srand() seed would still feed each platform different data, and a
+ * data-dependent failure would reproduce on only one of them. */
+typedef struct {
+    uint32_t state;
+} ph_test_rng_t;
+
+static inline ph_test_rng_t ph_test_rng(uint32_t seed) {
+    ph_test_rng_t rng = {seed ? seed : 1u}; /* xorshift has a fixed point at 0 */
+    return rng;
+}
+
+static inline uint32_t ph_test_rng_next(ph_test_rng_t *rng) {
+    uint32_t x = rng->state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    rng->state = x;
+    return x;
+}
+
+static inline uint8_t ph_test_rng_byte(ph_test_rng_t *rng) {
+    return (uint8_t)ph_test_rng_next(rng);
+}
+
+/* Assertion macros.
+ *
+ * A failure message has to say what was compared, what came out and on which input:
+ * the log is often all there is to go on (a CI leg on a platform nobody has locally).
+ * The fixed-shape macros print the expression or both values; when the input matters
+ * -- a loop over fixtures, algorithms or parameters -- use ASSERT_MSG and name it. */
+
+PH_TEST_PRINTF_FORMAT(4, 5)
+
+static inline void ph_test_fail(const char *file, int line, const char *expr, const char *fmt,
+                                ...) {
+    va_list ap;
+    fprintf(stderr, "[FAIL] %s:%d - Assertion '%s' failed: ", file, line, expr);
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+    exit(1);
+}
+
+/* ASSERT_MSG(expr, fmt, ...): the format string is checked by the compiler. */
+#define ASSERT_MSG(expr, ...)                                     \
+    do {                                                          \
+        if (!(expr)) {                                            \
+            ph_test_fail(__FILE__, __LINE__, #expr, __VA_ARGS__); \
+        }                                                         \
+    } while (0)
 
 #define ASSERT_OK(expr)                                                                        \
     do {                                                                                       \

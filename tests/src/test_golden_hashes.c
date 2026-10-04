@@ -96,8 +96,7 @@ static void load_golden(int required) {
         if (!required) {
             return;
         }
-        fprintf(stderr, "[FAIL] test_golden_hashes - could not open %s\n", golden_path());
-        exit(1);
+        ASSERT_MSG(f != NULL, "could not open %s", golden_path());
     }
     while (g_golden_count < (int)(sizeof(g_golden) / sizeof(g_golden[0])) &&
            fscanf(f, "%63s %31s %" PH_GOLDEN_STR(PH_GOLDEN_HEX_DIGITS) "s",
@@ -154,11 +153,7 @@ static void process_fixture(size_t index, FILE *update_out) {
         ph_free(ctx);
         return;
     }
-    if (err != PH_SUCCESS) {
-        fprintf(stderr, "[FAIL] test_golden_hashes - could not load %s: %s\n", filename,
-                ph_get_error_string(err));
-        exit(1);
-    }
+    ASSERT_MSG(err == PH_SUCCESS, "could not load %s: %s", filename, ph_get_error_string(err));
 
     uint64_t hashes[PH_HASH_FLAGS_COUNT];
     uint32_t flags = PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH;

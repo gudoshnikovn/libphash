@@ -69,9 +69,8 @@ TEST_DIR = tests/src
 INC_DIR = include
 
 # CFLAGS updates
-# Note: PH_TESTING is NOT defined for the library build. The mock decoder
-# backend in src/loader.c is opt-in via PHASH_ENABLE_MOCK_BACKEND=1 and must
-# never be present in a shipped artifact.
+# The mock decoder backend in src/loader.c is opt-in via PHASH_ENABLE_MOCK_BACKEND=1
+# and must never be present in a shipped artifact.
 CFLAGS += -I./$(TEST_DIR) -DTEST_DATA_DIR=\"$(shell pwd)/tests/data\"
 
 # Opt-in test-only mock decoder backend (see src/loader.c)
