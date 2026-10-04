@@ -27,6 +27,9 @@ permissions:
   contents: read
   pull-requests: write
 
+# Linux legs name an exact image (ubuntu-24.04), not ubuntu-latest: the coverage
+# thresholds and warning gates are measured against that image's compilers, and a
+# moving label would change them underneath the gates.
 jobs:
   # Fast, no submodules/build needed -- catches an unformatted diff before
   # the much slower legs below spend minutes on it. scripts/format.sh is the same
@@ -39,7 +42,7 @@ jobs:
   # image moved. setup-python rather than the system pip, which Ubuntu 24.04 marks
   # externally managed (PEP 668) and refuses to install into.
   format-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
 
@@ -88,11 +91,11 @@ jobs:
       matrix:
         include:
           - name: ubuntu-x86_64-gcc
-            os: ubuntu-latest
+            os: ubuntu-24.04
             needs_nasm: true
             cc: gcc
           - name: ubuntu-x86_64-clang
-            os: ubuntu-latest
+            os: ubuntu-24.04
             needs_nasm: true
             cc: clang
           - name: ubuntu-arm64-gcc
@@ -142,7 +145,7 @@ jobs:
       fail-fast: false
       matrix:
         cc: [gcc, clang]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     name: strict-warnings (${{ matrix.cc }})
     env:
       CC: ${{ matrix.cc }}
@@ -186,7 +189,7 @@ jobs:
   # -DPHASH_COVERAGE=ON, then publishes the HTML report as an artifact. See
   # docs/development.md#two-coverage-targets-and-why-one-isnt-enough.
   coverage-cmake:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
 
@@ -219,7 +222,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-24.04, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     name: minimal-build (${{ matrix.os }})
     steps:
@@ -255,7 +258,7 @@ jobs:
   # strict -std=c17 dialect. Repeating that set here at three standards would
   # triple the vendored builds to prove a property of the vendored code, not of ours.
   #
-  # gcc-14, not the runner's default gcc: ubuntu-latest ships GCC 13, whose -std=c2x
+  # gcc-14, not the runner's default gcc: ubuntu-24.04 ships GCC 13, whose -std=c2x
   # reports __STDC_VERSION__ 202000L rather than 202311L, so a "C23" job on it never
   # compiles the public header's C23-only branches. 14 is the first GCC that is
   # actually C23.
@@ -263,7 +266,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-24.04, macos-latest]
         std: [11, 17, 23]
         cc: [gcc-14, clang]
         exclude:
@@ -325,7 +328,7 @@ jobs:
   # two differ can see the mismatch at all. GCC 14 promoted this diagnostic to an error
   # by default; pinning it here keeps the class caught on the runner's GCC 13 too.
   build-and-test-32bit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
 
@@ -357,7 +360,7 @@ jobs:
   # noise out of the comparison. Warning-only (STRICT unset below).
   benchmark:
     if: github.event_name == 'pull_request' || github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - name: Checkout head
       uses: actions/checkout@v4
@@ -461,7 +464,7 @@ jobs:
   # doesn't exist); detect_leaks=1 states it explicitly instead of relying on an
   # upstream default that could silently change.
   sanitizers:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       CC: clang
       ASAN_OPTIONS: halt_on_error=1:detect_leaks=1
@@ -504,7 +507,7 @@ jobs:
   # by the configure step without the sanitizer flags, so TSan sees libphash's side of
   # the JPEG path but not libjpeg-turbo's internals.
   tsan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -563,7 +566,7 @@ jobs:
   # the allocation-heavy paths (loader, core, batch, the alloc-failure-injection
   # test itself).
   valgrind:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
 
@@ -590,7 +593,7 @@ jobs:
         done
 
   fuzz:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       CC: clang
       ASAN_OPTIONS: halt_on_error=1
@@ -642,7 +645,7 @@ jobs:
         path: /tmp/fuzz-artifacts/
 
   install-smoke-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
 

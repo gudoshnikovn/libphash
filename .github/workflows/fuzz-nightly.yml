@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   fuzz-nightly:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       CC: clang
       ASAN_OPTIONS: halt_on_error=1

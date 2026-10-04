@@ -38,7 +38,7 @@ jobs:
       matrix:
         include:
           - platform: linux-x86_64
-            os: ubuntu-latest
+            os: ubuntu-24.04
             needs_nasm: true
           - platform: linux-arm64
             os: ubuntu-24.04-arm
@@ -111,7 +111,7 @@ jobs:
       matrix:
         include:
           - platform: linux-x86_64
-            os: ubuntu-latest
+            os: ubuntu-24.04
           - platform: linux-arm64
             os: ubuntu-24.04-arm
           - platform: macos-arm64
@@ -149,7 +149,7 @@ jobs:
 
   checksums:
     needs: smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - name: Download all archives
       uses: actions/download-artifact@v4
@@ -178,7 +178,7 @@ jobs:
   publish:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: checksums
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
 

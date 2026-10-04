@@ -6,7 +6,7 @@
 # performance (e.g. benchmarks): --platform linux/amd64 on this
 # image would run under QEMU emulation, whose overhead dwarfs any real perf difference.
 #
-# debian:bookworm-slim (not ubuntu:24.04) — same glibc family as the CI's ubuntu-latest
+# debian:bookworm-slim (not ubuntu:24.04) — same glibc family as the CI's ubuntu-24.04
 # runners, so it still catches glibc/GCC-specific bugs, but without Ubuntu's much larger
 # default package set. Kept deliberately minimal: build-essential (gcc + make) for the
 # normal build, clang for the `-fsanitize=fuzzer`/ASan builds that Apple Clang can't do
