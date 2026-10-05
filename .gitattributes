@@ -9,3 +9,5 @@
 *.png  binary
 *.webp binary
 tests/fuzz/corpus/** binary
+tests/fuzz/seeds/** binary
+tests/fuzz/seeds/README.md text

@@ -31,9 +31,8 @@ generated/
 tests/output_*.jpeg
 
 # fuzz_load's working corpus. libFuzzer only ever writes new units into the
-# *first* directory on its command line -- tests/data is passed as a second,
-# read-only seed corpus and must never be it, or CI would commit fuzzer-generated
-# files into the fixture directory. Cached separately across CI runs instead.
+# *first* directory on its command line; tests/fuzz/seeds (tracked) is passed second,
+# read-only. The working corpus is cached across CI runs, never committed.
 tests/fuzz/corpus/
 
 # Coverage and GCov data
