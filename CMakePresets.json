@@ -86,7 +86,8 @@
         "PHASH_USE_ZLIB_NG": "OFF",
         "CMAKE_C_FLAGS": "-m32 -Werror=incompatible-pointer-types",
         "CMAKE_EXE_LINKER_FLAGS": "-m32",
-        "CMAKE_SYSTEM_PROCESSOR": "i686"
+        "CMAKE_SYSTEM_PROCESSOR": "i686",
+        "PHASH_STRICT_DEPS": "ON"
       }
     },
     {
@@ -211,6 +212,9 @@
       "configuration": "Release",
       "output": {
         "outputOnFailure": true
+      },
+      "environment": {
+        "PH_EXPECT_BUILD": "jpeg=libjpeg-turbo png=libpng webp=libwebp zlib=zlib-ng"
       }
     },
     {
@@ -219,6 +223,9 @@
       "configuration": "Release",
       "output": {
         "outputOnFailure": true
+      },
+      "environment": {
+        "PH_EXPECT_BUILD": "jpeg=libjpeg-turbo png=libpng webp=libwebp zlib=zlib-ng"
       }
     },
     {
@@ -227,6 +234,9 @@
       "configuration": "Release",
       "output": {
         "outputOnFailure": true
+      },
+      "environment": {
+        "PH_EXPECT_BUILD": "jpeg=libjpeg-turbo png=libpng webp=libwebp zlib=zlib-ng"
       }
     },
     {
@@ -235,6 +245,9 @@
       "configuration": "Release",
       "output": {
         "outputOnFailure": true
+      },
+      "environment": {
+        "PH_EXPECT_BUILD": "jpeg=stb png=stb webp=none zlib=none"
       }
     },
     {
@@ -243,6 +256,9 @@
       "configuration": "Debug",
       "output": {
         "outputOnFailure": true
+      },
+      "environment": {
+        "PH_EXPECT_BUILD": "jpeg=stb png=stb webp=none zlib=none"
       }
     },
     {
@@ -251,6 +267,9 @@
       "configuration": "Release",
       "output": {
         "outputOnFailure": true
+      },
+      "environment": {
+        "PH_EXPECT_BUILD": "jpeg=stb png=libpng webp=none zlib=zlib"
       }
     },
     {
@@ -259,6 +278,9 @@
       "configuration": "Debug",
       "output": {
         "outputOnFailure": true
+      },
+      "environment": {
+        "PH_EXPECT_BUILD": "jpeg=libjpeg-turbo png=libpng webp=libwebp zlib=zlib-ng"
       }
     },
     {
@@ -267,6 +289,9 @@
       "configuration": "Debug",
       "output": {
         "outputOnFailure": true
+      },
+      "environment": {
+        "PH_EXPECT_BUILD": "jpeg=libjpeg-turbo png=libpng webp=libwebp zlib=zlib-ng"
       }
     },
     {
@@ -275,6 +300,9 @@
       "configuration": "Debug",
       "output": {
         "outputOnFailure": true
+      },
+      "environment": {
+        "PH_EXPECT_BUILD": "jpeg=stb png=libpng webp=libwebp zlib=zlib-ng"
       }
     },
     {
@@ -283,6 +311,9 @@
       "configuration": "Debug",
       "output": {
         "outputOnFailure": true
+      },
+      "environment": {
+        "PH_EXPECT_BUILD": "jpeg=stb png=stb webp=none zlib=none"
       }
     }
   ]

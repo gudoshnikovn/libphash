@@ -56,9 +56,13 @@ capture_run() {
         --output-file "$OUT_DIR/$label.info" "${LCOV_FLAGS[@]}"
 }
 
+# A decoder that fell back to stb_image would measure a different library under the
+# native label: PHASH_STRICT_DEPS stops the configure instead, and PH_EXPECT_BUILD has
+# test_build_info name the configuration it found.
+export PH_EXPECT_BUILD="jpeg=libjpeg-turbo png=libpng webp=libwebp zlib=zlib-ng"
 capture_run "$OUT_DIR/build-native" native \
     -DPHASH_USE_LIBJPEG_TURBO=ON -DPHASH_USE_LIBPNG=ON \
-    -DPHASH_USE_WEBP=ON -DPHASH_USE_ZLIB_NG=ON
+    -DPHASH_USE_WEBP=ON -DPHASH_USE_ZLIB_NG=ON -DPHASH_STRICT_DEPS=ON
 
 genhtml "$OUT_DIR/native.info" --output-directory "$OUT_DIR/html" "${LCOV_FLAGS[@]}"
 

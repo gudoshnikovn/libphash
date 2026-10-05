@@ -2,12 +2,19 @@
 #include "test_macros.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* The build-introspection answers are checked against the same PH_USE_* / PH_ENABLE_*
  * macros that selected the code: the tests are compiled with the library's own
  * definitions (the Makefile shares CFLAGS; CMake copies phash's COMPILE_DEFINITIONS), so
- * a mismatch here means the library reports a backend it does not have. */
+ * a mismatch here means the library reports a backend it does not have.
+ *
+ * That check is self-consistent by construction: a decoder that silently fell back to
+ * stb_image changes the macros and the answer together. PH_EXPECT_BUILD states the build
+ * from outside -- space-separated key=value tokens of ph_get_build_info(), e.g.
+ * "jpeg=libjpeg-turbo png=libpng webp=libwebp zlib=zlib-ng" -- and every token has to
+ * match. The CMake test presets and the CI jobs set it for the configuration they build. */
 
 #if defined(PH_USE_LIBPNG)
 #    define EXPECT_PNG "libpng"
@@ -80,7 +87,7 @@ static void expect_value(const char *info, const char *key, const char *expected
         exit(1);
     }
     if (strcmp(value, expected) != 0) {
-        fprintf(stderr, "[FAIL] build info says %s=%s, the build has %s=%s\n", key, value, key,
+        fprintf(stderr, "[FAIL] build info says %s=%s, expected %s=%s\n", key, value, key,
                 expected);
         exit(1);
     }
@@ -125,9 +132,38 @@ static void test_build_info_matches_the_build(void) {
     PASS("test_build_info_matches_the_build");
 }
 
+static void test_build_info_matches_the_expected_build(void) {
+    const char *expect = getenv("PH_EXPECT_BUILD");
+    if (!expect || !*expect) {
+        printf("  PH_EXPECT_BUILD not set: the configuration is not checked from outside\n");
+        return;
+    }
+    char tokens[256];
+    size_t len = strlen(expect);
+    ASSERT(len < sizeof(tokens));
+    memcpy(tokens, expect, len + 1);
+
+    const char *info = ph_get_build_info();
+    int checked = 0;
+    for (char *token = strtok(tokens, " "); token; token = strtok(NULL, " ")) {
+        char *eq = strchr(token, '=');
+        if (!eq || eq == token) {
+            fprintf(stderr, "[FAIL] PH_EXPECT_BUILD token '%s' is not key=value\n", token);
+            exit(1);
+        }
+        *eq = '\0';
+        expect_value(info, token, eq + 1);
+        checked++;
+    }
+    ASSERT(checked > 0);
+    printf("  PH_EXPECT_BUILD: %d key(s) match \"%s\"\n", checked, expect);
+    PASS("test_build_info_matches_the_expected_build");
+}
+
 int main(void) {
     test_capability_checks_match_the_build();
     test_build_info_matches_the_build();
+    test_build_info_matches_the_expected_build();
     printf("test_build_info: PASSED\n");
     return 0;
 }

@@ -70,7 +70,11 @@ CC=clang cmake --preset asan && cmake --build --preset asan -j && ctest --preset
 ```
 
 The compiler is not part of a preset: CMake takes it from `CC` (or
-`-DCMAKE_C_COMPILER`), as CI does.
+`-DCMAKE_C_COMPILER`), as CI does. Each test preset sets `PH_EXPECT_BUILD` to the decoders
+its configuration builds (`jpeg=libjpeg-turbo png=libpng webp=libwebp zlib=zlib-ng`, for
+one), and `test_build_info` fails unless `ph_get_build_info()` reports exactly those: a
+decoder that fell back to stb_image changes the library's answer and its own test's
+expectation together, so only a value set from outside sees it.
 
 | Preset | Configuration | CI job |
 |---|---|---|
@@ -458,6 +462,7 @@ and on any pull request targeting either:
 | `minimal-build` | Zero-dependency build on ubuntu-24.04, macos-latest, windows-latest: a checkout without submodules, configured with the default options, so stb_image decodes everything. Checks the one warning that names every missing submodule, and that `PHASH_STRICT_DEPS=ON` turns it into a configure error. |
 | `c-standard-matrix` | Full test suite under `-DCMAKE_C_STANDARD=11/17/23`, gcc+clang, Linux+macOS (no Windows — see the Toolchains section above for why). |
 | `build-and-test-32bit` | The native PNG backend (libpng) built `-m32`, catching `size_t`/`int`-width overflow bugs a 64-bit build can't reach. |
+| `bare-image` | The full vendored build in an `ubuntu:24.04` container with a compiler, cmake and nasm and no library headers: a vendored decoder that compiles against a system header, or a target missing a build-order dependency, passes on a runner image and fails here. Builds `test_golden_hashes` and `test_build_info` alone in a fresh tree and runs them. |
 | `benchmark` | Regression gate against the PR's base commit — see the Benchmarks section below. |
 | `sanitizers` | ASan+UBSan via CMake, `-fno-sanitize-recover=all` (first report aborts the run). |
 | `tsan` | ThreadSanitizer over the threaded batch path (`src/batch.c`) and the "one context per thread" contract. |
@@ -526,8 +531,11 @@ grayscale, at every `decode_scale`. The golden hashes see a 32×32 reduction and
 shift of a few levels; this table does not. A change to the decoder's settings or to the
 libjpeg-turbo version fails it, and the failure prints the new table — accepting it is a
 decision about decoded pixels, made in the same commit as the change that caused it.
-`scripts/check_decoder_symbols.sh` checks the linked result: zlib-ng is the only zlib, and
-nothing from libjpeg-turbo's TurboJPEG archive (its private zlib and libspng) is linked.
+`scripts/check_decoder_symbols.sh` checks the linked result against the build tree's
+`PHASH_USE_*` options: every decoder that is on is linked statically and every one that is
+off is absent, zlib-ng is the only zlib (or the system one, with `PHASH_USE_ZLIB_NG=OFF`),
+nothing is a dynamic dependency on a decoder library, and nothing from libjpeg-turbo's
+TurboJPEG archive (its private zlib and libspng) is linked. Every CMake job in CI runs it.
 
 **Golden hashes.** `tests/src/test_golden_hashes.c` compares every algorithm on every
 fixture, exactly, with `tests/data/golden_hashes.<jpeg>.txt` — one file per JPEG decoder
