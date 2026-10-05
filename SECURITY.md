@@ -81,8 +81,9 @@ source the caller does not control, passed to `ph_load_from_file()`/
 `ph_load_from_memory()`): no out-of-bounds memory access, no code execution, and a
 defined error code (`ph_error_t`) rather than undefined behavior, for any input —
 malformed, truncated, adversarially crafted, or simply not an image at all. Every
-decode path is covered by continuous fuzzing (`tests/fuzz/fuzz_load.c`, libFuzzer,
-gated behind `PHASH_BUILD_FUZZERS`) and by the sanitizer-instrumented CI legs
+decode path is fuzzed on every CI run and nightly (`tests/fuzz/fuzz_load.c`, libFuzzer,
+gated behind `PHASH_BUILD_FUZZERS`; see "Fuzzing" below) and exercised by the
+sanitizer-instrumented CI legs
 (ASan/UBSan, TSan for the threaded batch path, Valgrind for the allocation-failure
 suite).
 
@@ -131,8 +132,10 @@ carry, and `docs/development.md` for the reasons).
 
 ## Fuzzing
 
-`tests/fuzz/fuzz_load.c` is a libFuzzer harness over `ph_decode_buffer()`, the single
-entry point every format-decoding path funnels through. Build it with
+`tests/fuzz/fuzz_load.c` is a libFuzzer harness over the whole untrusted-input path:
+it loads the input with `ph_load_from_memory()` — every decoder the build contains,
+instrumented along with the library — and hashes the result with one algorithm, under
+a configuration the input's last bytes choose. Build it with
 `-DPHASH_BUILD_FUZZERS=ON` (requires Clang — libFuzzer needs compiler-rt, so this
 option is a configure-time error under GCC). CI runs it nightly for 30 minutes
 (`.github/workflows/fuzz-nightly.yml`), plus a 90-second run on every CI run (`ci.yml`).

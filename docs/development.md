@@ -574,8 +574,9 @@ bound is 3 bits.
 
 ### 3. Fuzzing (`tests/fuzz/fuzz_load.c`)
 
-A libFuzzer harness over `ph_decode_buffer()` — the same single entry point every
-format-decoding path funnels through (see `docs/architecture.md`). Build it with
+A libFuzzer harness over the whole untrusted-input path: `ph_load_from_memory()`, which
+reaches every decoder through the same dispatcher as a file load (see
+`docs/architecture.md`), then one hash algorithm on the result. Build it with
 `-DPHASH_BUILD_FUZZERS=ON`; this is a configure-time error under GCC, since libFuzzer
 needs compiler-rt, which only Clang ships. The option instruments every C file in the
 build — libphash and the vendored libjpeg-turbo, libpng, zlib-ng and libwebp alike — with

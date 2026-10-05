@@ -67,16 +67,19 @@ commands above are what let you find CI's problems before CI does.
 
 ### Fuzzing
 
-The `fuzz_load` harness (`tests/fuzz/fuzz_load.c`) drives `ph_decode_buffer()` under
-libFuzzer. It requires Clang (libFuzzer is a compiler-rt feature GCC does not ship):
+The `fuzz_load` harness (`tests/fuzz/fuzz_load.c`) feeds arbitrary bytes to
+`ph_load_from_memory()` and hashes whatever decodes, under libFuzzer. It requires Clang
+(libFuzzer is a compiler-rt feature GCC does not ship):
 
 ```bash
-cmake -S . -B build -DPHASH_BUILD_FUZZERS=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang
-cmake --build build --target fuzz_load
-./build/fuzz_load -max_total_time=90 -dict=tests/fuzz/magic.dict tests/data
+cmake -S . -B build-fuzz -DPHASH_BUILD_FUZZERS=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang
+cmake --build build-fuzz --target fuzz_load -j
+mkdir -p tests/fuzz/corpus
+./build-fuzz/fuzz_load -max_total_time=90 -max_len=65536 -dict=tests/fuzz/magic.dict \
+    tests/fuzz/corpus tests/fuzz/seeds
 ```
 
-Every PR gets a short (90s) fuzzing session against `tests/data` in CI automatically;
+Every PR gets a short (90s) fuzzing session in CI automatically, the same command;
 you do not need to run a long session locally unless you are chasing something the
 short one already flagged.
 
@@ -147,7 +150,7 @@ header, because they affect binary compatibility for anyone linking a prebuilt
 ## Reporting a security issue
 
 Do not open a public issue or pull request for a security vulnerability (e.g. a crash
-or memory-safety issue reachable from `ph_decode_buffer()`/`ph_load_from_*()` on
+or memory-safety issue reachable from `ph_load_from_file()`/`ph_load_from_memory()` on
 attacker-controlled input). See [`SECURITY.md`](SECURITY.md) for the reporting channel
 and disclosure timeline.
 
