@@ -160,6 +160,12 @@ debug:
 format:
 	./scripts/format.sh
 
+# API reference from include/libphash.h's doc comments (Doxygen), into
+# build/api-docs/html/. Fails on any Doxygen warning, as the CI format-check job does.
+docs:
+	mkdir -p build/api-docs
+	doxygen docs/Doxyfile
+
 # Library build, byte-identical from identical sources: GNU and LLVM ar zero the member
 # timestamps with D; Apple's ar has no D and reads ZERO_AR_DATE instead (the same rule
 # as cmake/deterministic_archives.cmake). Decided by what `ar --version` says, not by
@@ -328,6 +334,6 @@ docker-test: docker-build
 docker-shell: docker-build
 	docker run --rm -it $(DOCKER_IMAGE) bash
 
-.PHONY: all debug test clean format benchmark coverage coverage-cmake docker-build docker-test docker-shell install uninstall install-test
+.PHONY: all debug test clean format docs benchmark coverage coverage-cmake docker-build docker-test docker-shell install uninstall install-test
 
 -include $(OBJS:.o=.d) $(TEST_BINS:%=%.d) bench_hash.d

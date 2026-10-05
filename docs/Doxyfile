@@ -1,0 +1,32 @@
+# API reference for include/libphash.h, generated from its doc comments.
+# Run from the repository root: `make docs` (or create build/api-docs and run
+# `doxygen docs/Doxyfile`); the HTML lands in build/api-docs/html/index.html. Any
+# warning -- an undocumented public declaration, a @param that names no parameter --
+# fails the run, which is how CI keeps the header fully documented.
+
+PROJECT_NAME           = libphash
+PROJECT_BRIEF          = "Perceptual image hashing in portable C"
+INPUT                  = include/libphash.h
+OUTPUT_DIRECTORY       = build/api-docs
+FULL_PATH_NAMES        = NO
+
+OPTIMIZE_OUTPUT_FOR_C  = YES
+EXTRACT_ALL            = NO
+SORT_MEMBER_DOCS       = NO
+
+# The declaration macros expand to nothing for the reference, so a function reads as
+# its plain C signature.
+ENABLE_PREPROCESSING   = YES
+MACRO_EXPANSION        = YES
+EXPAND_ONLY_PREDEF     = YES
+PREDEFINED             = PH_API= PH_NODISCARD=
+
+QUIET                  = YES
+WARN_IF_UNDOCUMENTED   = YES
+WARN_IF_DOC_ERROR      = YES
+WARN_AS_ERROR          = FAIL_ON_WARNINGS
+
+GENERATE_HTML          = YES
+GENERATE_LATEX         = NO
+GENERATE_TREEVIEW      = YES
+SEARCHENGINE           = YES

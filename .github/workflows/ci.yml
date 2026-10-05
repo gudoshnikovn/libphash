@@ -108,6 +108,21 @@ jobs:
     - name: Vendored stb headers = upstream + vendor/patches
       run: ./scripts/check_stb_patches.sh
 
+    # The API reference is generated from include/libphash.h; docs/Doxyfile fails on any
+    # warning, so an undocumented public declaration fails here.
+    - name: Install Doxygen
+      run: sudo apt-get update && sudo apt-get install -y --no-install-recommends doxygen
+
+    - name: API reference (make docs)
+      run: make docs
+
+    - name: Upload API reference
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: api-reference-html
+        path: build/api-docs/html/
+        retention-days: 14
+
   # Full vendored build (all bundled decoders) across the platforms/arches we
   # actually ship for. PHASH_STRICT_DEPS=ON turns a silent decoder fallback
   # (e.g. a vendored submodule not checked out) into a hard configure failure, so a CI green
