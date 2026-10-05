@@ -31,10 +31,10 @@ jobs:
         sudo apt-get install -y cmake clang nasm
 
     - name: Configure CMake (fuzzers)
-      run: cmake -B build -DPHASH_BUILD_FUZZERS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Debug
+      run: cmake --preset fuzz
 
     - name: Build
-      run: cmake --build build --target fuzz_load
+      run: cmake --build --preset fuzz --target fuzz_load
 
     # Same cache lineage as the fuzz job in ci.yml -- both read and write
     # fuzz-corpus-*, so a corpus entry either job finds benefits the other.
@@ -49,7 +49,7 @@ jobs:
     - name: Run fuzz_load (30 minute session)
       run: |
         mkdir -p /tmp/fuzz-artifacts tests/fuzz/corpus
-        ./build/fuzz_load -max_total_time=1800 -dict=tests/fuzz/magic.dict \
+        ./build/fuzz/fuzz_load -max_total_time=1800 -dict=tests/fuzz/magic.dict \
           -artifact_prefix=/tmp/fuzz-artifacts/ tests/fuzz/corpus tests/data
 
     - name: Upload crash artifacts

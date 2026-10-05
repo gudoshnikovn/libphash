@@ -1,25 +1,273 @@
 {
   "version": 3,
-  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 21,
+    "patch": 0
+  },
   "configurePresets": [
     {
-      "name": "clang",
-      "displayName": "Clang/LLVM (recommended default)",
-      "description": "Priority toolchain: LLVM is the more actively developed of the two compilers this project tests, and the libFuzzer build (PHASH_BUILD_FUZZERS) requires it. Not forced anywhere else -- override with -DCMAKE_C_COMPILER=gcc or the 'gcc' preset below.",
-      "binaryDir": "${sourceDir}/build",
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_C_COMPILER": "clang",
-        "CMAKE_BUILD_TYPE": "Release"
+        "PHASH_BUILD_TESTS": "ON"
       }
     },
     {
-      "name": "gcc",
-      "displayName": "GCC",
-      "description": "Fully supported alternative -- CI tests both compilers on every push. Use this preset (or plain -DCMAKE_C_COMPILER=gcc) if you don't have clang installed.",
-      "binaryDir": "${sourceDir}/build",
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release, every bundled decoder",
+      "description": "libjpeg-turbo, libpng, libwebp and zlib-ng from vendor/; a missing submodule fails the configure (PHASH_STRICT_DEPS). The build CI tests on every platform and the one releases ship.",
       "cacheVariables": {
-        "CMAKE_C_COMPILER": "gcc",
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "PHASH_STRICT_DEPS": "ON"
+      }
+    },
+    {
+      "name": "shared",
+      "inherits": "release",
+      "displayName": "Release, shared library",
+      "cacheVariables": {
+        "PHASH_BUILD_SHARED": "ON"
+      }
+    },
+    {
+      "name": "strict-warnings",
+      "inherits": "release",
+      "displayName": "Release, warnings as errors in libphash's own code",
+      "cacheVariables": {
+        "PHASH_WARNINGS_AS_ERRORS": "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "minimal",
+      "inherits": "base",
+      "displayName": "Release, stb_image only",
+      "description": "No vendored decoder: the zero-dependency build.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PHASH_USE_LIBJPEG_TURBO": "OFF",
+        "PHASH_USE_LIBPNG": "OFF",
+        "PHASH_USE_WEBP": "OFF",
+        "PHASH_USE_ZLIB_NG": "OFF"
+      }
+    },
+    {
+      "name": "minimal-debug",
+      "inherits": "minimal",
+      "displayName": "Debug, stb_image only",
+      "description": "The Valgrind configuration.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "i686",
+      "inherits": "base",
+      "displayName": "32-bit x86 (-m32), native PNG",
+      "description": "Linux with a multilib compiler. libpng without zlib-ng; no libjpeg-turbo or libwebp, whose SIMD would need their own 32-bit toolchains.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "PHASH_USE_LIBJPEG_TURBO": "OFF",
+        "PHASH_USE_LIBPNG": "ON",
+        "PHASH_USE_WEBP": "OFF",
+        "PHASH_USE_ZLIB_NG": "OFF",
+        "CMAKE_C_FLAGS": "-m32 -Werror=incompatible-pointer-types",
+        "CMAKE_EXE_LINKER_FLAGS": "-m32",
+        "CMAKE_SYSTEM_PROCESSOR": "i686"
+      }
+    },
+    {
+      "name": "asan",
+      "inherits": "base",
+      "displayName": "Debug, ASan + UBSan, every bundled decoder",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "PHASH_STRICT_DEPS": "ON",
+        "CMAKE_C_FLAGS": "-fsanitize=address,undefined -fno-sanitize-recover=all",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=address,undefined"
+      }
+    },
+    {
+      "name": "tsan",
+      "inherits": "base",
+      "displayName": "Debug, TSan, every bundled decoder",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "PHASH_STRICT_DEPS": "ON",
+        "CMAKE_C_FLAGS": "-fsanitize=thread",
+        "CMAKE_EXE_LINKER_FLAGS": "-fsanitize=thread"
+      }
+    },
+    {
+      "name": "tsan-png",
+      "inherits": "tsan",
+      "displayName": "Debug, TSan, native PNG and WebP",
+      "cacheVariables": {
+        "PHASH_USE_LIBJPEG_TURBO": "OFF"
+      }
+    },
+    {
+      "name": "tsan-stb",
+      "inherits": "tsan",
+      "displayName": "Debug, TSan, stb_image only",
+      "cacheVariables": {
+        "PHASH_STRICT_DEPS": "OFF",
+        "PHASH_USE_LIBJPEG_TURBO": "OFF",
+        "PHASH_USE_LIBPNG": "OFF",
+        "PHASH_USE_WEBP": "OFF",
+        "PHASH_USE_ZLIB_NG": "OFF"
+      }
+    },
+    {
+      "name": "fuzz",
+      "inherits": "base",
+      "displayName": "libFuzzer harness (Clang: CC=clang)",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "PHASH_STRICT_DEPS": "ON",
+        "PHASH_BUILD_FUZZERS": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "configuration": "Release"
+    },
+    {
+      "name": "shared",
+      "configurePreset": "shared",
+      "configuration": "Release"
+    },
+    {
+      "name": "strict-warnings",
+      "configurePreset": "strict-warnings",
+      "configuration": "Release"
+    },
+    {
+      "name": "minimal",
+      "configurePreset": "minimal",
+      "configuration": "Release"
+    },
+    {
+      "name": "minimal-debug",
+      "configurePreset": "minimal-debug",
+      "configuration": "Debug"
+    },
+    {
+      "name": "i686",
+      "configurePreset": "i686",
+      "configuration": "Release"
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan",
+      "configuration": "Debug"
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "configuration": "Debug"
+    },
+    {
+      "name": "tsan-png",
+      "configurePreset": "tsan-png",
+      "configuration": "Debug"
+    },
+    {
+      "name": "tsan-stb",
+      "configurePreset": "tsan-stb",
+      "configuration": "Debug"
+    },
+    {
+      "name": "fuzz",
+      "configurePreset": "fuzz",
+      "configuration": "Debug"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "release",
+      "configurePreset": "release",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "shared",
+      "configurePreset": "shared",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "strict-warnings",
+      "configurePreset": "strict-warnings",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "minimal",
+      "configurePreset": "minimal",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "minimal-debug",
+      "configurePreset": "minimal-debug",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "i686",
+      "configurePreset": "i686",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "asan",
+      "configurePreset": "asan",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "tsan-png",
+      "configurePreset": "tsan-png",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "tsan-stb",
+      "configurePreset": "tsan-stb",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
       }
     }
   ]

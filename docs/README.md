@@ -30,9 +30,9 @@ make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu)
 make test
 
 # Using CMake (recommended -- bundled high-performance decoders)
-cmake --preset clang -DPHASH_BUILD_TESTS=ON -B build   # or --preset gcc
-cmake --build build -j
-cd build && ctest --output-on-failure
+CC=clang cmake --preset release      # every bundled decoder; CC=gcc works too
+cmake --build --preset release -j
+ctest --preset release
 ```
 
 See [`development.md`](development.md) for the full option table, both build systems'

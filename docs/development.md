@@ -15,9 +15,9 @@ every push:
 # Makefile: CC defaults to clang, override with CC=
 make CC=gcc
 
-# CMake: use the "clang" or "gcc" preset from CMakePresets.json, or override directly
-cmake --preset clang -DPHASH_BUILD_TESTS=ON -B build
-cmake -B build -DCMAKE_C_COMPILER=gcc  # equivalent, no presets
+# CMake: the compiler is CC (or -DCMAKE_C_COMPILER), with or without a preset
+CC=clang cmake --preset release
+CC=gcc cmake -B build-gcc
 ```
 
 The C standard is pinned explicitly: `CMAKE_C_STANDARD 17` (`CMakeLists.txt`), with
@@ -57,6 +57,54 @@ sync when you add or flip a switch.**
 | Install | `cmake --install` (`CMAKE_INSTALL_PREFIX`) | `make install` (`PREFIX=/usr/local`, `DESTDIR`) | both write a relocatable `libphash.pc` from `libphash.pc.in`; the Makefile installs the static library only and has no `find_package` package |
 | Warnings as errors (own code only) | `PHASH_WARNINGS_AS_ERRORS=OFF` | *n/a* | for the `strict-warnings` CI job; never reaches the vendored decoders |
 | Coverage instrumentation | `PHASH_COVERAGE=OFF` | `PHASH_COVERAGE=0` | same flag name, independent implementations — see below for why one build alone isn't enough |
+
+### Presets and supported option combinations
+
+`CMakePresets.json` holds one configure, build and test preset per configuration CI
+builds, each in its own `build/<preset>` directory, so any two can sit side by side. CI
+configures through them, so a failing leg is reproduced locally with the same three
+commands:
+
+```bash
+CC=clang cmake --preset asan && cmake --build --preset asan -j && ctest --preset asan
+```
+
+The compiler is not part of a preset: CMake takes it from `CC` (or
+`-DCMAKE_C_COMPILER`), as CI does.
+
+| Preset | Configuration | CI job |
+|---|---|---|
+| `release` | Release, every bundled decoder, `PHASH_STRICT_DEPS=ON` | `build-and-test` (gcc and clang) |
+| `shared` | `release` + `PHASH_BUILD_SHARED=ON` | — (`install-smoke-test` builds it through its scripts) |
+| `strict-warnings` | `release` + `PHASH_WARNINGS_AS_ERRORS=ON`, compile commands for clang-tidy | `strict-warnings` |
+| `minimal` | Release, stb_image only | `c-standard-matrix` (with `-DCMAKE_C_STANDARD=…`) |
+| `minimal-debug` | Debug, stb_image only | `valgrind` |
+| `i686` | Release, `-m32`, libpng only | `build-and-test-32bit` |
+| `asan` | Debug, ASan + UBSan, every bundled decoder | `sanitizers` |
+| `tsan`, `tsan-png`, `tsan-stb` | Debug, TSan: every decoder / libpng + libwebp + zlib-ng / stb_image only | `tsan` |
+| `fuzz` | Debug, `PHASH_BUILD_FUZZERS=ON` (Clang only) | `fuzz` |
+
+`minimal-build` is the one job without a preset: it configures a checkout with no
+submodules and the default options, which is the point of the job. The benchmark job
+configures its two trees with explicit options, because the base commit may predate a
+preset.
+
+The decoder options (`PHASH_USE_LIBJPEG_TURBO`, `PHASH_USE_LIBPNG`, `PHASH_USE_WEBP`,
+`PHASH_USE_ZLIB_NG`) are independent of each other, with these constraints:
+
+- **zlib-ng serves libpng only.** Without libpng it is not configured, whatever
+  `PHASH_USE_ZLIB_NG` says; with libpng and `PHASH_USE_ZLIB_NG=OFF`, libpng uses the
+  system zlib.
+- **libjpeg-turbo cannot be part of a macOS universal build** (more than one
+  `CMAKE_OSX_ARCHITECTURES` value): its SIMD is per-architecture assembly. The configure
+  stops with that message.
+- **`PHASH_BUILD_FUZZERS` needs Clang** (libFuzzer); the configure stops under GCC.
+- **`PHASH_ENABLE_MOCK_BACKEND`** is for tests and never ships.
+- A missing submodule turns its decoder off with one warning, or fails the configure
+  under `PHASH_STRICT_DEPS=ON`.
+
+CI covers the presets above; any other combination of the four decoder options is
+expected to build, and is not tested on every push.
 
 **Architecture flags follow the target, not the host.** Both build systems read the
 target from the compiler's predefined macros, so `-m32`, a toolchain file and

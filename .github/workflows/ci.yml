@@ -131,17 +131,17 @@ jobs:
         apt-packages: cmake${{ matrix.needs_nasm && ' nasm' || '' }}${{ matrix.cc == 'clang' && ' clang' || '' }}
 
     - name: Configure CMake (full vendored build)
-      run: cmake -B build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
+      run: cmake --preset release
 
     - name: Build
-      run: cmake --build build --config Release -j
+      run: cmake --build --preset release -j
 
     - name: Run Tests
-      run: cd build && ctest --output-on-failure
+      run: ctest --preset release
 
     # One zlib (zlib-ng) and no codec the library does not use in the linked result.
     - name: Check decoder symbols
-      run: ./scripts/check_decoder_symbols.sh build/test_png_variants
+      run: ./scripts/check_decoder_symbols.sh build/release/test_png_variants
 
     # Apple's ar and ranlib take ZERO_AR_DATE rather than D; install-smoke-test covers
     # the GNU side.
@@ -176,15 +176,13 @@ jobs:
         apt-packages: cmake nasm${{ matrix.cc == 'clang' && ' clang clang-tidy' || '' }}
 
     - name: Configure CMake (full vendored build, -Werror on libphash's own targets)
-      run: >
-        cmake -B build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
-        -DPHASH_WARNINGS_AS_ERRORS=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      run: cmake --preset strict-warnings
 
     - name: Build
-      run: cmake --build build -j
+      run: cmake --build --preset strict-warnings -j
 
     - name: Run Tests
-      run: cd build && ctest --output-on-failure
+      run: ctest --preset strict-warnings
 
     # A cast applied to the result of an arithmetic that has already overflowed in the
     # narrower type -- (uint64_t)(a * b) on ints -- widens nothing. No compiler warning
@@ -193,7 +191,7 @@ jobs:
       if: matrix.cc == 'clang'
       run: >
         git ls-files 'src/*.c' | grep -v '/stb_' |
-        xargs clang-tidy -p build --quiet --checks='-*,bugprone-misplaced-widening-cast'
+        xargs clang-tidy -p build/strict-warnings --quiet --checks='-*,bugprone-misplaced-widening-cast'
         --warnings-as-errors='*'
 
   # `make coverage` (Makefile) only measures the stb_image-only path -- none
@@ -331,15 +329,14 @@ jobs:
 
     - name: Configure CMake (minimal, stb_image only)
       run: >
-        cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
+        cmake --preset minimal
         -DCMAKE_C_STANDARD=${{ matrix.std }} -DCMAKE_C_STANDARD_REQUIRED=ON
-        -DPHASH_USE_LIBJPEG_TURBO=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
 
     - name: Build
-      run: cmake --build build --config Release
+      run: cmake --build --preset minimal
 
     - name: Run Tests
-      run: cd build && ctest --output-on-failure
+      run: ctest --preset minimal
 
   # Overflow bugs (e.g. pixel-count overflow, PNG row_ptrs overflow) trigger at much
   # smaller inputs on a 32-bit size_t/int than on 64-bit, which no other leg
@@ -367,20 +364,16 @@ jobs:
         apt-packages: cmake gcc-multilib g++-multilib zlib1g-dev:i386
 
     - name: Configure CMake (32-bit, libpng)
-      run: >
-        cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
-        -DPHASH_USE_LIBJPEG_TURBO=OFF -DPHASH_USE_LIBPNG=ON -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
-        -DCMAKE_C_FLAGS="-m32 -Werror=incompatible-pointer-types"
-        -DCMAKE_EXE_LINKER_FLAGS=-m32 -DCMAKE_SYSTEM_PROCESSOR=i686
+      run: cmake --preset i686
 
     - name: Build
-      run: cmake --build build --config Release -j
+      run: cmake --build --preset i686 -j
 
     - name: Confirm this is actually a 32-bit build
-      run: file build/test_version | grep -q "ELF 32-bit"
+      run: file build/i686/test_version | grep -q "ELF 32-bit"
 
     - name: Run Tests
-      run: cd build && ctest --output-on-failure
+      run: ctest --preset i686
 
   # Builds the head and a base commit in this same job and compares their
   # benchmark numbers (scripts/bench_regression_gate.sh), so runner noise hits
@@ -526,16 +519,13 @@ jobs:
         apt-packages: cmake clang nasm
 
     - name: Configure CMake (ASan/UBSan)
-      run: |
-        cmake -B build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Debug \
-          -DCMAKE_C_FLAGS="-fsanitize=address,undefined -fno-sanitize-recover=all" \
-          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined"
+      run: cmake --preset asan
 
     - name: Build
-      run: cmake --build build
+      run: cmake --build --preset asan -j
 
     - name: Run Tests
-      run: cd build && ctest --output-on-failure
+      run: ctest --preset asan
 
   # The threaded batch path (src/batch.c) and the "one context per thread"
   # contract (include/libphash.h) are the two places in this codebase whose whole point
@@ -558,19 +548,13 @@ jobs:
         include:
           - name: stb-only
             submodules: 'false'
-            cmake_args: >-
-              -DPHASH_USE_LIBJPEG_TURBO=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF
-              -DPHASH_USE_ZLIB_NG=OFF
+            preset: tsan-stb
           - name: libpng-zlibng-webp
             submodules: 'true'
-            cmake_args: >-
-              -DPHASH_USE_LIBJPEG_TURBO=OFF -DPHASH_USE_LIBPNG=ON -DPHASH_USE_WEBP=ON
-              -DPHASH_USE_ZLIB_NG=ON -DPHASH_STRICT_DEPS=ON
+            preset: tsan-png
           - name: full-native
             submodules: 'true'
-            cmake_args: >-
-              -DPHASH_USE_LIBJPEG_TURBO=ON -DPHASH_USE_LIBPNG=ON -DPHASH_USE_WEBP=ON
-              -DPHASH_USE_ZLIB_NG=ON -DPHASH_STRICT_DEPS=ON
+            preset: tsan
     name: tsan (${{ matrix.name }})
     env:
       CC: clang
@@ -586,23 +570,20 @@ jobs:
         apt-packages: cmake clang nasm
 
     - name: Configure CMake (TSan)
-      run: >
-        cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
-        ${{ matrix.cmake_args }}
-        -DCMAKE_C_FLAGS=-fsanitize=thread -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=thread
+      run: cmake --preset ${{ matrix.preset }}
 
     - name: Build
       run: >
-        cmake --build build -j --target test_cold_parallel_decode --target test_batch
+        cmake --build --preset ${{ matrix.preset }} -j --target test_cold_parallel_decode --target test_batch
         --target test_batch_stress --target test_thread_safety
 
     # One at a time: each of these starts a thread per core of its own.
     - name: Run the thread tests
       run: |
-        ./build/test_cold_parallel_decode
-        ./build/test_batch
-        ./build/test_batch_stress
-        ./build/test_thread_safety
+        ./build/${{ matrix.preset }}/test_cold_parallel_decode
+        ./build/${{ matrix.preset }}/test_batch
+        ./build/${{ matrix.preset }}/test_batch_stress
+        ./build/${{ matrix.preset }}/test_thread_safety
 
   # Independent of ASan/LSan above (Valgrind and ASan don't mix -- ASan's own
   # shadow memory looks like a leak to Valgrind and vice versa), and it catches a
@@ -623,19 +604,17 @@ jobs:
         apt-packages: cmake valgrind
 
     - name: Configure CMake (stb_image only, no sanitizers)
-      run: >
-        cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
-        -DPHASH_USE_LIBJPEG_TURBO=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
+      run: cmake --preset minimal-debug
 
     - name: Build
       run: >
-        cmake --build build --target test_alloc_failure --target test_api_guards
+        cmake --build --preset minimal-debug --target test_alloc_failure --target test_api_guards
         --target test_core_extended --target test_loader --target test_batch
         --target test_pixel_count_overflow -j
 
     - name: Run subset under Valgrind
       run: |
-        printf 'valgrind --error-exitcode=1 --leak-check=full --errors-for-leak-kinds=all ./build/%s\n' \
+        printf 'valgrind --error-exitcode=1 --leak-check=full --errors-for-leak-kinds=all ./build/minimal-debug/%s\n' \
           test_alloc_failure test_api_guards test_core_extended test_loader test_batch \
           test_pixel_count_overflow | scripts/run_parallel.sh 4
 
@@ -654,10 +633,10 @@ jobs:
         apt-packages: cmake clang nasm
 
     - name: Configure CMake (fuzzers)
-      run: cmake -B build -DPHASH_BUILD_FUZZERS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Debug
+      run: cmake --preset fuzz
 
     - name: Build
-      run: cmake --build build --target fuzz_load
+      run: cmake --build --preset fuzz --target fuzz_load
 
     # fuzz-corpus- (no run id) always misses on the save side and restores the
     # most recently saved cache on the restore side -- the corpus only ever grows,
@@ -677,7 +656,7 @@ jobs:
         # tests/data is passed second, as a read-only seed corpus -- swapping the
         # order would make libFuzzer write generated inputs straight into the
         # fixture directory.
-        ./build/fuzz_load -max_total_time=90 -dict=tests/fuzz/magic.dict \
+        ./build/fuzz/fuzz_load -max_total_time=90 -dict=tests/fuzz/magic.dict \
           -artifact_prefix=/tmp/fuzz-artifacts/ tests/fuzz/corpus tests/data
 
     - name: Upload crash artifacts
