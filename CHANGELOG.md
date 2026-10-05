@@ -376,6 +376,10 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   CMake must define when linking libphash statically on Windows; the exported target and
   the `.pc` file set it automatically. `add_subdirectory()` works for static and shared
   parents and leaves the parent project's settings and cache as it found them.
+- **`CMakePresets.json`** with a configure, build and test preset for each configuration
+  CI builds — `release`, `shared`, `minimal`, `asan`, `tsan`, `fuzz` and others — each in
+  its own `build/<preset>`: `cmake --preset release && cmake --build --preset release &&
+  ctest --preset release`. The compiler comes from `CC`.
 - **`make install` / `make uninstall`** for the Makefile build: `libphash.a`, the two
   headers and a relocatable `libphash.pc` under `PREFIX` (default `/usr/local`; `DESTDIR`
   for staging).
@@ -437,9 +441,7 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   whichever the dynamic linker found first. Both build systems compile with
   `-fvisibility=hidden`, which also keeps the internals out of a shared library a consumer
   builds from the static archive. See `MIGRATION.md`.
-- Clang is the default compiler in both build systems (`CMakePresets.json`'s `clang`
-  preset; the Makefile's `CC`; 1.x: `gcc`) — still fully overridable
-  (`-DCMAKE_C_COMPILER=gcc`, `CC=gcc make`, or the `gcc` preset).
+- Clang is the Makefile's default compiler (1.x: `gcc`); `CC=gcc make` overrides it.
 - **A clone without its submodules configures and builds.** 1.x stopped with a cascade of
   CMake errors from inside `add_subdirectory()` when `vendor/libpng` or `vendor/libwebp` was
   empty, none of them naming the cause. One warning now lists every enabled decoder whose
