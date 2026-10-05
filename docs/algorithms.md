@@ -16,8 +16,10 @@ there rather than quietly describing the behaviour as if it were intended.
 
 ## Threat model: what these hashes are not
 
-Every hash here is **deterministic and unkeyed**. The same image produces the same hash on
-any machine, with no shared secret — which is exactly what deduplication needs, and
+Every hash here is **deterministic and unkeyed**. The same file, hashed with the same
+context settings, gives the same value on every operating system, CPU architecture and
+compiler the library builds on (see "Same hash on every machine" below for the one
+exception), with no shared secret — which is exactly what deduplication needs, and
 exactly what makes all of them trivial to defeat on purpose.
 
 An attacker who wants two visually different images to collide, or one image to stop
@@ -46,6 +48,32 @@ If you need a filter in an adversarial setting, the usual shape is two stages: a
 deterministic hash like these to reduce a corpus to a candidate set, then a heavier and
 harder-to-steer comparison over those candidates. The first stage is what this library is
 good at; the second is not in scope.
+
+## Same hash on every machine
+
+A hash is a function of the decoded pixels and the context settings, and the library
+computes it the same way everywhere: no fused multiply-add contraction, one plain loop
+for pHash's DCT, integer area averaging and grayscale conversion, exact histogram
+intersection. A build for arm64 or x86-64, with GCC, Clang or MSVC, with or without SIMD,
+gives the same bits; `tests/src/test_golden_hashes.c` holds every algorithm to that
+exactly, with no tolerance.
+
+The one thing that changes the pixels is **the JPEG decoder**. libjpeg-turbo (the bundled
+decoder in the CMake build) and stb_image (the zero-dependency fallback) round their
+inverse DCT differently, so the same JPEG reaches the hash functions as slightly
+different pixels. `ph_get_build_info()` names the decoder (`jpeg=libjpeg-turbo` or
+`jpeg=stb`). PNG and WebP decode to the same pixels in every build.
+
+For a hash database this means:
+
+- Hashes from builds with the same JPEG decoder can be compared by equality.
+- Across the two JPEG decoders, compare by distance with a threshold, never by equality.
+  On the test fixtures the 64-bit hashes (aHash, dHash, pHash, wHash) and BMH come out
+  the same; mHash differs by 3–4 of 576 bits, and Radial, ColorHash and ColorMoments
+  by small amounts in a few of their features.
+- Settings that change the pixels a hash sees — `decode_scale`, gamma, the grayscale
+  weights, auto-orientation — are part of a hash's identity just like the algorithm's
+  own parameters. Store them with the hashes.
 
 ## Attribution at a glance
 

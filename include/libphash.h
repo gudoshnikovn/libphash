@@ -1513,7 +1513,10 @@ PH_API int ph_can_use_webp(void);
  * `version=2.0.0 jpeg=libjpeg-turbo png=libpng webp=libwebp zlib=zlib-ng threads=on simd=neon
  * mock=off`
  *
- * - `jpeg`: `libjpeg-turbo` or `stb`; `png`: `libpng` or `stb`; `webp`: `libwebp` or
+ * - `jpeg`: `libjpeg-turbo` or `stb`. The two round their inverse DCT differently, so a JPEG
+ *   hashes to slightly different values under each; every other build difference, OS,
+ *   architecture, compiler and SIMD level included, leaves hash values unchanged;
+ * - `png`: `libpng` or `stb`; `webp`: `libwebp` or
  *   `none`; `zlib`: `zlib-ng`, `zlib` or `none` (stb_image inflates PNG itself);
  * - `threads`: `on` if the batch functions can use worker threads, `off` if they always
  *   run sequentially;

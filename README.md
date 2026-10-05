@@ -16,8 +16,10 @@ an archive, clustering a catalogue, keying a cache, answering "have I stored thi
 inside a trusted pipeline. Every design decision in this library is made for that job.
 
 **It is not built to withstand someone trying to fool it.** Every hash here is
-deterministic and unkeyed — the same image gives the same value on any machine, with no
-shared secret — and that property, which is what makes deduplication work at all, is also
+deterministic and unkeyed — the same file and settings give the same value on any
+machine (for JPEG, with the same decoder; see
+[`docs/algorithms.md`](docs/algorithms.md#same-hash-on-every-machine)), with no shared
+secret — and that property, which is what makes deduplication work at all, is also
 what makes the hashes straightforward to attack on purpose. Anyone who benefits from a
 wrong answer can construct a visually different image with a matching hash, or perturb an
 image so it stops matching its own copy.
