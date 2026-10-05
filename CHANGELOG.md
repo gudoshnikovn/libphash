@@ -373,11 +373,11 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   the `.pc` file set it automatically. `add_subdirectory()` works for static and shared
   parents and leaves the parent project's settings and cache as it found them.
 - **`PHASH_USE_ZLIB_NG` build option** to build libpng against the vendored zlib-ng,
-  safe for concurrent first decodes. The JPEG backend decodes through libjpeg-turbo's
+  safe for concurrent first decodes; a build without libpng does not configure it. The JPEG backend decodes through libjpeg-turbo's
   libjpeg API, whose archive carries no zlib of its own to compete with it.
-- **`PHASH_STRICT_DEPS` build option** turning the "libjpeg-turbo not found, falling back
-  to stb_image" and "zlib-ng submodule not found" warnings into configure-time errors, so a
-  green build proves the vendored decoders were built and linked.
+- **`PHASH_STRICT_DEPS` build option** turning the "vendored decoder submodules are not
+  checked out" warning into a configure-time error, so a green build proves the vendored
+  decoders were built and linked.
 - **`docs/algorithm-provenance.md`** traces each of the nine hashes to its primary source
   and records, per algorithm, where this implementation departs from it; wHash has no
   primary source. `docs/references.md` is the matching bibliography, and every
@@ -433,6 +433,12 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
 - Clang is the default compiler in both build systems (`CMakePresets.json`'s `clang`
   preset; the Makefile's `CC`; 1.x: `gcc`) — still fully overridable
   (`-DCMAKE_C_COMPILER=gcc`, `CC=gcc make`, or the `gcc` preset).
+- **A clone without its submodules configures and builds.** 1.x stopped with a cascade of
+  CMake errors from inside `add_subdirectory()` when `vendor/libpng` or `vendor/libwebp` was
+  empty, none of them naming the cause. One warning now lists every enabled decoder whose
+  submodule is missing, with `git submodule update --init --recursive`, and the build goes
+  on with stb_image for JPEG and PNG, no WebP decoder and the system zlib;
+  `-DPHASH_STRICT_DEPS=ON` makes the same message an error.
 - **CMake builds the vendored libjpeg-turbo itself, inside each build tree.** 1.x looked for
   a `libturbojpeg.a` that had to be built by hand in `vendor/libjpeg-turbo/build` and fell
   back to stb_image without it; every build tree then shared that one archive, whatever
