@@ -38,8 +38,10 @@ There are two build systems, and they are not interchangeable:
 
 Because they are separate implementations, their defaults can drift, and a default
 that differs between them means a code path that is exercised in one flow and dead in
-the other. The table below is the single place where both are recorded — **keep it in
-sync when you add or flip a switch.**
+the other. The table below is the single place where both are recorded — keep it in
+sync when you add or flip a switch. `scripts/check_docs_coverage.sh` (the `format-check`
+job) fails when a `PHASH_*` `option()` in `CMakeLists.txt` has no row here; the defaults
+themselves are checked by reading both files.
 
 | Knob | CMake default | Makefile default | Notes |
 |---|---|---|---|
@@ -57,6 +59,30 @@ sync when you add or flip a switch.**
 | Install | `cmake --install` (`CMAKE_INSTALL_PREFIX`) | `make install` (`PREFIX=/usr/local`, `DESTDIR`) | both write a relocatable `libphash.pc` from `libphash.pc.in`; the Makefile installs the static library only and has no `find_package` package |
 | Warnings as errors (own code only) | `PHASH_WARNINGS_AS_ERRORS=OFF` | *n/a* | for the `strict-warnings` CI job; never reaches the vendored decoders |
 | Coverage instrumentation | `PHASH_COVERAGE=OFF` | `PHASH_COVERAGE=0` | same flag name, independent implementations — see below for why one build alone isn't enough |
+| C standard | C17, strict ISO (`CMAKE_C_STANDARD 17`, extensions off) | `-std=c17` | the same dialect in both; C11 and C23 are checked by the `c-standard-matrix` job |
+| Optimization | from the build type; `Release` (`-O3 -DNDEBUG` on GCC/Clang) when none is named | `-O3`; `debug`/`coverage` switch to `-O0 -g` | the library has no `assert()`, so `NDEBUG` changes nothing in it |
+| Floating-point contraction | `-ffp-contract=off` (MSVC's default `/fp:precise` does not contract) | `-ffp-contract=off` | no fused multiply-add, so every target computes the same hash bits |
+| Architecture flags | follow the target (table below); `-march=native` only with `PHASH_OPTIMIZE_NATIVE` | follow the target (table below) | no per-file exceptions: every source gets the same flags |
+| Static archive | deterministic (`cmake/deterministic_archives.cmake`) | deterministic (`ar D` or `ZERO_AR_DATE`) | the same sources give a byte-identical `libphash.a` |
+
+### Supported platforms
+
+A platform is supported when CI builds the library on it and runs the whole test suite,
+the golden hashes included, on every push:
+
+| Platform | Toolchains in CI | Release archive |
+|---|---|---|
+| Linux x86-64 | GCC, Clang; static and shared | yes |
+| Linux arm64 | GCC | yes |
+| Linux 32-bit x86 (i686) | GCC, `-m32` | no |
+| macOS arm64 | Apple Clang | yes |
+| Windows x86-64 | MSVC | yes |
+
+Other little-endian targets with a C11 compiler and either POSIX threads or Win32 —
+the BSDs, Intel macOS, 32-bit Arm — are expected to build and to give the same hashes,
+but nothing runs there, so they are not claimed. Big-endian targets are not supported:
+the library reads every multi-byte field through explicit byte-order loads and has no
+known big-endian defect, but it has never been run on one.
 
 ### Presets and supported option combinations
 
