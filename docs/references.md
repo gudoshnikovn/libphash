@@ -368,7 +368,7 @@ source" is a checkable statement rather than an assertion.
 | ColorHash | [SB91] | 4 (secondary restatements) | no | none |
 | ColorMoments | [SO95] | 1 | no — via [Ke05], rank 4 | none |
 
-One of the nine, wHash, has no primary source. Per the verification methodology it is
+One of the nine, wHash, has no primary source. Per the [verification methodology](methodology.md) it is
 judged only by measurable properties, and its attribution header says so instead of
 implying a specification exists.
 

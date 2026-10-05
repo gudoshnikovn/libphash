@@ -8,8 +8,9 @@ Two companion documents carry the parts this one deliberately does not:
   each one can be trusted.
 - **[`algorithm-provenance.md`](algorithm-provenance.md)** — the analysis. What each
   source specifies, what this code does, and every place the two differ, classified as a
-  defect, a deliberate choice, or something the source leaves open. It also records the
-  verification methodology this project works to.
+  defect, a deliberate choice, or something the source leaves open.
+- **[`methodology.md`](methodology.md)** — the verification methodology this project
+  works to: what counts as a defect and how the properties are measured.
 
 Where an algorithm below is known to depart from its source, this page says so and links
 there rather than quietly describing the behaviour as if it were intended.
@@ -341,8 +342,8 @@ either — call them directly.
 
 Ratings are relative and qualitative — they come from experience with the library, not
 from a measured benchmark. Where a rating depends on a divergence noted above, it is
-marked. For measured numbers, see the property tests described in the verification
-methodology.
+marked. For measured numbers, see the property tests described in the
+[verification methodology](methodology.md).
 
 | Algorithm | Speed | Rotation | Noise | Scaling | Output |
 |---|---|---|---|---|---|
@@ -359,3 +360,30 @@ methodology.
 The two colour hashes are insensitive to rotation and scaling for a reason that is worth
 stating: they discard spatial layout entirely. That makes them robust and, on their own,
 weak discriminators — use them alongside a structural hash, not instead of one.
+
+## Comparing digests: which function for which hash
+
+Every digest says what it holds in its `kind` field, and each comparison function accepts
+one kind. Given a digest of another kind it refuses rather than return a number that
+means nothing: Hamming distance over quantized coefficients is a plausible-looking
+integer with no meaning. `PH_DIGEST_KIND_UNSPECIFIED` — the zero a hand-filled
+`ph_digest_t` holds — is accepted by every function, so a digest built without setting
+the field gets no check, but no error either.
+
+| `kind` | Produced by | Compare with | Result |
+|---|---|---|---|
+| `PH_DIGEST_KIND_BITS` | aHash, dHash, pHash, wHash (as a digest), mHash, BMH | `ph_hamming_distance_digest()`, `ph_similarity_digest()` | differing bits; share of equal bits, 0.0–1.0 |
+| `PH_DIGEST_KIND_COEFFICIENTS` | Radial | `ph_radial_similarity()` | peak cross-correlation, −1.0–1.0; same image at `PH_RADIAL_PCC_THRESHOLD` (0.9) and above |
+| `PH_DIGEST_KIND_HISTOGRAM` | ColorHash | `ph_histogram_intersection()` | shared share of the two histograms, 0.0–1.0 |
+| `PH_DIGEST_KIND_VECTOR16` | ColorMoments | `ph_l2_distance()` | Euclidean distance between the feature vectors |
+| `PH_DIGEST_KIND_VECTOR` | none: a feature vector the caller builds | `ph_l2_distance()` | Euclidean distance |
+
+On a digest of the wrong kind — or a NULL pointer, two digests of different sizes, or a
+size of 0 or above `PH_DIGEST_MAX_BYTES` — the distance and similarity functions return
+`-1`, and `ph_radial_similarity()`/`ph_histogram_intersection()` return
+`PH_ERR_INVALID_ARGUMENT`. `ph_radial_similarity()` also returns `PH_ERR_NO_STRUCTURE` for
+the all-zero digest of an image with no angular structure, which correlates with
+nothing. The four 64-bit hashes also come as a plain `uint64_t`, compared
+with `ph_hamming_distance()` and `ph_similarity()`. To store a digest or send it across a
+process boundary, `ph_digest_to_hex()` writes it as text and `ph_digest_from_hex()` reads
+it back with its kind (see `include/libphash.h` for the buffer sizes).

@@ -16,7 +16,7 @@
  *
  * The corpus is generated, not loaded: a deterministic set of synthetic images built
  * from a fixed seed. That choice, and its cost, are recorded in the verification
- * methodology (docs/algorithm-provenance.md). Briefly: it needs no network, adds nothing
+ * methodology (docs/methodology.md). Briefly: it needs no network, adds nothing
  * to the repository, and reproduces byte-for-byte in CI -- but synthetic images are not
  * photographs, so the numbers here describe behaviour on this corpus and are evidence
  * about regressions, not about real-world recall.

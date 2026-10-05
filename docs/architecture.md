@@ -111,7 +111,7 @@ where the code lives, not what it computes or why; see `docs/algorithms.md` for 
   allows it and read into the heap otherwise; every reason a path cannot be loaded is
   classified here as `PH_ERR_IO`, before a decoder sees a byte.
 - `batch.c`: `ph_hash_files()`/`ph_hash_buffers()` and their `_ex` forms, the worker
-  pool and the CPU count behind `threads = 0` (see "Batch hashing").
+  pool and the CPU count behind `threads = 0` (see [`batch.md`](batch.md)).
 - `compare.c`: comparison and hex serialisation of finished digests.
 - `version.c`: `ph_version()`, `ph_version_number()`, `ph_get_build_info()` and the
   `ph_can_use_*()` queries.
@@ -195,48 +195,38 @@ contract.
   therefore none of `ph_error_t`'s format-related codes apply — see its doc comment in
   `include/libphash.h` for the exact contract on `width`/`height`/`channels`/`stride`.
 
+## Error codes
+
+Every function that can fail returns a `ph_error_t`: `PH_SUCCESS` (0) or a negative
+code. `ph_get_error_string()` turns a code into a fixed English sentence;
+`ph_get_last_error_message()` adds what only the failing call knew — the path, the
+dimension, the decoder's own complaint — for the last load on that context. The values
+are part of the ABI: a code keeps its number for the whole 2.x series, and -2 and -4 are
+never assigned.
+
+| Code | Value | Returned by | Meaning, and what to do |
+|---|---|---|---|
+| `PH_ERR_ALLOCATION_FAILED` | -1 | anything that allocates: `ph_create()`, loads, hashes, batches | Out of memory. Transient — the input was fine; retry, or lower `max_pixels` and the batch thread count. |
+| `PH_ERR_INVALID_ARGUMENT` | -3 | every function | A NULL pointer or a value outside the documented range: a mistake in the call itself. |
+| `PH_ERR_EMPTY_IMAGE` | -5 | `ph_compute_*()`, `ph_compute_multi()` | The context holds no image: nothing loaded yet, or the last file/memory load failed. |
+| `PH_ERR_IMAGE_TOO_LARGE` | -6 | loads | The image is over the context's `max_pixels`, or over the limits no setting lifts. Raise `max_pixels` only for inputs you trust. |
+| `PH_ERR_UNSUPPORTED_FORMAT` | -7 | loads | Not an image format the library recognizes. |
+| `PH_ERR_CORRUPT_DATA` | -8 | loads | A recognized format whose data is malformed or truncated: a verdict on the input, not worth retrying. |
+| `PH_ERR_DECODER_UNAVAILABLE` | -9 | loads | A recognized format with no decoder in this build (WebP without libwebp). `ph_can_use_webp()` tells in advance. |
+| `PH_ERR_IO` | -10 | `ph_load_from_file()`, `ph_hash_files()` items | The path is missing, unreadable, not a regular file, or empty — decided before any decoder sees a byte. |
+| `PH_ERR_REQUIRES_COLOR` | -11 | `ph_compute_color_hash()`, `ph_compute_color_moments_hash()` | A color hash on a single-channel image, such as one loaded with `ph_context_set_load_grayscale()` on. |
+| `PH_ERR_CANCELLED` | -12 | `ph_hash_files_ex()`, `ph_hash_buffers_ex()` | The batch's `should_continue` callback stopped it; every item not started carries this code. |
+| `PH_ERR_NO_STRUCTURE` | -13 | `ph_radial_similarity()` | One of the digests is the all-zero Radial digest of an image with no angular structure. |
+
+A batch returns its own status for the call as a whole, and each item's `status` holds
+the code its load or hash returned, so one unreadable file never fails the others.
+
 ## Batch hashing
 
-`ph_hash_files()`/`ph_hash_buffers()` hash an array of files or in-memory buffers, each
-item loaded and hashed with `ph_compute_multi()` independently, optionally across an
-internal pool of worker threads. Each worker creates and owns its own `ph_context_t`,
-claims the next unstarted item from a shared atomic index, and writes only into that
-item — per-item failures land in the item's `status` and never stop the batch.
-
-`ph_hash_files_ex()`/`ph_hash_buffers_ex()` take a `ph_batch_options_t` (initialise it
-with `ph_batch_options_init()`) and add what the plain pair cannot do:
-
-- **Configuration.** `options.config` is a template context: its whole configuration —
-  gray weights, algorithm parameters, `max_pixels`, decode scale, auto-orient — is copied
-  on the calling thread into every worker's context, so the batch hashes an item exactly
-  as that context would. The plain pair always runs on the defaults, including the
-  default `max_pixels`, whatever was configured elsewhere.
-- **Cancellation.** `options.should_continue` is called before each item; once it
-  returns 0 no new item is started, the call returns `PH_ERR_CANCELLED`, and every item
-  not started carries `PH_ERR_CANCELLED`. The plain pair blocks until the last item.
-- **Progress.** `options.on_progress` is called after each finished item.
-
-Both callbacks run on the worker threads, possibly concurrently, so they must be
-thread-safe.
-
-**Memory.** Each worker holds one decoded image at a time: its RGB pixels plus a
-grayscale copy, about 4 bytes per pixel. The peak is therefore roughly
-`workers × 4 × the largest image's pixel count` — linear in the thread count, and
-`threads = 0` means one worker per CPU available to the process. At the default `max_pixels` (256 Mi pixels) that
-bound is about 1 GB per worker; measured on 20-megapixel JPEGs it is about 80 MB per
-worker (94 MB at one thread, 1.35 GB at sixteen). To bound it, pass an explicit thread
-count, a lower `max_pixels` on the template, or both.
-
-**One image, one thread.** Parallelism is across images only: `threads` sizes the
-batch's worker pool and nothing else. A single image — in a batch worker or through a
-direct `ph_load_*()`/`ph_compute_*()` call — is decoded, converted to gray and hashed on
-the calling thread at every stage. Splitting one image across threads would buy little
-where the time goes: on a 20-megapixel JPEG the decode is about 85% of a
-`ph_compute_multi()` call with all four flags, and neither libjpeg-turbo nor libpng can
-split one decode across threads. It would also oversubscribe the machine whenever a
-batch already runs one worker per CPU, which is why libwebp's optional second decoding
-thread is left off as well. A caller with one large JPEG and idle cores gains more from
-`ph_context_set_decode_scale()`.
+`ph_hash_files()`/`ph_hash_buffers()` and their `_ex` forms (`src/batch.c`) run many
+images through a pool of worker threads, each worker with a context of its own. How to
+use them, what they guarantee about threads and memory, and what an item costs:
+[`batch.md`](batch.md).
 
 ## Algorithms as values
 

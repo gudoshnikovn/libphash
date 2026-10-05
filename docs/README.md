@@ -6,13 +6,18 @@ Welcome to the internal technical documentation for `libphash`. This directory c
 
 - [**Architecture Overview**](architecture.md)
   System design, module breakdown, and core data structures.
+- [**Batch Hashing and Threads**](batch.md)
+  Hashing many images at once: the worker pool, thread safety, memory and cost per item.
 - [**Development Guide**](development.md)
   Build instructions, testing strategies, coding standards, and naming conventions.
 - [**Algorithms Depth**](algorithms.md)
   What each of the nine hashes computes, how to tune it, and what it is good for.
 - [**Algorithm Provenance**](algorithm-provenance.md)
   Where each algorithm comes from, what its source specifies against what this code
-  does, every known divergence, and the methodology this project verifies against.
+  does, and every known divergence.
+- [**Verification Methodology**](methodology.md)
+  What this project treats as correct: the premise, the criterion for a defect, the
+  measurable properties and the test corpus.
 - [**References**](references.md)
   The bibliography: full citations and links for every source the algorithms rest on,
   with how far each one can be trusted and whether it was read directly.
