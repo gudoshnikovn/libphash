@@ -695,6 +695,7 @@ jobs:
       run: |
         ./scripts/smoke_install.sh static
         ./scripts/smoke_install.sh shared
+        ./scripts/smoke_make_install.sh
         # libphash must not reconfigure a parent that pulls it in via
         # add_subdirectory(), and the result must build and run -- with the
         # parent static or shared, and across a repeated configure of the same

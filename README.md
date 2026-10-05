@@ -112,6 +112,8 @@ make -j8
 # Run tests
 make test
 
+# Install libphash.a, the headers and libphash.pc (default PREFIX=/usr/local)
+make install PREFIX=$HOME/.local
 ```
 
 ---

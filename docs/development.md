@@ -54,6 +54,7 @@ sync when you add or flip a switch.**
 | libFuzzer harnesses | `PHASH_BUILD_FUZZERS=OFF` | *n/a* | requires Clang |
 | Test-only mock decoder | `PHASH_ENABLE_MOCK_BACKEND=OFF` | `PHASH_ENABLE_MOCK_BACKEND=0` | must never be on in a shipped build |
 | Strict dependency handling | `PHASH_STRICT_DEPS=OFF` | *n/a* | |
+| Install | `cmake --install` (`CMAKE_INSTALL_PREFIX`) | `make install` (`PREFIX=/usr/local`, `DESTDIR`) | both write a relocatable `libphash.pc` from `libphash.pc.in`; the Makefile installs the static library only and has no `find_package` package |
 | Warnings as errors (own code only) | `PHASH_WARNINGS_AS_ERRORS=OFF` | *n/a* | for the `strict-warnings` CI job; never reaches the vendored decoders |
 | Coverage instrumentation | `PHASH_COVERAGE=OFF` | `PHASH_COVERAGE=0` | same flag name, independent implementations — see below for why one build alone isn't enough |
 
@@ -198,7 +199,11 @@ itself. Both targets print the per-area table.
 `scripts/smoke_install.sh static|shared` (also `make install-test`), which installs into
 a throwaway prefix, builds a consumer through `find_package(phash)` and through
 `pkg-config`, then **moves the prefix** and repeats the `pkg-config` build from the new
-location. `scripts/smoke_release_artifact.sh` does the same against an unpacked release
+location. `make install` (the Makefile build) writes the static library, both headers and
+a `libphash.pc` in the same form; `scripts/smoke_make_install.sh` (also in
+`make install-test`) installs it, builds and runs a consumer, moves the prefix, rebuilds,
+and checks that `make uninstall` leaves no file behind.
+`scripts/smoke_release_artifact.sh` does the same as `smoke_install.sh` against an unpacked release
 archive. Both use the plain command README shows, `pkg-config --cflags --libs libphash`,
 and run every consumer without `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`; a consumer that
 starts only with them is reported as missing its rpath.
@@ -390,7 +395,7 @@ and on any pull request targeting either:
 | `tsan` | ThreadSanitizer over the threaded batch path (`src/batch.c`) and the "one context per thread" contract. |
 | `valgrind` | The allocation-failure test suite (`tests/src/test_alloc_failure.c`) under Valgrind — independent of ASan/LSan, which don't mix with it. |
 | `fuzz` | A short (90s) libFuzzer run per PR — a fast regression check, not real corpus exploration; see "Fuzzing" below for the real thing. |
-| `install-smoke-test` | `scripts/smoke_install.sh` and `scripts/smoke_add_subdirectory.sh` — both consumer routes (`find_package`, pkg-config, `add_subdirectory()`), both link configurations; `scripts/check_exported_symbols.sh`, which fails unless the shared library exports exactly the functions of `include/libphash.h` (no internal helper, no `stb_image`, no vendored decoder); `scripts/build_examples.sh`, which builds and runs `examples/` against the shared library. |
+| `install-smoke-test` | `scripts/smoke_install.sh` and `scripts/smoke_add_subdirectory.sh` — both consumer routes (`find_package`, pkg-config, `add_subdirectory()`), both link configurations; `scripts/smoke_make_install.sh` — the Makefile's `install`/`uninstall`; `scripts/check_exported_symbols.sh`, which fails unless the shared library exports exactly the functions of `include/libphash.h` (no internal helper, no `stb_image`, no vendored decoder); `scripts/build_examples.sh`, which builds and runs `examples/` against the shared library. |
 
 Every build job starts the same way: a plain `actions/checkout`, then the local
 composite action [`.github/actions/setup-build`](../.github/actions/setup-build/action.yml),

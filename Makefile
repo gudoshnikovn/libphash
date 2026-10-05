@@ -240,11 +240,51 @@ bench_hash: $(TEST_DIR)/bench_hash.c $(LIB_NAME)
 benchmark: bench_hash
 	./bench_hash hash tests/data/photo.jpeg 100
 
-# Smoke-test install()/pkg-config/find_package(phash) packaging.
-# Builds+installs into a throwaway prefix, then builds a consumer against it.
+# --- install / uninstall ---
+# `make install PREFIX=/opt/libphash` (default /usr/local; DESTDIR for staging) puts
+# libphash.a, the two public headers and libphash.pc under PREFIX/lib and PREFIX/include.
+# The .pc comes from the same libphash.pc.in as the CMake build's, in the same
+# relocatable form (prefix relative to the .pc file's own directory), with what this
+# build links in Libs: there is no shared library for Libs.private to serve.
+PREFIX ?= /usr/local
+DESTDIR ?=
+PH_VERSION = $(shell sed -nE 's/.*project\([^)]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -n1)
+PC_LIBS = -lm
+ifeq ($(PHASH_ENABLE_THREADS),1)
+    PC_LIBS += -lpthread
+endif
+ifeq ($(UNAME_S),Linux)
+    PC_LIBS += -ldl
+endif
+ifeq ($(USE_WEBP),1)
+    PC_LIBS += -lwebp -lwebpdecoder
+endif
+
+install: $(LIB_NAME) $(GENERATED_DIR)/phash_version.h
+	install -d $(DESTDIR)$(PREFIX)/lib/pkgconfig $(DESTDIR)$(PREFIX)/include
+	install -m 644 $(LIB_NAME) $(DESTDIR)$(PREFIX)/lib/$(LIB_NAME)
+	install -m 644 $(INC_DIR)/libphash.h $(GENERATED_DIR)/phash_version.h $(DESTDIR)$(PREFIX)/include/
+	sed -e 's|@PHASH_PC_PREFIX@|$${pcfiledir}/../..|' \
+	    -e 's|@PHASH_PC_LIBDIR@|$${prefix}/lib|' \
+	    -e 's|@PHASH_PC_INCLUDEDIR@|$${prefix}/include|' \
+	    -e 's|@PROJECT_VERSION@|$(PH_VERSION)|' \
+	    -e 's|@PHASH_PC_RPATH@||' \
+	    -e 's|@PHASH_PC_LIBS_STR@| $(PC_LIBS)|' \
+	    -e 's|@PHASH_PC_LIBS_PRIVATE_STR@||' \
+	    -e 's|@PHASH_PC_CFLAGS_EXTRA@|-DPHASH_STATIC_DEFINE|' \
+	    libphash.pc.in > $(DESTDIR)$(PREFIX)/lib/pkgconfig/libphash.pc
+
+uninstall:
+	rm -f $(DESTDIR)$(PREFIX)/lib/$(LIB_NAME) $(DESTDIR)$(PREFIX)/lib/pkgconfig/libphash.pc \
+	      $(DESTDIR)$(PREFIX)/include/libphash.h $(DESTDIR)$(PREFIX)/include/phash_version.h
+
+# Smoke-test both builds' packaging: CMake's install()/pkg-config/find_package(phash),
+# static and shared, and this file's install/uninstall. Each installs into a throwaway
+# prefix and builds a consumer against it.
 install-test:
 	./scripts/smoke_install.sh static
 	./scripts/smoke_install.sh shared
+	./scripts/smoke_make_install.sh
 
 clean:
 	rm -rf $(OBJ_DIR) $(GENERATED_DIR) *.a *.o test_* bench_hash bench_hash.dSYM build .cache docs/coverage
@@ -270,4 +310,4 @@ docker-test: docker-build
 docker-shell: docker-build
 	docker run --rm -it $(DOCKER_IMAGE) bash
 
-.PHONY: all debug test clean format benchmark coverage coverage-cmake docker-build docker-test docker-shell install-test
+.PHONY: all debug test clean format benchmark coverage coverage-cmake docker-build docker-test docker-shell install uninstall install-test
