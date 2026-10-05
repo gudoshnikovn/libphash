@@ -57,8 +57,8 @@ jobs:
     - name: Run fuzz_load (30 minute session)
       run: |
         mkdir -p /tmp/fuzz-artifacts tests/fuzz/corpus
-        ./build/fuzz/fuzz_load -max_total_time=1800 -dict=tests/fuzz/magic.dict \
-          -artifact_prefix=/tmp/fuzz-artifacts/ tests/fuzz/corpus tests/data
+        ./build/fuzz/fuzz_load -max_total_time=1800 -max_len=65536 -dict=tests/fuzz/magic.dict \
+          -artifact_prefix=/tmp/fuzz-artifacts/ tests/fuzz/corpus tests/fuzz/seeds
 
     - name: Upload crash artifacts
       if: failure()

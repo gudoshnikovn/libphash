@@ -574,8 +574,21 @@ branches and a memory error inside a decoder is reported where it happens:
 ```bash
 cmake -B build-fuzz -DPHASH_BUILD_FUZZERS=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang
 cmake --build build-fuzz --target fuzz_load -j
-./build-fuzz/fuzz_load -max_total_time=60 tests/fuzz/corpus/
+mkdir -p tests/fuzz/corpus
+./build-fuzz/fuzz_load -max_total_time=60 -max_len=65536 -dict=tests/fuzz/magic.dict \
+    tests/fuzz/corpus tests/fuzz/seeds
 ```
+
+`tests/fuzz/corpus/` is the working corpus libFuzzer writes into, ignored by git;
+`tests/fuzz/seeds/` is the tracked seed set, one or more minimal files per accepted
+format — its README lists where each comes from — and `tests/fuzz/magic.dict` the
+signatures, markers and chunk names a mutation would not find by chance. Each input picks
+its own configuration from its last 8 bytes (decode scale, grayscale, EXIF orientation,
+alpha mode, every algorithm's parameters, which algorithm or `ph_compute_multi()` mask to
+run), so the fuzzer reaches the configured paths as well as the defaults. Beyond crashes
+and sanitizer reports, the harness aborts when a successful load reports non-positive
+dimensions, or when the same hash computed twice differs. **A crash it finds is
+minimized and added to `tests/fuzz/seeds/` in the commit that fixes it.**
 
 CI runs this two ways: a 90-second smoke run on every PR (the `fuzz` job above, meant
 to catch a fast regression, not explore the input space) and a 30-minute run nightly

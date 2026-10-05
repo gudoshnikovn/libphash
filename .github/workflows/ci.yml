@@ -816,11 +816,12 @@ jobs:
       run: |
         mkdir -p /tmp/fuzz-artifacts tests/fuzz/corpus
         # tests/fuzz/corpus is the writable corpus libFuzzer saves new units into;
-        # tests/data is passed second, as a read-only seed corpus -- swapping the
-        # order would make libFuzzer write generated inputs straight into the
-        # fixture directory.
-        ./build/fuzz/fuzz_load -max_total_time=90 -dict=tests/fuzz/magic.dict \
-          -artifact_prefix=/tmp/fuzz-artifacts/ tests/fuzz/corpus tests/data
+        # tests/fuzz/seeds is passed second, read-only -- swapping the order would make
+        # libFuzzer write generated inputs into the tracked seeds. -max_len: 64 KiB is
+        # above every seed, and longer inputs reach no parsing code a shorter one does
+        # not -- they only make each iteration slower.
+        ./build/fuzz/fuzz_load -max_total_time=90 -max_len=65536 -dict=tests/fuzz/magic.dict \
+          -artifact_prefix=/tmp/fuzz-artifacts/ tests/fuzz/corpus tests/fuzz/seeds
 
     - name: Upload crash artifacts
       if: failure()
