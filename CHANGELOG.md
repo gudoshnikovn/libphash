@@ -375,6 +375,9 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   CMake must define when linking libphash statically on Windows; the exported target and
   the `.pc` file set it automatically. `add_subdirectory()` works for static and shared
   parents and leaves the parent project's settings and cache as it found them.
+- **`make install` / `make uninstall`** for the Makefile build: `libphash.a`, the two
+  headers and a relocatable `libphash.pc` under `PREFIX` (default `/usr/local`; `DESTDIR`
+  for staging).
 - **`PHASH_USE_ZLIB_NG` build option** to build libpng against the vendored zlib-ng,
   safe for concurrent first decodes; a build without libpng does not configure it. The JPEG backend decodes through libjpeg-turbo's
   libjpeg API, whose archive carries no zlib of its own to compete with it.
