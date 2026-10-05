@@ -433,8 +433,12 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
 - Clang is the default compiler in both build systems (`CMakePresets.json`'s `clang`
   preset; the Makefile's `CC`; 1.x: `gcc`) — still fully overridable
   (`-DCMAKE_C_COMPILER=gcc`, `CC=gcc make`, or the `gcc` preset).
-- A plain `cmake -B build` builds the vendored libjpeg-turbo submodule itself if it isn't
-  built yet, instead of warning and falling back to stb_image.
+- **CMake builds the vendored libjpeg-turbo itself, inside each build tree.** 1.x looked for
+  a `libturbojpeg.a` that had to be built by hand in `vendor/libjpeg-turbo/build` and fell
+  back to stb_image without it; every build tree then shared that one archive, whatever
+  compiler, flags or architecture it was built for. libjpeg-turbo is now configured with the
+  build tree's compiler, C flags, build type, toolchain file and `CMAKE_OSX_*`, so a gcc,
+  sanitizer or cross build gets a matching decoder, and nothing is written into `vendor/`.
 - `make debug` inherits `CFLAGS` instead of replacing it.
 - **libphash builds with `-ffp-contract=off`**, so GCC and Clang builds produce identical
   hashes on arm64. On arm64 a 1.x build made by a compiler that contracts multiply-adds
