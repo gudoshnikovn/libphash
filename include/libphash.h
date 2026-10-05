@@ -84,7 +84,9 @@ extern "C" {
 
 // --- Enum width ---
 
-/* Every public enum ends in a *_FORCE_INT32_ enumerator. It is not a value any function
+/** @brief The value of every public enum's *_FORCE_INT32_ enumerator.
+ *
+ * Every public enum ends in a *_FORCE_INT32_ enumerator. It is not a value any function
  * accepts or returns: it exists only to make the enum's range need a full 32-bit int, so
  * that the enum is 4 bytes wide under every compiler and flag. Without it, -fshort-enums
  * -- the default ABI on ARM EABI targets -- shrinks an enum to the smallest type that
@@ -96,14 +98,20 @@ extern "C" {
 
 // --- Error Codes ---
 
-/* ABI rule: every value here is spelled out explicitly, and new codes are only
+/**
+ * @brief Result of every function that can fail: @c PH_SUCCESS (0) or a negative code.
+ *
+ * ph_get_error_string() names a code; ph_get_last_error_message() adds the details of the
+ * last failed load on a context.
+ *
+ * ABI rule: every value here is spelled out explicitly, and new codes are only
  * ever appended at the end of the list (before PH_ERR_FORCE_INT32_, which is not a
  * code) with the next free negative value.
  * Renumbering or reusing a value silently changes the meaning of an error in
  * already-compiled consumers and in FFI bindings that hardcode the number, so
  * a value, once assigned, is never handed to a different code. */
 typedef enum {
-    PH_SUCCESS = 0,
+    PH_SUCCESS = 0,                ///< The call did what it was asked.
     PH_ERR_ALLOCATION_FAILED = -1, ///< A malloc() somewhere on the call path returned NULL --
                                    ///< the input was fine, the process just could not get the
                                    ///< memory it needed right now. This is transient and worth
@@ -123,13 +131,17 @@ typedef enum {
     /* -4 is reserved and never assigned (see MIGRATION.md). A feature missing from a
      * build is reported as PH_ERR_DECODER_UNAVAILABLE (a decoder) or degrades without
      * an error (threads: the batch runs sequentially). */
-    PH_ERR_EMPTY_IMAGE = -5, ///< A hash was requested from a context that holds no image:
-                             ///< nothing was loaded yet, or the last ph_load_from_file() /
-                             ///< ph_load_from_memory() failed (a failed ph_load_from_pixels()
-                             ///< keeps the previous image). Returned by every ph_compute_*
-                             ///< function and ph_compute_multi(), after their pointer
-                             ///< arguments have been checked.
-    PH_ERR_IMAGE_TOO_LARGE = -6,
+    PH_ERR_EMPTY_IMAGE = -5,     ///< A hash was requested from a context that holds no image:
+                                 ///< nothing was loaded yet, or the last ph_load_from_file() /
+                                 ///< ph_load_from_memory() failed (a failed ph_load_from_pixels()
+                                 ///< keeps the previous image). Returned by every ph_compute_*
+                                 ///< function and ph_compute_multi(), after their pointer
+                                 ///< arguments have been checked.
+    PH_ERR_IMAGE_TOO_LARGE = -6, ///< The image is larger than the context's max_pixels (see
+                                 ///< ph_context_set_max_pixels()) or than the fixed limits no
+                                 ///< setting lifts; or a buffer passed to a load is longer
+                                 ///< than the library can address. Decided before the pixels
+                                 ///< are allocated.
     PH_ERR_UNSUPPORTED_FORMAT = -7,  ///< The data isn't any image format libphash recognizes.
     PH_ERR_CORRUPT_DATA = -8,        ///< A recognized format's magic/header matched, but the
                                      ///< bitstream itself is malformed or truncated.
@@ -210,7 +222,10 @@ typedef enum {
  * merely reading it concurrently (e.g. one loading a new image while another reads
  * ph_get_last_error_message()); that pairing is the caller's to serialize, not the
  * library's. ph_hash_files()/ph_hash_buffers() follow this same rule internally: each
- * worker thread in their pool creates and owns its own context.
+ * worker thread in their pool creates and owns its own context. They take no context
+ * themselves, so several threads may run batches at the same time. One image is always
+ * loaded and hashed on a single thread -- parallelism is across images, through the
+ * batch functions or the caller's own threads. See docs/batch.md.
  */
 typedef struct ph_context ph_context_t;
 
@@ -282,7 +297,9 @@ typedef struct {
     uint8_t data[PH_DIGEST_MAX_BYTES]; ///< The raw hash bytes.
     uint8_t size;                      ///< Number of valid bytes in 'data'.
     uint8_t kind;                      ///< A @c ph_digest_kind_t. 0 when not stated.
-    uint8_t reserved[6];               ///< Padding for 64-bit alignment.
+    uint8_t reserved[6];               ///< Zero. Room for future fields; makes the size a multiple
+                                       ///< of 8. Not alignment: every field is a byte, so
+                                       ///< _Alignof(ph_digest_t) is 1.
 } ph_digest_t;
 
 // --- Lifecycle & Configuration ---
@@ -839,10 +856,58 @@ PH_NODISCARD PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint
                                                    int width, int height, int channels, int stride);
 
 // --- uint64_t Hash Algorithms ---
+//
+// The four algorithms below share one contract. Each hashes the image loaded into
+// @p ctx into all 64 bits of @p out_hash, compared with ph_hamming_distance() or
+// ph_similarity(). The value depends on the decoded pixels and on the context's settings
+// -- the grayscale weights, and everything that shapes the pixels at load time
+// (decode scale, auto-orientation, alpha mode) -- so hashes are comparable only between
+// contexts configured alike. The cost grows with the source image's pixel count: the
+// reduction to the hash's working size reads every pixel. Return values:
+//   - PH_SUCCESS, with the hash in @p out_hash;
+//   - PH_ERR_INVALID_ARGUMENT for a NULL @p ctx or @p out_hash;
+//   - PH_ERR_EMPTY_IMAGE if no image is loaded (see ph_is_loaded());
+//   - PH_ERR_ALLOCATION_FAILED if the working buffers cannot be allocated.
+// @p out_hash is written only on success. ph_compute_multi() computes any combination
+// of the four in one call.
 
+/**
+ * @brief Average hash: one bit per cell of an 8x8 grayscale reduction, set where the
+ *        cell is at or above the reduction's mean.
+ *
+ * The fastest of the four, and sensitive to anything that moves the mean (brightness,
+ * contrast). See the shared contract above for the return values.
+ */
 PH_NODISCARD PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash);
+
+/**
+ * @brief Difference hash: a 9x8 grayscale reduction, one bit per pair of horizontal
+ *        neighbors, set where the left one is darker.
+ *
+ * As fast as aHash and more tolerant of brightness and contrast changes. See the shared
+ * contract above for the return values.
+ */
 PH_NODISCARD PH_API ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out_hash);
+
+/**
+ * @brief Perceptual (DCT) hash: the low-frequency block of the 2-D DCT of a grayscale
+ *        reduction, thresholded at its median plus 0.1% of the AC range.
+ *
+ * Sizes from ph_context_set_phash_params() (default: a 32x32 reduction, an 8x8 block). With
+ * a block smaller than 8x8 only its `reduction_size` squared low bits are used. The DC
+ * coefficient's bit is set for any ordinary image, as in pHash. See the shared contract
+ * above for the return values.
+ */
 PH_NODISCARD PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash);
+
+/**
+ * @brief Wavelet hash: the low-frequency Haar band of a grayscale reduction, thresholded
+ *        at its median.
+ *
+ * The scale and depth come from ph_context_set_whash_mode(); the coarsest band can be
+ * zeroed with ph_context_set_whash_remove_max_haar_ll(). See the shared contract above for
+ * the return values.
+ */
 PH_NODISCARD PH_API ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash);
 
 /**
@@ -1295,6 +1360,12 @@ PH_NODISCARD PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_dige
 
 // --- Comparison Functions ---
 
+/**
+ * @brief Number of differing bits between two 64-bit hashes, 0 to 64.
+ *
+ * For aHash, dHash, pHash and wHash values. Only meaningful between two hashes of the same
+ * algorithm, computed with the same settings.
+ */
 PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
 /* Contract shared by every function below that reads a ph_digest_t.
  *
@@ -1318,7 +1389,21 @@ PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
  * PH_DIGEST_KIND_VECTOR16; ph_radial_similarity() is for PH_DIGEST_KIND_COEFFICIENTS;
  * ph_histogram_intersection() is for PH_DIGEST_KIND_HISTOGRAM.
  */
+/**
+ * @brief Number of differing bits between two @c PH_DIGEST_KIND_BITS digests (mHash, BMH,
+ *        or a 64-bit hash taken as a digest).
+ * @return 0 to 8 times the digest size; -1 for anything the digest contract above rejects:
+ *         NULL, mismatched or invalid sizes, or another kind.
+ */
 PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b);
+
+/**
+ * @brief Euclidean distance between two feature vectors: @c PH_DIGEST_KIND_VECTOR16
+ *        (ColorMoments, decoded from its 16-bit fixed point) or @c PH_DIGEST_KIND_VECTOR
+ *        (one unsigned byte per feature).
+ * @return 0.0 or more, in the features' own units; -1.0 for anything the digest contract
+ *         above rejects: NULL, mismatched or invalid sizes, or another kind.
+ */
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b);
 
 /**
