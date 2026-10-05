@@ -134,11 +134,10 @@ report that only ran one of them as measuring at most half the decoder surface.
 `scripts/coverage_cmake.sh` treats a failing test the same way `make coverage`
 does: coverage is a measurement pass, not a correctness gate, so a `ctest` failure
 prints a warning and the script continues rather than aborting (a failed test still
-executed its lines). If a decoder submodule isn't built locally, that backend's
-native path simply can't be measured on
-that machine; `find_library(PHASH_LIBJPEG_LIB ...)` falls back to stb_image silently in
-that case, same as any other CMake build here, so check the summary's per-file
-breakdown (`lcov --list docs/coverage/cmake/native.info`) rather than assuming the
+executed its lines). If a decoder submodule isn't checked out locally, that backend's
+native path simply can't be measured on that machine: the configure falls back to
+stb_image with a warning, same as any other CMake build here, so check the summary's
+per-file breakdown (`lcov --list docs/coverage/cmake/native.info`) rather than assuming the
 option being `ON` means the backend was actually linked.
 
 ### Coverage standard

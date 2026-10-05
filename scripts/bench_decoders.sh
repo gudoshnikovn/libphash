@@ -28,13 +28,6 @@ mkdir -p "$WORK"
 WORK="$(cd "$WORK" && pwd)"
 JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
 
-if [[ ! -f "$SRC/vendor/libjpeg-turbo/build/libjpeg.a" ]]; then
-    cmake -S "$SRC/vendor/libjpeg-turbo" -B "$SRC/vendor/libjpeg-turbo/build" \
-        -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF >"$WORK/jpeg-configure.log"
-    cmake --build "$SRC/vendor/libjpeg-turbo/build" --target jpeg-static -j "$JOBS" \
-        >"$WORK/jpeg-build.log"
-fi
-
 flags_for() {
     case "$1" in
         native) echo "-DPHASH_USE_LIBJPEG_TURBO=ON -DPHASH_USE_LIBPNG=ON -DPHASH_USE_ZLIB_NG=ON" ;;

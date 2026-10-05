@@ -93,7 +93,7 @@ jobs:
 
   # Full vendored build (all bundled decoders) across the platforms/arches we
   # actually ship for. PHASH_STRICT_DEPS=ON turns a silent decoder fallback
-  # (e.g. libjpeg-turbo not found) into a hard configure failure, so a CI green
+  # (e.g. a vendored submodule not checked out) into a hard configure failure, so a CI green
   # here means the vendored decoders were genuinely built and linked, not
   # quietly swapped for stb_image.
   build-and-test:
@@ -129,14 +129,6 @@ jobs:
         ccache: 'true'
         ccache-key: ${{ matrix.name }}
         apt-packages: cmake${{ matrix.needs_nasm && ' nasm' || '' }}${{ matrix.cc == 'clang' && ' clang' || '' }}
-
-    # libjpeg-turbo doesn't like add_subdirectory (see CMakeLists.txt), so its
-    # submodule is built separately; the main configure below then finds the
-    # resulting static lib in vendor/libjpeg-turbo/build.
-    - name: Build vendored libjpeg-turbo
-      run: |
-        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
-        cmake --build vendor/libjpeg-turbo/build --target jpeg-static -j
 
     - name: Configure CMake (full vendored build)
       run: cmake -B build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
@@ -175,11 +167,6 @@ jobs:
         ccache-key: ${{ matrix.cc }}
         apt-packages: cmake nasm${{ matrix.cc == 'clang' && ' clang clang-tidy' || '' }}
 
-    - name: Build vendored libjpeg-turbo
-      run: |
-        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
-        cmake --build vendor/libjpeg-turbo/build --target jpeg-static -j
-
     - name: Configure CMake (full vendored build, -Werror on libphash's own targets)
       run: >
         cmake -B build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
@@ -216,11 +203,6 @@ jobs:
       with:
         ccache: 'true'
         apt-packages: cmake nasm lcov
-
-    - name: Build vendored libjpeg-turbo
-      run: |
-        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
-        cmake --build vendor/libjpeg-turbo/build --target jpeg-static -j
 
     - name: Run coverage-cmake
       run: ./scripts/coverage_cmake.sh
@@ -443,16 +425,12 @@ jobs:
 
     - name: Build head
       run: |
-        cmake -S pr/vendor/libjpeg-turbo -B pr/vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
-        cmake --build pr/vendor/libjpeg-turbo/build --target jpeg-static -j
         cmake -S pr -B pr/build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
         cmake --build pr/build --config Release -j
 
     - name: Build base
       if: steps.base.outputs.ref != ''
       run: |
-        cmake -S base/vendor/libjpeg-turbo -B base/vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF
-        cmake --build base/vendor/libjpeg-turbo/build --target jpeg-static -j
         cmake -S base -B base/build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Release
         cmake --build base/build --config Release -j
 
@@ -522,11 +500,6 @@ jobs:
         ccache: 'true'
         apt-packages: cmake clang nasm
 
-    - name: Build vendored libjpeg-turbo
-      run: |
-        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DCMAKE_C_COMPILER=clang
-        cmake --build vendor/libjpeg-turbo/build --target jpeg-static -j
-
     - name: Configure CMake (ASan/UBSan)
       run: |
         cmake -B build -DPHASH_BUILD_TESTS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Debug \
@@ -549,9 +522,9 @@ jobs:
   # on the first parallel PNG decodes if the loader did not warm it once
   # (test_cold_parallel_decode is the test that sees it -- the other thread tests decode
   # a sequential reference first and warm it by accident). The full-native leg adds the
-  # JPEG decoder: libjpeg-turbo's libjpeg archive (jpeg-static). It is built out of band
-  # by the configure step without the sanitizer flags, so TSan sees libphash's side of
-  # the JPEG path but not libjpeg-turbo's internals.
+  # JPEG decoder: libjpeg-turbo's libjpeg archive (jpeg-static), built inside the build
+  # tree with the same C flags, so TSan instruments libjpeg-turbo's C code as well as
+  # libphash's side of the JPEG path (its SIMD assembly is not instrumented).
   tsan:
     runs-on: ubuntu-24.04
     strategy:
@@ -655,11 +628,6 @@ jobs:
         ccache: 'true'
         apt-packages: cmake clang nasm
 
-    - name: Build vendored libjpeg-turbo
-      run: |
-        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DCMAKE_C_COMPILER=clang
-        cmake --build vendor/libjpeg-turbo/build --target jpeg-static -j
-
     - name: Configure CMake (fuzzers)
       run: cmake -B build -DPHASH_BUILD_FUZZERS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Debug
 
@@ -703,17 +671,6 @@ jobs:
       with:
         ccache: 'true'
         apt-packages: cmake nasm pkg-config
-
-    # -DCMAKE_POSITION_INDEPENDENT_CODE=ON: the smoke test below also builds a
-    # SHARED libphash against this same archive. Unlike libpng/webp/zlib-ng
-    # (pulled in via add_subdirectory(), which inherits this project's own -fPIC
-    # from CMakeLists.txt), libjpeg-turbo is built as a fully separate CMake
-    # invocation that never sees that flag -- without it, linking libphash.so
-    # against libjpeg.a fails on Linux with "recompile with -fPIC".
-    - name: Build vendored libjpeg-turbo
-      run: |
-        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DCMAKE_POSITION_INDEPENDENT_CODE=ON
-        cmake --build vendor/libjpeg-turbo/build --target jpeg-static -j
 
     # cmake --install into a throwaway prefix + build a mini find_package(phash)
     # consumer against it. Exercises both the static and shared build.

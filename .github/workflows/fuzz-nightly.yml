@@ -30,11 +30,6 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y cmake clang nasm
 
-    - name: Build vendored libjpeg-turbo
-      run: |
-        cmake -S vendor/libjpeg-turbo -B vendor/libjpeg-turbo/build -DCMAKE_BUILD_TYPE=Release -DENABLE_SHARED=OFF -DCMAKE_C_COMPILER=clang
-        cmake --build vendor/libjpeg-turbo/build --target jpeg-static -j
-
     - name: Configure CMake (fuzzers)
       run: cmake -B build -DPHASH_BUILD_FUZZERS=ON -DPHASH_STRICT_DEPS=ON -DCMAKE_BUILD_TYPE=Debug
 

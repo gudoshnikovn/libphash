@@ -4,5 +4,8 @@ generated/
 docs/coverage/
 *.o
 *.a
+**/*.o
+**/*.a
+**/build/
 *.dSYM
 .DS_Store
