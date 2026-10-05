@@ -588,6 +588,9 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
 - **PNG decoder hardening:** overflow-checked `row_ptrs` allocation, the dimension cap
   applied straight from the IHDR, and `setjmp` armed before the info struct exists.
 - The decode path is fuzzed (libFuzzer) and built under ASan/UBSan in CI.
+- **The bundled libpng is 1.6.59** (1.10.4 bundled 1.6.56): it fixes CVE-2026-46675, a
+  use-after-free in `png_read_end()` after an incomplete `zTXt`, `iTXt` or `iCCP`
+  decompression, and a double free after an allocation failure.
 
 ## [1.10.4] - 2026-04-19
 
