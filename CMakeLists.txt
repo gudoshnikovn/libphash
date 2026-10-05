@@ -864,7 +864,16 @@ if(PHASH_IS_TOP_LEVEL)
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/phash
     )
 
+    # A static install has no shared libphash to fall back on, so every link against it
+    # needs the codec archives and system libraries: they go into Libs, and the plain
+    # `pkg-config --libs libphash` that README shows links. A shared libphash carries
+    # them itself; for it they stay in Libs.private, read only by --static.
     string(REPLACE ";" " " PHASH_PC_LIBS_PRIVATE_STR "${PHASH_PC_LIBS_PRIVATE}")
+    set(PHASH_PC_LIBS_STR "")
+    if(NOT PHASH_BUILD_SHARED AND PHASH_PC_LIBS_PRIVATE_STR)
+        set(PHASH_PC_LIBS_STR " ${PHASH_PC_LIBS_PRIVATE_STR}")
+        set(PHASH_PC_LIBS_PRIVATE_STR "")
+    endif()
 
     # Mirrors the PUBLIC target_compile_definitions(phash PHASH_STATIC_DEFINE)
     # above for the pkg-config path (e.g. MinGW consumers, who use pkg-config
@@ -875,18 +884,39 @@ if(PHASH_IS_TOP_LEVEL)
         set(PHASH_PC_CFLAGS_EXTRA "-DPHASH_STATIC_DEFINE")
     endif()
 
-    # Keep libphash.pc relocatable. Substituting CMAKE_INSTALL_FULL_LIBDIR would bake
-    # the configure-time absolute path into the file, so moving (or packaging and
-    # unpacking elsewhere) the install tree would yield -L/-I pointing at a directory
-    # that is not there. Expressing libdir/includedir relative to ${prefix}
-    # means pkg-config's own --define-prefix (and the redefinition of prefix that
-    # relocatable distributions do) reaches them.
+    # Keep libphash.pc relocatable: an install tree that is moved, or packaged and
+    # unpacked elsewhere (the release archives), must work with a plain
+    # `pkg-config --cflags --libs libphash`. So prefix is not CMAKE_INSTALL_PREFIX, a
+    # configure-time path, but the .pc file's own directory, ${pcfiledir}, walked back
+    # up out of <libdir>/pkgconfig -- a variable every pkg-config implementation
+    # defines -- and libdir/includedir are written relative to ${prefix}.
     #
     # GNUInstallDirs permits CMAKE_INSTALL_LIBDIR/INCLUDEDIR to be absolute -- some
     # distributions and toolchain files set them that way. An absolute value cannot
     # be made prefix-relative, so it is emitted verbatim: such an install is not
     # relocatable by construction, and silently prefixing it would produce a path
-    # that is simply wrong.
+    # that is simply wrong. An absolute libdir also fixes where the .pc itself lands,
+    # so prefix is then the absolute CMAKE_INSTALL_PREFIX.
+    if(IS_ABSOLUTE "${CMAKE_INSTALL_LIBDIR}")
+        set(PHASH_PC_PREFIX "${CMAKE_INSTALL_PREFIX}")
+    else()
+        cmake_path(SET _phash_pc_dir NORMALIZE "${CMAKE_INSTALL_LIBDIR}/pkgconfig")
+        string(REPLACE "/" ";" _phash_pc_dir_parts "${_phash_pc_dir}")
+        set(PHASH_PC_PREFIX "\${pcfiledir}")
+        foreach(_part IN LISTS _phash_pc_dir_parts)
+            string(APPEND PHASH_PC_PREFIX "/..")
+        endforeach()
+    endif()
+
+    # A shared libphash is found at run time through the rpath its consumer carries
+    # (on macOS its install name is @rpath/libphash.<N>.dylib), so the .pc hands one
+    # out along with -L. Windows has no rpath: the DLL is found next to the executable
+    # or on PATH.
+    set(PHASH_PC_RPATH "")
+    if(PHASH_BUILD_SHARED AND NOT WIN32)
+        set(PHASH_PC_RPATH "-Wl,-rpath,\${libdir} ")
+    endif()
+
     foreach(_dir LIBDIR INCLUDEDIR)
         if(IS_ABSOLUTE "${CMAKE_INSTALL_${_dir}}")
             set(PHASH_PC_${_dir} "${CMAKE_INSTALL_${_dir}}")

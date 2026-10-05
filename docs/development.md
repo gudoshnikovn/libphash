@@ -198,40 +198,40 @@ itself. Both targets print the per-area table.
 `scripts/smoke_install.sh static|shared` (also `make install-test`), which installs into
 a throwaway prefix, builds a consumer through `find_package(phash)` and through
 `pkg-config`, then **moves the prefix** and repeats the `pkg-config` build from the new
-location.
+location. `scripts/smoke_release_artifact.sh` does the same against an unpacked release
+archive. Both use the plain command README shows, `pkg-config --cflags --libs libphash`,
+and run every consumer without `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`; a consumer that
+starts only with them is reported as missing its rpath.
 
-That last step guards relocatability. `libphash.pc.in` writes
+`libphash.pc.in` writes
 
 ```
-prefix=@CMAKE_INSTALL_PREFIX@
+prefix=${pcfiledir}/../..
 libdir=${prefix}/@CMAKE_INSTALL_LIBDIR@
 includedir=${prefix}/@CMAKE_INSTALL_INCLUDEDIR@
 ```
 
-so that redefining `prefix` moves everything else with it — `pkg-config --define-prefix`
-guesses `prefix` from the `.pc` file's own location, which is how relocatable and
-relocated (packaged, then unpacked elsewhere) install trees are consumed. An absolute
-`@CMAKE_INSTALL_FULL_LIBDIR@` would be a configure-time path that `--define-prefix`
-cannot touch.
+with one `..` per component of `<libdir>/pkgconfig` (`../../..` for `lib/<triplet>`).
+`${pcfiledir}` is the directory the `.pc` file was read from, defined by every
+`pkg-config` implementation, so the paths follow the file wherever the tree is moved or
+unpacked, with no `--define-prefix`. A configure-time `prefix` would name the staging
+directory of the release build, deleted once the archive is written.
 
-Three caveats worth knowing:
-
-- Plain `pkg-config` does **not** redefine the prefix unless asked (`--define-prefix`,
-  or a build of pkg-config/pkgconf configured to do it by default, as on Windows). The
-  `.pc` makes relocation possible; the consumer still opts into it.
-- The behavioural half of the smoke check (move the tree, rebuild) is **not** a
-  sufficient regression guard on its own, which is why `smoke_install.sh` also asserts
-  on the text of the generated `.pc`. `pkgconf` (3.0.6, what Homebrew installs as
-  `pkg-config`) implements `--define-prefix` by string-replacing the old prefix inside
-  absolute variable values as well, so it produces correct output even from a `.pc`
-  with an absolute `libdir`. freedesktop `pkg-config` only redefines the
-  `prefix` variable and leaves an absolute `libdir` stale — the same `.pc` is relocatable
-  under one implementation and not the other. Assert on the file, not just the output.
+- **Static install:** the codec archives and system libraries (`-lphash_jpeg -lpng16
+  -lwebpdecoder -lz -lm …`) are in `Libs`, not `Libs.private`. There is no shared
+  libphash to fall back on, so every link needs them, `--static` or not.
+- **Shared install:** `Libs` carries `-Wl,-rpath,${libdir}` (not on Windows, which has no
+  rpath). The library's install name on macOS is `@rpath/libphash.<N>.dylib`, and on
+  Linux a prefix outside the loader's default path is equally invisible without it.
+- `smoke_install.sh` also asserts on the text of the generated `.pc` — `prefix` starts
+  with `${pcfiledir}/`, `libdir`/`includedir` with `${prefix}/` — because the behavioural
+  check alone depends on the `pkg-config` implementation in use.
 - `GNUInstallDirs` allows `CMAKE_INSTALL_LIBDIR`/`CMAKE_INSTALL_INCLUDEDIR` to be
   absolute paths, and some distribution toolchain files set them that way. Such a value
-  cannot be expressed relative to `${prefix}`, so `CMakeLists.txt` emits it verbatim and
-  prints a `STATUS` message saying the `.pc` will not be relocatable. That is a property
-  of the requested layout, not a bug to paper over.
+  cannot be expressed relative to `${prefix}`, so `CMakeLists.txt` emits it verbatim,
+  takes `prefix` from `CMAKE_INSTALL_PREFIX`, and prints a `STATUS` message saying the
+  `.pc` will not be relocatable. That is a property of the requested layout, not a bug to
+  paper over.
 
 ### Vendoring libphash with `add_subdirectory()`
 

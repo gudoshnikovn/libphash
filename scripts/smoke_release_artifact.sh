@@ -13,6 +13,12 @@
 # and CMake -- no access to this checkout's build tree or CMake cache -- which
 # is the actual condition a consumer downloading the archive is in.
 #
+# Where pkg-config exists (not on Windows), the consumer is also built with the plain
+# command README shows -- `pkg-config --cflags --libs libphash`, no --define-prefix --
+# against the extracted archive's libphash.pc. Every consumer runs the way its user
+# would run it: on Linux and macOS with no LD_LIBRARY_PATH/DYLD_LIBRARY_PATH, so a
+# shared libphash is found through the consumer's rpath or not at all.
+#
 # Usage: scripts/smoke_release_artifact.sh <archive-path> <static|shared>
 set -euo pipefail
 
@@ -78,12 +84,43 @@ BIN="$CONSUMER_DIR/build/consumer"
 [ -f "$BIN" ] || BIN="$CONSUMER_DIR/build/Release/consumer.exe"
 [ -f "$BIN" ] || BIN="$CONSUMER_DIR/build/consumer.exe"
 
-echo "==> Running consumer"
 LIBDIR="$STAGE_DIR/lib"
 [ -d "$LIBDIR" ] || LIBDIR="$STAGE_DIR/lib64"
-PATH="$LIBDIR:$STAGE_DIR/bin:$PATH" \
-    LD_LIBRARY_PATH="$LIBDIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
-    DYLD_LIBRARY_PATH="$LIBDIR${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}" \
-    "$BIN"
+
+# Windows has no rpath: a DLL is found next to the executable or on PATH, which is what a
+# consumer there arranges. Elsewhere the environment stays clean, and a consumer that
+# starts only with LD_LIBRARY_PATH/DYLD_LIBRARY_PATH is reported as missing its rpath.
+run_consumer() {
+    local bin="$1"
+    case "$bin" in
+        *.exe) PATH="$LIBDIR:$STAGE_DIR/bin:$PATH" "$bin"; return ;;
+    esac
+    if env -u LD_LIBRARY_PATH -u DYLD_LIBRARY_PATH "$bin"; then
+        return 0
+    fi
+    if LD_LIBRARY_PATH="$LIBDIR" DYLD_LIBRARY_PATH="$LIBDIR" "$bin" >/dev/null 2>&1; then
+        echo "!!! $bin starts only with LD_LIBRARY_PATH/DYLD_LIBRARY_PATH=$LIBDIR: no rpath" >&2
+    fi
+    return 1
+}
+
+echo "==> Running consumer (find_package)"
+run_consumer "$BIN"
+
+case "$BIN" in
+    *.exe) ;;
+    *)
+        if command -v pkg-config >/dev/null 2>&1; then
+            echo "==> Building consumer via pkg-config against the extracted archive"
+            PC_FLAGS=$(PKG_CONFIG_PATH="$LIBDIR/pkgconfig" pkg-config --cflags --libs libphash)
+            echo "    $PC_FLAGS"
+            cc "$CONSUMER_DIR/main.c" $PC_FLAGS -o "$CONSUMER_DIR/consumer_pc"
+            echo "==> Running consumer (pkg-config)"
+            run_consumer "$CONSUMER_DIR/consumer_pc"
+        else
+            echo "==> pkg-config not found, skipping the pkg-config consumer"
+        fi
+        ;;
+esac
 
 echo "==> Smoke test passed"
