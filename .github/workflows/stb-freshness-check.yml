@@ -3,8 +3,9 @@ name: stb freshness check
 # The two copied-in stb headers (vendor/stb_image.h, vendor/stb_image_resize2.h)
 # aren't git submodules, so Dependabot (.github/dependabot.yml) can't see when
 # nothings/stb moves on. This runs scripts/check_stb_freshness.sh on a schedule and
-# opens (or updates) a tracking issue instead of failing anything -- see SECURITY.md's
-# "Vendored dependencies" section for why a bump isn't a drop-in file replacement.
+# opens (or updates) a tracking issue when a header is stale, rather than failing the
+# run -- see SECURITY.md's "Vendored dependencies" section for why a bump isn't a
+# drop-in file replacement. A check that cannot run at all does fail the run.
 
 on:
   schedule:
@@ -23,36 +24,53 @@ jobs:
 
       - name: Check stb header freshness
         id: check
+        # 0 fresh, 1 stale (tracking issue below), anything else means the check
+        # could not run -- see the header of scripts/check_stb_freshness.sh.
         run: |
           set +e
-          out=$(bash scripts/check_stb_freshness.sh)
+          bash scripts/check_stb_freshness.sh > "$RUNNER_TEMP/stb-freshness.txt"
           status=$?
           set -e
-          echo "output<<EOF" >> "$GITHUB_OUTPUT"
-          echo "$out" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-          echo "stale=$status" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/stb-freshness.txt"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Fail if the check could not run
+        if: steps.check.outputs.status != '0' && steps.check.outputs.status != '1'
+        run: |
+          echo "::error::scripts/check_stb_freshness.sh exited with ${{ steps.check.outputs.status }}: the freshness check itself is broken"
+          exit 1
 
       - name: Open or update tracking issue
-        if: steps.check.outputs.stale == '1'
+        if: steps.check.outputs.status == '1'
         env:
           GH_TOKEN: ${{ github.token }}
-          BODY: ${{ steps.check.outputs.output }}
         run: |
           title="vendor/stb_image*.h are behind upstream nothings/stb"
-          existing=$(gh issue list --search "in:title \"$title\"" --state open --json number --jq '.[0].number' || true)
-          full_body="Detected by the scheduled \`stb-freshness-check\` workflow.
+          body="$RUNNER_TEMP/stb-freshness-issue.md"
+          {
+            cat <<'EOF'
+          Detected by the scheduled `stb-freshness-check` workflow.
 
-          \`\`\`
-          $BODY
-          \`\`\`
+          ```
+          EOF
+            cat "$RUNNER_TEMP/stb-freshness.txt"
+            cat <<'EOF'
+          ```
 
-          Bumping either file needs the local OOM-handling patch reapplied and
-          re-verified against \`tests/src/test_alloc_failure.c\` -- see SECURITY.md's
-          \"Vendored dependencies\" section and \`docs/development.md\`. Not a drop-in
-          file replacement."
+          Bumping either file means reapplying the local OOM-handling patches and
+          re-verifying them against `tests/src/test_alloc_failure.c` -- see SECURITY.md's
+          "Vendored dependencies" section and `docs/development.md`. It is not a drop-in
+          file replacement.
+          EOF
+          } > "$body"
+          # The label is created on first use, so the workflow does not depend on
+          # repository settings made by hand.
+          gh label create dependencies --color 0366d6 \
+            --description "Vendored code and dependency updates" 2> /dev/null || true
+          existing=$(gh issue list --search "in:title \"$title\"" --state open \
+            --json number --jq '.[0].number')
           if [ -n "$existing" ]; then
-            gh issue comment "$existing" --body "$full_body"
+            gh issue comment "$existing" --body-file "$body"
           else
-            gh issue create --title "$title" --body "$full_body" --label dependencies
+            gh issue create --title "$title" --body-file "$body" --label dependencies
           fi
