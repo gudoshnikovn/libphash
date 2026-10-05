@@ -65,6 +65,16 @@ CI runs a wider matrix than any of the above on its own (multiple platforms and
 architectures, TSan, a 32-bit leg, a format check, fuzzing) — it is the actual gate; the
 commands above are what let you find CI's problems before CI does.
 
+### If `test_golden_hashes` fails on your machine
+
+`test_golden_hashes` compares every hash with a committed value, exactly. If it fails on
+a platform or compiler the CI matrix does not cover, and you did not touch an algorithm,
+that is a finding about the library, not a mistake on your side: open an issue with the
+test's output and `ph_get_build_info()`'s line (`./build/test_build_info` prints it).
+Please do not send a regenerated golden file — the values are the same on every platform
+by design, so a different one points at a portability bug to fix, and the procedure is in
+`docs/development.md`, "Golden hashes".
+
 ### Fuzzing
 
 The `fuzz_load` harness (`tests/fuzz/fuzz_load.c`) feeds arbitrary bytes to

@@ -562,9 +562,30 @@ cmake -B build-stb -DPHASH_USE_LIBJPEG_TURBO=OFF && cmake --build build-stb --ta
 ./build-stb/test_golden_hashes --update
 ```
 
-`--update` writes the file only when every fixture and algorithm succeeded. A difference
-on one platform alone is not a reason to regenerate: it means that platform computes
-differently, which is the defect to find.
+`--update` writes the file only when every fixture and algorithm succeeded.
+
+**When the test fails**, the failure line names the fixture, the algorithm, the expected
+and the computed hex. What it means depends on where it fails:
+
+- **On one platform, compiler or option set only.** That build computes differently from
+  the others — a vectorized loop that reorders a sum, a contracted multiply-add, a
+  library function with a different rounding. This is the defect to find; regenerating
+  would hide it and leave the other builds disagreeing with the files.
+- **Everywhere, after a change you meant to make to an algorithm's output.** Regenerate
+  both files as above, in the same commit as the change, and say in the commit message
+  which algorithms moved and why. Any such change also gets a `CHANGELOG.md` entry
+  naming the algorithms whose stored hashes must be recomputed: every hash a user
+  stored with them stops matching new ones.
+- **Everywhere, after a change you did not mean to alter output** (a refactor, an
+  optimization). The change is not the no-op it was meant to be: fix it, do not
+  regenerate.
+- **With a hex string of a different length.** The digest's size changed, which is a
+  change to the algorithm's output format: as above, plus the `ph_digest_info()` size
+  the header documents.
+
+The rule behind all four: the files record what the library computes, and only a
+deliberate change to what it computes moves them. A difference between builds is never
+absorbed into the files, by a tolerance or by a per-platform copy.
 
 ### 2. Stability Tests (`tests/src/test_stability.c`)
 A colour load and a grayscale load of the same file must hash identically wherever both
