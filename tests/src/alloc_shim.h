@@ -58,10 +58,12 @@
  * runtime-probe/graceful-skip contract (see shim_is_effective() in the tests) covers
  * this the same way it covers a shared-library build. */
 #if defined(__SANITIZE_ADDRESS__)
-#    define PH_SHIM_SUPPORTED 0
+#    define PH_SHIM_SUPPORTED          0
+#    define PH_SHIM_UNSUPPORTED_REASON "built with AddressSanitizer"
 #elif defined(__has_feature)
 #    if __has_feature(address_sanitizer)
-#        define PH_SHIM_SUPPORTED 0
+#        define PH_SHIM_SUPPORTED          0
+#        define PH_SHIM_UNSUPPORTED_REASON "built with AddressSanitizer"
 #    endif
 #endif
 
@@ -77,7 +79,8 @@ extern void *__libc_realloc(void *, size_t);
 extern void __libc_free(void *);
 extern void *__libc_memalign(size_t, size_t);
 #    else
-#        define PH_SHIM_SUPPORTED 0
+#        define PH_SHIM_SUPPORTED          0
+#        define PH_SHIM_UNSUPPORTED_REASON "no allocator override for this libc"
 #    endif
 #endif
 

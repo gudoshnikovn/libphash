@@ -78,7 +78,8 @@ The compiler is not part of a preset: CMake takes it from `CC` (or
 | `shared` | `release` + `PHASH_BUILD_SHARED=ON` | — (`install-smoke-test` builds it through its scripts) |
 | `strict-warnings` | `release` + `PHASH_WARNINGS_AS_ERRORS=ON`, compile commands for clang-tidy | `strict-warnings` |
 | `minimal` | Release, stb_image only | `c-standard-matrix` (with `-DCMAKE_C_STANDARD=…`) |
-| `minimal-debug` | Debug, stb_image only | `valgrind` |
+| `debug` | Debug, every bundled decoder | `valgrind` (native) |
+| `minimal-debug` | Debug, stb_image only | `valgrind` (stb-only) |
 | `i686` | Release, `-m32`, libpng only | `build-and-test-32bit` |
 | `asan` | Debug, ASan + UBSan, every bundled decoder | `sanitizers` |
 | `tsan`, `tsan-png`, `tsan-stb` | Debug, TSan: every decoder / libpng + libwebp + zlib-ng / stb_image only | `tsan` |
@@ -460,7 +461,7 @@ and on any pull request targeting either:
 | `benchmark` | Regression gate against the PR's base commit — see the Benchmarks section below. |
 | `sanitizers` | ASan+UBSan via CMake, `-fno-sanitize-recover=all` (first report aborts the run). |
 | `tsan` | ThreadSanitizer over the threaded batch path (`src/batch.c`) and the "one context per thread" contract. |
-| `valgrind` | The allocation-failure test suite (`tests/src/test_alloc_failure.c`) under Valgrind — independent of ASan/LSan, which don't mix with it. |
+| `valgrind` | The allocation-failure test suite (`tests/src/test_alloc_failure.c`) under Valgrind — independent of ASan/LSan, which don't mix with it, and the only place that test injects failures under a memory checker: its allocator shim stands down under ASan. Two legs: stb_image only, with a subset of the library's allocation-heavy tests, and every bundled decoder, which fails allocations inside libjpeg-turbo, libpng and libwebp. |
 | `fuzz` | A short (90s) libFuzzer run per PR — a fast regression check, not real corpus exploration; see "Fuzzing" below for the real thing. |
 | `install-smoke-test` | `scripts/smoke_install.sh` and `scripts/smoke_add_subdirectory.sh` — both consumer routes (`find_package`, pkg-config, `add_subdirectory()`), both link configurations; `scripts/smoke_make_install.sh` — the Makefile's `install`/`uninstall`; `scripts/check_exported_symbols.sh`, which fails unless the shared library exports exactly the functions of `include/libphash.h` (no internal helper, no `stb_image`, no vendored decoder); `scripts/build_examples.sh`, which builds and runs `examples/` against the shared library. |
 

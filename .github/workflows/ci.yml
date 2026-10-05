@@ -631,13 +631,35 @@ jobs:
   # shadow memory looks like a leak to Valgrind and vice versa), and it catches a
   # different class of memory error (e.g. uninitialized-read) that neither
   # sanitizer nor test_alloc_failure's own shim-based leak accounting covers.
-  # stb-only + a fixed subset, not the whole matrix: Valgrind's own instrumentation
-  # overhead makes a full run too slow for every CI run; this subset concentrates on
-  # the allocation-heavy paths (loader, core, batch, the alloc-failure-injection
-  # test itself).
+  # It is also the only job where test_alloc_failure injects anything under a memory
+  # checker: its allocator shim stands down under ASan (tests/src/alloc_shim.h), so in
+  # the sanitizers job that test passes without running a single scenario.
+  #
+  # Two legs, a fixed subset each: Valgrind's instrumentation overhead makes the whole
+  # suite too slow for every CI run.
+  #  - stb-only concentrates on the allocation-heavy paths of the library itself
+  #    (loader, core, batch, the alloc-failure-injection test).
+  #  - native fails allocations inside libjpeg-turbo, libpng and libwebp -- the
+  #    injection points the stb-only build does not have -- and checks that each
+  #    failure is reported and leaks nothing.
   valgrind:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: stb-only
+            preset: minimal-debug
+            submodules: 'false'
+            ccache: 'false'
+            tests: test_alloc_failure test_api_guards test_core_extended test_loader test_batch test_pixel_count_overflow
+          - name: native
+            preset: debug
+            submodules: 'true'
+            ccache: 'true'
+            tests: test_alloc_failure test_loader
+    name: valgrind (${{ matrix.name }})
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
@@ -645,23 +667,35 @@ jobs:
 
     - uses: ./.github/actions/setup-build
       with:
-        submodules: 'false'
+        ccache: ${{ matrix.ccache }}
+        ccache-key: ${{ matrix.name }}
+        submodules: ${{ matrix.submodules }}
         apt-packages: cmake valgrind
 
-    - name: Configure CMake (stb_image only, no sanitizers)
-      run: cmake --preset minimal-debug
+    - name: Configure CMake
+      run: cmake --preset ${{ matrix.preset }}
 
     - name: Build
-      run: >
-        cmake --build --preset minimal-debug --target test_alloc_failure --target test_api_guards
-        --target test_core_extended --target test_loader --target test_batch
-        --target test_pixel_count_overflow -j
-
-    - name: Run subset under Valgrind
+      env:
+        TESTS: ${{ matrix.tests }}
       run: |
-        printf 'valgrind --error-exitcode=1 --leak-check=full --errors-for-leak-kinds=all ./build/minimal-debug/%s\n' \
-          test_alloc_failure test_api_guards test_core_extended test_loader test_batch \
-          test_pixel_count_overflow | scripts/run_parallel.sh 4
+        targets=()
+        for t in $TESTS; do targets+=(--target "$t"); done
+        cmake --build --preset ${{ matrix.preset }} -j "${targets[@]}"
+
+    # somalloc=nouserintercepts: Valgrind replaces malloc() in libc only, not the one
+    # test_alloc_failure defines in the executable, so the test's allocator shim sees
+    # every call (and forwards it to libc, where Valgrind tracks it). Without it the
+    # shim sees nothing and the test skips; PH_EXPECT_ALLOC_SHIM=1 makes that skip a
+    # failure.
+    - name: Run subset under Valgrind
+      env:
+        TESTS: ${{ matrix.tests }}
+        PH_EXPECT_ALLOC_SHIM: 1
+      run: |
+        for t in $TESTS; do
+          echo "valgrind --soname-synonyms=somalloc=nouserintercepts --error-exitcode=1 --leak-check=full --errors-for-leak-kinds=all ./build/${{ matrix.preset }}/$t"
+        done | scripts/run_parallel.sh 4
 
   fuzz:
     runs-on: ubuntu-24.04

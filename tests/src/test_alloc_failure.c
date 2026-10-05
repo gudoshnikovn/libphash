@@ -7,7 +7,10 @@
  *   3. the context survives the failure -- after a failed call the same context
  *      still produces the same hashes as an untouched one.
  *
- * The allocation-failure injection itself lives in alloc_shim.h.
+ * The allocation-failure injection itself lives in alloc_shim.h. A build the shim
+ * cannot intercept skips the run; with PH_EXPECT_ALLOC_SHIM=1 that skip is a failure
+ * instead, for a CI job that exists to run the injection (under Valgrind, whose own
+ * malloc replacement must be kept out of the test binary for the shim to see a call).
  */
 
 #include "alloc_shim.h"
@@ -834,9 +837,22 @@ int main(void) {
     printf("Running allocation-failure tests...\n");
 
     if (!shim_is_effective()) {
-        printf("[SKIP] the allocator shim does not intercept this build "
-               "(unsupported libc, or libphash linked as a shared library)\n");
-        return 0;
+        const char *expect = getenv("PH_EXPECT_ALLOC_SHIM");
+        int required = expect && *expect && strcmp(expect, "0") != 0;
+        const char *verdict = required ? "[FAIL]" : "[SKIP]";
+        /* The compile-time reasons are named by alloc_shim.h; a shim that compiled in
+         * but saw no allocation means libphash's malloc() calls bypass it -- a shared
+         * libphash, or a memory checker that replaces malloc() in the executable. */
+#ifdef PH_SHIM_UNSUPPORTED_REASON
+        printf("%s the allocator shim is not compiled in: %s (tests/src/alloc_shim.h)\n", verdict,
+               PH_SHIM_UNSUPPORTED_REASON);
+#else
+        printf("%s the allocator shim does not intercept this build (libphash linked as "
+               "a shared library, or malloc() replaced in the executable -- under Valgrind, "
+               "run with --soname-synonyms=somalloc=nouserintercepts)\n",
+               verdict);
+#endif
+        return required ? 1 : 0;
     }
 
     g_png = read_file(PNG_PATH);

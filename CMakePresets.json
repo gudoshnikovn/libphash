@@ -42,6 +42,16 @@
       }
     },
     {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug, every bundled decoder",
+      "description": "The native Valgrind configuration: the allocation-failure paths inside libjpeg-turbo, libpng and libwebp.",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "PHASH_STRICT_DEPS": "ON"
+      }
+    },
+    {
       "name": "minimal",
       "inherits": "base",
       "displayName": "Release, stb_image only",
@@ -152,6 +162,11 @@
       "name": "minimal",
       "configurePreset": "minimal",
       "configuration": "Release"
+    },
+    {
+      "name": "debug",
+      "configurePreset": "debug",
+      "configuration": "Debug"
     },
     {
       "name": "minimal-debug",
