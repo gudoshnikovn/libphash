@@ -190,11 +190,11 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 `libphash` bundles several high-performance libraries to ensure zero-dependency builds:
 
-* **libjpeg-turbo (v3.2.0)**: IJG, BSD-3-Clause, zlib.
-* **libpng (v1.6.58)**: libpng License 2.0.
-* **libwebp (v1.6.0)**: WebP License (BSD 3-Clause).
-* **zlib-ng (v2.3.3)**: zlib License.
-* **stb_image (v2.30)**: Public Domain / MIT.
-* **stb_image_resize2 (v2.18)**: Public Domain / MIT.
+* **[libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo) (v3.2.0)**: IJG, BSD-3-Clause, zlib.
+* **[libpng](https://github.com/pnggroup/libpng) (v1.6.59)**: libpng License 2.0.
+* **[libwebp](https://github.com/webmproject/libwebp) (v1.6.0)**: WebP License (BSD 3-Clause).
+* **[zlib-ng](https://github.com/zlib-ng/zlib-ng) (v2.3.3)**: zlib License.
+* **[stb_image](https://github.com/nothings/stb) (v2.30)**: Public Domain / MIT.
+* **[stb_image_resize2](https://github.com/nothings/stb) (v2.18)**: Public Domain / MIT.
 
 For detailed licensing information regarding these components, please refer to [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
