@@ -42,9 +42,9 @@ struct stored_hash {
 ## Restoring 1.x hash values (where possible)
 
 **Auto-orientation and alpha compositing are the two breaking changes you can opt out
-of.** Every other hash value change below (color hash, mHash, color moments, BMH, radial,
-JPEG decoding) has no "old mode" switch — recompute is the only path, per each item's own
-entry.
+of.** Every other hash value change below (aHash, pHash, BMH, color hash, mHash, color
+moments, radial, JPEG decoding) has no "old mode" switch — recompute is the only path, per
+each item's own entry.
 
 ```c
 ph_context_t *ctx;
@@ -304,6 +304,27 @@ out.
 
 # Hash values
 
+## Which stored values change
+
+Measured on 807 JPEG and PNG files (photographs, wallpapers, textures, icons), each
+hashed by 1.10.4 and by 2.0, both built with the Makefile — stb_image decodes JPEG and
+PNG in both, so the JPEG decoder change below is not in these numbers — and with
+auto-orientation off:
+
+| Algorithm | Values that change | Why | Opt out |
+|---|---|---|---|
+| aHash | 572 of 807 (71 %) | exact area-average reduction, `>=` against the exact mean | no |
+| pHash | 490 of 807 (61 %) | median threshold with a margin | no |
+| BMH | 639 of 807 (79 %) | median threshold, not mean | no |
+| dHash | 170 of 807 (21 %), all PNGs with transparency | alpha compositing | `PH_ALPHA_IGNORE` restores all but 2 |
+| wHash | 129 of 807 (16 %), all PNGs with transparency | alpha compositing | `PH_ALPHA_IGNORE` restores all but 2 |
+| mHash, ColorHash, ColorMoments, Radial | all | rewritten; the digests are a different size or kind | no |
+
+On top of these, in every algorithm: a photo with an EXIF/WebP rotation tag hashes as
+displayed (opt out with `ph_context_set_auto_orient(ctx, 0)`), and with the native JPEG
+decoder every JPEG hash can move by a few bits (below). A 1.x build that fused
+multiply-adds — Clang's default on arm64 — also differs in pHash on another 20 of the 807.
+
 ## Rewritten algorithms: no compatible mode, recompute is the only option
 
 Each of these changed enough that a stored 1.x value **cannot** be compared against a
@@ -406,7 +427,7 @@ target_link_libraries(my_app PRIVATE phash::phash)
 $ cc my_app.c $(pkg-config --cflags --libs libphash) -o my_app
 ```
 
-Both forms pull in whatever backend libraries (`-lphash_jpeg`, `-lpng16`, `-lwebp`,
+Both forms pull in whatever backend libraries (`-lphash_jpeg`, `-lpng16`, `-lwebpdecoder`,
 `-lz`, ...) the installed build was configured with, so a static link does not need
 that list tracked by hand.
 

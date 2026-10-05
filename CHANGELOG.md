@@ -64,8 +64,8 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   pairs of different images share a hash (1208 → 1051) — and the reduction is shared with
   pHash, wHash and BMH, so `ph_compute_multi()` pays for it once. The tie-break is `>=`,
   the rule BMH follows, against the exact mean: an image that is uniform at 8×8 hashes to
-  all ones instead of all zeros. Across 807 photographs and textures about two thirds of
-  aHash values move, mostly by 1–6 bits.
+  all ones instead of all zeros. Across 807 photographs and textures about seven in ten
+  aHash values move, half of those by 5 bits or fewer.
   *Restore the old behaviour:* not possible; recompute stored aHash values.
 
 - **pHash thresholds its DCT block at the median plus 0.1 % of the AC coefficients'
@@ -76,7 +76,7 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   same photographs false matches at 95 % recall fall from 14.2 % to 6.8 %. pHash values
   differ from the reference `ph_dct_imagehash()` (and from 1.x) wherever coefficients sit
   within the margin of the median: across 807 photographs and textures, about three in
-  five, mostly by 1–3 bits.
+  five, half of those by 5 bits or fewer.
   *Restore the old behaviour:* not possible; recompute stored pHash values.
 
 - **Images with transparency are hashed as they look.** 1.x dropped the alpha channel and
@@ -99,11 +99,12 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   *Restore the old behaviour:* not possible — recompute stored JPEG hashes.
 
 - **The Block Mean Hash thresholds against the median of the block means, not their
-  arithmetic mean, so every BMH value changes.** That is what Yang, Gu and Niu's method 1
+  arithmetic mean, so most BMH values change.** That is what Yang, Gu and Niu's method 1
   specifies (step d and equation 3.9), and the median makes the bit distribution balanced
   by construction — under the mean, a dark image with a few bright blocks produces a
-  lopsided hash. On photographs the two rules almost agree, so most values move by a bit
-  or two; on images with skewed block values they move a great deal. BMH values differ
+  lopsided hash. Across 807 photographs and textures four in five values move, half of
+  those by 23 of 256 bits or fewer; on images with skewed block values they move a great
+  deal. BMH values differ
   from OpenCV's `BlockMeanHash`, which thresholds on the mean (in a variable it calls
   `median`).
   *Restore the old behaviour:* not possible; recompute any stored BMH digests.
@@ -322,8 +323,9 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   libjpeg-turbo's DCT-domain scaling. Default is `PH_DECODE_SCALE_FULL`. Only the JPEG
   backend honors it; PNG has no format-level scaled decode and libwebp's scaling API
   resizes *after* a full decode (no decode-time saving), so both backends decode at full
-  resolution regardless of the setting. Measured tradeoffs (speed saturates around 18% at
-  1/8 because entropy decoding isn't skipped; accuracy holds on photographic content but
+  resolution regardless of the setting. Measured tradeoffs (on a 20-megapixel photo, from
+  full to 1/8, the decode alone is 1.3× faster since entropy decoding is not skipped, while
+  load plus pHash is 1.4× and load plus Radial 2.5×; accuracy holds on photographic content but
   pHash and mHash can exceed this library's own same-scene-transform contract on fine
   periodic textures) are in the setter's doc comment in `include/libphash.h`. Radial,
   ColorMoments and ColorHash are not resize-based, so at any scale other than full they
@@ -493,6 +495,8 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   as slightly different pixels. 1.x differed between architectures on near-uniform
   images: pHash's DCT summed in a different order on arm64, and its bare median
   threshold turned the rounding into flipped bits.
+
+- **The bundled libjpeg-turbo is 3.2.0** (1.10.4 bundled 3.1.4).
 
 ### Fixed
 
