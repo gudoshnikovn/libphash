@@ -260,7 +260,9 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   linux-arm64, macos-arm64 and windows-x86_64 on the GitHub Releases page, each built
   with the full vendored decoder set and smoke-tested in isolation before publishing.
   The archives are reproducible: rebuilt from the same tag with the same toolchain, they
-  match `SHA256SUMS.txt` byte for byte. See the README's "Prebuilt binaries" section.
+  match `SHA256SUMS.txt` byte for byte. Each carries a build provenance attestation that
+  `gh attestation verify` checks against this repository's release workflow (`SECURITY.md`).
+  See the README's "Prebuilt binaries" section.
 
 - **Batch API.** `ph_hash_files()` and `ph_hash_buffers()` hash a batch of files or
   in-memory buffers, optionally across an internal thread pool (`threads`: 0 = one worker
