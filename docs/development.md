@@ -263,7 +263,7 @@ standard library, not the platform's `tar`/`zip`): sorted entries, every timesta
 `SOURCE_DATE_EPOCH` — by default the time of the commit being packed — owner 0/0, and a
 gzip header with no time or name. `scripts/check_reproducible.sh cmake|make|package`
 builds twice and compares every installed file, `libphash.a` or the release archives; CI
-runs the first two on Linux (`install-smoke-test`, where it also packages) and macOS
+runs all three on Linux (`reproducible-builds`, one leg each) and the first two on macOS
 (`build-and-test`).
 
 ### Installed package and `pkg-config`
@@ -473,6 +473,7 @@ and on any pull request targeting either:
 | `valgrind` | The allocation-failure test suite (`tests/src/test_alloc_failure.c`) under Valgrind — independent of ASan/LSan, which don't mix with it, and the only place that test injects failures under a memory checker: its allocator shim stands down under ASan. Two legs: stb_image only, with a subset of the library's allocation-heavy tests, and every bundled decoder, which fails allocations inside libjpeg-turbo, libpng and libwebp. |
 | `fuzz` | A short (90s) libFuzzer run per PR — a fast regression check, not real corpus exploration; see "Fuzzing" below for the real thing. |
 | `install-smoke-test` | `scripts/smoke_install.sh` and `scripts/smoke_add_subdirectory.sh` — both consumer routes (`find_package`, pkg-config, `add_subdirectory()`), both link configurations; `scripts/smoke_make_install.sh` — the Makefile's `install`/`uninstall`; `scripts/check_exported_symbols.sh`, which fails unless the shared library exports exactly the functions of `include/libphash.h` (no internal helper, no `stb_image`, no vendored decoder); `scripts/build_examples.sh`, which builds and runs `examples/` against the shared library. |
+| `reproducible-builds` | `scripts/check_reproducible.sh` in three parallel legs: the CMake install trees (static and shared), the Makefile's `libphash.a`, and the linux-x86_64 release archives, each built twice and compared byte for byte. |
 
 Every build job starts the same way: a plain `actions/checkout`, then the local
 composite action [`.github/actions/setup-build`](../.github/actions/setup-build/action.yml),

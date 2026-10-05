@@ -176,7 +176,7 @@ jobs:
     - name: Check decoder symbols
       run: ./scripts/check_decoder_symbols.sh build/${{ matrix.preset }}/test_png_variants
 
-    # Apple's ar and ranlib take ZERO_AR_DATE rather than D; install-smoke-test covers
+    # Apple's ar and ranlib take ZERO_AR_DATE rather than D; reproducible-builds covers
     # the GNU side.
     - name: Reproducible builds (macOS toolchain)
       if: runner.os == 'macOS'
@@ -923,9 +923,45 @@ jobs:
         name: fuzz-crashes
         path: /tmp/fuzz-artifacts/
 
+  # Two builds of the same sources give byte-identical static archives, install trees
+  # and release archives, so a published archive can be rebuilt and checked against
+  # SHA256SUMS.txt. One leg per kind, side by side: each builds its target twice, and in
+  # sequence the three would be the longest job of the run.
+  reproducible-builds:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - kind: cmake
+            args: cmake
+            submodules: 'true'
+          - kind: make
+            args: make
+            submodules: 'false'
+          - kind: package
+            args: package linux-x86_64
+            submodules: 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    name: reproducible-builds (${{ matrix.kind }})
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - uses: ./.github/actions/setup-build
+      with:
+        ccache: 'true'
+        ccache-key: ${{ matrix.kind }}
+        submodules: ${{ matrix.submodules }}
+        apt-packages: cmake nasm pkg-config
+
+    - name: Reproducible build (${{ matrix.kind }})
+      run: ./scripts/check_reproducible.sh ${{ matrix.args }}
+
   install-smoke-test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
@@ -953,15 +989,6 @@ jobs:
     # internal ph_* helpers, not stb_image, not the vendored decoders it links.
     - name: Check the shared library's exported symbols
       run: ./scripts/check_exported_symbols.sh
-
-    # Two builds of the same sources give byte-identical static archives, install trees
-    # and release archives, so a published archive can be rebuilt and checked against
-    # SHA256SUMS.txt.
-    - name: Reproducible builds (CMake install trees, Makefile archive, release archives)
-      run: |
-        ./scripts/check_reproducible.sh cmake
-        ./scripts/check_reproducible.sh make
-        ./scripts/check_reproducible.sh package linux-x86_64
 
     - name: Build and run examples/
       run: ./scripts/build_examples.sh
