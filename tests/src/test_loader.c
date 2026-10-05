@@ -946,6 +946,35 @@ void test_stb_path_limits() {
     PASS("test_stb_path_limits");
 }
 
+// A decoder can accept a header that declares zero width or height -- stb_image's HDR
+// reader takes "+X 0", or "+X X 4", whose width strtol() reads as 0 -- and return an
+// image with no pixels. A load never succeeds with one: every hash would describe nothing.
+static void test_zero_dimension_rejected(void) {
+    static const char *const headers[] = {
+        "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 4 +X 0\n",
+        "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 4 +X X 4\n",
+        "#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 0 +X 4\n",
+    };
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    for (size_t i = 0; i < sizeof(headers) / sizeof(headers[0]); i++) {
+        uint8_t buf[256];
+        size_t n = strlen(headers[i]);
+        memcpy(buf, headers[i], n);
+        memset(buf + n, 0x80, 64); /* pixel data, should the decoder read any */
+        n += 64;
+        ph_error_t err = ph_load_from_memory(ctx, buf, n);
+        ASSERT_MSG(err == PH_ERR_CORRUPT_DATA, "header %zu: %d (%s)", i, err,
+                   ph_get_last_error_message(ctx));
+        int w = -1, h = -1;
+        ph_context_get_dimensions(ctx, &w, &h, NULL);
+        ASSERT_INT_EQ(0, w);
+        ASSERT_INT_EQ(0, h);
+    }
+    ph_free(ctx);
+    PASS("test_zero_dimension_rejected");
+}
+
 int main() {
     test_stb_path_limits();
     test_truncated_input_rejected_in_every_build();
@@ -968,5 +997,6 @@ int main() {
     test_bmp_negative_height_not_too_large();
     test_bmp_extreme_aspect_ratio_rejected();
     test_stb_failure_classification();
+    test_zero_dimension_rejected();
     return 0;
 }

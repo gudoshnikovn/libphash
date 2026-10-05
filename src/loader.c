@@ -603,6 +603,16 @@ uint8_t *ph_decode_buffer(const uint8_t *buffer, size_t length, int *width, int 
             uint8_t *data =
                 backends[i].decode(buffer, length, width, height, channels, req_comp, max_pixels,
                                    decode_scale, &err, err_msg, err_msg_cap);
+            if (data && (*width <= 0 || *height <= 0)) {
+                /* A header can declare a zero dimension that a decoder accepts (stb_image's
+                 * HDR reader takes "+X 0"). An image with no pixels is not a load. */
+                ph_free_image(data);
+                if (out_err) {
+                    *out_err = PH_ERR_CORRUPT_DATA;
+                }
+                ph_set_err_msg(err_msg, err_msg_cap, "Image has a zero width or height");
+                return NULL;
+            }
             if (data) {
                 const char *truncated = ph_container_truncation(buffer, length);
                 if (!truncated) {

@@ -17,6 +17,7 @@ configuration from the last 8 bytes of an input (see the comment at the top of
 | `webp_lossy.webp`, `webp_lossless.webp`, `webp_alpha.webp` | `cwebp` 1.6.0 from `tests/data/png/rgb8.png` (`-q 50 -m 6`; `-lossless`) and `rgba8.png` (`-q 50 -alpha_q 50`). |
 | `webp_animated.webp` | `img2webp -loop 0 -lossy -d 100 rgb8.png rgba8.png` (two frames). The library rejects animated WebP, and that rejection is a path of its own. |
 | `webp_broken_truncated.webp` | Copy of `tests/data/png/broken_truncated.webp`. |
+| `hdr_zero_width.hdr` | Found by the fuzzer: an HDR header whose width reads as 0 (`+X X 4`), which the decoder accepted. The load fails with `PH_ERR_CORRUPT_DATA`. |
 | `exif_*` | Hand-built JPEG and PNG files whose EXIF block is malformed in one way each (bad byte order mark, IFD offset out of bounds, giant entry count, wrong tag type, `eXIf` after `IEND`, ...): the orientation parser's error paths. |
 
 ## A crash found by the fuzzer
