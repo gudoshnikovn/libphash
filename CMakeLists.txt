@@ -3,6 +3,8 @@
 cmake_minimum_required(VERSION 3.21)
 project(libphash VERSION 2.0.0 LANGUAGES C)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+# Byte-identical static archives from identical sources (see the file).
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/deterministic_archives.cmake)
 
 # Explicit C standard. Left unset, the dialect is whatever the compiler defaults to
 # (gnu17 on modern gcc/clang, gnu23 on GCC 15, gnu11 or lower on old ones). C17 is
@@ -562,7 +564,8 @@ if(PHASH_USE_LIBJPEG_TURBO)
         -DENABLE_STATIC:BOOL=ON
         -DWITH_TURBOJPEG:BOOL=OFF
         -DWITH_TOOLS:BOOL=OFF
-        -DWITH_TESTS:BOOL=OFF)
+        -DWITH_TESTS:BOOL=OFF
+        -DCMAKE_PROJECT_INCLUDE:FILEPATH=${CMAKE_CURRENT_SOURCE_DIR}/cmake/deterministic_archives.cmake)
     if(CMAKE_MSVC_RUNTIME_LIBRARY)
         list(APPEND _phash_libjpeg_cache_args
             -DCMAKE_MSVC_RUNTIME_LIBRARY:STRING=${CMAKE_MSVC_RUNTIME_LIBRARY})

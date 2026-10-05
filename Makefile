@@ -154,9 +154,21 @@ debug:
 format:
 	./scripts/format.sh
 
-# Library build
+# Library build, byte-identical from identical sources: GNU and LLVM ar zero the member
+# timestamps with D; Apple's ar has no D and reads ZERO_AR_DATE instead (the same rule
+# as cmake/deterministic_archives.cmake). Decided by what `ar --version` says, not by
+# the OS -- Linux can have LLVM's ar, macOS GNU's.
+AR_VERSION := $(shell $(AR) --version 2>/dev/null)
+ifneq (,$(filter GNU LLVM,$(AR_VERSION)))
+    AR_DETERMINISTIC = $(AR) rcsD
+else ifeq ($(UNAME_S),Darwin)
+    AR_DETERMINISTIC = ZERO_AR_DATE=1 $(AR) rcs
+else
+    AR_DETERMINISTIC = $(AR) rcs
+endif
+
 $(LIB_NAME): $(OBJS)
-	ar rcs $@ $^
+	$(AR_DETERMINISTIC) $@ $^
 
 # Object file compilation.
 # -fvisibility=hidden: only what include/libphash.h marks PH_API is visible outside the

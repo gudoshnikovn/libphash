@@ -143,6 +143,14 @@ jobs:
     - name: Check decoder symbols
       run: ./scripts/check_decoder_symbols.sh build/test_png_variants
 
+    # Apple's ar and ranlib take ZERO_AR_DATE rather than D; install-smoke-test covers
+    # the GNU side.
+    - name: Reproducible builds (macOS toolchain)
+      if: runner.os == 'macOS'
+      run: |
+        ./scripts/check_reproducible.sh cmake
+        ./scripts/check_reproducible.sh make
+
   # Warnings as errors on the project's own code -- library, tests, fuzzer, benchmark --
   # and never on the vendored decoders (PHASH_WARNINGS_AS_ERRORS). A job of its own
   # rather than a flag on every build: a build from source must not fail because a newer
@@ -706,6 +714,13 @@ jobs:
     # internal ph_* helpers, not stb_image, not the vendored decoders it links.
     - name: Check the shared library's exported symbols
       run: ./scripts/check_exported_symbols.sh
+
+    # Two builds of the same sources give byte-identical static archives and install
+    # trees, so the files in a published release archive can be rebuilt and compared.
+    - name: Reproducible builds (CMake install trees, Makefile archive)
+      run: |
+        ./scripts/check_reproducible.sh cmake
+        ./scripts/check_reproducible.sh make
 
     - name: Build and run examples/
       run: ./scripts/build_examples.sh
