@@ -171,6 +171,24 @@ option(PHASH_COVERAGE "Instrument phash and its tests with --coverage (gcov/lcov
 option(PHASH_WARNINGS_AS_ERRORS "Treat warnings in libphash's own sources as errors (CI)" OFF)
 mark_as_advanced(PHASH_WARNINGS_AS_ERRORS)
 
+# --- Fuzzing instrumentation (libFuzzer, Clang only) ---
+# Coverage feedback and ASan/UBSan for every C file in the build, the vendored decoders
+# included: libpng's chunk parser, zlib-ng's inflate, libwebp's VP8 decoder and
+# libjpeg-turbo's Huffman decoder are the state machines worth fuzzing, and libFuzzer can
+# only steer by edges it sees. Set in CMAKE_C_FLAGS, before any decoder is configured, so
+# the add_subdirectory() decoders inherit it and the libjpeg-turbo ExternalProject is
+# passed it -- a flag on the phash target alone would leave the decoders unseen.
+# fuzzer-no-link: the instrumentation without libFuzzer's main(), so the same library
+# also links into the plain test binaries; only fuzz_load links -fsanitize=fuzzer.
+# CMake puts CMAKE_C_FLAGS on link lines as well, so every executable, try_compile
+# checks included, gets the sanitizer runtimes.
+if(PHASH_BUILD_FUZZERS)
+    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "PHASH_BUILD_FUZZERS requires Clang (libFuzzer is a Clang/compiler-rt feature).")
+    endif()
+    string(APPEND CMAKE_C_FLAGS " -fsanitize=fuzzer-no-link,address,undefined -g -O1")
+endif()
+
 # --- Vendored decoder submodules ---
 # A clone without --recursive leaves vendor/ empty. Every enabled decoder whose submodule
 # is missing is reported here, in one message with the command that fetches them all,
@@ -524,9 +542,10 @@ if(PHASH_USE_LIBJPEG_TURBO)
     # a FATAL_ERROR when it is not the top-level project. It is configured inside this
     # build tree, so every build tree gets its own copy, built by the same compiler,
     # launcher, toolchain, architecture, build type and C flags (sanitizers included).
-    # PHASH_COVERAGE and the fuzzer instrumentation are options of libphash's own
-    # targets, so the decoder is compiled without them. The generator is this
-    # project's, which ExternalProject passes on by default.
+    # The fuzzer instrumentation is part of CMAKE_C_FLAGS and reaches it with them;
+    # PHASH_COVERAGE is an option of libphash's own targets, so the decoder is compiled
+    # without it. The generator is this project's, which ExternalProject passes on by
+    # default.
     include(ExternalProject)
     set(PHASH_LIBJPEG_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/vendor/libjpeg-turbo)
     # The archive is libjpeg.a, except with MSVC (jpeg-static.lib); a multi-config
@@ -951,26 +970,12 @@ if(PHASH_ENABLE_MOCK_BACKEND)
 endif()
 
 # --- Fuzzing (libFuzzer, Clang only) ---
-# Configured before the tests below on purpose: when fuzzers and tests are enabled
-# together, the ctest binaries link a sanitizer-instrumented libphash and therefore
-# need the very same sanitizer flags at link time. Without them the link fails on
-# undefined __asan_*/__ubsan_* symbols.
+# The instrumentation itself is set globally, near the options above.
 if(PHASH_BUILD_FUZZERS)
-    if(NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
-        message(FATAL_ERROR "PHASH_BUILD_FUZZERS requires Clang (libFuzzer is a Clang/compiler-rt feature).")
-    endif()
-
-    # Instrument the library for coverage/sanitizers without pulling in a fuzzer main,
-    # so it can still be linked into the plain ctest binaries below.
-    set(PHASH_FUZZ_INSTRUMENT_FLAGS -fsanitize=fuzzer-no-link,address,undefined)
-    target_compile_options(phash PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS} -g -O1)
-    target_link_options(phash PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS})
-
     add_executable(fuzz_load tests/fuzz/fuzz_load.c)
     target_compile_options(fuzz_load PRIVATE ${PHASH_OWN_COMPILE_OPTIONS})
     target_link_libraries(fuzz_load PRIVATE phash)
-    target_compile_options(fuzz_load PRIVATE -fsanitize=fuzzer,address,undefined -g -O1)
-    target_link_options(fuzz_load PRIVATE -fsanitize=fuzzer,address,undefined)
+    target_link_options(fuzz_load PRIVATE -fsanitize=fuzzer)
 endif()
 
 # --- Tests ---
@@ -1000,11 +1005,6 @@ if(PHASH_BUILD_TESTS)
             TEST_DATA_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/data\"
             $<TARGET_PROPERTY:phash,COMPILE_DEFINITIONS>
         )
-        if(PHASH_BUILD_FUZZERS)
-            # Match the instrumentation of the library the test links against.
-            target_compile_options(${test_name} PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS} -g -O1)
-            target_link_options(${test_name} PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS})
-        endif()
         if(PHASH_COVERAGE)
             # -fprofile-update=atomic: see the matching comment on the `phash`
             # target above -- must match here too, since test_batch_stress.c and
@@ -1065,11 +1065,7 @@ if(PHASH_BUILD_TESTS)
     target_compile_definitions(bench_hash PRIVATE
         TEST_DATA_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/tests/data\")
     # Linked against the same instrumented library as the tests, so it takes the same
-    # link-time flags (the profiling runtime, the sanitizer coverage hooks).
-    if(PHASH_BUILD_FUZZERS)
-        target_compile_options(bench_hash PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS})
-        target_link_options(bench_hash PRIVATE ${PHASH_FUZZ_INSTRUMENT_FLAGS})
-    endif()
+    # link-time flags (the profiling runtime).
     if(PHASH_COVERAGE)
         target_link_options(bench_hash PRIVATE --coverage)
     endif()

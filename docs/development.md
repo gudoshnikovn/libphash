@@ -566,7 +566,10 @@ bound is 3 bits.
 A libFuzzer harness over `ph_decode_buffer()` — the same single entry point every
 format-decoding path funnels through (see `docs/architecture.md`). Build it with
 `-DPHASH_BUILD_FUZZERS=ON`; this is a configure-time error under GCC, since libFuzzer
-needs compiler-rt, which only Clang ships:
+needs compiler-rt, which only Clang ships. The option instruments every C file in the
+build — libphash and the vendored libjpeg-turbo, libpng, zlib-ng and libwebp alike — with
+libFuzzer's coverage feedback and ASan/UBSan, so the fuzzer steers by the decoders' own
+branches and a memory error inside a decoder is reported where it happens:
 
 ```bash
 cmake -B build-fuzz -DPHASH_BUILD_FUZZERS=ON -DCMAKE_BUILD_TYPE=Debug -DCMAKE_C_COMPILER=clang
