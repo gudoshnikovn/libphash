@@ -153,7 +153,7 @@ option(PHASH_USE_ZLIB_NG "Use bundled zlib-ng (zlib-compat) instead of system zl
 option(PHASH_OPTIMIZE_NATIVE "Optimize for host CPU architecture (-march=native)" OFF)
 option(PHASH_BUILD_FUZZERS "Build libFuzzer harnesses (requires Clang)" OFF)
 option(PHASH_ENABLE_MOCK_BACKEND "Register the DE AD mock decoder in the loader's backend table (test-only; must never be ON in a shipped build)" OFF)
-option(PHASH_STRICT_DEPS "Fail the configure step instead of silently falling back when a bundled decoder dependency (e.g. vendored libjpeg-turbo/zlib-ng) can't be found" OFF)
+option(PHASH_STRICT_DEPS "Fail the configure step, instead of falling back to stb_image (or the system zlib), when an enabled vendored decoder submodule is not checked out" OFF)
 option(PHASH_ENABLE_THREADS "Let ph_hash_files()/ph_hash_buffers() spawn a pool of OS threads (pthreads/Win32) instead of always running sequentially" ON)
 # `make coverage` (Makefile) measures only the stb_image-only path: the native
 # decoders in src/loaders/ compile to nothing or are not built at all under that flow,
@@ -168,6 +168,58 @@ option(PHASH_COVERAGE "Instrument phash and its tests with --coverage (gcov/lcov
 # default.
 option(PHASH_WARNINGS_AS_ERRORS "Treat warnings in libphash's own sources as errors (CI)" OFF)
 mark_as_advanced(PHASH_WARNINGS_AS_ERRORS)
+
+# --- Vendored decoder submodules ---
+# A clone without --recursive leaves vendor/ empty. Every enabled decoder whose submodule
+# is missing is reported here, in one message with the command that fetches them all,
+# before anything tries to configure it -- add_subdirectory() on an empty directory fails
+# with a cascade of errors that never name the cause. Without PHASH_STRICT_DEPS the build
+# goes on without them: JPEG, PNG and WebP fall back to stb_image (which has no WebP
+# decoder), zlib-ng to the system zlib. zlib-ng has one user, libpng: it is checked only
+# when libpng is requested and configured only when libpng is built, and a build without
+# libpng reports no zlib in ph_get_build_info().
+set(_phash_missing_submodules "")
+set(_phash_fallbacks "")
+set(_phash_libpng_requested ${PHASH_USE_LIBPNG})
+foreach(_phash_dep
+        "PHASH_USE_LIBJPEG_TURBO;libjpeg-turbo;JPEG decodes with stb_image"
+        "PHASH_USE_LIBPNG;libpng;PNG decodes with stb_image"
+        "PHASH_USE_WEBP;libwebp;WebP is not decoded"
+        "PHASH_USE_ZLIB_NG;zlib-ng;libpng uses the system zlib")
+    list(GET _phash_dep 0 _phash_opt)
+    list(GET _phash_dep 1 _phash_dir)
+    list(GET _phash_dep 2 _phash_fallback)
+    if(_phash_opt STREQUAL "PHASH_USE_ZLIB_NG" AND NOT _phash_libpng_requested)
+        continue()
+    endif()
+    if(${_phash_opt} AND NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/vendor/${_phash_dir}/CMakeLists.txt)
+        list(APPEND _phash_missing_submodules "vendor/${_phash_dir}")
+        if(NOT (_phash_opt STREQUAL "PHASH_USE_ZLIB_NG" AND NOT PHASH_USE_LIBPNG))
+            list(APPEND _phash_fallbacks "${_phash_fallback}")
+        endif()
+        # A plain variable: it shadows the cached option for this configure only, so the
+        # first configure after the checkout builds the decoder.
+        set(${_phash_opt} OFF)
+    endif()
+endforeach()
+if(NOT PHASH_USE_LIBPNG)
+    set(PHASH_USE_ZLIB_NG OFF)
+endif()
+if(_phash_missing_submodules)
+    list(JOIN _phash_missing_submodules ", " _phash_missing_text)
+    list(JOIN _phash_fallbacks "; " _phash_fallback_text)
+    if(PHASH_STRICT_DEPS)
+        message(FATAL_ERROR
+            "Vendored decoder submodules are not checked out: ${_phash_missing_text}.\n"
+            "Fetch them with:\n    git submodule update --init --recursive\n"
+            "or turn the decoder off (e.g. -DPHASH_USE_LIBPNG=OFF).")
+    else()
+        message(WARNING
+            "Vendored decoder submodules are not checked out: ${_phash_missing_text}.\n"
+            "Building without them: ${_phash_fallback_text}.\n"
+            "Fetch them with:\n    git submodule update --init --recursive")
+    endif()
+endif()
 
 if(PHASH_IS_TOP_LEVEL)
     include(GNUInstallDirs)
@@ -458,105 +510,97 @@ if(PHASH_USE_LIBJPEG_TURBO AND PHASH_OSX_ARCH_COUNT GREATER 1)
         "libraries with `lipo -create`.")
 endif()
 if(PHASH_USE_LIBJPEG_TURBO)
-    if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/CMakeLists.txt)
-        # The libjpeg API archive (jpeg-static), not the TurboJPEG one (turbojpeg-static):
-        # libjpeg-turbo 3.x compiles its own zlib and spng into the TurboJPEG archive, with
-        # global symbols, for image-file I/O this library never uses -- and on macOS libpng
-        # would then bind to that zlib instead of the vendored zlib-ng.
-        # jpeg-static is the codec alone, and its API reports a failed allocation by error
-        # code (JERR_OUT_OF_MEMORY), which the TurboJPEG API folds into a generic fatal error.
-        # scripts/check_decoder_symbols.sh checks the linked result.
-        #
-        # ExternalProject, not add_subdirectory(): libjpeg-turbo's CMakeLists.txt stops with
-        # a FATAL_ERROR when it is not the top-level project. It is configured inside this
-        # build tree, so every build tree gets its own copy, built by the same compiler,
-        # launcher, toolchain, architecture, build type and C flags (sanitizers included).
-        # PHASH_COVERAGE and the fuzzer instrumentation are options of libphash's own
-        # targets, so the decoder is compiled without them. The generator is this
-        # project's, which ExternalProject passes on by default.
-        include(ExternalProject)
-        set(PHASH_LIBJPEG_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/vendor/libjpeg-turbo)
-        # The archive is libjpeg.a, except with MSVC (jpeg-static.lib); a multi-config
-        # generator writes it into a per-configuration subdirectory.
-        if(MSVC)
-            set(_phash_libjpeg_name jpeg-static.lib)
-        else()
-            set(_phash_libjpeg_name libjpeg.a)
-        endif()
-        if(CMAKE_CONFIGURATION_TYPES)
-            set(PHASH_LIBJPEG_LIB ${PHASH_LIBJPEG_BINARY_DIR}/$<CONFIG>/${_phash_libjpeg_name})
-        else()
-            set(PHASH_LIBJPEG_LIB ${PHASH_LIBJPEG_BINARY_DIR}/${_phash_libjpeg_name})
-        endif()
-        set(_phash_libjpeg_cache_args
-            -DCMAKE_C_COMPILER:FILEPATH=${CMAKE_C_COMPILER}
-            -DCMAKE_C_COMPILER_LAUNCHER:STRING=${CMAKE_C_COMPILER_LAUNCHER}
-            -DCMAKE_C_FLAGS:STRING=${CMAKE_C_FLAGS}
-            -DCMAKE_C_FLAGS_DEBUG:STRING=${CMAKE_C_FLAGS_DEBUG}
-            -DCMAKE_C_FLAGS_RELEASE:STRING=${CMAKE_C_FLAGS_RELEASE}
-            -DCMAKE_C_FLAGS_RELWITHDEBINFO:STRING=${CMAKE_C_FLAGS_RELWITHDEBINFO}
-            -DCMAKE_C_FLAGS_MINSIZEREL:STRING=${CMAKE_C_FLAGS_MINSIZEREL}
-            -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
-            -DCMAKE_TOOLCHAIN_FILE:FILEPATH=${CMAKE_TOOLCHAIN_FILE}
-            -DCMAKE_OSX_ARCHITECTURES:STRING=${CMAKE_OSX_ARCHITECTURES}
-            -DCMAKE_OSX_DEPLOYMENT_TARGET:STRING=${CMAKE_OSX_DEPLOYMENT_TARGET}
-            -DCMAKE_OSX_SYSROOT:STRING=${CMAKE_OSX_SYSROOT}
-            # libjpeg-turbo would otherwise pick the static C run-time (/MT) for its
-            # static archive, while libphash uses CMake's default, the C run-time DLL (/MD),
-            # and mixing the two in one link is a mismatch MSVC only warns about.
-            -DWITH_CRT_DLL:BOOL=ON
-            # A shared libphash links this archive into itself.
-            -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
-            -DENABLE_SHARED:BOOL=OFF
-            -DENABLE_STATIC:BOOL=ON
-            -DWITH_TURBOJPEG:BOOL=OFF
-            -DWITH_TOOLS:BOOL=OFF
-            -DWITH_TESTS:BOOL=OFF)
-        if(CMAKE_MSVC_RUNTIME_LIBRARY)
-            list(APPEND _phash_libjpeg_cache_args
-                -DCMAKE_MSVC_RUNTIME_LIBRARY:STRING=${CMAKE_MSVC_RUNTIME_LIBRARY})
-        endif()
-        ExternalProject_Add(phash_libjpeg_turbo
-            SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo
-            BINARY_DIR ${PHASH_LIBJPEG_BINARY_DIR}
-            CMAKE_CACHE_ARGS ${_phash_libjpeg_cache_args}
-            BUILD_BYPRODUCTS ${PHASH_LIBJPEG_LIB}
-            INSTALL_COMMAND ""
-            TEST_COMMAND ""
-            # Rebuild when the submodule's sources change, not only on a clean tree.
-            BUILD_ALWAYS ON
-            USES_TERMINAL_CONFIGURE ON
-            USES_TERMINAL_BUILD ON)
-        add_dependencies(phash phash_libjpeg_turbo)
-
-        target_compile_definitions(phash PRIVATE PH_USE_LIBJPEG_TURBO)
-        # BUILD_INTERFACE: link the build-tree archive directly. INSTALL_INTERFACE: link
-        # the copy installed below instead -- the build-tree path won't exist for an
-        # installed consumer.
-        target_link_libraries(phash PRIVATE $<BUILD_INTERFACE:${PHASH_LIBJPEG_LIB}>)
-        # jpeglib.h from the sources, jconfig.h from the configured tree.
-        target_include_directories(phash PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/src
-            ${PHASH_LIBJPEG_BINARY_DIR}
-        )
-        if(PHASH_INSTALL_PRIVATE_DEPS)
-            # Installed under a private name: "libjpeg.a" in a shared prefix would shadow
-            # (or be shadowed by) the system libjpeg. CMAKE_STATIC_LIBRARY_PREFIX/SUFFIX
-            # rather than a hardcoded "lib…a", which is only right for Unix ar archives.
-            set(PHASH_LIBJPEG_INSTALLED_NAME
-                "${CMAKE_STATIC_LIBRARY_PREFIX}phash_jpeg${CMAKE_STATIC_LIBRARY_SUFFIX}")
-            target_link_libraries(phash PRIVATE
-                $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/${PHASH_LIBJPEG_INSTALLED_NAME}>)
-            install(FILES ${PHASH_LIBJPEG_LIB} DESTINATION ${CMAKE_INSTALL_LIBDIR}
-                    RENAME ${PHASH_LIBJPEG_INSTALLED_NAME})
-            list(APPEND PHASH_PC_LIBS_PRIVATE "-lphash_jpeg")
-        endif()
+    # The libjpeg API archive (jpeg-static), not the TurboJPEG one (turbojpeg-static):
+    # libjpeg-turbo 3.x compiles its own zlib and spng into the TurboJPEG archive, with
+    # global symbols, for image-file I/O this library never uses -- and on macOS libpng
+    # would then bind to that zlib instead of the vendored zlib-ng.
+    # jpeg-static is the codec alone, and its API reports a failed allocation by error
+    # code (JERR_OUT_OF_MEMORY), which the TurboJPEG API folds into a generic fatal error.
+    # scripts/check_decoder_symbols.sh checks the linked result.
+    #
+    # ExternalProject, not add_subdirectory(): libjpeg-turbo's CMakeLists.txt stops with
+    # a FATAL_ERROR when it is not the top-level project. It is configured inside this
+    # build tree, so every build tree gets its own copy, built by the same compiler,
+    # launcher, toolchain, architecture, build type and C flags (sanitizers included).
+    # PHASH_COVERAGE and the fuzzer instrumentation are options of libphash's own
+    # targets, so the decoder is compiled without them. The generator is this
+    # project's, which ExternalProject passes on by default.
+    include(ExternalProject)
+    set(PHASH_LIBJPEG_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/vendor/libjpeg-turbo)
+    # The archive is libjpeg.a, except with MSVC (jpeg-static.lib); a multi-config
+    # generator writes it into a per-configuration subdirectory.
+    if(MSVC)
+        set(_phash_libjpeg_name jpeg-static.lib)
     else()
-        if(PHASH_STRICT_DEPS)
-            message(FATAL_ERROR "vendor/libjpeg-turbo submodule not found (PHASH_STRICT_DEPS=ON). Run: git submodule update --init --recursive")
-        else()
-            message(WARNING "vendor/libjpeg-turbo submodule not found. Falling back to stb_image.")
-        endif()
+        set(_phash_libjpeg_name libjpeg.a)
+    endif()
+    if(CMAKE_CONFIGURATION_TYPES)
+        set(PHASH_LIBJPEG_LIB ${PHASH_LIBJPEG_BINARY_DIR}/$<CONFIG>/${_phash_libjpeg_name})
+    else()
+        set(PHASH_LIBJPEG_LIB ${PHASH_LIBJPEG_BINARY_DIR}/${_phash_libjpeg_name})
+    endif()
+    set(_phash_libjpeg_cache_args
+        -DCMAKE_C_COMPILER:FILEPATH=${CMAKE_C_COMPILER}
+        -DCMAKE_C_COMPILER_LAUNCHER:STRING=${CMAKE_C_COMPILER_LAUNCHER}
+        -DCMAKE_C_FLAGS:STRING=${CMAKE_C_FLAGS}
+        -DCMAKE_C_FLAGS_DEBUG:STRING=${CMAKE_C_FLAGS_DEBUG}
+        -DCMAKE_C_FLAGS_RELEASE:STRING=${CMAKE_C_FLAGS_RELEASE}
+        -DCMAKE_C_FLAGS_RELWITHDEBINFO:STRING=${CMAKE_C_FLAGS_RELWITHDEBINFO}
+        -DCMAKE_C_FLAGS_MINSIZEREL:STRING=${CMAKE_C_FLAGS_MINSIZEREL}
+        -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
+        -DCMAKE_TOOLCHAIN_FILE:FILEPATH=${CMAKE_TOOLCHAIN_FILE}
+        -DCMAKE_OSX_ARCHITECTURES:STRING=${CMAKE_OSX_ARCHITECTURES}
+        -DCMAKE_OSX_DEPLOYMENT_TARGET:STRING=${CMAKE_OSX_DEPLOYMENT_TARGET}
+        -DCMAKE_OSX_SYSROOT:STRING=${CMAKE_OSX_SYSROOT}
+        # libjpeg-turbo would otherwise pick the static C run-time (/MT) for its
+        # static archive, while libphash uses CMake's default, the C run-time DLL (/MD),
+        # and mixing the two in one link is a mismatch MSVC only warns about.
+        -DWITH_CRT_DLL:BOOL=ON
+        # A shared libphash links this archive into itself.
+        -DCMAKE_POSITION_INDEPENDENT_CODE:BOOL=ON
+        -DENABLE_SHARED:BOOL=OFF
+        -DENABLE_STATIC:BOOL=ON
+        -DWITH_TURBOJPEG:BOOL=OFF
+        -DWITH_TOOLS:BOOL=OFF
+        -DWITH_TESTS:BOOL=OFF)
+    if(CMAKE_MSVC_RUNTIME_LIBRARY)
+        list(APPEND _phash_libjpeg_cache_args
+            -DCMAKE_MSVC_RUNTIME_LIBRARY:STRING=${CMAKE_MSVC_RUNTIME_LIBRARY})
+    endif()
+    ExternalProject_Add(phash_libjpeg_turbo
+        SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo
+        BINARY_DIR ${PHASH_LIBJPEG_BINARY_DIR}
+        CMAKE_CACHE_ARGS ${_phash_libjpeg_cache_args}
+        BUILD_BYPRODUCTS ${PHASH_LIBJPEG_LIB}
+        INSTALL_COMMAND ""
+        TEST_COMMAND ""
+        # Rebuild when the submodule's sources change, not only on a clean tree.
+        BUILD_ALWAYS ON
+        USES_TERMINAL_CONFIGURE ON
+        USES_TERMINAL_BUILD ON)
+    add_dependencies(phash phash_libjpeg_turbo)
+
+    target_compile_definitions(phash PRIVATE PH_USE_LIBJPEG_TURBO)
+    # BUILD_INTERFACE: link the build-tree archive directly. INSTALL_INTERFACE: link
+    # the copy installed below instead -- the build-tree path won't exist for an
+    # installed consumer.
+    target_link_libraries(phash PRIVATE $<BUILD_INTERFACE:${PHASH_LIBJPEG_LIB}>)
+    # jpeglib.h from the sources, jconfig.h from the configured tree.
+    target_include_directories(phash PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/vendor/libjpeg-turbo/src
+        ${PHASH_LIBJPEG_BINARY_DIR}
+    )
+    if(PHASH_INSTALL_PRIVATE_DEPS)
+        # Installed under a private name: "libjpeg.a" in a shared prefix would shadow
+        # (or be shadowed by) the system libjpeg. CMAKE_STATIC_LIBRARY_PREFIX/SUFFIX
+        # rather than a hardcoded "lib…a", which is only right for Unix ar archives.
+        set(PHASH_LIBJPEG_INSTALLED_NAME
+            "${CMAKE_STATIC_LIBRARY_PREFIX}phash_jpeg${CMAKE_STATIC_LIBRARY_SUFFIX}")
+        target_link_libraries(phash PRIVATE
+            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/${PHASH_LIBJPEG_INSTALLED_NAME}>)
+        install(FILES ${PHASH_LIBJPEG_LIB} DESTINATION ${CMAKE_INSTALL_LIBDIR}
+                RENAME ${PHASH_LIBJPEG_INSTALLED_NAME})
+        list(APPEND PHASH_PC_LIBS_PRIVATE "-lphash_jpeg")
     endif()
 endif()
 
@@ -590,7 +634,7 @@ if(NOT PHASH_IS_TOP_LEVEL AND PHASH_USE_ZLIB_NG)
     endif()
 endif()
 
-if(PHASH_USE_ZLIB_NG AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/zlib-ng/CMakeLists.txt")
+if(PHASH_USE_ZLIB_NG)
     # zlib-ng's own options: scoped to it, harmless to a parent.
     set(ZLIB_COMPAT ON CACHE BOOL "" FORCE)
     set(ZLIB_ALIASES ON CACHE BOOL "" FORCE)
@@ -652,13 +696,6 @@ if(PHASH_USE_ZLIB_NG AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/vendor/zlib-ng/CMak
             $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/${PHASH_ZLIB_LIB_FILENAME}>)
     endif()
 else()
-    if(PHASH_USE_ZLIB_NG)
-        if(PHASH_STRICT_DEPS)
-            message(FATAL_ERROR "vendor/zlib-ng submodule not found (PHASH_STRICT_DEPS=ON). Run: git submodule update --init --recursive")
-        else()
-            message(WARNING "vendor/zlib-ng submodule not found. Falling back to system zlib.")
-        endif()
-    endif()
     if(PHASH_INSTALL_PRIVATE_DEPS)
         # System zlib -- nothing to install, just record the dependency.
         set(PHASH_ZLIB_INSTALL_LINK_LIB $<INSTALL_INTERFACE:z>)

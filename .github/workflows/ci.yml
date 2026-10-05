@@ -230,17 +230,34 @@ jobs:
     steps:
     - uses: actions/checkout@v7
 
-    # Nothing to install: cmake ships on all three runner images. The shared action
-    # still fetches the submodules, although this stb-only build does not read vendor/.
+    # Nothing to install: cmake ships on all three runner images. No submodules either:
+    # this job is a clone without --recursive, configured with the default options.
     - uses: ./.github/actions/setup-build
       with:
+        submodules: 'false'
         apt-packages: ''
         brew-packages: ''
 
-    - name: Configure CMake (minimal, stb_image only)
-      run: >
-        cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release
-        -DPHASH_USE_LIBJPEG_TURBO=OFF -DPHASH_USE_LIBPNG=OFF -DPHASH_USE_WEBP=OFF -DPHASH_USE_ZLIB_NG=OFF
+    # The configure names every missing decoder submodule in one warning, with the
+    # command that fetches them, and builds stb_image only. CMake wraps the warning's
+    # lines, so the log is flattened before matching.
+    - name: Configure CMake (no submodules, default options -> stb_image only)
+      shell: bash
+      run: |
+        cmake -B build -DPHASH_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Release 2>&1 | tee configure.log
+        flat="$(tr -s ' \r\n' ' ' < configure.log)"
+        grep -qF 'not checked out: vendor/libjpeg-turbo, vendor/libpng, vendor/libwebp, vendor/zlib-ng.' <<<"$flat"
+        grep -qF 'git submodule update --init --recursive' <<<"$flat"
+
+    - name: PHASH_STRICT_DEPS=ON refuses the same tree
+      shell: bash
+      run: |
+        if cmake -B build-strict -DPHASH_STRICT_DEPS=ON > strict.log 2>&1; then
+          echo "::error::configure succeeded without the submodules under PHASH_STRICT_DEPS=ON"
+          exit 1
+        fi
+        flat="$(tr -s ' \r\n' ' ' < strict.log)"
+        grep -qF 'not checked out: vendor/libjpeg-turbo, vendor/libpng, vendor/libwebp, vendor/zlib-ng.' <<<"$flat"
 
     - name: Build
       run: cmake --build build --config Release
