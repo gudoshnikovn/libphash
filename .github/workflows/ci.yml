@@ -694,12 +694,14 @@ jobs:
     - name: Check the shared library's exported symbols
       run: ./scripts/check_exported_symbols.sh
 
-    # Two builds of the same sources give byte-identical static archives and install
-    # trees, so the files in a published release archive can be rebuilt and compared.
-    - name: Reproducible builds (CMake install trees, Makefile archive)
+    # Two builds of the same sources give byte-identical static archives, install trees
+    # and release archives, so a published archive can be rebuilt and checked against
+    # SHA256SUMS.txt.
+    - name: Reproducible builds (CMake install trees, Makefile archive, release archives)
       run: |
         ./scripts/check_reproducible.sh cmake
         ./scripts/check_reproducible.sh make
+        ./scripts/check_reproducible.sh package linux-x86_64
 
     - name: Build and run examples/
       run: ./scripts/build_examples.sh

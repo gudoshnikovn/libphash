@@ -2,16 +2,18 @@
 # Fails (non-zero exit) unless two builds of the same sources produce byte-identical
 # results: for CMake, the whole install tree (static and shared libraries, the vendored
 # codec archives, headers, CMake package, libphash.pc), built in two different build
-# directories; for the Makefile, libphash.a built twice. The second build starts after
-# the first has finished and a second has passed, so any timestamp that reaches an
-# artifact differs between them.
+# directories; for the Makefile, libphash.a built twice; for packaging, the release
+# archives scripts/package_release.sh writes. The second build starts after the first
+# has finished and a second has passed, so any timestamp that reaches an artifact
+# differs between them.
 #
 #   scripts/check_reproducible.sh cmake [extra CMake options]
 #   scripts/check_reproducible.sh make
+#   scripts/check_reproducible.sh package <platform-name>
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MODE="${1:?usage: check_reproducible.sh cmake|make [options]}"
+MODE="${1:?usage: check_reproducible.sh cmake|make|package [options]}"
 shift
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -68,8 +70,28 @@ case "$MODE" in
             exit 1
         fi
         ;;
+    package)
+        platform="${1:?usage: check_reproducible.sh package <platform-name>}"
+        for n in 1 2; do
+            if ! "$ROOT/scripts/package_release.sh" "$platform" "$WORK_DIR/dist$n" both \
+                    >"$WORK_DIR/package$n.log" 2>&1; then
+                cat "$WORK_DIR/package$n.log" >&2
+                echo "check_reproducible: packaging $n failed" >&2
+                exit 1
+            fi
+            sleep 1
+        done
+        checksums "$WORK_DIR/dist1" > "$WORK_DIR/dist1.sum"
+        checksums "$WORK_DIR/dist2" > "$WORK_DIR/dist2.sum"
+        if diff "$WORK_DIR/dist1.sum" "$WORK_DIR/dist2.sum" >&2; then
+            echo "check_reproducible: release archives identical ($(wc -l < "$WORK_DIR/dist1.sum" | tr -d ' ') files)"
+        else
+            echo "check_reproducible: release archives differ (above)" >&2
+            exit 1
+        fi
+        ;;
     *)
-        echo "check_reproducible: unknown mode '$MODE' (cmake or make)" >&2
+        echo "check_reproducible: unknown mode '$MODE' (cmake, make or package)" >&2
         exit 1
         ;;
 esac

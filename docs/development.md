@@ -243,16 +243,20 @@ itself. Both targets print the per-area table.
 ### Reproducible archives
 
 Two builds of the same sources produce byte-identical static libraries, shared
-libraries and install trees, from any build directory, so the files in a published
-release archive can be rebuilt and compared byte for byte. The object files carry no build
+libraries, install trees and release archives, from any build directory, so a published
+release archive can be rebuilt and checked against `SHA256SUMS.txt`. The object files carry no build
 path or date; what would differ is the time `ar` and `ranlib` write into a static
 archive. `cmake/deterministic_archives.cmake` gives GNU and LLVM `ar` the `D` modifier
 (and `ranlib -D`), and runs Apple's `ar`/`ranlib` under `ZERO_AR_DATE=1`, including the
 `ranlib` that `cmake --install` runs on every static library it copies on macOS; the
 libjpeg-turbo sub-build gets the same file as `CMAKE_PROJECT_INCLUDE`. The Makefile picks
 `ar rcsD` or `ZERO_AR_DATE=1 ar rcs` from what `ar --version` reports.
-`scripts/check_reproducible.sh cmake|make` builds twice and compares every installed
-file (or `libphash.a`); CI runs it on Linux (`install-smoke-test`) and macOS
+`scripts/package_release.sh` packs with `scripts/deterministic_archive.py` (Python's
+standard library, not the platform's `tar`/`zip`): sorted entries, every timestamp
+`SOURCE_DATE_EPOCH` — by default the time of the commit being packed — owner 0/0, and a
+gzip header with no time or name. `scripts/check_reproducible.sh cmake|make|package`
+builds twice and compares every installed file, `libphash.a` or the release archives; CI
+runs the first two on Linux (`install-smoke-test`, where it also packages) and macOS
 (`build-and-test`).
 
 ### Installed package and `pkg-config`

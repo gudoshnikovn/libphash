@@ -24,12 +24,11 @@ KINDS="${3:-both}"
 VERSION=$(sed -nE 's/.*project\([^)]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' "$ROOT_DIR/CMakeLists.txt" | head -n1)
 [ -n "$VERSION" ] || { echo "package_release.sh: could not read version from CMakeLists.txt" >&2; exit 1; }
 
-# Canonicalize to an absolute path: package_one() below cd's into a temporary
-# stage directory before invoking 7z/zip (Windows branch), so a relative
-# OUT_DIR would otherwise resolve against that temp dir, and the archives
-# would land where the workflow's upload step doesn't look.
+# An absolute path, so the "wrote" lines name exactly where the workflow's upload step looks.
 mkdir -p "$OUT_DIR"
 OUT_DIR="$(cd "$OUT_DIR" && pwd)"
+PYTHON="$(command -v python3 || command -v python || true)"
+[ -n "$PYTHON" ] || { echo "package_release.sh: needs python3 to write the archive" >&2; exit 1; }
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
@@ -53,21 +52,15 @@ package_one() {
     cp "$ROOT_DIR/LICENSE" "$stage_dir/"
     cp "$ROOT_DIR/THIRD-PARTY-NOTICES.md" "$stage_dir/"
 
+    # The archive's bytes depend only on its files (scripts/deterministic_archive.py): two
+    # packagings of the same build, or of two reproducible builds, give the same
+    # checksum in SHA256SUMS.txt.
     mkdir -p "$OUT_DIR"
-    if [[ "$PLATFORM" == windows-* ]]; then
-        local archive="$OUT_DIR/$name.zip"
-        rm -f "$archive"
-        if command -v 7z >/dev/null 2>&1; then
-            (cd "$WORK_DIR/stage-$kind" && 7z a -tzip "$archive" "$name" >/dev/null)
-        else
-            (cd "$WORK_DIR/stage-$kind" && zip -qr "$archive" "$name")
-        fi
-        echo "==> wrote $archive"
-    else
-        local archive="$OUT_DIR/$name.tar.gz"
-        tar -czf "$archive" -C "$WORK_DIR/stage-$kind" "$name"
-        echo "==> wrote $archive"
-    fi
+    local archive="$OUT_DIR/$name.tar.gz"
+    [[ "$PLATFORM" == windows-* ]] && archive="$OUT_DIR/$name.zip"
+    rm -f "$archive"
+    "$PYTHON" "$ROOT_DIR/scripts/deterministic_archive.py" "$WORK_DIR/stage-$kind" "$name" "$archive"
+    echo "==> wrote $archive"
 }
 
 case "$KINDS" in
