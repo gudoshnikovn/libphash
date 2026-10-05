@@ -2,11 +2,13 @@
 # Fails (non-zero exit) unless a binary linked against libphash carries exactly the
 # decoders its CMake build tree asked for, linked statically, and nothing else:
 #
-#   - "asked for" is the PHASH_USE_* options in the CMakeCache.txt of the build tree the
-#     binary sits in, or, for a binary outside a build tree (an unpacked release archive),
-#     PH_EXPECT_BUILD in the format test_build_info reads ("jpeg=libjpeg-turbo
-#     png=libpng webp=libwebp zlib=zlib-ng"). A decoder that is on and silently fell back
-#     to stb_image, or that is off and was linked anyway, fails the check;
+#   - "asked for" is PH_EXPECT_BUILD when it is set, in the format test_build_info reads
+#     ("jpeg=libjpeg-turbo png=libpng webp=libwebp zlib=zlib-ng") -- for a binary outside
+#     a build tree (an unpacked release archive), or a build whose options are meant to
+#     fall back (a clone without the decoder submodules). Otherwise it is the PHASH_USE_*
+#     options in the CMakeCache.txt of the build tree the binary sits in. A decoder that
+#     is expected and silently fell back to stb_image, or that is not and was linked
+#     anyway, fails the check;
 #   - each decoder that is on defines its entry point in the binary (libjpeg-turbo
 #     jpeg_std_error, libpng png_create_read_struct, libwebp WebPDecode), and each one
 #     that is off defines none;
@@ -31,10 +33,11 @@ set -euo pipefail
 BIN="${1:?usage: check_decoder_symbols.sh <linked binary>}"
 [ -f "$BIN" ] || { echo "check_decoder_symbols: no file at '$BIN'" >&2; exit 1; }
 
-# The build tree is the nearest directory above the binary with a CMakeCache.txt.
+# The build tree is the nearest directory above the binary with a CMakeCache.txt;
+# PH_EXPECT_BUILD, when set, is used instead.
 CACHE=""
 dir="$(cd "$(dirname "$BIN")" && pwd)"
-while :; do
+while [ -z "${PH_EXPECT_BUILD:-}" ]; do
     if [ -f "$dir/CMakeCache.txt" ]; then
         CACHE="$dir/CMakeCache.txt"
         break

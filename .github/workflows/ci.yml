@@ -385,9 +385,12 @@ jobs:
         PH_EXPECT_BUILD: jpeg=stb png=stb webp=none zlib=none
       run: cd build && ctest -C Release --output-on-failure
 
-    # nm/readelf/otool: the check reads ELF and Mach-O.
+    # nm/readelf/otool: the check reads ELF and Mach-O. The options are on and the
+    # decoders absent, so the expectation is stated rather than read from the cache.
     - name: Check decoder symbols
       if: runner.os != 'Windows'
+      env:
+        PH_EXPECT_BUILD: jpeg=stb png=stb webp=none zlib=none
       run: ./scripts/check_decoder_symbols.sh build/test_png_variants
 
   # Confirms the code actually compiles and passes under each standard the
