@@ -365,10 +365,13 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   patch` (2.0.0 → 2000000), at run time and as `PH_VERSION_NUMBER` at compile time. The
   two headers are installed side by side; code that copies the header by hand needs both.
 - **Packaging:** `install()` rules, a `phashConfig.cmake` package usable via
-  `find_package(phash)` (`COMPATIBILITY SameMajorVersion`), and a relocatable
-  `libphash.pc` for pkg-config. Both carry the backend libraries the build was configured
-  with, the vendored JPEG codec installed as `-lphash_jpeg` so it cannot shadow a system
-  libjpeg. `PHASH_STATIC_DEFINE` is the macro a build system other than this project's own
+  `find_package(phash)` (`COMPATIBILITY SameMajorVersion`), and a `libphash.pc` for
+  pkg-config that finds its files relative to its own location, so a plain
+  `pkg-config --cflags --libs libphash` works on an install tree that was moved or
+  unpacked elsewhere. A shared build's `.pc` adds an rpath to `${libdir}`, so its
+  consumers start without `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`. Both carry the backend
+  libraries the build was configured with (a static build's `.pc` in `Libs`), the
+  vendored JPEG codec installed as `-lphash_jpeg` so it cannot shadow a system libjpeg. `PHASH_STATIC_DEFINE` is the macro a build system other than this project's own
   CMake must define when linking libphash statically on Windows; the exported target and
   the `.pc` file set it automatically. `add_subdirectory()` works for static and shared
   parents and leaves the parent project's settings and cache as it found them.
