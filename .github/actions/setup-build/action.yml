@@ -75,7 +75,7 @@ runs:
     # evicts the oldest entries past the repository's cache quota.
     - name: Restore ccache
       if: runner.os == 'Linux' && inputs.ccache == 'true'
-      uses: actions/cache@v6
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ runner.temp }}/ccache
         key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ inputs.ccache-key }}-${{ github.sha }}

@@ -20,8 +20,15 @@ on:
       - 'v*'
   workflow_dispatch: {}
 
+# Read-only by default: only publish writes, and only it gets the token that can.
 permissions:
-  contents: write
+  contents: read
+
+# Two runs for the same tag would race to create one GitHub Release. The second
+# waits instead of cancelling the first: an interrupted publish is worse than a late one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   # Same release decoder set as CI's build-and-test job and scripts/coverage_cmake.sh's
@@ -50,10 +57,12 @@ jobs:
             os: windows-latest
             needs_nasm: true
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     name: build (${{ matrix.platform }})
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
+        persist-credentials: false
         submodules: recursive
 
     - name: Install NASM (Linux)
@@ -84,7 +93,7 @@ jobs:
       run: scripts/package_release.sh ${{ matrix.platform }} dist both
 
     - name: Upload archives
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: dist-${{ matrix.platform }}
         path: dist/*
@@ -108,40 +117,44 @@ jobs:
           - platform: windows-x86_64
             os: windows-latest
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     name: smoke (${{ matrix.platform }})
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     - name: Download archives
-      uses: actions/download-artifact@v8
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
         name: dist-${{ matrix.platform }}
         path: dist
 
-    # ls with two glob patterns, only one of which ever exists (.tar.gz on
-    # Unix, .zip on Windows), exits nonzero for the missing one even after
-    # printing the match for the other -- and under bash's default -e (GH
-    # Actions run steps), that kills the step before $archive is even used.
-    # Same bug class as scripts/smoke_release_artifact.sh's own internal
-    # `find` call; both end in `|| true`.
+    # One glob per archive kind: .tar.gz on Unix, .zip on Windows, and the static
+    # pattern cannot match the -shared name. nullglob makes the kind that is absent
+    # expand to nothing, so the first element is the archive; none at all reaches
+    # smoke_release_artifact.sh as an empty path, which it reports.
     - name: Smoke test static archive
       shell: bash
       run: |
-        archive=$(ls dist/libphash-*-${{ matrix.platform }}.tar.gz dist/libphash-*-${{ matrix.platform }}.zip 2>/dev/null | grep -v -- -shared | head -n1 || true)
-        scripts/smoke_release_artifact.sh "$archive" static
+        shopt -s nullglob
+        archives=(dist/libphash-*-${{ matrix.platform }}.tar.gz dist/libphash-*-${{ matrix.platform }}.zip)
+        scripts/smoke_release_artifact.sh "${archives[0]:-}" static
 
     - name: Smoke test shared archive
       shell: bash
       run: |
-        archive=$(ls dist/libphash-*-${{ matrix.platform }}-shared.tar.gz dist/libphash-*-${{ matrix.platform }}-shared.zip 2>/dev/null | head -n1 || true)
-        scripts/smoke_release_artifact.sh "$archive" shared
+        shopt -s nullglob
+        archives=(dist/libphash-*-${{ matrix.platform }}-shared.tar.gz dist/libphash-*-${{ matrix.platform }}-shared.zip)
+        scripts/smoke_release_artifact.sh "${archives[0]:-}" shared
 
   checksums:
     needs: smoke
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
     - name: Download all archives
-      uses: actions/download-artifact@v8
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
         pattern: dist-*
         path: dist
@@ -150,11 +163,11 @@ jobs:
     - name: Compute SHA256SUMS.txt
       run: |
         cd dist
-        sha256sum * > SHA256SUMS.txt
+        sha256sum -- * > SHA256SUMS.txt
         cat SHA256SUMS.txt
 
     - name: Upload combined artifacts
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: dist-all
         path: |
@@ -168,11 +181,16 @@ jobs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: checksums
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    timeout-minutes: 10
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     - name: Download all archives
-      uses: actions/download-artifact@v8
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
       with:
         name: dist-all
         path: dist

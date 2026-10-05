@@ -13,16 +13,24 @@ on:
 permissions:
   contents: read
 
+# A manual run started during the nightly one waits for it, so the two do not save
+# competing corpus caches from the same starting point.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 jobs:
   fuzz-nightly:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     env:
       CC: clang
       ASAN_OPTIONS: halt_on_error=1
       UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
+        persist-credentials: false
         submodules: recursive
 
     - name: Install dependencies
@@ -39,7 +47,7 @@ jobs:
     # Same cache lineage as the fuzz job in ci.yml -- both read and write
     # fuzz-corpus-*, so a corpus entry either job finds benefits the other.
     - name: Restore fuzz corpus cache
-      uses: actions/cache@v6
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: tests/fuzz/corpus
         key: fuzz-corpus-${{ github.run_id }}
@@ -54,7 +62,7 @@ jobs:
 
     - name: Upload crash artifacts
       if: failure()
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: fuzz-nightly-crashes
         path: /tmp/fuzz-artifacts/

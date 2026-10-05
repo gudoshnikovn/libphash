@@ -34,10 +34,19 @@ on:
 env:
   CTEST_PARALLEL_LEVEL: 4
 
+# Read-only by default; the one job that writes (benchmark's PR comment) asks for it.
 permissions:
   contents: read
-  pull-requests: write
 
+# A newer push to the same ref makes the running matrix moot.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Every job has a timeout-minutes about three times its usual duration with a cold
+# ccache, so a hung test fails in minutes instead of holding a runner for GitHub's
+# default six hours.
+#
 # Linux legs name an exact image (ubuntu-24.04), not ubuntu-latest: the coverage
 # thresholds and warning gates are measured against that image's compilers, and a
 # moving label would change them underneath the gates.
@@ -54,10 +63,13 @@ jobs:
   # externally managed (PEP 668) and refuses to install into.
   format-check:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
-    - uses: actions/setup-python@v7
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
       with:
         python-version: '3.x'
 
@@ -118,11 +130,14 @@ jobs:
             needs_nasm: false
             cc: clang
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     name: build-and-test (${{ matrix.name }})
     env:
       CC: ${{ matrix.cc }}
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     - uses: ./.github/actions/setup-build
       with:
@@ -163,11 +178,14 @@ jobs:
       matrix:
         cc: [gcc, clang]
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     name: strict-warnings (${{ matrix.cc }})
     env:
       CC: ${{ matrix.cc }}
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     - uses: ./.github/actions/setup-build
       with:
@@ -202,8 +220,11 @@ jobs:
   # docs/development.md#two-coverage-targets-and-why-one-isnt-enough.
   coverage-cmake:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     - uses: ./.github/actions/setup-build
       with:
@@ -219,7 +240,7 @@ jobs:
       run: python3 scripts/check_coverage.py docs/coverage/cmake/native.info
 
     - name: Upload coverage report
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: coverage-cmake-html
         path: docs/coverage/cmake/html/
@@ -232,9 +253,12 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     name: minimal-build (${{ matrix.os }})
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     # Nothing to install: cmake ships on all three runner images. No submodules either:
     # this job is a clone without --recursive, configured with the default options.
@@ -299,11 +323,14 @@ jobs:
           - os: macos-latest
             cc: gcc-14
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     name: c-standard (${{ matrix.os }}, ${{ matrix.cc }}, C${{ matrix.std }})
     env:
       CC: ${{ matrix.cc }}
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     - uses: ./.github/actions/setup-build
       with:
@@ -353,8 +380,11 @@ jobs:
   # by default; pinning it here keeps the class caught on the runner's GCC 13 too.
   build-and-test-32bit:
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     - name: Install 32-bit toolchain and zlib
       uses: ./.github/actions/setup-build
@@ -386,10 +416,15 @@ jobs:
   # A push that creates a ref has no previous tip and skips the comparison.
   benchmark:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    timeout-minutes: 20
     steps:
     - name: Checkout head
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
+        persist-credentials: false
         path: pr
 
     - name: Determine base commit
@@ -416,8 +451,9 @@ jobs:
 
     - name: Checkout base commit
       if: steps.base.outputs.ref != ''
-      uses: actions/checkout@v7
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
+        persist-credentials: false
         ref: ${{ steps.base.outputs.ref }}
         path: base
 
@@ -484,7 +520,7 @@ jobs:
     # runs after a failed gate too: the report is what explains the failure.
     - name: Upload benchmark report
       if: ${{ !cancelled() && steps.base.outputs.ref != '' && hashFiles('benchmark_report.md') != '' }}
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: benchmark-report
         path: benchmark_report.md
@@ -506,12 +542,15 @@ jobs:
   # upstream default that could silently change.
   sanitizers:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     env:
       CC: clang
       ASAN_OPTIONS: halt_on_error=1:detect_leaks=1
       UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     - uses: ./.github/actions/setup-build
       with:
@@ -542,6 +581,7 @@ jobs:
   # libphash's side of the JPEG path (its SIMD assembly is not instrumented).
   tsan:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -560,7 +600,9 @@ jobs:
       CC: clang
       TSAN_OPTIONS: halt_on_error=1
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     - uses: ./.github/actions/setup-build
       with:
@@ -595,8 +637,11 @@ jobs:
   # test itself).
   valgrind:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     - uses: ./.github/actions/setup-build
       with:
@@ -620,12 +665,15 @@ jobs:
 
   fuzz:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     env:
       CC: clang
       ASAN_OPTIONS: halt_on_error=1
       UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     - uses: ./.github/actions/setup-build
       with:
@@ -642,7 +690,7 @@ jobs:
     # most recently saved cache on the restore side -- the corpus only ever grows,
     # so each run picks up where the last one left off instead of starting from zero.
     - name: Restore fuzz corpus cache
-      uses: actions/cache@v6
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: tests/fuzz/corpus
         key: fuzz-corpus-${{ github.run_id }}
@@ -661,15 +709,18 @@ jobs:
 
     - name: Upload crash artifacts
       if: failure()
-      uses: actions/upload-artifact@v7
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
         name: fuzz-crashes
         path: /tmp/fuzz-artifacts/
 
   install-smoke-test:
     runs-on: ubuntu-24.04
+    timeout-minutes: 25
     steps:
-    - uses: actions/checkout@v7
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     - uses: ./.github/actions/setup-build
       with:
