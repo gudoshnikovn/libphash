@@ -111,8 +111,8 @@ This library bundles four decoder libraries as git submodules
 (`libjpeg-turbo`, `libpng`, `libwebp`, `zlib-ng`) plus two files copied
 directly into the tree rather than submoduled (`vendor/stb_image.h`,
 `vendor/stb_image_resize2.h` — both locally patched; see `THIRD-PARTY-NOTICES.md`
-for their exact pinned versions and hashes, and `docs/development.md` for the local
-patches they carry).
+for their exact pinned versions and hashes, `vendor/patches/` for the local patches they
+carry, and `docs/development.md` for the reasons).
 
 - **Submoduled dependencies:** [Dependabot](https://docs.github.com/en/code-security/dependabot)
   is configured (`.github/dependabot.yml`, `gitsubmodule` ecosystem) to open a pull
@@ -125,8 +125,9 @@ patches they carry).
   compares each file's pinned upstream hash (recorded in `THIRD-PARTY-NOTICES.md`)
   against the current upstream file and opens a tracking issue if they differ — the
   bump itself is still a manual, reviewed task, since it has to reapply the local
-  patches (see `docs/development.md`) and re-verify against `tests/src/test_alloc_failure.c` rather
-  than being a drop-in file replacement.
+  patches in `vendor/patches/` and re-verify against `tests/src/test_alloc_failure.c` rather
+  than being a drop-in file replacement. On every push, `scripts/check_stb_patches.sh`
+  checks that each header is exactly its recorded upstream commit plus its patch.
 
 ## Fuzzing
 

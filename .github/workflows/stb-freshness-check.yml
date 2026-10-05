@@ -65,10 +65,10 @@ jobs:
             cat <<'EOF'
           ```
 
-          Bumping either file means reapplying the local OOM-handling patches and
-          re-verifying them against `tests/src/test_alloc_failure.c` -- see SECURITY.md's
-          "Vendored dependencies" section and `docs/development.md`. It is not a drop-in
-          file replacement.
+          Bumping either file means applying its local patch from `vendor/patches/` to
+          the new upstream file and re-verifying it against
+          `tests/src/test_alloc_failure.c` -- the steps are in `vendor/patches/README.md`.
+          It is not a drop-in file replacement.
           EOF
           } > "$body"
           # The label is created on first use, so the workflow does not depend on

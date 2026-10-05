@@ -771,10 +771,11 @@ for crashes/leaks, exercises all five of its scenarios, including under sanitize
 without the patch two of them crash or leak.
 
 This diverges from upstream `stb_image_resize2` (present verbatim in current
-upstream master) and **must be re-applied and re-verified against
-`test_alloc_failure` under `make debug && make test`** on the next bump of
-this vendored file — a version bump alone will silently drop the patch and
-reopen the crash/leak.
+upstream master). The whole change is `vendor/patches/stb_image_resize2.h.patch`; a bump
+of this vendored file applies it to the new upstream file and re-verifies it against
+`test_alloc_failure` under `make debug && make test` — the steps are in
+`vendor/patches/README.md`. A version bump without the patch reopens the crash and the
+leaks, and `scripts/check_stb_patches.sh` fails on it in CI.
 
 **Known vendor patch — the reason reported for an allocation failure in
 `vendor/stb_image.h`.** `src/loader.c` classifies a failed `stbi_load*()` by
@@ -803,10 +804,11 @@ that reason in two independent places, so a decode that failed purely because
   success path is untouched.
 
 Each change carries the same `/* libphash local patch (not upstream): ... */`
-marker as the resize patch above (search the file for it). Without the patch, 5 of
-`test_alloc_failure`'s 83 failure points misreport. As with the resize patch, **a bump
-of this vendored file must re-apply and re-verify it** against `test_alloc_failure`, and
-record the new pair of hashes in `THIRD-PARTY-NOTICES.md`. `src/loader.c` classifies a
+marker as the resize patch above (search the file for it), and the whole change is
+`vendor/patches/stb_image.h.patch`. Without the patch, 5 of `test_alloc_failure`'s 83
+failure points misreport. As with the resize patch, a bump of this vendored file applies
+it to the new upstream file, re-verifies it against `test_alloc_failure`, and records the
+commit and the new pair of hashes in `THIRD-PARTY-NOTICES.md` (`vendor/patches/README.md`). `src/loader.c` classifies a
 decode failure by comparing against error strings that live inside `stb_image.h`, so a
 bump also has to be reviewed against `ph_stb_unsupported_reasons[]` and
 `test_stb_failure_classification`.

@@ -64,13 +64,13 @@ portions hereof, for any purpose, without fee, subject to the following restrict
 
 * **Project:** [https://github.com/nothings/stb](https://github.com/nothings/stb)
 * **License:** Public Domain / MIT / Unlicense
-* **Vendored version:** v2.30, **locally modified** (`vendor/stb_image.h`, SHA-256 `b215f40ad1c6babf485a72307f84fa724507415cbd7ed1d8d7c600798d836f43`; as imported from upstream, before the local patch: `f53ea8b6ed181beb245d4c43c97dca0bf03cd1408e4b6485afc605199bbc9d3f`)
+* **Vendored version:** v2.30, **locally modified** (`vendor/stb_image.h`, SHA-256 `ab6110a65873d5cd828001246f851506f2126e1e418e5c01a989871d089b4009`; as imported from upstream commit `013ac3beddff3dbffafd5177e7972067cd2b5083`, before the local patch: `594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3`; local patch: `vendor/patches/stb_image.h.patch`)
 
 This software is dual-licensed to the public domain and under the following license: you are free to use this software under the terms of the MIT license or the Unlicense.
 
 Copyright (c) 2017 Sean Barrett.
 
-**Modifications by the libphash authors:** allocation failures inside the zlib entry points and inside the allocating format probes are made visible through `stbi_failure_reason()` instead of being lost or overwritten. Each change is marked in the file with `/* libphash local patch (not upstream): ... */`; the reasoning is in `docs/development.md`. Both licenses permit modification; the notice above is retained, and this paragraph records the change as required of a modified copy.
+**Modifications by the libphash authors:** allocation failures inside the zlib entry points and inside the allocating format probes are made visible through `stbi_failure_reason()` instead of being lost or overwritten. Each change is marked in the file with `/* libphash local patch (not upstream): ... */`, the whole change is `vendor/patches/stb_image.h.patch`, and the reasoning is in `docs/development.md`. Both licenses permit modification; the notice above is retained, and this paragraph records the change as required of a modified copy.
 
 ---
 
@@ -93,13 +93,13 @@ Redistribution and use in source and binary forms, with or without modification,
 
 * **Project:** [https://github.com/nothings/stb](https://github.com/nothings/stb)
 * **License:** Public Domain / MIT / Unlicense
-* **Vendored version:** v2.18, **locally modified** (`vendor/stb_image_resize2.h`, SHA-256 `114b2dbef70f85530aa17171029572ce4da2569a333c065e15b5c7100acde37a`; as imported from upstream, before the local patch: `173e654634f6ccaad98f603e686ea212eec1fe8ea6d2a5e5e8056efa10ae3880`)
+* **Vendored version:** v2.18, **locally modified** (`vendor/stb_image_resize2.h`, SHA-256 `114b2dbef70f85530aa17171029572ce4da2569a333c065e15b5c7100acde37a`; as imported from upstream commit `904aa67e1e2d1dec92959df63e700b166d5c1022`, before the local patch: `173e654634f6ccaad98f603e686ea212eec1fe8ea6d2a5e5e8056efa10ae3880`; local patch: `vendor/patches/stb_image_resize2.h.patch`)
 
 This software is dual-licensed to the public domain and under the following license: you are free to use this software under the terms of the MIT license or the Unlicense.
 
 Copyright (c) 2023 Jeff Roberts and Jorge L Rodriguez.
 
-**Modifications by the libphash authors:** the out-of-memory paths of `stbir__alloc_internal_mem_and_build_samplers()` / `stbir__free_internal_mem()` are hardened against a crash and several leaks under `STBIR__SEPARATE_ALLOCATIONS`. Each change is marked in the file with `/* libphash local patch (not upstream): ... */`; the reasoning is in `docs/development.md`. Both licenses permit modification; the notice above is retained, and this paragraph records the change as required of a modified copy.
+**Modifications by the libphash authors:** the out-of-memory paths of `stbir__alloc_internal_mem_and_build_samplers()` / `stbir__free_internal_mem()` are hardened against a crash and several leaks under `STBIR__SEPARATE_ALLOCATIONS`. Each change is marked in the file with `/* libphash local patch (not upstream): ... */`, the whole change is `vendor/patches/stb_image_resize2.h.patch`, and the reasoning is in `docs/development.md`. Both licenses permit modification; the notice above is retained, and this paragraph records the change as required of a modified copy.
 
 ---
 
@@ -130,7 +130,10 @@ Permission is granted to anyone to use this software for any purpose, including 
 Everything except the two `stb_*.h` files is a git submodule, so its exact revision is
 recorded in the repository and `git submodule status` prints it. The two stb headers are
 copied into `vendor/` instead, which is why their versions and hashes are written out
-above: without them an update leaves no trace. **Both are modified copies** — each carries
-a local patch to its out-of-memory handling, marked in the file and explained in
-`docs/development.md`, so two hashes are recorded for each: the file as it is here, and
-the upstream file it was derived from.
+above: without them an update leaves no trace. **Both are modified copies** — each is the
+upstream file at the recorded commit, unchanged except for a local patch to its
+out-of-memory handling, marked in the file, kept as a unified diff in `vendor/patches/` and
+explained in `docs/development.md`. Two hashes are recorded for each: the file as it is
+here, and the upstream file it was derived from. `scripts/check_stb_patches.sh` downloads
+the upstream file at the recorded commit, checks its hash, applies the patch and requires
+the result to be the vendored file byte for byte.
