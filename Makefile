@@ -132,6 +132,12 @@ OBJS = $(SRCS:$(SRC_DIR)/%.c=$(OBJ_DIR)/%.o)
 TEST_SRCS = $(wildcard $(TEST_DIR)/test_*.c)
 TEST_BINS = $(TEST_SRCS:$(TEST_DIR)/%.c=%) test_abi_short_enums
 
+# Header dependencies: every compile writes a .d next to its output (-MMD) listing the
+# headers it read, with an empty rule per header (-MP) so a deleted header does not stop
+# the build. Included at the end of this file; a change to any header -- include/,
+# src/, generated/ -- rebuilds exactly the objects and binaries that read it.
+DEPFLAGS = -MMD -MP
+
 # Default target
 all: $(LIB_NAME) $(TEST_BINS)
 
@@ -179,23 +185,23 @@ $(LIB_NAME): $(OBJS)
 LIB_CFLAGS = -fvisibility=hidden
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(LIB_CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(LIB_CFLAGS) $(DEPFLAGS) -c $< -o $@
 
 # stb_image_resize2 implementation TU — see the PHASH_SANITIZE block above.
 # Empty outside sanitizer builds, so release builds are unaffected.
 STB_NOSAN_CFLAGS ?=
 $(OBJ_DIR)/image/stb_resize_impl.o: $(SRC_DIR)/image/stb_resize_impl.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(LIB_CFLAGS) $(STB_NOSAN_CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(LIB_CFLAGS) $(STB_NOSAN_CFLAGS) $(DEPFLAGS) -c $< -o $@
 
 # Test compilation
 # test_abi.c built again under -fshort-enums, which shrinks any public enum without its
 # width spacer. Header-only by design, so it is not linked against the library.
 test_abi_short_enums: $(TEST_DIR)/test_abi.c $(GENERATED_DIR)/phash_version.h
-	$(CC) $(CFLAGS) -fshort-enums $< -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(DEPFLAGS) -fshort-enums $< -o $@ $(LDFLAGS)
 
 test_%: $(TEST_DIR)/test_%.c $(LIB_NAME)
-	$(CC) $(CFLAGS) $< $(LIB_NAME) -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(DEPFLAGS) $< $(LIB_NAME) -o $@ $(LDFLAGS)
 
 # Run all tests. Each test is its own target, so `make test -j8` runs them side by side:
 # they share no files (each names its own scratch files) and none depends on timing.
@@ -247,7 +253,7 @@ coverage-cmake:
 
 # The benchmark is a measuring tool, not a test: outside TEST_BINS, built and run here.
 bench_hash: $(TEST_DIR)/bench_hash.c $(LIB_NAME)
-	$(CC) $(CFLAGS) $< $(LIB_NAME) -o $@ $(LDFLAGS)
+	$(CC) $(CFLAGS) $(DEPFLAGS) $< $(LIB_NAME) -o $@ $(LDFLAGS)
 
 benchmark: bench_hash
 	./bench_hash hash tests/data/photo.jpeg 100
@@ -299,7 +305,7 @@ install-test:
 	./scripts/smoke_make_install.sh
 
 clean:
-	rm -rf $(OBJ_DIR) $(GENERATED_DIR) *.a *.o test_* bench_hash bench_hash.dSYM build .cache docs/coverage
+	rm -rf $(OBJ_DIR) $(GENERATED_DIR) *.a *.o *.d test_* bench_hash bench_hash.dSYM build .cache docs/coverage
 	find . -name "*.gcda" -delete
 	find . -name "*.gcno" -delete
 	find . -name "*.gcov" -delete
@@ -323,3 +329,5 @@ docker-shell: docker-build
 	docker run --rm -it $(DOCKER_IMAGE) bash
 
 .PHONY: all debug test clean format benchmark coverage coverage-cmake docker-build docker-test docker-shell install uninstall install-test
+
+-include $(OBJS:.o=.d) $(TEST_BINS:%=%.d) bench_hash.d

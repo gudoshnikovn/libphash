@@ -9,6 +9,7 @@ obj/
 # Executables (tests, benchmark)
 test_*
 /bench_hash
+/bench_hash.d
 /bench_hash.dSYM/
 !tests/**/test_*.c
 !tests/**/*.h
