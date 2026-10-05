@@ -14,10 +14,16 @@
  * would bind to that zlib instead of the vendored zlib-ng. jpeg-static is the codec
  * alone.
  *
- * Decode settings: the fast integer IDCT, fancy (smooth) chroma upsampling, DCT-domain
- * scaling for decode_scale, and any libjpeg warning (a truncated stream, stray bytes
- * before a marker) treated as a failure. These settings fix the decoded pixels, so
- * changing any of them changes hash values. */
+ * Decode settings: the accurate integer IDCT, fancy (smooth) chroma upsampling,
+ * DCT-domain scaling for decode_scale, and any libjpeg warning (a truncated stream, stray
+ * bytes before a marker) treated as a failure. These settings fix the decoded pixels, so
+ * changing any of them changes hash values.
+ *
+ * JDCT_ISLOW, not JDCT_IFAST: the fast IDCT adds an error of its own on top of the
+ * compression's -- about 13% more error energy at quality 90-95, where quantisation is
+ * fine -- and that error reaches the hashes: on photographs it moves dHash, pHash and BMH
+ * 1.7-3x further from the hash of the original pixels. The accurate IDCT matches the
+ * floating-point reference and costs about 5% of decode time. */
 #    include <setjmp.h>
 #    include <string.h>
 
@@ -161,7 +167,7 @@ unsigned char *ph_decode_jpeg_mem(const unsigned char *buffer, size_t size, int 
 
     const int out_channels = (req_comp == 1) ? 1 : 3;
     cinfo.out_color_space = (req_comp == 1) ? JCS_GRAYSCALE : JCS_RGB;
-    cinfo.dct_method = JDCT_IFAST;
+    cinfo.dct_method = JDCT_ISLOW;
     cinfo.do_fancy_upsampling = TRUE;
     cinfo.scale_num = 1;
     cinfo.scale_denom = ph_jpeg_scale_denom(decode_scale);
