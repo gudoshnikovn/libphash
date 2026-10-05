@@ -139,3 +139,42 @@ option is a configure-time error under GCC). CI runs it nightly for 30 minutes
 Both start from the corpus the previous runs saved to the Actions cache and save it back
 minimized; the nightly run also keeps it as a 90-day artifact. A crash there is treated
 the same as a privately reported vulnerability.
+
+## Verifying a release artifact
+
+Every archive attached to a GitHub Release comes with two things that say different
+things about it:
+
+- **`SHA256SUMS.txt`** shows that a download is intact. It does not show where the
+  archive came from: it is served from the same place as the archives, so anyone able
+  to replace an archive there could replace the checksum file with it.
+- **A build provenance attestation** shows where it came from. The release workflow
+  (`.github/workflows/release.yml`) attests every archive with
+  `actions/attest-build-provenance`: a statement that the file with this SHA-256 was
+  built by that workflow, in this repository, from the tagged commit, signed with a
+  certificate GitHub issues to that one run and recorded in the public Sigstore
+  transparency log. It cannot be produced without running the workflow here.
+
+To check an archive, with the [GitHub CLI](https://cli.github.com/):
+
+```bash
+gh attestation verify libphash-2.0.0-linux-x86_64.tar.gz --repo gudoshnikovn/libphash
+```
+
+The command fails unless the archive is byte for byte one this repository's release
+workflow built. The output names the workflow, the commit and the tag.
+
+## Withdrawing a release
+
+If a published release turns out to be defective — a security issue, a wrong artifact,
+a build that does not work — it is not replaced under the same version:
+
+1. The GitHub Release is marked as a pre-release (or deleted, if its archives must not
+   be downloaded at all), with a note naming the problem and the fixed version. The tag
+   stays: removing or moving a published tag breaks every build that pinned it, and the
+   attestations of its archives keep pointing at that commit.
+2. The fix is released as the next patch version, with a `CHANGELOG.md` entry that says
+   which release it supersedes and why.
+3. Dependents that ship the binaries — the Python bindings (`python-libphash`) among
+   them — are told through a GitHub Security Advisory when the defect is a vulnerability,
+   and through the release notes otherwise.

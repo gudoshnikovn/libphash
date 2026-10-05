@@ -82,7 +82,10 @@ compiled with the full vendored decoder set (`libjpeg-turbo`, `libpng`,
 `libwebp`, `zlib-ng`) and smoke-tested against a clean extraction before
 publishing — see `.github/workflows/release.yml`. This is the quickest path
 for FFI bindings or any consumer that doesn't want to build the vendored
-decoders itself.
+decoders itself. Each archive also carries a build provenance attestation:
+`gh attestation verify <archive> --repo gudoshnikovn/libphash` confirms it was
+built by this repository's release workflow (see `SECURITY.md`, "Verifying a
+release artifact").
 
 **CPU baseline.** The x86-64 archives need SSE4.2 and POPCNT (the x86-64-v2 level: every
 x86-64 CPU since 2009–2011); the arm64 archives need ARMv8-A with Advanced SIMD, which

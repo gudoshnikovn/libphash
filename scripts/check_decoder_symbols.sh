@@ -3,8 +3,10 @@
 # decoders its CMake build tree asked for, linked statically, and nothing else:
 #
 #   - "asked for" is the PHASH_USE_* options in the CMakeCache.txt of the build tree the
-#     binary sits in. A decoder that is on there and silently fell back to stb_image, or
-#     that is off and was linked anyway, fails the check;
+#     binary sits in, or, for a binary outside a build tree (an unpacked release archive),
+#     PH_EXPECT_BUILD in the format test_build_info reads ("jpeg=libjpeg-turbo
+#     png=libpng webp=libwebp zlib=zlib-ng"). A decoder that is on and silently fell back
+#     to stb_image, or that is off and was linked anyway, fails the check;
 #   - each decoder that is on defines its entry point in the binary (libjpeg-turbo
 #     jpeg_std_error, libpng png_create_read_struct, libwebp WebPDecode), and each one
 #     that is off defines none;
@@ -30,16 +32,48 @@ BIN="${1:?usage: check_decoder_symbols.sh <linked binary>}"
 [ -f "$BIN" ] || { echo "check_decoder_symbols: no file at '$BIN'" >&2; exit 1; }
 
 # The build tree is the nearest directory above the binary with a CMakeCache.txt.
+CACHE=""
 dir="$(cd "$(dirname "$BIN")" && pwd)"
-while [ ! -f "$dir/CMakeCache.txt" ]; do
-    [ "$dir" != "/" ] || { echo "check_decoder_symbols: no CMakeCache.txt above '$BIN'" >&2; exit 1; }
+while :; do
+    if [ -f "$dir/CMakeCache.txt" ]; then
+        CACHE="$dir/CMakeCache.txt"
+        break
+    fi
+    [ "$dir" != "/" ] || break
     dir="$(dirname "$dir")"
 done
-CACHE="$dir/CMakeCache.txt"
+if [ -z "$CACHE" ] && [ -z "${PH_EXPECT_BUILD:-}" ]; then
+    echo "check_decoder_symbols: no CMakeCache.txt above '$BIN' and no PH_EXPECT_BUILD" >&2
+    exit 1
+fi
+
+# PH_EXPECT_BUILD, translated to the option it stands for.
+expected_option() {
+    local key want
+    case "$1" in
+        PHASH_USE_LIBJPEG_TURBO) key=jpeg want=libjpeg-turbo ;;
+        PHASH_USE_LIBPNG) key=png want=libpng ;;
+        PHASH_USE_WEBP) key=webp want=libwebp ;;
+        PHASH_USE_ZLIB_NG) key=zlib want=zlib-ng ;;
+    esac
+    local token
+    for token in $PH_EXPECT_BUILD; do
+        if [ "${token%%=*}" = "$key" ]; then
+            [ "${token#*=}" = "$want" ] && echo ON || echo OFF
+            return
+        fi
+    done
+    echo "check_decoder_symbols: PH_EXPECT_BUILD has no $key= token" >&2
+    exit 1
+}
 
 option_on() {
     local value
-    value="$(sed -n "s/^$1:BOOL=//p" "$CACHE")"
+    if [ -n "$CACHE" ]; then
+        value="$(sed -n "s/^$1:BOOL=//p" "$CACHE")"
+    else
+        value="$(expected_option "$1")" || exit 1
+    fi
     case "$value" in
         ON | on | TRUE | true | 1 | YES | yes | Y | y) return 0 ;;
         OFF | off | FALSE | false | 0 | NO | no | N | n | "") return 1 ;;

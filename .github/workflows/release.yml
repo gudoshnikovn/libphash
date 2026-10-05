@@ -148,6 +148,20 @@ jobs:
         archives=(dist/libphash-*-${{ matrix.platform }}-shared.tar.gz dist/libphash-*-${{ matrix.platform }}-shared.zip)
         scripts/smoke_release_artifact.sh "${archives[0]:-}" shared
 
+    # The shared library in the archive carries the decoders the release is built with,
+    # statically, and no dynamic dependency on a system decoder library. nm/readelf/otool:
+    # Linux and macOS.
+    - name: Check the shared library's decoders
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        PH_EXPECT_BUILD: jpeg=libjpeg-turbo png=libpng webp=libwebp zlib=zlib-ng
+      run: |
+        mkdir -p unpacked
+        tar -xzf dist/libphash-*-${{ matrix.platform }}-shared.tar.gz -C unpacked
+        lib=$(find unpacked -type f \( -name 'libphash.so.*.*.*' -o -name 'libphash.*.*.*.dylib' \) | head -n1)
+        scripts/check_decoder_symbols.sh "$lib"
+
   checksums:
     needs: smoke
     runs-on: ubuntu-24.04
@@ -181,8 +195,12 @@ jobs:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: checksums
     runs-on: ubuntu-24.04
+    # contents: write to create the release; id-token and attestations: write to sign
+    # and store the build provenance below. No other job holds any of the three.
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     timeout-minutes: 10
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -209,14 +227,34 @@ jobs:
           echo "See CHANGELOG.md for details." > release_notes.md
         fi
 
-    - name: Create GitHub Release
+    # Build provenance for every archive: a statement, signed with a certificate GitHub
+    # issues to this run alone and recorded in the public Sigstore transparency log, that
+    # the file with this SHA-256 was built by this workflow from this repository at this
+    # commit and tag. SHA256SUMS.txt only shows a download is intact -- it is served from
+    # the same place as the archives, so whoever could replace one could replace both.
+    # `gh attestation verify <archive> --repo <owner>/libphash` checks it (SECURITY.md).
+    - name: Attest build provenance
+      uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      with:
+        subject-path: |
+          dist/*.tar.gz
+          dist/*.zip
+
+    # Idempotent: a rerun for the same tag -- after a failure past this point, or to
+    # replace an archive -- updates the existing release instead of failing on
+    # "release already exists" and discarding four platforms' builds. --verify-tag
+    # refuses to create a release (and with it a tag) for a tag that is not pushed.
+    - name: Create or update the GitHub Release
       env:
         GH_TOKEN: ${{ github.token }}
       run: |
         tag="${GITHUB_REF#refs/tags/}"
-        prerelease_flag=""
-        case "$tag" in *-*) prerelease_flag="--prerelease" ;; esac
-        gh release create "$tag" dist/* \
-          --title "$tag" \
-          --notes-file release_notes.md \
-          $prerelease_flag
+        prerelease_flag=()
+        case "$tag" in *-*) prerelease_flag=(--prerelease) ;; esac
+        if gh release view "$tag" > /dev/null 2>&1; then
+          gh release upload "$tag" dist/* --clobber
+          gh release edit "$tag" --title "$tag" --notes-file release_notes.md "${prerelease_flag[@]}"
+        else
+          gh release create "$tag" dist/* --verify-tag --title "$tag" \
+            --notes-file release_notes.md "${prerelease_flag[@]}"
+        fi
