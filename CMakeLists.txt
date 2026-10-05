@@ -462,7 +462,9 @@ if(PHASH_USE_LIBJPEG_TURBO)
     # libjpeg-turbo 3.x compiles its own zlib and spng into the TurboJPEG archive, with
     # global symbols, for image-file I/O this library never uses -- and on macOS libpng
     # would then bind to that zlib instead of the vendored zlib-ng.
-    # jpeg-static is the codec alone.
+    # jpeg-static is the codec alone, and its API reports a failed allocation by error code
+    # (JERR_OUT_OF_MEMORY), which the TurboJPEG API folds into a generic fatal error.
+    # scripts/check_decoder_symbols.sh checks the linked result.
     #
     # libjpeg-turbo doesn't like add_subdirectory, so we point to the pre-built lib.
     # NO_DEFAULT_PATH: otherwise a system copy (e.g. Homebrew's jpeg-turbo) found on the

@@ -147,6 +147,10 @@ jobs:
     - name: Run Tests
       run: cd build && ctest --output-on-failure
 
+    # One zlib (zlib-ng) and no codec the library does not use in the linked result.
+    - name: Check decoder symbols
+      run: ./scripts/check_decoder_symbols.sh build/test_png_variants
+
   # Warnings as errors on the project's own code -- library, tests, fuzzer, benchmark --
   # and never on the vendored decoders (PHASH_WARNINGS_AS_ERRORS). A job of its own
   # rather than a flag on every build: a build from source must not fail because a newer

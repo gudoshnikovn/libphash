@@ -444,6 +444,19 @@ Their pixels follow formulas that `tests/src/test_png_variants.c` recomputes. Th
 committed; regenerating them with another zlib may change the compressed bytes, never the
 pixels.
 
+The JPEG fixtures in `tests/data/jpeg/` are one 61×45 image in every coding mode the
+decoder reads — 4:4:4, 4:2:2, 4:4:0, 4:2:0, 4:1:1, grayscale, progressive, restart markers,
+arithmetic coding — encoded by `scripts/gen_jpeg_fixtures.py` with libjpeg-turbo's `cjpeg`
+(the script's docstring shows how to build it from the submodule). JPEG is lossy, so
+`tests/src/test_jpeg_variants.c` cannot recompute the pixels from a formula; it pins the
+size and a checksum of what the native decoder returns for each file, in colour and in
+grayscale, at every `decode_scale`. The golden hashes see a 32×32 reduction and miss a
+shift of a few levels; this table does not. A change to the decoder's settings or to the
+libjpeg-turbo version fails it, and the failure prints the new table — accepting it is a
+decision about decoded pixels, made in the same commit as the change that caused it.
+`scripts/check_decoder_symbols.sh` checks the linked result: zlib-ng is the only zlib, and
+nothing from libjpeg-turbo's TurboJPEG archive (its private zlib and libspng) is linked.
+
 **Golden hashes.** `tests/src/test_golden_hashes.c` compares every algorithm on every
 fixture, exactly, with `tests/data/golden_hashes.<jpeg>.txt` — one file per JPEG decoder
 (`libjpegturbo`, `stbjpeg`), because the two round their IDCT differently; nothing else
