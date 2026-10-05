@@ -509,6 +509,10 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   as not an image, and past 4 GiB the length wrapped and the start of the buffer was
   decoded as if it were the whole file. Encoded input over `INT_MAX` bytes fails with
   `PH_ERR_IMAGE_TOO_LARGE` in every build.
+- **A file declaring a zero width or height loaded as an image with no pixels.** An HDR
+  header of `+X 0` (or a width `strtol()` reads as 0) decoded "successfully", and every
+  hash then described nothing. A decoded image without a positive width and height fails
+  with `PH_ERR_CORRUPT_DATA`, whichever decoder produced it.
 - **pHash with an odd `dct_size` read and wrote misaligned `float`s.** Every odd value from
   3 to 31 placed the DCT buffers at an odd address: undefined behaviour, reported by UBSan
   and a crash on strict-alignment targets. Hash values do not change.
