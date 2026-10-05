@@ -453,7 +453,8 @@ already overflowed in the narrower type, such as `(uint64_t)(a * b)` on two ints
 ## CI matrix (`.github/workflows/ci.yml`)
 
 One job per concern, all triggered on push to `main` or to a `release/**` branch,
-and on any pull request targeting either:
+on any pull request targeting either, and by hand through `workflow_dispatch` (see
+"Running CI on a branch" below):
 
 | Job | What it checks |
 |---|---|
@@ -484,7 +485,13 @@ itself cannot move into the action, because a local action is read from the work
 copy. Configure and build steps stay in the jobs, since their arguments are what
 distinguishes one job from another.
 
-Two more workflows, and Dependabot, run on their own schedule rather than per push:
+Three more workflows, and Dependabot, run on their own trigger rather than per push:
+
+- **`.github/workflows/release.yml`** — on a pushed `v*` tag, builds the static and
+  shared release archives for every platform, smoke-tests each one from a clean
+  extraction, attests them and publishes the GitHub Release; a tag containing `-` is
+  published as a pre-release. Run by hand, it builds and smoke-tests the same archives
+  as workflow artifacts without publishing.
 
 - **`.github/workflows/fuzz-nightly.yml`** — a 30-minute libFuzzer run on the default
   branch, sharing the corpus cache with the `fuzz` job. See "Fuzzing" below.

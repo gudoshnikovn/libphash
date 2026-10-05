@@ -158,8 +158,8 @@ int main(void) {
 ```
 
 Full, compiling versions of this and a two-image comparison example are in
-[`examples/`](examples/) — they're built and run in CI, so they're guaranteed to still
-work with the current header.
+[`examples/`](examples/) — CI builds and runs them against the current header in every
+run.
 
 ### Compiling & Linking
 

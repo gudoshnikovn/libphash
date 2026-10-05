@@ -992,9 +992,9 @@ typedef struct {
  * @param threads Worker thread count. 0 = one per CPU this process may use (see below),
  *                1 = run sequentially on the calling thread with no thread creation,
  *                >1 = that many workers.
+ *                Never more workers than items: a count above `n` runs `n` workers.
  *                Ignored (always sequential) if the library was built without
- *                `PHASH_ENABLE_THREADS` (default ON in CMake, OFF in the Makefile) or if
- *                `n` is smaller than the requested thread count.
+ *                `PHASH_ENABLE_THREADS` (ON by default in both CMake and the Makefile).
  *
  *                What `threads = 0` counts: the online CPUs, narrowed on Linux by the
  *                process's affinity mask (`taskset`, `docker --cpuset-cpus`) and by a cgroup

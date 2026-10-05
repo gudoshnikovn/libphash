@@ -65,8 +65,8 @@ Optimized low-level primitives for image manipulation, split into dedicated modu
 - **`filters.c`**: Gaussian blur (σ-parameterised; mHash and Radial, see
   `docs/algorithms.md`) and histogram equalisation (mHash).
 - **`orient.c`**: the EXIF/WebP auto-orientation layer described above.
-- **Gamma Correction**: `(v/max)^γ · max` per image, default γ = 1.0 (identity), Radial
-  only; see `docs/algorithm-provenance.md` §7.
+- **Gamma Correction** (in `color.c`): `(v/max)^γ · max` per image, default γ = 1.0
+  (identity), Radial only; see `docs/algorithm-provenance.md` §7.
 
 ### 3. Hash Algorithms (`src/hashes/`)
 Divided into specific implementations corresponding to unique theoretical properties:
@@ -84,6 +84,8 @@ Divided into specific implementations corresponding to unique theoretical proper
   by histogram intersection, not a bit vector.
 - `color_moments.c`: mean/std-dev/skew of each RGB channel as nine signed fixed-point
   features.
+- `algorithm.c`: algorithms as values — the `ph_algorithm_t` dispatcher, each
+  algorithm's digest shape and its name (see "Algorithms as values" below).
 - `multi.c`: `ph_compute_multi()`, the four `uint64_t` algorithms (aHash/dHash/pHash/wHash)
   in one call, over the context's cached grayscale and shared area-average pass.
 - `common.c`: the median threshold pHash and wHash share (`ph_median_bitpack*`).
@@ -92,10 +94,34 @@ Comparison and serialisation of finished digests (`ph_hamming_distance*`,
 `ph_similarity*`, `ph_l2_distance`, `ph_radial_similarity`, the hex helpers) live in
 `src/compare.c`, outside the algorithms directory.
 
-Every one of these is traced to its source (or, for wHash, to the absence of one), and
+Every algorithm is traced to its source (or, for wHash, to the absence of one), and
 every known divergence from
 that source is written down, in `docs/algorithm-provenance.md` — this page describes
 where the code lives, not what it computes or why; see `docs/algorithms.md` for that.
+
+### 4. Context, files and the shared core (`src/*.c`)
+
+- `core.c`: the context lifecycle (`ph_create()`, `ph_free()`), the error strings and
+  `ph_get_last_error_message()`, and the load entry points (`ph_load_from_file()`,
+  `ph_load_from_memory()`, `ph_load_from_pixels()`) — decode, alpha handling and
+  orientation in that order.
+- `config.c`: the `ph_context_set_*` setters and the defaults a new context starts from.
+- `arena.c`: the scratch arena (see "Key Structures"); its fields are touched only here.
+- `fileio.c`: a file's bytes from exactly one `open()`, memory-mapped where the platform
+  allows it and read into the heap otherwise; every reason a path cannot be loaded is
+  classified here as `PH_ERR_IO`, before a decoder sees a byte.
+- `batch.c`: `ph_hash_files()`/`ph_hash_buffers()` and their `_ex` forms, the worker
+  pool and the CPU count behind `threads = 0` (see "Batch hashing").
+- `compare.c`: comparison and hex serialisation of finished digests.
+- `version.c`: `ph_version()`, `ph_version_number()`, `ph_get_build_info()` and the
+  `ph_can_use_*()` queries.
+
+There is no catch-all internal header. Each subsystem has its own, included by path
+from `src/`: `context.h` (`struct ph_context` and its configuration), `arena.h`,
+`safety.h` (decode limits, overflow-checked allocation sizes, diagnostic messages),
+`bytes.h` (byte-order loads), `digest.h` (digest checks shared by the comparison
+functions), `batch.h`, `fileio.h`, `loader.h`, `image/image.h`, `hashes/hashes.h` (the
+algorithms' shared math and every algorithm constant) and `loaders/backends.h`.
 
 ## Data Flow
 
