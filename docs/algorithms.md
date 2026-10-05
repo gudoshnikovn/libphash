@@ -163,7 +163,7 @@ portability and comparison against a foreign implementation.
 - **Concept**: downscale to 8×8, convert to grayscale, compute the mean luminance, set
   one bit per pixel for above/below the mean.
 - **Output**: 64-bit.
-- **Strength**: the fastest thing here, and very good at finding a known image again.
+- **Strength**: among the cheapest here, and very good at finding a known image again.
 - **Weakness**: sensitive to anything that moves the mean — brightness, contrast, gamma.
 - **Conformance**: follows its source, including the bit order.
 
@@ -173,7 +173,7 @@ portability and comparison against a foreign implementation.
 - **Concept**: downscale to 9×8 and compare each pixel with its right-hand neighbour,
   giving 8 differences per row over 8 rows.
 - **Output**: 64-bit.
-- **Strength**: as fast as aHash and markedly better at it — gradients survive brightness
+- **Strength**: as cheap as aHash on small images and markedly better at it — gradients survive brightness
   and contrast changes that defeat an average.
 - **Conformance**: follows its source exactly, including the direction of the comparison
   (`1` means the left pixel is darker than the right).
@@ -189,8 +189,8 @@ portability and comparison against a foreign implementation.
   own `ph_dct_imagehash()`.
 - **Output**: 64-bit.
 - **Tuning**: `ph_context_set_phash_params(dct_size, reduction_size)` — `dct_size`
-  default 32 (larger captures more detail and costs more), `reduction_size` default 8
-  (giving 8×8 = 64 bits), 4–8. Below 4 the hash is degenerate: over 400 photographs,
+  `reduction_size`..32, default 32, which is also the maximum (a smaller DCT costs less
+  and sees less detail); `reduction_size` 4–8, default 8 (giving 8×8 = 64 bits). Below 4 the hash is degenerate: over 400 photographs,
   `reduction_size` 3 gives 70 distinct hashes and 2 gives 4, against 304 at 4 and 350 at
   8. Between 4 and 8 a smaller block trades precision for a shorter hash.
 - **Strength**: robust to scaling and moderate compression; the usual first choice when
@@ -237,11 +237,13 @@ portability and comparison against a foreign implementation.
 - **Tuning**: `ph_context_set_mhash_params(alpha, level, size)` — `alpha` and `level` set
   the kernel's scale (pHash's own two parameters), `size` the normalisation preset. The
   defaults are 2, 1 and 512, and are the reference implementation's; across 24
-  combinations nothing reliably beats them.
+  combinations nothing reliably beats them. `alpha` > 1, `level` ≥ 0, with the kernel
+  (`2 · 4 · alpha^level + 1` on a side) at most 65; `size` 62–4096, the cost roughly
+  quadratic in it.
 - **Strength**: a coarse-structure edge descriptor, indifferent to colour — a colour shift
   moves 25 of 576 bits on the test photograph where an unrelated image moves 288.
-- **Weakness**: the most expensive hash here (1.8 ms against 0.04 ms for aHash), and it
-  notices a small local edit *less* than it notices a rescale — see
+- **Weakness**: the second most expensive hash here, after Radial — 13 to 20 times aHash
+  (see "Cost" below) — and it notices a small local edit *less* than it notices a rescale — see
   [`algorithm-provenance.md`](algorithm-provenance.md) §5.
 
 ## 6. BMH (Block Mean Hash)
@@ -299,10 +301,11 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
 - **Tuning**: `ph_context_set_radial_params(projections, samples, sigma)`:
   - `projections` — number of **angles**, default 180, 40–4096.
   - `samples` — default 128 samples per projection, 2–4096.
-  - The cost is `projections × samples` samples whatever the image size, and the digest
-    converges long before the ceilings: 1440 × 1024 costs 5.5 ms on a 400×400 photograph,
-    4096 × 4096 costs 56 ms and lies within one or two units per coefficient of a 16384²
-    grid. Raising either value past the low thousands buys time, not information.
+  - The projections cost `projections × samples` samples whatever the image size (the
+    blur before them is what grows with the image), and the digest converges long before
+    the ceilings: 1440 × 1024 costs 5.5 ms on a 400×400 photograph, 4096 × 4096 costs
+    56 ms and lies within one or two units per coefficient of a 16384² grid. Raising
+    either value past the low thousands buys time, not information.
   - `sigma` — Gaussian-blur σ applied before the projections, default 3.5, (0, 64/3].
   - gamma (`ph_context_set_gamma()`) — default 1.0 (identity), affects Radial only.
 - **Rotation: a few degrees, plus an exact half turn — not arbitrary rotation.** Measured
@@ -329,8 +332,8 @@ grayscale conversion, and one area-average pass onto a 32×32 grid of exact sums
 which aHash (8×8), pHash (32×32 at the default `dct_size`), wHash (16×16) and BMH (16×16
 at the default `block_size`) take their working images bit for bit as a direct area
 average would give them. dHash resamples on its own (Mitchell, see §2). On a 20-megapixel
-photograph the four hashes cost 7.6 ms together, of which dHash's pass is 4.8 ms and the
-shared pass 1.2 ms. Results are identical to calling the individual `ph_compute_*`
+photograph the four hashes cost 7.5 ms together: dHash's own resampling pass about 4.9 ms,
+the other three with the shared grayscale and area pass 2.5 ms. Results are identical to calling the individual `ph_compute_*`
 functions yourself, which share the same cached work — the same saving
 `ph_hash_files()`/`ph_hash_buffers()` get for each file of a batch. mHash, BMH, Radial,
 ColorHash and ColorMoments are not part of this — their digests don't fit a `uint64_t`,
@@ -338,24 +341,53 @@ and BMH's median threshold plus the colour algorithms' `PH_ERR_REQUIRES_COLOR` f
 mode don't fit the "stops at the first failure, other slots partially written" contract
 either — call them directly.
 
+## Cost
+
+A hash's time grows with the **source image's pixel count**, not with the size of the
+hash: before the algorithm proper runs on a few thousand values, the grayscale
+conversion and the reduction (or, for mHash and Radial, a blur; for the color hashes, a
+pass over every pixel) read the whole decoded image. Measured as the first hash on a
+freshly loaded image, so the grayscale conversion and the area pass shared by aHash,
+pHash, wHash and BMH are included (`bench_hash hash`; CMake Release, every bundled
+decoder, Apple M3 Pro, minimum of 300 and 30 runs, default parameters):
+
+| Algorithm | 400×400 (`photo.jpeg`) | 5472×3648 (`photo_large.jpeg`) |
+|---|---|---|
+| aHash | 0.05 ms | 2.6 ms |
+| dHash | 0.05 ms | 6.3 ms |
+| pHash | 0.05 ms | 2.5 ms |
+| wHash, fast | 0.05 ms | 2.6 ms |
+| wHash, full | 0.09 ms | 7.8 ms |
+| BMH | 0.05 ms | 2.6 ms |
+| ColorHash | 0.13 ms | 16.7 ms |
+| ColorMoments | 0.24 ms | 29.8 ms |
+| mHash | 0.92 ms | 33.1 ms |
+| Radial | 0.60 ms | 49.4 ms |
+| *decoding the JPEG, for scale* | *0.23 ms* | *54.0 ms* |
+
+For the cheap hashes the decode is most of a load-and-hash; for mHash, Radial and the
+color hashes on a large image the hash is comparable to it or larger.
+`ph_context_set_decode_scale()` shrinks both for JPEG — the header has the end-to-end
+numbers.
+
 ## Comparison summary
 
 Ratings are relative and qualitative — they come from experience with the library, not
 from a measured benchmark. Where a rating depends on a divergence noted above, it is
-marked. For measured numbers, see the property tests described in the
-[verification methodology](methodology.md).
+marked. For measured robustness numbers, see the property tests described in the
+[verification methodology](methodology.md); for time, "Cost" above.
 
-| Algorithm | Speed | Rotation | Noise | Scaling | Output |
-|---|---|---|---|---|---|
-| aHash | ★★★★★ | ✗ | ★ | ★★★ | 64-bit |
-| dHash | ★★★★★ | ✗ | ★★ | ★★★★ | 64-bit |
-| pHash | ★★★ | ★★★ | ★★★★ | ★★★★★ | 64-bit |
-| mHash | ★ | ★ | ★★★ | ★★★★ | digest, 576-bit |
-| wHash | ★★ | ★ | ★★★ | ★★★★ | 64-bit |
-| Radial | ★ | ★★ — small angles, see §8 | ★★ | ★★★ | digest, 40 bytes |
-| BMH | ★★★ | ★ | ★★★ | ★★★★ | digest, 256-bit default |
-| ColorHash | ★★★★ | ★★★★★ | ★★★ | ★★★★★ | digest, 108 bytes |
-| ColorMoments | ★★★ | ★★★★ | ★★★ | ★★★★★ | digest, 18 bytes |
+| Algorithm | Rotation | Noise | Scaling | Output |
+|---|---|---|---|---|
+| aHash | ✗ | ★ | ★★★ | 64-bit |
+| dHash | ✗ | ★★ | ★★★★ | 64-bit |
+| pHash | ★★★ | ★★★★ | ★★★★★ | 64-bit |
+| mHash | ★ | ★★★ | ★★★★ | digest, 576-bit |
+| wHash | ★ | ★★★ | ★★★★ | 64-bit |
+| Radial | ★★ — small angles, see §8 | ★★ | ★★★ | digest, 40 bytes |
+| BMH | ★ | ★★★ | ★★★★ | digest, 256-bit default |
+| ColorHash | ★★★★★ | ★★★ | ★★★★★ | digest, 108 bytes |
+| ColorMoments | ★★★★ | ★★★ | ★★★★★ | digest, 18 bytes |
 
 The two colour hashes are insensitive to rotation and scaling for a reason that is worth
 stating: they discard spatial layout entirely. That makes them robust and, on their own,

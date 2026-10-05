@@ -456,8 +456,9 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
 /**
  * @brief Sets Radial Hash parameters.
  *
- * The cost of one call is projections * samples bilinear samples, whatever the image
- * size, and the digest converges long before the ceilings. Measured on a 400 x 400
+ * The projections cost projections * samples bilinear samples, whatever the image size
+ * (the blur before them grows with the image), and the digest converges long before the
+ * ceilings. Measured on a 400 x 400
  * photograph, squared L2 distance of the 40-byte digest to a 16384 x 16384 reference:
  *
  * | projections x samples | time    | squared L2 to the reference |
@@ -709,16 +710,26 @@ PH_API ph_error_t ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixe
  * 1/4 or 1/8 linear resolution using its DCT-domain scaling, which is cheaper than
  * decoding in full and downsampling afterward.
  *
- * @note **Entropy decoding is not skipped by this**, so the saving is bounded, not
- *       proportional to the scale: DCT scaling only shrinks the IDCT/upsample/color
- *       convert stage, while Huffman-decoding every coded coefficient still happens at
- *       full cost regardless of the requested output size, because JPEG stores
- *       coefficients sequentially per 8x8 block and there is no way to skip that pass.
- *       Measured on a 20-megapixel photo (5472x3648 4:2:0, `tests/data/photo_large.jpeg`,
- *       libjpeg-turbo with the accurate integer IDCT this library uses, arm64, min of 40
- *       iterations): full decode 50.6ms; @c PH_DECODE_SCALE_HALF 42.8ms (15.5% faster);
- *       @c PH_DECODE_SCALE_QUARTER 40.1ms (20.7%); @c PH_DECODE_SCALE_EIGHTH 38.2ms
- *       (24.6%) -- the gain saturates well short of proportional to the scale.
+ * @note **What it saves.** The decode itself gets only somewhat cheaper: DCT scaling
+ *       shrinks the IDCT/upsample/color-convert stage, while Huffman-decoding every coded
+ *       coefficient still happens at full cost, because JPEG stores coefficients
+ *       sequentially per 8x8 block and there is no way to skip that pass. Everything
+ *       after the decode -- grayscale conversion, and the reduction, blur or histogram of
+ *       each hash -- reads every decoded pixel, so it shrinks with the pixel count, 4x per
+ *       step. The saving on a whole load-and-hash is therefore largest for the hashes that
+ *       cost the most at full size. Measured on a 20-megapixel photo (5472x3648 4:2:0,
+ *       `tests/data/photo_large.jpeg`; CMake Release with the bundled libjpeg-turbo, Apple
+ *       M3 Pro; minimum of 40 decodes, of 20 load-and-hash runs on a fresh context):
+ *
+ *       | scale   | decode  | load + pHash | load + mHash | load + Radial |
+ *       |---------|---------|--------------|--------------|---------------|
+ *       | FULL    | 53.9 ms | 58.2 ms      | 90.0 ms      | 106.2 ms      |
+ *       | HALF    | 46.2 ms | 48.4 ms      | 57.5 ms      | 61.2 ms       |
+ *       | QUARTER | 43.3 ms | 45.2 ms      | 47.6 ms      | 48.6 ms       |
+ *       | EIGHTH  | 40.8 ms | 40.7 ms      | 42.4 ms      | 42.7 ms       |
+ *
+ *       From full to eighth: the decode 1.3x faster, load + pHash 1.4x, load + mHash
+ *       2.1x, load + Radial 2.5x.
  *
  * @note **This changes the hash, and by how much depends on the algorithm and on the
  *       image's content, not on the scale alone.** Measured as the Hamming distance
