@@ -546,10 +546,12 @@ static void scen_load_gray_as_colour(int recording) {
     ph_free(ctx);
 }
 
-/* The same expansion for a grey PGM, which stb_image decodes in every build. */
+/* A grey PGM, which stb_image decodes in every build. */
+static const uint8_t pgm[] = "P5\n4 3\n255\n\x10\x20\x30\x40\x50\x60\x70\x80\x90\xa0\xb0\xc0";
+
+/* The same expansion for the grey PGM. */
 static void scen_load_pgm_as_colour(int recording) {
     (void)recording;
-    static const uint8_t pgm[] = "P5\n4 3\n255\n\x10\x20\x30\x40\x50\x60\x70\x80\x90\xa0\xb0\xc0";
     ph_context_t *ctx = NULL;
     if (ph_create(&ctx) != PH_SUCCESS) {
         return;
@@ -842,6 +844,18 @@ int main(void) {
     build_oriented_jpeg();
 
     test_stb_oom_reason_pinned();
+
+    /* One stb_image decode before any scenario is counted. stb_image keeps its state in
+     * thread-local variables, and where the compiler emulates TLS (GCC on macOS: emutls)
+     * the first touch of each one allocates a block that lives as long as the thread --
+     * which the shim would charge as a leak to whichever scenario reaches stb_image first.
+     * A build with every native decoder reaches it first in the PGM scenario. */
+    {
+        ph_context_t *warm = NULL;
+        ASSERT_OK(ph_create(&warm));
+        ASSERT_OK(ph_load_from_memory(warm, pgm, sizeof(pgm) - 1));
+        ph_free(warm);
+    }
 
     test_threaded_batch_thread_array_oom();
 
