@@ -42,9 +42,9 @@ struct stored_hash {
 ## Restoring 1.x hash values (where possible)
 
 **Auto-orientation and alpha compositing are the two breaking changes you can opt out
-of.** Every other hash value change below (color hash, mHash, color moments, BMH, radial)
-is a rewritten algorithm with no "old mode" switch — recompute is the only path, per each
-item's own entry.
+of.** Every other hash value change below (color hash, mHash, color moments, BMH, radial,
+JPEG decoding) has no "old mode" switch — recompute is the only path, per each item's own
+entry.
 
 ```c
 ph_context_t *ctx;
@@ -351,6 +351,15 @@ this is the "what do I call now" summary.
   ```
 
   Radial tolerates a few degrees of rotation plus an exact half turn.
+
+## JPEG hashes move by a few bits: the accurate IDCT
+
+The native JPEG decoder (libjpeg-turbo, the default CMake build) uses its accurate integer
+IDCT; 1.x used the fast one, whose approximation error showed up in the hashes. Any stored
+hash of a JPEG can differ from the 2.0 value by a few bits — usually within any matching
+threshold, but not bit-identical, so an exact-match lookup on stored JPEG hashes misses.
+There is no switch back; recompute stored JPEG hashes. Builds without libjpeg-turbo
+(stb_image decodes JPEG) and PNG/WebP images are unaffected.
 
 ---
 

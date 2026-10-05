@@ -90,6 +90,14 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   reports 3 channels (1 when loaded as grayscale).
   *Restore the old behaviour:* `ph_context_set_alpha_mode(ctx, PH_ALPHA_IGNORE)`.
 
+- **JPEG is decoded with libjpeg-turbo's accurate IDCT.** 1.x used the fast integer IDCT
+  (`TJFLAG_FASTDCT`), whose approximation error lands in the hashes: over 120 crops of a
+  camera photo at JPEG quality 50–95 it adds up to 13 % more error energy than the
+  accurate one (at q90–95) and puts dHash, pHash and BMH 1.7–3× further from the hash of
+  the original pixels. Every hash of a JPEG decoded by the native backend can change, by a
+  few bits; the stb_image build, PNG and WebP are unaffected. Decoding costs about 5 % more.
+  *Restore the old behaviour:* not possible — recompute stored JPEG hashes.
+
 - **The Block Mean Hash thresholds against the median of the block means, not their
   arithmetic mean, so every BMH value changes.** That is what Yang, Gu and Niu's method 1
   specifies (step d and equation 3.9), and the median makes the bit distribution balanced
