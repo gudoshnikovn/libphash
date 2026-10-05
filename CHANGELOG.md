@@ -251,7 +251,8 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   archives (headers, library, `LICENSE`, `THIRD-PARTY-NOTICES.md`) for linux-x86_64,
   linux-arm64, macos-arm64 and windows-x86_64 on the GitHub Releases page, each built
   with the full vendored decoder set and smoke-tested in isolation before publishing.
-  See the README's "Prebuilt binaries" section.
+  The libraries are reproducible: a rebuild of the same sources with the same toolchain
+  gives byte-identical files. See the README's "Prebuilt binaries" section.
 
 - **Batch API.** `ph_hash_files()` and `ph_hash_buffers()` hash a batch of files or
   in-memory buffers, optionally across an internal thread pool (`threads`: 0 = one worker
