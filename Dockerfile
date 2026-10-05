@@ -25,6 +25,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN useradd --create-home --shell /bin/bash dev
 
+# WORKDIR would create /workspace owned by root, and COPY --chown changes only what it
+# copies, not the directory: dev could not create build/ in it.
+RUN mkdir /workspace && chown dev:dev /workspace
 WORKDIR /workspace
 
 # Submodules must already be checked out on the host (`git submodule update --init

@@ -261,9 +261,11 @@ DOCKER_IMAGE = libphash-dev-arm64
 docker-build:
 	docker build -t $(DOCKER_IMAGE) .
 
+# \$$(nproc): make passes on $(nproc) literally, so the container's shell counts the
+# container's cores; a bare $$(nproc) would be expanded by the host shell first.
 docker-test: docker-build
 	docker run --rm $(DOCKER_IMAGE) bash -c \
-		"mkdir -p build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j$$(nproc) && ctest --output-on-failure"
+		"echo \"jobs: \$$(nproc)\" && cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j\$$(nproc) && cd build && ctest -j\$$(nproc) --output-on-failure"
 
 docker-shell: docker-build
 	docker run --rm -it $(DOCKER_IMAGE) bash

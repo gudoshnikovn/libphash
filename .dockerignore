@@ -9,3 +9,5 @@ docs/coverage/
 **/build/
 *.dSYM
 .DS_Store
+tmp/
+.claude/
