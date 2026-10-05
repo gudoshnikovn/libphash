@@ -78,12 +78,14 @@ expectation together, so only a value set from outside sees it.
 
 | Preset | Configuration | CI job |
 |---|---|---|
-| `release` | Release, every bundled decoder, `PHASH_STRICT_DEPS=ON` | `build-and-test` (gcc and clang) |
-| `shared` | `release` + `PHASH_BUILD_SHARED=ON` | — (`install-smoke-test` builds it through its scripts) |
+| `release` | Release, every bundled decoder, `PHASH_STRICT_DEPS=ON` | `build-and-test` (gcc and clang), `build-and-test-windows` (MSVC), `bare-image` |
+| `shared` | `release` + `PHASH_BUILD_SHARED=ON`; the tests that use only the public API link the shared library itself | `build-and-test` (`ubuntu-x86_64-gcc-shared`) |
 | `strict-warnings` | `release` + `PHASH_WARNINGS_AS_ERRORS=ON`, compile commands for clang-tidy | `strict-warnings` |
 | `minimal` | Release, stb_image only | `c-standard-matrix` (with `-DCMAKE_C_STANDARD=…`) |
 | `debug` | Debug, every bundled decoder | `valgrind` (native) |
 | `minimal-debug` | Debug, stb_image only | `valgrind` (stb-only) |
+| `no-threads` | `minimal` + `PHASH_ENABLE_THREADS=OFF` | `build-options` |
+| `mock-backend` | `minimal` + `PHASH_ENABLE_MOCK_BACKEND=ON` | `build-options` |
 | `i686` | Release, `-m32`, libpng only | `build-and-test-32bit` |
 | `asan` | Debug, ASan + UBSan, every bundled decoder | `sanitizers` |
 | `tsan`, `tsan-png`, `tsan-stb` | Debug, TSan: every decoder / libpng + libwebp + zlib-ng / stb_image only | `tsan` |
@@ -456,7 +458,9 @@ and on any pull request targeting either:
 | Job | What it checks |
 |---|---|
 | `format-check` | `scripts/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`; `scripts/check_docs_coverage.sh`; `scripts/check_final_state_voice.sh`, which fails on tracker ids, paths into local planning notes and release-cycle wording (a feature "since" a version) in tracked text; `shellcheck --severity=warning` over `scripts/*.sh`; `scripts/check_casts.py`, the explicit-cast count per file in `src/` against `scripts/explicit_casts.txt`; and `scripts/check_coverage.py --check-docs`, which keeps the coverage table below equal to `scripts/coverage_thresholds.txt`. Fast, no build, catches these before the slower jobs run. |
-| `build-and-test` | Full vendored build (libjpeg-turbo + libpng + libwebp + zlib-ng) across linux-x86_64 (gcc, clang), linux-arm64, macos-arm64. `PHASH_STRICT_DEPS=ON`, so a decoder silently falling back to stb_image is a hard configure failure, not a quiet pass. |
+| `build-and-test` | Full vendored build (libjpeg-turbo + libpng + libwebp + zlib-ng) across linux-x86_64 (gcc, clang), linux-arm64, macos-arm64, plus the shared library on linux-x86_64 (gcc). `PHASH_STRICT_DEPS=ON`, so a decoder silently falling back to stb_image is a hard configure failure, not a quiet pass. |
+| `build-and-test-windows` | The same full vendored build under MSVC on windows-latest, with NASM for libjpeg-turbo's SIMD: the configuration of the windows-x86_64 release archives, built and tested before a tag. |
+| `build-options` | stb_image-only builds with `PHASH_ENABLE_THREADS=OFF` (the batch API's sequential path) and with `PHASH_ENABLE_MOCK_BACKEND=ON` (the test-only `DE AD` decoder and the test branches written for it). `PHASH_OPTIMIZE_NATIVE` has no job: `-march=native` compiles for whatever CPU the runner has, so a result would describe that machine rather than the option. |
 | `strict-warnings` | The full vendored build with `PHASH_WARNINGS_AS_ERRORS=ON` (gcc, clang): any warning in libphash's own sources, tests or benchmark fails it. The only job with `-Werror`, so a newer compiler's new warning never breaks a build from source. Its clang leg also runs clang-tidy's `bugprone-misplaced-widening-cast` over `src/`. |
 | `coverage-cmake` | `scripts/coverage_cmake.sh` — line and branch coverage of the vendored decoder build, checked against `scripts/coverage_thresholds.txt` (see "Coverage standard"); the HTML report is published as a downloadable artifact. |
 | `minimal-build` | Zero-dependency build on ubuntu-24.04, macos-latest, windows-latest: a checkout without submodules, configured with the default options, so stb_image decodes everything. Checks the one warning that names every missing submodule, and that `PHASH_STRICT_DEPS=ON` turns it into a configure error. |

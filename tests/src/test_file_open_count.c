@@ -21,6 +21,12 @@
 #    define _POSIX_C_SOURCE 200809L
 #endif
 
+/* The interposition needs the library's own calls to resolve to this binary, which a
+ * shared libphash does not do on every platform (macOS binds them to libc when the
+ * library is linked): CMakeLists.txt links this test against the library's object files
+ * in a shared build as well. */
+#define PH_TEST_LINKS_LIBRARY_OBJECTS
+
 #include "test_macros.h"
 
 #include <libphash.h>

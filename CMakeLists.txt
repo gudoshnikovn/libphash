@@ -984,10 +984,24 @@ if(PHASH_BUILD_TESTS)
     file(GLOB TEST_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/tests/src/test_*.c")
     foreach(test_src ${TEST_SOURCES})
         get_filename_component(test_name ${test_src} NAME_WE)
-        # Tests reach internal functions (src/*.h) as well as the public API. A shared
-        # libphash exports only the public API, so in a shared build the tests link the
-        # library's object files and its link dependencies directly instead.
+        # A shared libphash exports only the public API. A test that includes nothing but
+        # libphash.h and the test helpers links the shared library itself, so in a shared
+        # build ctest runs the library as a consumer gets it. A test that reaches internal
+        # functions (src/*.h), or that replaces a libc function the library calls and says
+        # so with `#define PH_TEST_LINKS_LIBRARY_OBJECTS`, links the library's object files
+        # and its link dependencies instead.
+        set(_phash_test_internal FALSE)
         if(PHASH_BUILD_SHARED)
+            file(STRINGS ${test_src} _phash_test_lines
+                REGEX "^[ \t]*#[ \t]*(include[ \t]*\"|define[ \t]+PH_TEST_LINKS_LIBRARY_OBJECTS)")
+            foreach(_phash_line IN LISTS _phash_test_lines)
+                if(_phash_line MATCHES "PH_TEST_LINKS_LIBRARY_OBJECTS"
+                   OR NOT _phash_line MATCHES "\"(libphash|test_macros|test_helpers|phash_version)\\.h\"")
+                    set(_phash_test_internal TRUE)
+                endif()
+            endforeach()
+        endif()
+        if(_phash_test_internal)
             add_executable(${test_name} ${test_src} $<TARGET_OBJECTS:phash>)
             target_link_libraries(${test_name} PRIVATE $<GENEX_EVAL:$<TARGET_PROPERTY:phash,LINK_LIBRARIES>>)
             target_include_directories(${test_name} PRIVATE

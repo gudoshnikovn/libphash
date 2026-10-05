@@ -74,6 +74,24 @@
       }
     },
     {
+      "name": "no-threads",
+      "inherits": "minimal",
+      "displayName": "Release, stb_image only, no threads",
+      "description": "PHASH_ENABLE_THREADS=OFF: the batch API runs sequentially, the configuration for a platform without threads.",
+      "cacheVariables": {
+        "PHASH_ENABLE_THREADS": "OFF"
+      }
+    },
+    {
+      "name": "mock-backend",
+      "inherits": "minimal",
+      "displayName": "Release, stb_image only, mock decoder",
+      "description": "PHASH_ENABLE_MOCK_BACKEND=ON: the test-only decoder for buffers starting with DE AD, which no shipped build has.",
+      "cacheVariables": {
+        "PHASH_ENABLE_MOCK_BACKEND": "ON"
+      }
+    },
+    {
       "name": "i686",
       "inherits": "base",
       "displayName": "32-bit x86 (-m32), native PNG",
@@ -175,6 +193,16 @@
       "configuration": "Debug"
     },
     {
+      "name": "no-threads",
+      "configurePreset": "no-threads",
+      "configuration": "Release"
+    },
+    {
+      "name": "mock-backend",
+      "configurePreset": "mock-backend",
+      "configuration": "Release"
+    },
+    {
       "name": "i686",
       "configurePreset": "i686",
       "configuration": "Release"
@@ -259,6 +287,28 @@
       },
       "environment": {
         "PH_EXPECT_BUILD": "jpeg=stb png=stb webp=none zlib=none"
+      }
+    },
+    {
+      "name": "no-threads",
+      "configurePreset": "no-threads",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "environment": {
+        "PH_EXPECT_BUILD": "jpeg=stb png=stb webp=none zlib=none threads=off"
+      }
+    },
+    {
+      "name": "mock-backend",
+      "configurePreset": "mock-backend",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "environment": {
+        "PH_EXPECT_BUILD": "jpeg=stb png=stb webp=none zlib=none mock=on"
       }
     },
     {

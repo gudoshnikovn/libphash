@@ -122,18 +122,29 @@ jobs:
             os: ubuntu-24.04
             needs_nasm: true
             cc: gcc
+            preset: release
           - name: ubuntu-x86_64-clang
             os: ubuntu-24.04
             needs_nasm: true
             cc: clang
+            preset: release
+          # Half of every release's archives are the shared library. In this build the
+          # tests that use only the public API link libphash.so itself (CMakeLists.txt).
+          - name: ubuntu-x86_64-gcc-shared
+            os: ubuntu-24.04
+            needs_nasm: true
+            cc: gcc
+            preset: shared
           - name: ubuntu-arm64-gcc
             os: ubuntu-24.04-arm
             needs_nasm: false
             cc: gcc
+            preset: release
           - name: macos-arm64-clang
             os: macos-latest
             needs_nasm: false
             cc: clang
+            preset: release
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     name: build-and-test (${{ matrix.name }})
@@ -151,19 +162,19 @@ jobs:
         apt-packages: cmake${{ matrix.needs_nasm && ' nasm' || '' }}${{ matrix.cc == 'clang' && ' clang' || '' }}
 
     - name: Configure CMake (full vendored build)
-      run: cmake --preset release
+      run: cmake --preset ${{ matrix.preset }}
 
     - name: Build
-      run: cmake --build --preset release -j
+      run: cmake --build --preset ${{ matrix.preset }} -j
 
     - name: Run Tests
-      run: ctest --preset release
+      run: ctest --preset ${{ matrix.preset }}
 
     # The linked result carries the decoders the build tree asked for, statically, with
     # one zlib (zlib-ng) and no codec the library does not use. Every CMake job below
     # runs the same step on its own tree.
     - name: Check decoder symbols
-      run: ./scripts/check_decoder_symbols.sh build/release/test_png_variants
+      run: ./scripts/check_decoder_symbols.sh build/${{ matrix.preset }}/test_png_variants
 
     # Apple's ar and ranlib take ZERO_AR_DATE rather than D; install-smoke-test covers
     # the GNU side.
@@ -172,6 +183,73 @@ jobs:
       run: |
         ./scripts/check_reproducible.sh cmake
         ./scripts/check_reproducible.sh make
+
+  # The windows-x86_64 release archives are this configuration -- every vendored decoder,
+  # built by MSVC -- and this is where it is built and tested before a tag. NASM for
+  # libjpeg-turbo's x86-64 SIMD, as in release.yml. No decoder-symbol step: the check
+  # reads ELF and Mach-O.
+  build-and-test-windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - uses: ./.github/actions/setup-build
+      with:
+        apt-packages: ''
+        brew-packages: ''
+
+    - name: Install NASM
+      shell: bash
+      run: |
+        choco install nasm --no-progress -y
+        echo "C:\\Program Files\\NASM" >> "$GITHUB_PATH"
+
+    - name: Configure CMake (full vendored build, MSVC)
+      run: cmake --preset release
+
+    - name: Build
+      run: cmake --build --preset release -j
+
+    - name: Run Tests
+      run: ctest --preset release
+
+  # Build options no other job turns: PHASH_ENABLE_THREADS=OFF (the batch API's
+  # sequential path, for a platform without threads) and PHASH_ENABLE_MOCK_BACKEND=ON
+  # (the test-only DE AD decoder, which no shipped build has, and the test branches
+  # written for it). Neither depends on a decoder, so both build stb_image only.
+  # PHASH_OPTIMIZE_NATIVE has no job: -march=native compiles for whatever CPU the runner
+  # happens to have, so a result would describe that machine, not the option.
+  build-options:
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [no-threads, mock-backend]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    name: build-options (${{ matrix.preset }})
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - uses: ./.github/actions/setup-build
+      with:
+        submodules: 'false'
+
+    - name: Configure CMake
+      run: cmake --preset ${{ matrix.preset }}
+
+    - name: Build
+      run: cmake --build --preset ${{ matrix.preset }} -j
+
+    - name: Run Tests
+      run: ctest --preset ${{ matrix.preset }}
+
+    - name: Check decoder symbols
+      run: ./scripts/check_decoder_symbols.sh build/${{ matrix.preset }}/test_png_variants
 
   # Warnings as errors on the project's own code -- library, tests, fuzzer, benchmark --
   # and never on the vendored decoders (PHASH_WARNINGS_AS_ERRORS). A job of its own
