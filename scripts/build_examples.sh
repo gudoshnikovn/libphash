@@ -2,7 +2,8 @@
 # Builds and (where a two-argument example is given a real image) runs every example
 # under examples/ against a throwaway install, via pkg-config -- the same route
 # README.md's "Compiling & Linking" section documents. Exists so the examples in the
-# README stay compiling, not just readable: see docs/README.md and README.md for the
+# README stay compiling, not just readable, and so do the C blocks in README.md and
+# MIGRATION.md (scripts/doc_snippets.py): see docs/README.md and README.md for the
 # check that keeps every public symbol documented, which this complements by keeping
 # the documented *usage* buildable too.
 #
@@ -54,8 +55,23 @@ for src in "$ROOT_DIR"/examples/*.c; do
     esac
 done
 
+# The C blocks in README.md and MIGRATION.md, against the same installed headers and
+# nothing else: a fragment that needs an include the document does not name fails here.
+# Unused results and variables are allowed, since a fragment shows one call, not a
+# program around it.
+PKG_CFLAGS=$(PKG_CONFIG_PATH="$PREFIX_DIR/lib/pkgconfig" pkg-config --cflags libphash)
+while read -r origin snippet; do
+    echo "==> Compiling the code block at $origin"
+    # shellcheck disable=SC2086 # PKG_CFLAGS is a list of flags
+    if ! cc -std=c17 -fsyntax-only -Wall -Wextra -Werror -Wno-unused-variable \
+        -Wno-unused-result -Wno-shadow $PKG_CFLAGS "$snippet"; then
+        echo "!!! the code block at $origin does not compile" >&2
+        status=1
+    fi
+done < <(python3 "$ROOT_DIR/scripts/doc_snippets.py" "$WORK_DIR/snippets")
+
 if [ "$status" -eq 0 ]; then
-    echo "==> All examples built and ran successfully"
+    echo "==> All examples built and ran successfully; every code block in README.md and MIGRATION.md compiles"
 else
     exit "$status"
 fi
