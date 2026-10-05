@@ -481,9 +481,8 @@ distinguishes one job from another.
 
 Two more workflows, and Dependabot, run on their own schedule rather than per push:
 
-- **`.github/workflows/fuzz-nightly.yml`** — a 30-minute libFuzzer run, sharing the
-  same growing corpus cache across every night and every PR's short run. See
-  "Fuzzing" below.
+- **`.github/workflows/fuzz-nightly.yml`** — a 30-minute libFuzzer run on the default
+  branch, sharing the corpus cache with the `fuzz` job. See "Fuzzing" below.
 - **`.github/workflows/stb-freshness-check.yml`** — monthly, checks whether the two
   copied-in stb headers (`vendor/stb_image.h`, `vendor/stb_image_resize2.h`) have
   drifted from upstream and opens a tracking issue if so. See `SECURITY.md`'s
@@ -590,10 +589,15 @@ and sanitizer reports, the harness aborts when a successful load reports non-pos
 dimensions, or when the same hash computed twice differs. **A crash it finds is
 minimized and added to `tests/fuzz/seeds/` in the commit that fixes it.**
 
-CI runs this two ways: a 90-second smoke run on every PR (the `fuzz` job above, meant
-to catch a fast regression, not explore the input space) and a 30-minute run nightly
-(`fuzz-nightly.yml`) against a corpus that persists and grows across both. Report a
-crash found this way through `SECURITY.md`'s reporting channel if it looks like a real
+CI runs this two ways: a 90-second smoke run on every push and pull request (the `fuzz`
+job above, meant to catch a fast regression, not explore the input space) and a 30-minute
+run nightly (`fuzz-nightly.yml`). The working corpus is kept in the Actions cache: each
+run restores the newest one its branch can see — its own branch's, or the default
+branch's, which is where the nightly run saves — reduces it with `-merge=1` to the inputs
+that add coverage, and saves it back. A cache entry unused for 7 days is evicted, so the
+nightly run also uploads the minimized corpus as the `fuzz-corpus` artifact, kept 90
+days; unpacked into `tests/fuzz/corpus/` it is the starting point for a local run. Report
+a crash found this way through `SECURITY.md`'s reporting channel if it looks like a real
 memory-safety issue, not a public issue.
 
 ### 4. Benchmarks (`tests/src/bench_hash.c`)

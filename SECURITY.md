@@ -134,7 +134,8 @@ carry, and `docs/development.md` for the reasons).
 `tests/fuzz/fuzz_load.c` is a libFuzzer harness over `ph_decode_buffer()`, the single
 entry point every format-decoding path funnels through. Build it with
 `-DPHASH_BUILD_FUZZERS=ON` (requires Clang — libFuzzer needs compiler-rt, so this
-option is a configure-time error under GCC). CI runs it nightly for 30 minutes with a
-cached, growing corpus (`.github/workflows/fuzz-nightly.yml`), plus a 90-second run on
-every CI run (`ci.yml`); a crash there is treated the
-same as a privately reported vulnerability.
+option is a configure-time error under GCC). CI runs it nightly for 30 minutes
+(`.github/workflows/fuzz-nightly.yml`), plus a 90-second run on every CI run (`ci.yml`).
+Both start from the corpus the previous runs saved to the Actions cache and save it back
+minimized; the nightly run also keeps it as a 90-day artifact. A crash there is treated
+the same as a privately reported vulnerability.

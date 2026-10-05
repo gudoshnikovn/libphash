@@ -801,9 +801,11 @@ jobs:
     - name: Build
       run: cmake --build --preset fuzz --target fuzz_load
 
-    # fuzz-corpus- (no run id) always misses on the save side and restores the
-    # most recently saved cache on the restore side -- the corpus only ever grows,
-    # so each run picks up where the last one left off instead of starting from zero.
+    # The working corpus lives in the Actions cache. The key ends in the run id, so it
+    # never matches on restore; restore-keys then picks the newest fuzz-corpus-* entry
+    # this run can see -- its own branch's, or the default branch's, where the nightly
+    # run saves -- and the run starts from what earlier runs found. The cache action
+    # saves the directory under this run's key when the job ends.
     - name: Restore fuzz corpus cache
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
@@ -822,6 +824,16 @@ jobs:
         # not -- they only make each iteration slower.
         ./build/fuzz/fuzz_load -max_total_time=90 -max_len=65536 -dict=tests/fuzz/magic.dict \
           -artifact_prefix=/tmp/fuzz-artifacts/ tests/fuzz/corpus tests/fuzz/seeds
+
+    # Keep only the inputs that add coverage, so the saved corpus stays the size of what
+    # it covers instead of growing by every unit each run adds.
+    - name: Minimize the corpus
+      run: |
+        mkdir -p /tmp/corpus-min
+        ./build/fuzz/fuzz_load -merge=1 -max_len=65536 /tmp/corpus-min tests/fuzz/corpus
+        echo "corpus: $(find tests/fuzz/corpus -type f | wc -l) units, $(find /tmp/corpus-min -type f | wc -l) after -merge=1"
+        rm -rf tests/fuzz/corpus
+        mv /tmp/corpus-min tests/fuzz/corpus
 
     - name: Upload crash artifacts
       if: failure()
