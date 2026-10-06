@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Nothing yet.
 
-## [2.0.0] - Unreleased
+## [2.0.0] - 2026-10-07
 
 First major release. It is a major because some changes are invisible at upgrade time:
 the same input can produce a different hash, several functions changed signature, and
@@ -656,8 +656,8 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
 Earlier releases (1.0.0 – 1.9.0) predate this changelog. See the git history and the
 release tags for details.
 
-[Unreleased]: https://github.com/gudoshnikovn/libphash/compare/1.10.4...HEAD
-[2.0.0]: https://github.com/gudoshnikovn/libphash/compare/1.10.4...HEAD
+[Unreleased]: https://github.com/gudoshnikovn/libphash/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/gudoshnikovn/libphash/compare/1.10.4...v2.0.0
 [1.10.4]: https://github.com/gudoshnikovn/libphash/compare/1.10.3...1.10.4
 [1.10.3]: https://github.com/gudoshnikovn/libphash/compare/1.10.2...1.10.3
 [1.10.2]: https://github.com/gudoshnikovn/libphash/compare/1.10.1...1.10.2
