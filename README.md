@@ -1,6 +1,6 @@
 # libphash
 
-A portable C library for perceptual image hashing: nine algorithms, native SIMD-accelerated
+A perceptual image hashing library in C: nine algorithms, native SIMD-accelerated
 JPEG/PNG/WebP decoders, and a hash of a 400×400 photo in 0.05 ms after a 0.23 ms decode
 (numbers under "Performance" below).
 

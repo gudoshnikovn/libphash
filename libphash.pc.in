@@ -4,7 +4,7 @@ libdir=@PHASH_PC_LIBDIR@
 includedir=@PHASH_PC_INCLUDEDIR@
 
 Name: libphash
-Description: Portable C library for perceptual image hashing
+Description: Perceptual image hashing library in C
 Version: @PROJECT_VERSION@
 Libs: -L${libdir} @PHASH_PC_RPATH@-lphash@PHASH_PC_LIBS_STR@
 Libs.private: @PHASH_PC_LIBS_PRIVATE_STR@

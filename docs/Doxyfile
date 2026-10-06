@@ -5,7 +5,7 @@
 # the header fully documented.
 
 PROJECT_NAME           = libphash
-PROJECT_BRIEF          = "Perceptual image hashing in portable C"
+PROJECT_BRIEF          = "Perceptual image hashing library in C"
 INPUT                  = include/libphash.h
 OUTPUT_DIRECTORY       = build/api-docs
 FULL_PATH_NAMES        = NO
