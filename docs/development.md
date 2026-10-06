@@ -520,13 +520,16 @@ Three more workflows, and Dependabot, run on their own trigger rather than per p
   as workflow artifacts without publishing.
 
 - **`.github/workflows/fuzz-nightly.yml`** — a 30-minute libFuzzer run on the default
-  branch, sharing the corpus cache with the `fuzz` job. See "Fuzzing" below.
+  branch, sharing the corpus cache with the `fuzz` job. See "Fuzzing" below. GitHub
+  disables the `schedule` trigger of a public repository after 60 days without activity;
+  the workflow's page in the Actions tab then offers to enable it again, and a manual
+  run (*Run workflow*) works either way.
 - **`.github/workflows/stb-freshness-check.yml`** — monthly, checks whether the two
   copied-in stb headers (`vendor/stb_image.h`, `vendor/stb_image_resize2.h`) have
   drifted from upstream and opens a tracking issue if so. See `SECURITY.md`'s
   "Vendored dependencies" section.
-- **`.github/dependabot.yml`** — weekly PRs bumping the five vendored decoder
-  submodules and the GitHub Actions themselves.
+- **`.github/dependabot.yml`** — weekly PRs bumping the four vendored submodules
+  (libjpeg-turbo, libpng, libwebp, zlib-ng) and the GitHub Actions themselves.
 
 ### Running CI on a branch
 
