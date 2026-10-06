@@ -10,3 +10,6 @@
 [submodule "vendor/zlib-ng"]
 	path = vendor/zlib-ng
 	url = https://github.com/zlib-ng/zlib-ng.git
+	# zlib-ng develops on develop; stable carries only releases. Dependabot follows
+	# this branch, so a bump it proposes is a release.
+	branch = stable
