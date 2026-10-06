@@ -29,7 +29,10 @@ nav = [
   { "Home" = "index.md" },
   { "Theory" = [
     { "Perceptual hashing" = "theory/perceptual-hashing.md" },
-    { "Algorithms" = "algorithms.md" },
+    { "Algorithms" = [
+      { "Overview" = "algorithms.md" },
+      { "aHash" = "theory/ahash.md" },
+    ] },
     { "Provenance" = "algorithm-provenance.md" },
     { "References" = "references.md" },
     { "Verification methodology" = "methodology.md" },

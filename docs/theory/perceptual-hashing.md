@@ -74,11 +74,11 @@ $$
 h = \sum_{i=0}^{63} [\,p_i \ge \bar p\,] \cdot 2^{\,63 - i} .
 $$
 
-Adding the same amount to every pixel moves the mean by that amount too, and no bit
-changes. Real brightness, contrast and gamma edits are not that uniform — they clip at
-white and bend the tone curve — and they do move bits, which is aHash's main weakness.
-Moving a bright object to the other side of the frame flips the bits of every cell it left
-and every cell it entered.
+An edit that keeps the order of pixels relative to the mean keeps every bit: scaling the
+brightness, or stretching the contrast around mid-gray, changes the values but not which
+side of the mean each one is on. What moves bits is moving content — rotating, cropping,
+shifting an object to the other side of the frame flips the bits of every cell it left and
+every cell it entered. The [aHash](ahash.md) page measures both kinds.
 
 The other eight algorithms replace the mean with something more robust: differences
 between neighbors (dHash), low-frequency DCT coefficients (pHash), a wavelet approximation

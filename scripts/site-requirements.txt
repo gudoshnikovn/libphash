@@ -1,4 +1,8 @@
-# The documentation site generator, pinned: scripts/site.sh refuses any other version,
-# as scripts/format.sh does for clang-format and scripts/api_docs.sh for Doxygen.
+# The documentation site's tools, pinned: the generator, which scripts/site.sh refuses in
+# any other version (as scripts/format.sh does for clang-format and scripts/api_docs.sh
+# for Doxygen), and what tools/site/render.py draws the figures with.
 #   python3 -m pip install -r scripts/site-requirements.txt
 zensical==0.0.68
+matplotlib==3.11.2
+numpy==2.5.3
+pillow==12.3.0

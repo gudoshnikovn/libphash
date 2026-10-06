@@ -38,8 +38,10 @@ tests/fuzz/corpus/
 # Coverage and GCov data
 docs/coverage/
 
-# The API reference, copied into the site's source by scripts/site.sh
+# Generated into the site's source by scripts/site.sh: the API reference, and the figures
+# tools/site/render.py draws
 docs/api/
+docs/assets/generated/
 *.gcda
 *.gcno
 *.gcov

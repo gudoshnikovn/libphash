@@ -1083,4 +1083,15 @@ if(PHASH_BUILD_TESTS)
     if(PHASH_COVERAGE)
         target_link_options(bench_hash PRIVATE --coverage)
     endif()
+
+    # The documentation site's measuring tool (tools/site/stages.c): the pictures and
+    # numbers on the algorithm pages. It reads the context's internal state, so it links
+    # like the tests do. Built only when scripts/site.sh asks for it.
+    if(NOT PHASH_BUILD_SHARED)
+        add_executable(site_stages EXCLUDE_FROM_ALL
+            ${CMAKE_CURRENT_SOURCE_DIR}/tools/site/stages.c)
+        target_link_libraries(site_stages PRIVATE phash)
+        target_compile_options(site_stages PRIVATE ${PHASH_OWN_COMPILE_OPTIONS})
+        target_include_directories(site_stages PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    endif()
 endif()

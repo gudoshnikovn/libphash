@@ -11,8 +11,8 @@
 # together with whatever reformatting the new version asks for -- never silently.
 #
 # Why this perimeter: everything of ours that is C -- the library, its public
-# header, all of tests/ (tests/fuzz/ included) and examples/, which are the files
-# an outside user actually reads. vendor/ is outside it by construction.
+# header, all of tests/ (tests/fuzz/ included), examples/, which are the files an
+# outside user actually reads, and tools/. vendor/ is outside it by construction.
 #
 # Usage: scripts/format.sh           # rewrite files in place
 #        scripts/format.sh --check   # report a diff and fail, change nothing
@@ -43,7 +43,7 @@ cd "$ROOT_DIR"
 files=()
 while IFS= read -r f; do
     files+=("$f")
-done < <(find src include tests examples -type f \( -name '*.c' -o -name '*.h' \) | sort)
+done < <(find src include tests examples tools -type f \( -name '*.c' -o -name '*.h' \) | sort)
 
 case "${1:-}" in
     --check)

@@ -50,6 +50,9 @@ for src in "$ROOT_DIR"/examples/*.c; do
         compare_two_images)
             "$WORK_DIR/$name" "$D/photo.jpeg" "$D/photo.jpeg"
             ;;
+        hash_distance)
+            "$WORK_DIR/$name" "$D/photo.jpeg" "$D/photo_copy.jpeg"
+            ;;
         digest_and_metrics)
             "$WORK_DIR/$name" "$D/photo.jpeg" "$D/photo_rotated_90.jpeg"
             ;;
