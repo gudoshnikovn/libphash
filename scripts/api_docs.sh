@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Builds the API reference from include/libphash.h with Doxygen (docs/Doxyfile) into
-# build/api-docs/html/. `make docs` and the CI format-check job both call this script.
+# build/api-docs/html/, and checks that every declaration is in one of its topics
+# (scripts/check_api_groups.py). `make docs` and the CI format-check job both call this
+# script.
 #
 # Why the version is pinned: the run fails on any Doxygen warning, and what Doxygen
 # warns about, and its defaults, change between releases -- an unpinned tool turns the
@@ -33,4 +35,5 @@ fi
 cd "$ROOT_DIR"
 mkdir -p build/api-docs
 "$DX" docs/Doxyfile
+python3 scripts/check_api_groups.py build/api-docs/xml
 echo "==> API reference: build/api-docs/html/index.html"

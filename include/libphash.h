@@ -24,6 +24,44 @@
  * or reused.
  */
 
+/**
+ * @defgroup errors Errors
+ * @brief Every failure is a @c ph_error_t; how to read one, and the details of the last
+ *        failed load.
+ *
+ * @defgroup context Context
+ * @brief The @c ph_context_t that holds one image and its configuration: create, free,
+ *        and what is loaded.
+ *
+ * @defgroup loading Loading images
+ * @brief From a file, a memory buffer or raw pixels, and the settings that shape the
+ *        pixels at load time: grayscale, transparency, orientation, size limit, decode scale.
+ *
+ * @defgroup params Algorithm parameters
+ * @brief Grayscale weights, gamma, and each algorithm's own tuning.
+ *
+ * @defgroup hash64 64-bit hashes
+ * @brief aHash, dHash, pHash and wHash, alone or several at once with ph_compute_multi().
+ *
+ * @defgroup digests Digest hashes
+ * @brief mHash, BMH, Radial, ColorHash and ColorMoments, returned as a @c ph_digest_t.
+ *
+ * @defgroup algorithms Algorithms as values
+ * @brief Any algorithm through one call, selected by a @c ph_algorithm_t or its name.
+ *
+ * @defgroup compare Comparing hashes
+ * @brief Distances and similarities, one per kind of digest.
+ *
+ * @defgroup text Hashes as text
+ * @brief Storing and reading back hashes and digests as hex strings.
+ *
+ * @defgroup batch Batch hashing
+ * @brief Many files or buffers in one call, on a pool of worker threads.
+ *
+ * @defgroup build Version and build
+ * @brief The library's version, the decoders it was built with, and the ABI conventions.
+ */
+
 // --- Platform & Export Macros ---
 #ifndef PH_API
 #    if defined(_WIN32) || defined(__CYGWIN__)
@@ -79,7 +117,7 @@ extern "C" {
  * The widest digest the library produces is the Marr-Hildreth hash at 576 bits (72
  * bytes); the rest is headroom for the color histogram's bin count, reserved so that the
  * size stays fixed for the whole 2.x series. @c ph_digest_t is passed and stored by
- * value, so it costs 136 bytes wherever one lives. */
+ * value, so it costs 136 bytes wherever one lives. @ingroup digests */
 #define PH_DIGEST_MAX_BYTES 128
 
 // --- Enum width ---
@@ -93,7 +131,7 @@ extern "C" {
  * holds its values, and a library and a consumer built with different settings disagree
  * on the width of every ph_error_t return value and of the `status` field in the batch
  * structs. Nothing diagnoses that mismatch; the caller just reads garbage. The width of
- * a public enum is part of the ABI. */
+ * a public enum is part of the ABI. @ingroup build */
 #define PH_ENUM_FORCE_INT32_VALUE 0x7FFFFFFF
 
 // --- Error Codes ---
@@ -109,7 +147,7 @@ extern "C" {
  * code) with the next free negative value.
  * Renumbering or reusing a value silently changes the meaning of an error in
  * already-compiled consumers and in FFI bindings that hardcode the number, so
- * a value, once assigned, is never handed to a different code. */
+ * a value, once assigned, is never handed to a different code. @ingroup errors */
 typedef enum {
     PH_SUCCESS = 0,                ///< The call did what it was asked.
     PH_ERR_ALLOCATION_FAILED = -1, ///< A malloc() somewhere on the call path returned NULL --
@@ -174,11 +212,13 @@ typedef enum {
  * @brief Returns a human-readable string description for an error code.
  * @param err The error code.
  * @return A constant string describing the error. Never returns NULL.
+ * @ingroup errors
  */
 PH_API const char *ph_get_error_string(ph_error_t err);
 
 /**
  * @brief Wavelet Hash operating modes.
+ * @ingroup params
  */
 typedef enum {
     PH_WHASH_FAST = 0, ///< High-speed 8x8 median approximation (default).
@@ -188,6 +228,7 @@ typedef enum {
 
 /**
  * @brief JPEG decode resolution hint — see ph_context_set_decode_scale().
+ * @ingroup loading
  */
 typedef enum {
     PH_DECODE_SCALE_FULL = 0,    ///< Decode at the image's native resolution (default).
@@ -200,6 +241,7 @@ typedef enum {
 /**
  * @brief What becomes of an image's alpha channel before it is hashed — see
  *        ph_context_set_alpha_mode().
+ * @ingroup loading
  */
 typedef enum {
     PH_ALPHA_BLEND_GREY = 0,  ///< Composite onto mid-gray (128, 128, 128) (default).
@@ -226,6 +268,7 @@ typedef enum {
  * themselves, so several threads may run batches at the same time. One image is always
  * loaded and hashed on a single thread -- parallelism is across images, through the
  * batch functions or the caller's own threads. See docs/batch.md.
+ * @ingroup context
  */
 typedef struct ph_context ph_context_t;
 
@@ -239,6 +282,7 @@ typedef struct ph_context ph_context_t;
  * The returned pointer is owned by the context and is invalidated by the next
  * load/free call on it.
  * @param ctx The context. Passing NULL returns an empty string.
+ * @ingroup errors
  */
 PH_API const char *ph_get_last_error_message(const ph_context_t *ctx);
 
@@ -261,6 +305,7 @@ PH_API const char *ph_get_last_error_message(const ph_context_t *ctx);
  * @c PH_DIGEST_KIND_UNSPECIFIED is what a hand-filled struct contains, since it is zero.
  * Every comparison function accepts it — an FFI binding that fills in `data` and `size`
  * and nothing else is accepted by every comparison, and gets no protection.
+ * @ingroup digests
  */
 typedef enum {
     PH_DIGEST_KIND_UNSPECIFIED = 0,  ///< Not stated. Accepted by every comparison.
@@ -282,6 +327,7 @@ typedef enum {
  * two bytes per feature, most significant byte first. Divide by this to get the value
  * back. A caller that only compares digests never needs it — ph_l2_distance() decodes
  * them — but a caller that wants the moments themselves does.
+ * @ingroup digests
  */
 #define PH_VECTOR16_SCALE 128
 
@@ -292,6 +338,7 @@ typedef enum {
  * It does not own any heap memory.
  *
  * @note The struct is 136 bytes: 128 data bytes, `size`, `kind`, and 6 bytes of padding.
+ * @ingroup digests
  */
 typedef struct {
     uint8_t data[PH_DIGEST_MAX_BYTES]; ///< The raw hash bytes.
@@ -306,6 +353,7 @@ typedef struct {
 
 /**
  * @brief Returns the library version string (e.g., "2.0.0").
+ * @ingroup build
  */
 PH_API const char *ph_version(void);
 
@@ -320,18 +368,21 @@ PH_API const char *ph_version(void);
  *
  * @note Each component has 1000 slots, so the number stays monotonic for any minor or
  *       patch up to 999.
+ * @ingroup build
  */
 PH_API int ph_version_number(void);
 
 /**
  * @brief Allocates a new context with default settings (Gamma 1.0, identity).
  * @param[out] out_ctx Pointer to the created context.
+ * @ingroup context
  */
 PH_NODISCARD PH_API ph_error_t ph_create(ph_context_t **out_ctx);
 
 /**
  * @brief Frees the context and all associated image memory.
  * @param ctx The context to free. Safe to pass NULL.
+ * @ingroup context
  */
 PH_API void ph_free(ph_context_t *ctx);
 
@@ -388,6 +439,7 @@ PH_API void ph_free(ph_context_t *ctx);
  *
  * @note Non-finite values (NaN, +/-infinity) are rejected: a NaN gamma compares false
  *       against both bounds and would otherwise pass.
+ * @ingroup params
  */
 PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma);
 
@@ -406,6 +458,7 @@ PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma);
  *
  * @note A zero sum is an error, not a request for the defaults: the configuration is
  *       never replaced by something the caller did not ask for.
+ * @ingroup params
  */
 PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, int b);
 
@@ -421,6 +474,7 @@ PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, i
  * @param[out] r,g,b Receive the weights. None may be NULL.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for a NULL argument (nothing is
  *         written then).
+ * @ingroup params
  */
 PH_NODISCARD PH_API ph_error_t ph_context_get_gray_weights(const ph_context_t *ctx, int *r, int *g,
                                                            int *b);
@@ -450,6 +504,7 @@ PH_NODISCARD PH_API ph_error_t ph_context_get_gray_weights(const ph_context_t *c
  *                       precision for length.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
  *         out-of-range pair.
+ * @ingroup params
  */
 PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, int reduction_size);
 
@@ -487,6 +542,7 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
  * than requested, which this setter refuses rather than clamp.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
  *         out-of-range value.
+ * @ingroup params
  */
 PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projections, int samples,
                                                float sigma);
@@ -510,6 +566,7 @@ PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projection
  *
  * @note This affects BMH only; mHash has its own parameters, see
  *       ph_context_set_mhash_params().
+ * @ingroup params
  */
 PH_API ph_error_t ph_context_set_block_params(ph_context_t *ctx, int block_size);
 
@@ -538,6 +595,7 @@ PH_API ph_error_t ph_context_set_block_params(ph_context_t *ctx, int block_size)
  * @param size Normalization side, 62..4096.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or any value out of
  *         range, with the configuration left untouched.
+ * @ingroup params
  */
 PH_API ph_error_t ph_context_set_mhash_params(ph_context_t *ctx, float alpha, float level,
                                               int size);
@@ -552,6 +610,7 @@ PH_API ph_error_t ph_context_set_mhash_params(ph_context_t *ctx, float alpha, fl
  *             closer to ImageHash, and its cost grows with the image.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or a @p mode that
  *         is not one of the declared enumerators.
+ * @ingroup params
  */
 PH_API ph_error_t ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t mode);
 
@@ -576,6 +635,7 @@ PH_API ph_error_t ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t m
  * @param enable Non-zero to zero the coarsest LL coefficient before the working
  *        decomposition, zero to leave it in place.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx.
+ * @ingroup params
  */
 PH_API ph_error_t ph_context_set_whash_remove_max_haar_ll(ph_context_t *ctx, int enable);
 
@@ -600,6 +660,7 @@ PH_API ph_error_t ph_context_set_whash_remove_max_haar_ll(ph_context_t *ctx, int
  *               Any non-zero value enables it.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT only for a NULL @p ctx — every
  *         @c int is a valid flag value.
+ * @ingroup loading
  */
 PH_API ph_error_t ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
 
@@ -632,6 +693,7 @@ PH_API ph_error_t ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
  *        whatever its alpha, which is what ImageHash (and PIL's `convert("L")`) does.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or a @p mode that
  *         is not one of the enumerators above (configuration unchanged).
+ * @ingroup loading
  */
 PH_API ph_error_t ph_context_set_alpha_mode(ph_context_t *ctx, ph_alpha_mode_t mode);
 
@@ -660,6 +722,7 @@ PH_API ph_error_t ph_context_set_alpha_mode(ph_context_t *ctx, ph_alpha_mode_t m
  * raw decoded buffer as-is. Any non-zero value enables it.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT only for a NULL @p ctx — every
  *         @c int is a valid flag value.
+ * @ingroup loading
  */
 PH_API ph_error_t ph_context_set_auto_orient(ph_context_t *ctx, int enable);
 
@@ -697,6 +760,7 @@ PH_API ph_error_t ph_context_set_auto_orient(ph_context_t *ctx, int enable);
  *         @c uint64_t is accepted, including values above the implementation ceiling:
  *         the ceiling is applied when an image is loaded, not when the limit is set, so
  *         such an image is refused with @c PH_ERR_IMAGE_TOO_LARGE.
+ * @ingroup loading
  */
 PH_API ph_error_t ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixels);
 
@@ -766,6 +830,7 @@ PH_API ph_error_t ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixe
  * @param scale The requested decode resolution. @c PH_DECODE_SCALE_FULL is the default.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or a @p scale that
  *         is not one of the declared enumerators.
+ * @ingroup loading
  */
 PH_API ph_error_t ph_context_set_decode_scale(ph_context_t *ctx, ph_decode_scale_t scale);
 
@@ -783,6 +848,7 @@ PH_API ph_error_t ph_context_set_decode_scale(ph_context_t *ctx, ph_decode_scale
  * @param height Output for height; may be NULL.
  * @param channels Output for number of channels -- 1 or 3; may be NULL. An alpha channel is
  *        resolved at load time (ph_context_set_alpha_mode()) and never stored.
+ * @ingroup context
  */
 PH_API void ph_context_get_dimensions(const ph_context_t *ctx, int *width, int *height,
                                       int *channels);
@@ -790,6 +856,7 @@ PH_API void ph_context_get_dimensions(const ph_context_t *ctx, int *width, int *
 /**
  * @brief Checks if an image is currently loaded in the context.
  * @return 1 if loaded, 0 otherwise (including for a NULL @p ctx).
+ * @ingroup context
  */
 PH_API int ph_is_loaded(const ph_context_t *ctx);
 
@@ -815,6 +882,7 @@ PH_API int ph_is_loaded(const ph_context_t *ctx);
  *         @c PH_ERR_IO if the path cannot be opened or is not a readable,
  *         non-empty regular file; otherwise the same decoding errors as
  *         @c ph_load_from_memory().
+ * @ingroup loading
  */
 PH_NODISCARD PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath);
 
@@ -843,6 +911,7 @@ PH_NODISCARD PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *
  * @param ctx The context.
  * @param buffer Pointer to the raw file data (e.g., JPEG bytes).
  * @param length Size of the buffer.
+ * @ingroup loading
  */
 PH_NODISCARD PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer,
                                                    size_t length);
@@ -862,6 +931,7 @@ PH_NODISCARD PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint
  *        straight (not premultiplied) alpha, resolved as ph_context_set_alpha_mode() says.
  * @param stride Number of bytes between the start of consecutive rows. Pass 0 for
  *               tightly packed rows (stride = width * channels).
+ * @ingroup loading
  */
 PH_NODISCARD PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint8_t *pixels,
                                                    int width, int height, int channels, int stride);
@@ -888,6 +958,7 @@ PH_NODISCARD PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint
  *
  * The fastest of the four, and sensitive to anything that moves the mean (brightness,
  * contrast). See the shared contract above for the return values.
+ * @ingroup hash64
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out_hash);
 
@@ -897,6 +968,7 @@ PH_NODISCARD PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out
  *
  * As fast as aHash and more tolerant of brightness and contrast changes. See the shared
  * contract above for the return values.
+ * @ingroup hash64
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out_hash);
 
@@ -908,6 +980,7 @@ PH_NODISCARD PH_API ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out
  * a block smaller than 8x8 only its `reduction_size` squared low bits are used. The DC
  * coefficient's bit is set for any ordinary image, as in pHash. See the shared contract
  * above for the return values.
+ * @ingroup hash64
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out_hash);
 
@@ -918,12 +991,14 @@ PH_NODISCARD PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out
  * The scale and depth come from ph_context_set_whash_mode(); the coarsest band can be
  * zeroed with ph_context_set_whash_remove_max_haar_ll(). See the shared contract above for
  * the return values.
+ * @ingroup hash64
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash);
 
 /**
  * @brief Flags selecting which uint64_t hash algorithms to compute in a single
  *        `ph_compute_multi()` call. Bitwise-OR any combination.
+ * @ingroup hash64
  */
 typedef enum {
     PH_HASH_AHASH = 1 << 0,
@@ -936,7 +1011,8 @@ typedef enum {
     PH_HASH_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE, ///< Not a flag -- see "Enum width".
 } ph_hash_flags_t;
 
-/** Number of distinct bits defined in ph_hash_flags_t. Sizes ph_compute_multi's out[]. */
+/** Number of distinct bits defined in ph_hash_flags_t. Sizes ph_compute_multi's out[].
+ * @ingroup hash64 */
 #define PH_HASH_FLAGS_COUNT 4
 
 /**
@@ -968,6 +1044,7 @@ typedef enum {
  *                 bit order (e.g. for `PH_HASH_DHASH | PH_HASH_WHASH`, `out[0]` receives
  *                 the dHash and `out[1]` the wHash). Must have room for at least as many
  *                 elements as bits set in `flags` (at most `PH_HASH_FLAGS_COUNT`).
+ * @ingroup hash64
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flags, uint64_t out[]);
 
@@ -981,11 +1058,12 @@ PH_NODISCARD PH_API ph_error_t ph_compute_multi(ph_context_t *ctx, uint32_t flag
  * changes the struct size. The spare slots are that headroom: up to four new uint64_t
  * algorithms can be added without an ABI break. On a per-item success the first
  * popcount(flags) slots are written and the rest are left untouched; on a per-item
- * failure every slot is zeroed. */
+ * failure every slot is zeroed. @ingroup batch */
 #define PH_BATCH_HASHES_CAPACITY 8
 
 /**
  * @brief One entry in a `ph_hash_files()` batch: a file path in, hashes and status out.
+ * @ingroup batch
  */
 typedef struct {
     const char *path; ///< Path to the image file to hash. Must stay valid for the call.
@@ -999,6 +1077,7 @@ typedef struct {
 /**
  * @brief One entry in a `ph_hash_buffers()` batch: an in-memory image buffer in, hashes
  *        and status out.
+ * @ingroup batch
  */
 typedef struct {
     const uint8_t *buffer; ///< Pointer to the encoded image bytes (e.g. JPEG/PNG/WebP).
@@ -1092,6 +1171,7 @@ typedef struct {
  * @return PH_SUCCESS once the batch has been processed (regardless of per-item outcomes),
  *         PH_ERR_INVALID_ARGUMENT for a malformed call, or PH_ERR_ALLOCATION_FAILED if no
  *         item could be worked on at all. See the return contract above.
+ * @ingroup batch
  */
 PH_NODISCARD PH_API ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, uint32_t flags,
                                              int threads);
@@ -1109,6 +1189,7 @@ PH_NODISCARD PH_API ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, u
  * defaults -- default configuration, no cancellation, memory per worker -- and
  * ph_hash_buffers_ex() is the way around them. The encoded buffers themselves are the
  * caller's and are not copied, so they add nothing per worker.
+ * @ingroup batch
  */
 PH_NODISCARD PH_API ph_error_t ph_hash_buffers(ph_batch_buffer_item_t *items, size_t n,
                                                uint32_t flags, int threads);
@@ -1121,6 +1202,7 @@ PH_NODISCARD PH_API ph_error_t ph_hash_buffers(ph_batch_buffer_item_t *items, si
  * starts another item, items already in progress finish normally, and every item not
  * started gets @c PH_ERR_CANCELLED. It may still be called a few more times by workers
  * that had not yet seen the stop.
+ * @ingroup batch
  */
 typedef int (*ph_batch_continue_fn)(void *user_data);
 
@@ -1131,6 +1213,7 @@ typedef int (*ph_batch_continue_fn)(void *user_data);
  * is passed exactly once, but calls come from worker threads, possibly concurrently and
  * not in order, so it must be thread-safe. @p total is the batch size. Not called for
  * items skipped by a cancellation.
+ * @ingroup batch
  */
 typedef void (*ph_batch_progress_fn)(size_t done, size_t total, void *user_data);
 
@@ -1141,6 +1224,7 @@ typedef void (*ph_batch_progress_fn)(size_t done, size_t total, void *user_data)
  * @c struct_size and the defaults, and keeps working when later versions append fields.
  * A caller that fills the struct by hand must set @c struct_size to sizeof of the struct
  * it was compiled with.
+ * @ingroup batch
  */
 typedef struct {
     /** sizeof(ph_batch_options_t) as the caller compiled it. Lets a later version add
@@ -1166,6 +1250,7 @@ typedef struct {
 /**
  * @brief Fills @p options with the defaults and the right @c struct_size.
  * @return PH_SUCCESS, or PH_ERR_INVALID_ARGUMENT for a NULL @p options.
+ * @ingroup batch
  */
 PH_API ph_error_t ph_batch_options_init(ph_batch_options_t *options);
 
@@ -1186,12 +1271,14 @@ PH_API ph_error_t ph_batch_options_init(ph_batch_options_t *options);
  *   started. The items that were started have their real status; the rest have
  *   @c PH_ERR_CANCELLED and zeroed hashes.
  * - @c PH_SUCCESS: every item was processed; inspect each `status`.
+ * @ingroup batch
  */
 PH_NODISCARD PH_API ph_error_t ph_hash_files_ex(ph_batch_item_t *items, size_t n, uint32_t flags,
                                                 const ph_batch_options_t *options);
 
 /**
  * @brief ph_hash_buffers() with options; see ph_hash_files_ex().
+ * @ingroup batch
  */
 PH_NODISCARD PH_API ph_error_t ph_hash_buffers_ex(ph_batch_buffer_item_t *items, size_t n,
                                                   uint32_t flags,
@@ -1208,6 +1295,7 @@ PH_NODISCARD PH_API ph_error_t ph_hash_buffers_ex(ph_batch_buffer_item_t *items,
  * PH_ALGORITHM_COUNT; a++)` visits every algorithm. For the four uint64_t algorithms the
  * matching ph_hash_flags_t bit is `1u << value`: @c PH_HASH_DHASH == 1u << @c PH_ALGO_DHASH.
  * New algorithms are appended; existing values never change.
+ * @ingroup algorithms
  */
 typedef enum {
     PH_ALGO_AHASH = 0,         ///< ph_compute_ahash(); "ahash".
@@ -1222,7 +1310,8 @@ typedef enum {
     PH_ALGO_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE, ///< Not an algorithm -- see "Enum width".
 } ph_algorithm_t;
 
-/** Number of ph_algorithm_t values: every algorithm is in [0, PH_ALGORITHM_COUNT). */
+/** Number of ph_algorithm_t values: every algorithm is in [0, PH_ALGORITHM_COUNT).
+ * @ingroup algorithms */
 #define PH_ALGORITHM_COUNT 9
 
 /**
@@ -1241,6 +1330,7 @@ typedef enum {
  *                        reports for this context and algorithm.
  * @return As the algorithm's ph_compute_* function, or @c PH_ERR_INVALID_ARGUMENT for an
  *         @p algo that is not a ph_algorithm_t value.
+ * @ingroup algorithms
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_digest(ph_context_t *ctx, ph_algorithm_t algo,
                                                  ph_digest_t *out_digest);
@@ -1261,6 +1351,7 @@ PH_NODISCARD PH_API ph_error_t ph_compute_digest(ph_context_t *ctx, ph_algorithm
  * @param[out] out_kind Receives the digest kind. May be NULL.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for an @p algo that is not a
  *         ph_algorithm_t value (nothing is written then).
+ * @ingroup algorithms
  */
 PH_NODISCARD PH_API ph_error_t ph_digest_info(const ph_context_t *ctx, ph_algorithm_t algo,
                                               size_t *out_size, ph_digest_kind_t *out_kind);
@@ -1269,6 +1360,7 @@ PH_NODISCARD PH_API ph_error_t ph_digest_info(const ph_context_t *ctx, ph_algori
  * @brief The algorithm's stable lowercase name: "ahash", "dhash", "phash", "whash", "bmh",
  * "mhash", "radial", "color_hash", "color_moments".
  * @return A static string, never NULL; "unknown" for a value that is not an algorithm.
+ * @ingroup algorithms
  */
 PH_API const char *ph_algorithm_name(ph_algorithm_t algo);
 
@@ -1278,6 +1370,7 @@ PH_API const char *ph_algorithm_name(ph_algorithm_t algo);
  * @param[out] out_algo Receives the algorithm. Untouched on error.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for a NULL argument or a name that
  *         is not one ph_algorithm_name() returns.
+ * @ingroup algorithms
  */
 PH_NODISCARD PH_API ph_error_t ph_algorithm_from_name(const char *name, ph_algorithm_t *out_algo);
 
@@ -1286,6 +1379,7 @@ PH_NODISCARD PH_API ph_error_t ph_algorithm_from_name(const char *name, ph_algor
 /**
  * @brief Computes Block Mean Hash (BMH). Returns a `block_size * block_size`-bit digest
  * (256 bits / 32 bytes at the default block_size 16; see ph_context_set_block_params()).
+ * @ingroup digests
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest);
 
@@ -1296,6 +1390,7 @@ PH_NODISCARD PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *ou
  * single-channel image — one loaded while ph_context_set_load_grayscale() was
  * enabled, or handed to ph_load_from_pixels() with @c channels = 1 — this returns
  * @c PH_ERR_REQUIRES_COLOR and leaves @p out_digest untouched.
+ * @ingroup digests
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
                                                              ph_digest_t *out_digest);
@@ -1320,6 +1415,7 @@ PH_NODISCARD PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
  * @note Like every color histogram it discards spatial layout entirely: an image and a
  *       shuffling of its pixels hash identically. Use it alongside a structural hash, not
  *       instead of one.
+ * @ingroup digests
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_digest);
 
@@ -1342,6 +1438,7 @@ PH_NODISCARD PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_diges
  * @note It is by far the most expensive hash here — at the defaults, a 17x17 correlation
  *       over a 512x512 image — which is a property of the algorithm, not of this
  *       implementation.
+ * @ingroup digests
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest);
 
@@ -1366,6 +1463,7 @@ PH_NODISCARD PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *
  *          The rotation tolerance the algorithm is known for comes from the comparison,
  *          not from the hash -- and it is a few degrees plus an exact half turn, not
  *          invariance to an arbitrary rotation. See docs/algorithms.md section 8.
+ * @ingroup digests
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_digest);
 
@@ -1376,6 +1474,7 @@ PH_NODISCARD PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_dige
  *
  * For aHash, dHash, pHash and wHash values. Only meaningful between two hashes of the same
  * algorithm, computed with the same settings.
+ * @ingroup compare
  */
 PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
 /* Contract shared by every function below that reads a ph_digest_t.
@@ -1405,6 +1504,7 @@ PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
  *        or a 64-bit hash taken as a digest).
  * @return 0 to 8 times the digest size; -1 for anything the digest contract above rejects:
  *         NULL, mismatched or invalid sizes, or another kind.
+ * @ingroup compare
  */
 PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b);
 
@@ -1414,6 +1514,7 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
  *        (one unsigned byte per feature).
  * @return 0.0 or more, in the features' own units; -1.0 for anything the digest contract
  *         above rejects: NULL, mismatched or invalid sizes, or another kind.
+ * @ingroup compare
  */
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b);
 
@@ -1423,6 +1524,7 @@ PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b);
  * 1.0 means identical hashes, 0.0 means every bit differs. Unlike
  * ph_hamming_distance(), this is comparable across algorithms of different
  * bit widths.
+ * @ingroup compare
  */
 PH_API double ph_similarity(uint64_t a, uint64_t b);
 
@@ -1430,6 +1532,7 @@ PH_API double ph_similarity(uint64_t a, uint64_t b);
  * @brief Normalized similarity between two digests, in [0.0, 1.0].
  * @return -1.0 for anything the digest contract above rejects: NULL, mismatched or
  *         invalid sizes, or a kind other than PH_DIGEST_KIND_BITS.
+ * @ingroup compare
  */
 PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
 
@@ -1442,6 +1545,7 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
  * ph_radial_similarity() hands back the raw score precisely so that you can pick your
  * own cut. Do pick it deliberately and measure it — a threshold chosen by eye is the
  * usual reason a perceptual hash "does not work".
+ * @ingroup compare
  */
 #define PH_RADIAL_PCC_THRESHOLD 0.9
 
@@ -1479,6 +1583,7 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
  *       the other comparison functions here do. They signal failure with -1.0, and -1.0
  *       is a legitimate correlation — a perfect anti-correlation — so the sentinel would
  *       be ambiguous exactly where the caller needs it not to be.
+ * @ingroup compare
  */
 PH_NODISCARD PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *b,
                                                     double *out_pcc);
@@ -1504,13 +1609,14 @@ PH_NODISCARD PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const 
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for a NULL argument, an invalid or
  *         empty digest, two digests of different sizes, or a digest tagged as something
  *         other than a histogram.
+ * @ingroup compare
  */
 PH_NODISCARD PH_API ph_error_t ph_histogram_intersection(const ph_digest_t *a, const ph_digest_t *b,
                                                          double *out_similarity);
 
 /** Buffer size that holds the text form of any digest, terminator included: the longest
  *  kind name plus its colon ("coefficients:", 13 characters), two hex digits per byte of
- *  a full @c PH_DIGEST_MAX_BYTES digest, and the NUL. */
+ *  a full @c PH_DIGEST_MAX_BYTES digest, and the NUL. @ingroup text */
 #define PH_DIGEST_HEX_BUFFER_SIZE (13 + PH_DIGEST_MAX_BYTES * 2 + 1)
 
 /**
@@ -1528,6 +1634,7 @@ PH_NODISCARD PH_API ph_error_t ph_histogram_intersection(const ph_digest_t *a, c
  *                 d->size * 2 + 1.
  * @return PH_SUCCESS, or PH_ERR_INVALID_ARGUMENT if arguments are invalid, the digest's
  * kind is not a ph_digest_kind_t value, or 'out_size' is too small.
+ * @ingroup text
  */
 PH_NODISCARD PH_API ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out, size_t out_size);
 
@@ -1546,6 +1653,7 @@ PH_NODISCARD PH_API ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out,
  * @param out Output digest. Untouched on error.
  * @return PH_SUCCESS, or PH_ERR_INVALID_ARGUMENT if 'text' is malformed, has no or an
  * unknown kind prefix, or is too long.
+ * @ingroup text
  */
 PH_NODISCARD PH_API ph_error_t ph_digest_from_hex(const char *text, ph_digest_t *out);
 
@@ -1557,6 +1665,7 @@ PH_NODISCARD PH_API ph_error_t ph_digest_from_hex(const char *text, ph_digest_t 
  * @param out_size Size of 'out' in bytes; must be at least 17.
  * @return PH_SUCCESS, or PH_ERR_INVALID_ARGUMENT if arguments are invalid or
  * 'out_size' is too small.
+ * @ingroup text
  */
 PH_NODISCARD PH_API ph_error_t ph_hash_to_hex(uint64_t hash, char *out, size_t out_size);
 
@@ -1570,6 +1679,7 @@ PH_NODISCARD PH_API ph_error_t ph_hash_to_hex(uint64_t hash, char *out, size_t o
  * @param[out] out Receives the hash. Untouched on error.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for a NULL argument or any other
  *         length or character.
+ * @ingroup text
  */
 PH_NODISCARD PH_API ph_error_t ph_hash_from_hex(const char *hex, uint64_t *out);
 
@@ -1581,6 +1691,7 @@ PH_NODISCARD PH_API ph_error_t ph_hash_from_hex(const char *hex, uint64_t *out);
  * @brief Whether this build has a native JPEG decoder (libjpeg-turbo), decided when the
  * library was compiled.
  * @return 1 if it does, 0 if JPEG goes through the bundled stb_image fallback.
+ * @ingroup build
  */
 PH_API int ph_can_use_jpeg(void);
 
@@ -1590,6 +1701,7 @@ PH_API int ph_can_use_jpeg(void);
  *
  * Native means libpng.
  * @return 1 if PNG is decoded natively, 0 if it goes through the stb_image fallback.
+ * @ingroup build
  */
 PH_API int ph_can_use_png(void);
 
@@ -1598,6 +1710,7 @@ PH_API int ph_can_use_png(void);
  * compiled.
  * @return 1 if it does, 0 if WebP is not supported at all (loading one returns
  * @c PH_ERR_DECODER_UNAVAILABLE; stb_image has no WebP decoder).
+ * @ingroup build
  */
 PH_API int ph_can_use_webp(void);
 
@@ -1625,6 +1738,7 @@ PH_API int ph_can_use_webp(void);
  * key's list. Meant to be logged, not parsed for decisions -- to branch on a decoder,
  * use ph_can_use_jpeg(), ph_can_use_png() and ph_can_use_webp().
  * @return A static NUL-terminated string. Never NULL; the caller must not free it.
+ * @ingroup build
  */
 PH_API const char *ph_get_build_info(void);
 

@@ -6,7 +6,8 @@
 
 PROJECT_NAME           = libphash
 PROJECT_BRIEF          = "Perceptual image hashing library in C"
-INPUT                  = include/libphash.h
+INPUT                  = include/libphash.h docs/api-index.md
+USE_MDFILE_AS_MAINPAGE = docs/api-index.md
 OUTPUT_DIRECTORY       = build/api-docs
 FULL_PATH_NAMES        = NO
 
@@ -30,5 +31,7 @@ GENERATE_HTML          = YES
 # No graphs: one header has nothing to draw, and Graphviz would be one more dependency.
 HAVE_DOT               = NO
 GENERATE_LATEX         = NO
+# Read by scripts/check_api_groups.py: every declaration must be in a topic.
+GENERATE_XML           = YES
 GENERATE_TREEVIEW      = YES
 SEARCHENGINE           = YES
