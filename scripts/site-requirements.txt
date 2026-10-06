@@ -1,0 +1,4 @@
+# The documentation site generator, pinned: scripts/site.sh refuses any other version,
+# as scripts/format.sh does for clang-format and scripts/api_docs.sh for Doxygen.
+#   python3 -m pip install -r scripts/site-requirements.txt
+zensical==0.0.68

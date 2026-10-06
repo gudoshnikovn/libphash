@@ -427,6 +427,24 @@ the code follows is held by the gate rather than by habit.
   editor the same indentation, final newline and no trailing whitespace before
   clang-format runs.
 
+### Documentation site
+
+`docs/` is the source of the documentation site and is read on GitHub as it is, so a page
+works in both places. `make site` builds it with the Zensical version pinned in
+`scripts/site-requirements.txt` into `build/site/`, `make site-serve` serves it with live
+reload, and both copy the Doxygen API reference into `docs/api/` (ignored by git) first.
+The build is strict, and three rules keep it green:
+
+- **Navigation** is `nav` in `zensical.toml`; a new page goes there or the build fails.
+  Pages written for the site live in `docs/theory/`, `docs/guide/` and `docs/project/`;
+  files that code and scripts refer to by path keep their path.
+- **Links** to a page or an anchor are checked by the build. A link to any other file
+  must stay inside `docs/` — `scripts/check_site_links.py` fails on `../src/...` — so a
+  file elsewhere in the repository is linked by its GitHub URL.
+- **Code** on a page is included from a file CI compiles (`--8<-- "examples/basic_hash.c"`),
+  not pasted, so it cannot drift from the header. `CHANGELOG.md`, `MIGRATION.md` and
+  `SECURITY.md` are included the same way, from the repository root.
+
 ## Naming Conventions
 
 - **External linkage ⇒ `ph_`.** Every function and variable of ours that is not `static`
@@ -509,7 +527,7 @@ on any pull request targeting either, and by hand through `workflow_dispatch` (s
 | `reproducible-builds` | `scripts/check_reproducible.sh` in four parallel legs: the CMake install trees (static and shared), the Makefile's `libphash.a`, and the linux-x86_64 and windows-x86_64 release archives, each built twice and compared byte for byte. |
 
 Every build job starts the same way: a plain `actions/checkout`, then the local
-composite action [`.github/actions/setup-build`](../.github/actions/setup-build/action.yml),
+composite action [`.github/actions/setup-build`](https://github.com/gudoshnikovn/libphash/blob/main/.github/actions/setup-build/action.yml),
 which fetches the vendored submodules and installs the job's packages (apt on Linux,
 Homebrew on macOS). A job passes only what differs — its package list, or
 `submodules: 'false'` for the stb-only jobs that never read `vendor/`. The checkout

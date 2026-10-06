@@ -1,0 +1,131 @@
+# The documentation site, built from docs/ by Zensical (scripts/site.sh, `make site`).
+# docs/ is the site's only source: the same Markdown files read as plain documents on
+# GitHub. Pages that already have a path the code and scripts refer to keep it; pages
+# written for the site live under docs/theory/ and docs/guide/.
+
+[project]
+site_name = "libphash"
+site_description = "Perceptual image hashing library in C"
+site_url = "https://gudoshnikovn.github.io/libphash/"
+repo_url = "https://github.com/gudoshnikovn/libphash"
+repo_name = "gudoshnikovn/libphash"
+copyright = "libphash is released under the MIT License."
+docs_dir = "docs"
+site_dir = "build/site"
+
+# docs/README.md is the repository's map of this directory (GitHub shows it when the
+# directory is opened); the site's front page is docs/index.md. api-index.md is the
+# Doxygen main page, rendered by Doxygen, not by the site.
+exclude_docs = """
+README.md
+api-index.md
+Doxyfile
+coverage/
+html/
+xml/
+"""
+
+nav = [
+  { "Home" = "index.md" },
+  { "Theory" = [
+    { "Perceptual hashing" = "theory/perceptual-hashing.md" },
+    { "Algorithms" = "algorithms.md" },
+    { "Provenance" = "algorithm-provenance.md" },
+    { "References" = "references.md" },
+    { "Verification methodology" = "methodology.md" },
+  ] },
+  { "Guide" = [
+    { "Quick start" = "guide/quickstart.md" },
+    { "Hashing many files" = "batch.md" },
+    { "Architecture" = "architecture.md" },
+    { "Migrating from 1.x" = "guide/migration.md" },
+    { "Benchmarks" = [
+      { "Overview" = "benchmarks/README.md" },
+      { "Decoders against stb_image" = "benchmarks/2026-10-04-decoders-vs-stb.md" },
+      { "libpng against spng" = "benchmarks/2026-10-04-png-libpng-vs-spng.md" },
+    ] },
+  ] },
+  { "API reference" = "api/index.html" },
+  { "Project" = [
+    { "Changelog" = "project/changelog.md" },
+    { "Security" = "project/security.md" },
+    { "Development" = "development.md" },
+    { "Contributing" = "https://github.com/gudoshnikovn/libphash/blob/main/CONTRIBUTING.md" },
+  ] },
+]
+
+extra_javascript = [
+  "javascripts/mathjax.js",
+  "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js",
+]
+
+[project.theme]
+language = "en"
+features = [
+  "content.code.annotate",
+  "content.code.copy",
+  "content.tabs.link",
+  "content.tooltips",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.tabs",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  "toc.follow",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme)"
+toggle.icon = "lucide/sun-moon"
+toggle.name = "Switch to light mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to system preference"
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+tables = {}
+# Heading anchors as GitHub forms them, so a link such as #building--installation
+# works both on GitHub and on the site.
+toc.permalink = true
+toc.slugify = { object = "pymdownx.slugs.slugify", kwds = { case = "lower" } }
+pymdownx.arithmatex.generic = true
+pymdownx.betterem = {}
+pymdownx.details = {}
+pymdownx.emoji.emoji_generator = "zensical.extensions.emoji.to_svg"
+pymdownx.emoji.emoji_index = "zensical.extensions.emoji.twemoji"
+pymdownx.highlight.anchor_linenums = true
+pymdownx.highlight.line_spans = "__span"
+pymdownx.highlight.pygments_lang_class = true
+pymdownx.inlinehilite = {}
+pymdownx.keys = {}
+pymdownx.mark = {}
+pymdownx.smartsymbols = {}
+# Code on the site is included from files CI compiles (examples/*.c) rather than
+# copied, so it cannot drift from the header. Paths are relative to the repository root.
+pymdownx.snippets.base_path = ["."]
+pymdownx.snippets.check_paths = true
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+pymdownx.tabbed.alternate_style = true
+pymdownx.tabbed.combine_header_slug = true
+pymdownx.tasklist.custom_checkbox = true

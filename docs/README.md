@@ -10,6 +10,12 @@ Welcome to the internal technical documentation for `libphash`. This directory c
   (Doxygen 1.18, which the script checks for) writes it to `build/api-docs/html/index.html`, and each CI run publishes it as the
   `api-reference-html` artifact. The header itself is the same text.
 
+- **Documentation site** — this directory is also the source of the site: `make site`
+  builds it with Zensical into `build/site/`, with the API reference under `api/`, and
+  `make site-serve` serves it with live reload. Pages written for the site live in
+  [`theory/`](theory/perceptual-hashing.md), [`guide/`](guide/quickstart.md) and
+  `project/`; the navigation is in `zensical.toml` at the repository root.
+
 - [**Architecture Overview**](architecture.md)
   System design, module breakdown, and core data structures.
 - [**Batch Hashing and Threads**](batch.md)

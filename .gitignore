@@ -37,6 +37,9 @@ tests/fuzz/corpus/
 
 # Coverage and GCov data
 docs/coverage/
+
+# The API reference, copied into the site's source by scripts/site.sh
+docs/api/
 *.gcda
 *.gcno
 *.gcov

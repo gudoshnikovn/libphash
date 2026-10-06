@@ -2,8 +2,9 @@
 """Fails if the documentation or the public header uses a British spelling.
 
 The project writes American English (CONTRIBUTING.md, "Commit and PR conventions").
-Checked: the top-level Markdown files, docs/, examples/README.md and include/libphash.h,
-the text the API reference is generated from. Code in backticks, quoted text, URLs and
+Checked: the top-level Markdown files, every Markdown file under docs/ (the site's
+pages), examples/README.md and include/libphash.h, the text the API reference is generated
+from. Code in backticks, quoted text, URLs and
 identifiers are not prose and are skipped: a quotation keeps its source's spelling, and
 an identifier such as PH_ALPHA_BLEND_GREY is part of the API.
 """
@@ -16,7 +17,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 FILES = ["README.md", "MIGRATION.md", "CONTRIBUTING.md", "SECURITY.md",
          "THIRD-PARTY-NOTICES.md", "CHANGELOG.md", "examples/README.md",
          "include/libphash.h"] + sorted(
-             str(pathlib.Path(p).relative_to(ROOT)) for p in glob.glob(str(ROOT / "docs/*.md")))
+             str(pathlib.Path(p).relative_to(ROOT)) for p in glob.glob(str(ROOT / "docs/**/*.md"), recursive=True)
+             if not pathlib.Path(p).relative_to(ROOT).parts[1:2] == ("api",))
 
 BRITISH = re.compile(
     r"\b(?:colour[a-z]*|behaviour[a-z]*|neighbour[a-z]*|catalogue|analysing|centres?|"
