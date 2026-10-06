@@ -44,13 +44,26 @@ for src in "$ROOT_DIR"/examples/*.c; do
         status=1
         continue
     fi
-    echo "==> Running examples/$name (against tests/data/photo.jpeg)"
+    D="$ROOT_DIR/tests/data"
+    echo "==> Running examples/$name"
     case "$name" in
         compare_two_images)
-            "$WORK_DIR/$name" "$ROOT_DIR/tests/data/photo.jpeg" "$ROOT_DIR/tests/data/photo.jpeg"
+            "$WORK_DIR/$name" "$D/photo.jpeg" "$D/photo.jpeg"
+            ;;
+        digest_and_metrics)
+            "$WORK_DIR/$name" "$D/photo.jpeg" "$D/photo_rotated_90.jpeg"
+            ;;
+        batch_hash)
+            "$WORK_DIR/$name" "$D/photo.jpeg" "$D/photo_copy.jpeg" "$D/photo_complex.png" \
+                "$D/no-such-file.jpg"
+            ;;
+        error_handling)
+            # One path per outcome it explains; the build has no WebP decoder.
+            "$WORK_DIR/$name" "$D/photo.png" "$D/no-such-file.jpg" "$ROOT_DIR/README.md" \
+                "$D/corrupted.jpg" "$D/photo.jpeg" "$D/photo.webp"
             ;;
         *)
-            "$WORK_DIR/$name" "$ROOT_DIR/tests/data/photo.jpeg"
+            "$WORK_DIR/$name" "$D/photo.jpeg"
             ;;
     esac
 done

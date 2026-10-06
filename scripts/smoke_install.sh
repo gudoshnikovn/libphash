@@ -61,24 +61,9 @@ done
 
 echo "==> Building consumer via find_package(phash)"
 mkdir -p "$CONSUMER_DIR"
-cat > "$CONSUMER_DIR/main.c" <<'EOF'
-#include <libphash.h>
-#include <stdio.h>
-int main(void) {
-    ph_context_t *ctx = NULL;
-    if (ph_create(&ctx) != PH_SUCCESS) { fprintf(stderr, "ph_create failed\n"); return 1; }
-    printf("libphash smoke test OK (version %s)\n", ph_version());
-    ph_free(ctx);
-    return 0;
-}
-EOF
-cat > "$CONSUMER_DIR/CMakeLists.txt" <<'EOF'
-cmake_minimum_required(VERSION 3.10)
-project(phash_smoke_consumer C)
-find_package(phash REQUIRED CONFIG)
-add_executable(consumer main.c)
-target_link_libraries(consumer PRIVATE phash::phash)
-EOF
+# The consumer is examples/cmake_consumer, the one the README points to.
+cp "$ROOT_DIR/examples/cmake_consumer/CMakeLists.txt" "$ROOT_DIR/examples/cmake_consumer/main.c" \
+    "$CONSUMER_DIR/"
 cmake -S "$CONSUMER_DIR" -B "$CONSUMER_DIR/build" -DCMAKE_PREFIX_PATH="$PREFIX_DIR"
 cmake --build "$CONSUMER_DIR/build" -j
 run_consumer "$CONSUMER_DIR/build/consumer" "$PREFIX_DIR/lib"

@@ -159,9 +159,10 @@ int main(void) {
 }
 ```
 
-Full, compiling versions of this and a two-image comparison example are in
-[`examples/`](examples/) — CI builds and runs them against the current header in every
-run.
+Full, compiling versions of this and five more — comparing two images, the digest
+algorithms and their metrics, batch hashing, error handling, a CMake consumer — are in
+[`examples/`](examples/README.md). CI builds and runs them against the current header in
+every run.
 
 ### Compiling & Linking
 
