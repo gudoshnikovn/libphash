@@ -161,10 +161,10 @@ format:
 	./scripts/format.sh
 
 # API reference from include/libphash.h's doc comments (Doxygen), into
-# build/api-docs/html/. Fails on any Doxygen warning, as the CI format-check job does.
+# build/api-docs/html/. The script pins the Doxygen version and the CI format-check job
+# calls it too; any Doxygen warning fails it.
 docs:
-	mkdir -p build/api-docs
-	doxygen docs/Doxyfile
+	./scripts/api_docs.sh
 
 # Library build, byte-identical from identical sources: GNU and LLVM ar zero the member
 # timestamps with D; Apple's ar has no D and reads ZERO_AR_DATE instead (the same rule

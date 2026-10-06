@@ -1,8 +1,8 @@
 # API reference for include/libphash.h, generated from its doc comments.
-# Run from the repository root: `make docs` (or create build/api-docs and run
-# `doxygen docs/Doxyfile`); the HTML lands in build/api-docs/html/index.html. Any
-# warning -- an undocumented public declaration, a @param that names no parameter --
-# fails the run, which is how CI keeps the header fully documented.
+# Built by scripts/api_docs.sh (`make docs`), which pins the Doxygen version; the HTML
+# lands in build/api-docs/html/index.html. Any warning -- an undocumented public
+# declaration, a @param that names no parameter -- fails the run, which is how CI keeps
+# the header fully documented.
 
 PROJECT_NAME           = libphash
 PROJECT_BRIEF          = "Perceptual image hashing in portable C"
@@ -27,6 +27,8 @@ WARN_IF_DOC_ERROR      = YES
 WARN_AS_ERROR          = FAIL_ON_WARNINGS
 
 GENERATE_HTML          = YES
+# No graphs: one header has nothing to draw, and Graphviz would be one more dependency.
+HAVE_DOT               = NO
 GENERATE_LATEX         = NO
 GENERATE_TREEVIEW      = YES
 SEARCHENGINE           = YES

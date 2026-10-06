@@ -112,9 +112,13 @@ jobs:
       run: ./scripts/check_stb_patches.sh
 
     # The API reference is generated from include/libphash.h; docs/Doxyfile fails on any
-    # warning, so an undocumented public declaration fails here.
-    - name: Install Doxygen
-      run: sudo apt-get update && sudo apt-get install -y --no-install-recommends doxygen
+    # warning, so an undocumented public declaration fails here. The Doxygen release is
+    # pinned in scripts/install_doxygen.sh and scripts/api_docs.sh, not taken from apt,
+    # whose version follows the runner image.
+    - name: Install Doxygen (pinned)
+      run: |
+        ./scripts/install_doxygen.sh "$RUNNER_TEMP/doxygen"
+        echo "$RUNNER_TEMP/doxygen/bin" >> "$GITHUB_PATH"
 
     - name: API reference (make docs)
       run: make docs
