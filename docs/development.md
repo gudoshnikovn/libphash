@@ -525,8 +525,8 @@ Three more workflows, and Dependabot, run on their own trigger rather than per p
   published as a pre-release. Run by hand, it builds and smoke-tests the same archives
   as workflow artifacts without publishing.
 
-- **`.github/workflows/fuzz-nightly.yml`** — a 30-minute libFuzzer run on the default
-  branch, sharing the corpus cache with the `fuzz` job. See "Fuzzing" below. GitHub
+- **`.github/workflows/fuzz-scheduled.yml`** — a 30-minute libFuzzer run on the default
+  branch on Mondays and Thursdays, sharing the corpus cache with the `fuzz` job. See "Fuzzing" below. GitHub
   disables the `schedule` trigger of a public repository after 60 days without activity;
   the workflow's page in the Actions tab then offers to enable it again, and a manual
   run (*Run workflow*) works either way.
@@ -660,14 +660,15 @@ minimized and added to `tests/fuzz/seeds/` in the commit that fixes it.**
 
 CI runs this two ways: a 90-second smoke run on every push and pull request (the `fuzz`
 job above, meant to catch a fast regression, not explore the input space) and a 30-minute
-run nightly (`fuzz-nightly.yml`). The working corpus is kept in the Actions cache: each
-run restores the newest one its branch can see — its own branch's, or the default
-branch's, which is where the nightly run saves — reduces it with `-merge=1` to the inputs
-that add coverage, and saves it back. A cache entry unused for 7 days is evicted, so the
-nightly run also uploads the minimized corpus as the `fuzz-corpus` artifact, kept 90
-days; unpacked into `tests/fuzz/corpus/` it is the starting point for a local run. Report
-a crash found this way through `SECURITY.md`'s reporting channel if it looks like a real
-memory-safety issue, not a public issue.
+run twice a week (`fuzz-scheduled.yml`). The working corpus is kept in the Actions cache:
+each run restores the newest one its branch can see — its own branch's, or the default
+branch's, which is where the scheduled run saves — reduces it with `-merge=1` to the
+inputs that add coverage, and saves it back. A cache entry unused for 7 days is evicted;
+the two scheduled runs a week stay inside that, and each also uploads the minimized
+corpus as the `fuzz-corpus` artifact, kept 90 days; unpacked into `tests/fuzz/corpus/` it
+is the starting point for a local run. Report a crash found this way through
+`SECURITY.md`'s reporting channel if it looks like a real memory-safety issue, not a
+public issue.
 
 ### 4. Benchmarks (`tests/src/bench_hash.c`)
 

@@ -1,25 +1,30 @@
-name: Fuzz (nightly)
+name: Fuzz (scheduled)
 
 # The fuzz job in ci.yml only gets a 90s budget, which is there to catch a regression
 # fast, not to explore the input space. This is the long run that does. It runs on the
 # default branch, so the corpus it saves to the cache is the one every branch's CI run
 # can restore; it starts from the newest corpus saved on the default branch.
+#
+# Twice a week rather than every night: each run continues from the saved corpus, so
+# the input space is still explored between code changes, while the gain per run falls
+# as coverage levels off. The gap stays under the Actions cache's 7-day eviction of an
+# unused entry, so the corpus is never lost between two runs.
 on:
   schedule:
-    - cron: '0 3 * * *' # 03:00 UTC daily
+    - cron: '0 3 * * 1,4' # 03:00 UTC, Mondays and Thursdays
   workflow_dispatch: {}
 
 permissions:
   contents: read
 
-# A manual run started during the nightly one waits for it, so the two do not save
+# A manual run started during a scheduled one waits for it, so the two do not save
 # competing corpus caches from the same starting point.
 concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
 jobs:
-  fuzz-nightly:
+  fuzz-scheduled:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
@@ -82,5 +87,5 @@ jobs:
       if: failure()
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
       with:
-        name: fuzz-nightly-crashes
+        name: fuzz-scheduled-crashes
         path: /tmp/fuzz-artifacts/

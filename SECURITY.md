@@ -81,7 +81,7 @@ source the caller does not control, passed to `ph_load_from_file()`/
 `ph_load_from_memory()`): no out-of-bounds memory access, no code execution, and a
 defined error code (`ph_error_t`) rather than undefined behavior, for any input —
 malformed, truncated, adversarially crafted, or simply not an image at all. Every
-decode path is fuzzed on every CI run and nightly (`tests/fuzz/fuzz_load.c`, libFuzzer,
+decode path is fuzzed on every CI run and twice a week (`tests/fuzz/fuzz_load.c`, libFuzzer,
 gated behind `PHASH_BUILD_FUZZERS`; see "Fuzzing" below) and exercised by the
 sanitizer-instrumented CI legs
 (ASan/UBSan, TSan for the threaded batch path, Valgrind for the allocation-failure
@@ -136,10 +136,10 @@ it loads the input with `ph_load_from_memory()` — every decoder the build cont
 instrumented along with the library — and hashes the result with one algorithm, under
 a configuration the input's last bytes choose. Build it with
 `-DPHASH_BUILD_FUZZERS=ON` (requires Clang — libFuzzer needs compiler-rt, so this
-option is a configure-time error under GCC). CI runs it nightly for 30 minutes
-(`.github/workflows/fuzz-nightly.yml`), plus a 90-second run on every CI run (`ci.yml`).
+option is a configure-time error under GCC). CI runs it twice a week for 30 minutes
+(`.github/workflows/fuzz-scheduled.yml`), plus a 90-second run on every CI run (`ci.yml`).
 Both start from the corpus the previous runs saved to the Actions cache and save it back
-minimized; the nightly run also keeps it as a 90-day artifact. A crash there is treated
+minimized; the scheduled run also keeps it as a 90-day artifact. A crash there is treated
 the same as a privately reported vulnerability.
 
 ## Verifying a release artifact

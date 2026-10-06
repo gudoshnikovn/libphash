@@ -906,7 +906,7 @@ jobs:
 
     # The working corpus lives in the Actions cache. The key ends in the run id, so it
     # never matches on restore; restore-keys then picks the newest fuzz-corpus-* entry
-    # this run can see -- its own branch's, or the default branch's, where the nightly
+    # this run can see -- its own branch's, or the default branch's, where the scheduled
     # run saves -- and the run starts from what earlier runs found. The cache action
     # saves the directory under this run's key when the job ends.
     - name: Restore fuzz corpus cache
