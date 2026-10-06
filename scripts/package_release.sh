@@ -31,12 +31,17 @@ PYTHON="$(command -v python3 || command -v python || true)"
 [ -n "$PYTHON" ] || { echo "package_release.sh: needs python3 to write the archive" >&2; exit 1; }
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
+# A fixed build directory: MSVC records each object file's path inside the object, so a
+# windows-x86_64 archive is reproducible only from a build in the same directory
+# (cmake/deterministic_archives.cmake). Emptied before each build.
+BUILD_ROOT="$ROOT_DIR/build/package"
 
 package_one() {
     local kind="$1" shared_flag="$2"
     local name="libphash-${VERSION}-${PLATFORM}"
     [ "$kind" = "shared" ] && name="${name}-shared"
-    local build_dir="$WORK_DIR/build-$kind"
+    local build_dir="$BUILD_ROOT/$kind"
+    rm -rf "$build_dir"
     local stage_dir="$WORK_DIR/stage-$kind/$name"
 
     echo "==> [$kind] configuring (release decoder set: libjpeg-turbo+libpng+webp+zlib-ng)"

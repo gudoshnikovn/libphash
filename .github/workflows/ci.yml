@@ -963,8 +963,15 @@ jobs:
           - kind: package
             args: package linux-x86_64
             submodules: 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
+          # MSVC and NASM stamp objects, archive members and DLLs unless told not to
+          # (cmake/deterministic_archives.cmake): the windows-x86_64 release archives,
+          # packaged twice.
+          - kind: package-windows
+            args: package windows-x86_64
+            submodules: 'true'
+            os: windows-latest
+    runs-on: ${{ matrix.os || 'ubuntu-24.04' }}
+    timeout-minutes: ${{ matrix.os && 45 || 15 }}
     name: reproducible-builds (${{ matrix.kind }})
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -978,7 +985,15 @@ jobs:
         submodules: ${{ matrix.submodules }}
         apt-packages: cmake nasm pkg-config
 
+    - name: Install NASM (Windows)
+      if: runner.os == 'Windows'
+      shell: bash
+      run: |
+        choco install nasm --no-progress -y
+        echo "C:\\Program Files\\NASM" >> "$GITHUB_PATH"
+
     - name: Reproducible build (${{ matrix.kind }})
+      shell: bash
       run: ./scripts/check_reproducible.sh ${{ matrix.args }}
 
   install-smoke-test:

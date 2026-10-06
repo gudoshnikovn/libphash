@@ -260,8 +260,9 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   archives (headers, library, `LICENSE`, `THIRD-PARTY-NOTICES.md`) for linux-x86_64,
   linux-arm64, macos-arm64 and windows-x86_64 on the GitHub Releases page, each built
   with the full vendored decoder set and smoke-tested in isolation before publishing.
-  The archives are reproducible: rebuilt from the same tag with the same toolchain, they
-  match `SHA256SUMS.txt` byte for byte. Each carries a build provenance attestation that
+  The archives are reproducible: rebuilt from the same tag with the same toolchain (for
+  windows-x86_64, also in the same build directory), they match `SHA256SUMS.txt` byte
+  for byte. Each carries a build provenance attestation that
   `gh attestation verify` checks against this repository's release workflow (`SECURITY.md`).
   See the README's "Prebuilt binaries" section.
 

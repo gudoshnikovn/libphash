@@ -1,18 +1,39 @@
 # Static archives with no build-time metadata: two builds of the same sources give the
 # same bytes, so a published archive can be rebuilt and checked against its checksum.
-# The object files are already reproducible; what differs between builds is the
+# GCC and Clang objects are already reproducible; what differs between builds is the
 # modification time ar writes into each member's header (and ranlib into the index).
 #
 # GNU and LLVM ar take the D modifier (deterministic mode: zero timestamps, uids and
 # gids), and their ranlib takes -D. Apple's ar and ranlib have no such option and read
 # the ZERO_AR_DATE environment variable instead, so on that toolchain each archive
-# command runs under `cmake -E env ZERO_AR_DATE=1`. MSVC's lib.exe writes no timestamps
-# that vary, and is left as it is.
+# command runs under `cmake -E env ZERO_AR_DATE=1`.
+#
+# MSVC stamps the build time into more than the archive: cl into every object file,
+# lib into every archive member, link into every DLL and executable, and NASM (which
+# assembles libjpeg-turbo's SIMD code) into its COFF objects. /Brepro makes cl, lib and
+# link write a fixed value, NASM's --reproducible a zero. What remains is the path of
+# each object file, which cl records in the object itself: two MSVC builds match when
+# they are built in the same directory, which is why scripts/package_release.sh builds
+# in build/package rather than in a temporary directory.
 #
 # Included by CMakeLists.txt after project(), and given to the libjpeg-turbo sub-build
 # as CMAKE_PROJECT_INCLUDE, which runs it after that project's own project() call.
 
-if(NOT CMAKE_AR OR MSVC)
+if(MSVC)
+    foreach(_phash_var CMAKE_C_FLAGS CMAKE_STATIC_LINKER_FLAGS CMAKE_SHARED_LINKER_FLAGS
+                       CMAKE_MODULE_LINKER_FLAGS CMAKE_EXE_LINKER_FLAGS)
+        if(NOT " ${${_phash_var}} " MATCHES " /Brepro ")
+            string(APPEND ${_phash_var} " /Brepro")
+        endif()
+    endforeach()
+    # Read once, when a project enables ASM_NASM (libjpeg-turbo's simd/ directory).
+    if(NOT " ${CMAKE_ASM_NASM_FLAGS_INIT} " MATCHES " --reproducible ")
+        string(APPEND CMAKE_ASM_NASM_FLAGS_INIT " --reproducible")
+    endif()
+    return()
+endif()
+
+if(NOT CMAKE_AR)
     return()
 endif()
 

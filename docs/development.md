@@ -276,21 +276,27 @@ itself. Both targets print the per-area table.
 ### Reproducible archives
 
 Two builds of the same sources produce byte-identical static libraries, shared
-libraries, install trees and release archives, from any build directory, so a published
-release archive can be rebuilt and checked against `SHA256SUMS.txt`. The object files carry no build
-path or date; what would differ is the time `ar` and `ranlib` write into a static
-archive. `cmake/deterministic_archives.cmake` gives GNU and LLVM `ar` the `D` modifier
-(and `ranlib -D`), and runs Apple's `ar`/`ranlib` under `ZERO_AR_DATE=1`, including the
-`ranlib` that `cmake --install` runs on every static library it copies on macOS; the
-libjpeg-turbo sub-build gets the same file as `CMAKE_PROJECT_INCLUDE`. The Makefile picks
+libraries, install trees and release archives, so a published release archive can be
+rebuilt and checked against `SHA256SUMS.txt`. With GCC and Clang this holds from any build
+directory: the object files carry no build path or date, and what would differ is the
+time `ar` and `ranlib` write into a static archive. `cmake/deterministic_archives.cmake`
+gives GNU and LLVM `ar` the `D` modifier (and `ranlib -D`), and runs Apple's `ar`/`ranlib`
+under `ZERO_AR_DATE=1`, including the `ranlib` that `cmake --install` runs on every static
+library it copies on macOS; the libjpeg-turbo sub-build gets the same file as
+`CMAKE_PROJECT_INCLUDE`. MSVC stamps the build time into every object, archive member
+and DLL, and NASM into its COFF objects; the same file passes `/Brepro` to `cl`, `lib` and
+`link` and `--reproducible` to NASM. MSVC also records each object file's own path in the
+object, so a Windows build reproduces only in the same build directory:
+`scripts/package_release.sh` builds in `build/package/` under the checkout, which on a
+GitHub runner is always the same path. The Makefile picks
 `ar rcsD` or `ZERO_AR_DATE=1 ar rcs` from what `ar --version` reports.
 `scripts/package_release.sh` packs with `scripts/deterministic_archive.py` (Python's
 standard library, not the platform's `tar`/`zip`): sorted entries, every timestamp
 `SOURCE_DATE_EPOCH` — by default the time of the commit being packed — owner 0/0, and a
 gzip header with no time or name. `scripts/check_reproducible.sh cmake|make|package`
 builds twice and compares every installed file, `libphash.a` or the release archives; CI
-runs all three on Linux (`reproducible-builds`, one leg each) and the first two on macOS
-(`build-and-test`).
+runs all three on Linux (`reproducible-builds`, one leg each), the first two on macOS
+(`build-and-test`), and `package` on Windows (`reproducible-builds`).
 
 ### Installed package and `pkg-config`
 
@@ -500,7 +506,7 @@ on any pull request targeting either, and by hand through `workflow_dispatch` (s
 | `valgrind` | The allocation-failure test suite (`tests/src/test_alloc_failure.c`) under Valgrind — independent of ASan/LSan, which don't mix with it, and the only place that test injects failures under a memory checker: its allocator shim stands down under ASan. Two legs: stb_image only, with a subset of the library's allocation-heavy tests, and every bundled decoder, which fails allocations inside libjpeg-turbo, libpng and libwebp. |
 | `fuzz` | A short (90s) libFuzzer run per PR — a fast regression check, not real corpus exploration; see "Fuzzing" below for the real thing. |
 | `install-smoke-test` | `scripts/smoke_install.sh` and `scripts/smoke_add_subdirectory.sh` — both consumer routes (`find_package`, pkg-config, `add_subdirectory()`), both link configurations; `scripts/smoke_make_install.sh` — the Makefile's `install`/`uninstall`; `scripts/check_exported_symbols.sh`, which fails unless the shared library exports exactly the functions of `include/libphash.h` (no internal helper, no `stb_image`, no vendored decoder); `scripts/build_examples.sh`, which builds and runs `examples/` against the shared library and compiles every C block of `README.md` and `MIGRATION.md` against the installed headers. |
-| `reproducible-builds` | `scripts/check_reproducible.sh` in three parallel legs: the CMake install trees (static and shared), the Makefile's `libphash.a`, and the linux-x86_64 release archives, each built twice and compared byte for byte. |
+| `reproducible-builds` | `scripts/check_reproducible.sh` in four parallel legs: the CMake install trees (static and shared), the Makefile's `libphash.a`, and the linux-x86_64 and windows-x86_64 release archives, each built twice and compared byte for byte. |
 
 Every build job starts the same way: a plain `actions/checkout`, then the local
 composite action [`.github/actions/setup-build`](../.github/actions/setup-build/action.yml),
