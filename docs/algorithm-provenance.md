@@ -33,7 +33,7 @@ account of it. Applied when sources disagree, strongest first:
 3. **Code published by the author** — which is the top rank whenever there is no paper,
    as for pHash's DCT hash, aHash and dHash, where the implementation *is* the algorithm.
 4. Third-party description or implementation: ImageHash, OpenCV, a blog restatement, or a
-   thesis analysing code the author of the thesis did not write.
+   thesis analyzing code the author of the thesis did not write.
 
 Zauner's thesis is rank 4 for the DCT hash: it is one careful reader's account of Klinger
 and Starkweather's program, and two of its statements about that program do not match it
@@ -57,7 +57,7 @@ citation so a reader can check them.
 What is *not* done: copying source, transcribing a function's structure, or reproducing
 documentation prose. Where this document needs to say what another implementation does, it
 says so in words. Every hash in `src/hashes/` is written from the specification, and where
-the specification is somebody's program, from a description of that program's behaviour —
+the specification is somebody's program, from a description of that program's behavior —
 not from its text.
 
 ### What could not be read directly
@@ -143,7 +143,7 @@ description by the people responsible for the algorithm.
 
 | Difference | Class | Note |
 |---|---|---|
-| Resampling filter | undefined | Source says only "shrink". Mitchell, not the area average aHash uses: dHash compares neighbouring pixels, and the sharp cell edges of an area average make those differences noisier. Measured with an area average, straight to 9×8 or through any intermediate grid from 72×64 to 288×256: separability down (3.49 → 3.23 synthetic) and more pairs of different photographs sharing a hash (721 → 900–1100 of 800 photographs). |
+| Resampling filter | undefined | Source says only "shrink". Mitchell, not the area average aHash uses: dHash compares neighboring pixels, and the sharp cell edges of an area average make those differences noisier. Measured with an area average, straight to 9×8 or through any intermediate grid from 72×64 to 288×256: separability down (3.49 → 3.23 synthetic) and more pairs of different photographs sharing a hash (721 → 900–1100 of 800 photographs). |
 | Grayscale coefficients | pinned | As for aHash. |
 
 **Verdict: conforms**, down to the direction of the comparison and the bit order, both
@@ -176,7 +176,7 @@ DCT-based *video* hash by Coskun and Sankur.
 
 Zauner §3.2.1, on pHash:
 
-> The method `ph_dct_imagehash()` first converts the image to grey scale using only its
+> The method `ph_dct_imagehash()` first converts the image to gray scale using only its
 > luminance. […] Then a mean filter is applied to the image. A kernel with dimension
 > 7x7 is used. […] After this operation the image is resized to 32x32 pixels.
 > Consequently, a DCT matrix is generated and the two-dimensional type-II DCT
@@ -218,7 +218,7 @@ The code decides here, and it is worth being exact about why, because the reason
 David Starkweather, and what they authored is the pHash implementation; there is nothing
 behind it to appeal to. Zauner's thesis and Krawetz's post are third parties describing
 someone else's program, however carefully. Where an algorithm *does* have a paper by its
-author — Yang, Gu and Niu for BMH, Stricker and Orengo for the colour moments — the paper
+author — Yang, Gu and Niu for BMH, Stricker and Orengo for the color moments — the paper
 outranks every implementation, including implementations more popular than this library
 will ever be. §6 follows the BMH paper against OpenCV for exactly that reason.
 
@@ -234,11 +234,11 @@ own: LSB first (see the bit-order table in [`algorithms.md`](algorithms.md)).
 | Difference | Class | Note |
 |---|---|---|
 | DC excluded from the median | matches pHash's code | As `ph_dct_imagehash()` does, and as both descriptions ask. For the median alone it changes no bit except on an exact tie; it also keeps DC out of the range the margin is taken from (both measured below). |
-| DC keeps its bit, so one bit of the 64 is constant | deliberate — pHash's own behaviour | DCT(0,0) is non-negative and larger than every AC term, so it is above the median every time and its bit is 1 every time. The hash is effectively 63 bits. Removing the dead bit means moving the block to (1,1), which the prose describes and the code does not; measured below and rejected. |
+| DC keeps its bit, so one bit of the 64 is constant | deliberate — pHash's own behavior | DCT(0,0) is non-negative and larger than every AC term, so it is above the median every time and its bit is 1 every time. The hash is effectively 63 bits. Removing the dead bit means moving the block to (1,1), which the prose describes and the code does not; measured below and rejected. |
 | No 7×7 mean prefilter before the resize | deliberate | The exact area average already averages over each source region, which is a low-pass step of a similar kind. Not identical to a 7×7 mean at full resolution; worth measuring rather than assuming. |
 | Threshold is the median | deliberate | The two sources disagree; the rank-1 source (Zauner/pHash) says median. |
 | Threshold is the median plus 0.1 % of the AC range, not the bare median | deliberate | Coefficients crowding the median decide their bits by noise; the margin sends them to 0 together. Measured below: false matches at 95 % recall on photographs halve. `ph_dct_imagehash()` thresholds at the bare median, so pHash values differ from it. |
-| `>` rather than `≥` | matches pHash's code | Zauner's 3.10 says `≥`; `ph_dct_imagehash()` writes `>`, and so does this. With floating-point coefficients the two differ only on an exact tie against the median, i.e. on degenerate input such as a solid colour. `>` because it is pinned to the reference implementation's code, which outranks a library-wide convention. |
+| `>` rather than `≥` | matches pHash's code | Zauner's 3.10 says `≥`; `ph_dct_imagehash()` writes `>`, and so does this. With floating-point coefficients the two differ only on an exact tie against the median, i.e. on degenerate input such as a solid color. `>` because it is pinned to the reference implementation's code, which outranks a library-wide convention. |
 | Area-average resampling | undefined | No source specifies a filter. Zauner's account of pHash has a 7×7 mean filter and then a resize, so an exact area average — each value the mean of the region it covers, shared with aHash, wHash and BMH — is at least the same kind of operation. |
 | Grayscale coefficients | pinned | As for aHash — see §1. `ph_median_bitpack_from()` (shared with wHash) operates on the DCT of the grayscale buffer, so the same BT.601 triple applies here too. |
 
@@ -289,10 +289,10 @@ reduced to 512 px on the long side):
 | 25–50 % | 77 (10 %) |
 | 50 % or more | 50 (6 %) |
 
-The same effect seen through the hash: ±1 grey level of uniform noise, invisible, moves
+The same effect seen through the hash: ±1 gray level of uniform noise, invisible, moves
 pHash by 11 bits or more on 140 of the 800 (aHash 53, dHash 45, wHash 68). `photo_complex.png`
 in `tests/data` is one of the 50: 55 of its 63 AC coefficients lie within 0.1 % of the
-median. It and the uniform `photo.png` therefore pin pHash's behaviour in that regime, not in
+median. It and the uniform `photo.png` therefore pin pHash's behavior in that regime, not in
 the typical one.
 
 So the threshold is not the bare median. It is raised by a margin of 0.1 % of the AC
@@ -307,7 +307,7 @@ range (`PH_PHASH_MEDIAN_MARGIN`), which sends the crowd around the median to 0 a
 
 The synthetic corpus agrees (separability 2.69 → 3.17). A uniform image, whose AC
 coefficients are float residue, hashes within 11 bits of zero instead of to rounding noise,
-and any two flat greys within 13 bits of each other. The price is conformance: pHash values
+and any two flat grays within 13 bits of each other. The price is conformance: pHash values
 are not `ph_dct_imagehash()`'s, and three near-flat synthetic images of 24 share a hash.
 
 ---
@@ -385,7 +385,7 @@ median too.
 
 The **operator** is the Laplacian of Gaussian of D. Marr and E. Hildreth, "Theory of edge
 detection", *Proc. R. Soc. Lond. B* 207:187–217, 1980 — rank 1. The kernel is the sampled
-Mexican hat, `(2 − A)·exp(−A/2)`, with `A` the squared distance from the centre in units
+Mexican hat, `(2 − A)·exp(−A/2)`, with `A` the squared distance from the center in units
 of the scale.
 
 The **hash** built on it has no paper. It is pHash's `ph_mh_imagehash()`, by Evan Klinger
@@ -395,8 +395,8 @@ source for the construction — not a reference implementation of something else
 steps and constants below are taken from it as facts about the algorithm.
 
 **What the source specifies:** luminance, blur at σ = 1, resize to 512×512, histogram
-equalisation over 256 levels, correlation with the LoG kernel at α = 2 and level = 1, the
-response normalised and summed over 16×16 blocks into a 31×31 grid, and nine bits per 3×3
+equalization over 256 levels, correlation with the LoG kernel at α = 2 and level = 1, the
+response normalized and summed over 16×16 blocks into a 31×31 grid, and nine bits per 3×3
 window of that grid at stride 4, each thresholded against its window's mean — 64 windows,
 **576 bits, 72 bytes**. pHash's own page states the 72 bytes; its header states the α and
 level defaults.
@@ -408,7 +408,7 @@ level defaults.
 | Separable truncated Gaussian at σ = 1, not Deriche's recursive approximation | deliberate | CImg's `blur()` is a recursive filter; this is a direct kernel truncated at 3σ. Both approximate the same Gaussian. |
 | Resize through stb's Mitchell filter (`ph_resize_mitchell()`), not CImg's quintic | deliberate | Different interpolator, same step. |
 | Block sums computed through an integral image rather than by filtering every pixel | deliberate, and strictly better | See below. This is the one change that moves the numbers, and it moves them the right way. |
-| Values are not bit-identical to pHash's | consequence of the three above | Reproducing them would mean reimplementing CImg's blur, resize and equaliser, for a comparison nothing here can run: there is no pHash build to check against. The construction and every parameter of it are reproduced; the arithmetic is not. |
+| Values are not bit-identical to pHash's | consequence of the three above | Reproducing them would mean reimplementing CImg's blur, resize and equalizer, for a comparison nothing here can run: there is no pHash build to check against. The construction and every parameter of it are reproduced; the arithmetic is not. |
 | Zero-crossings are not detected | **not a divergence** | Worth stating because the name invites it: Marr and Hildreth find edges as the zero-crossings of the filtered image, and *neither* pHash nor this code looks for one. The response is block-summed and thresholded against a local mean. The operator is theirs; the edge detector is not being implemented, by either. |
 | Grayscale coefficients (the "luminance" step) | pinned | As for aHash — see §1. |
 
@@ -431,7 +431,7 @@ definition evaluated directly in float — so the reason for folding is the time
 exactness is what makes it safe: `test_mh_block_sums_match_the_direct_definition()`
 checks the folded result against the definition evaluated in double.
 
-One step of the source is dropped, provably without effect: it normalises the response to
+One step of the source is dropped, provably without effect: it normalizes the response to
 [0,1] before summing. The block sums are affine in the response, the window mean is affine
 in the block sums, and `value > mean` is invariant under an affine map with positive
 scale, so no bit can change.
@@ -439,20 +439,20 @@ scale, so no bit can change.
 ### Parameters, and why the defaults are pHash's
 
 `ph_context_set_mhash_params()` exposes α and level — pHash's own two parameters, which
-set the kernel's scale — and the size the image is normalised to, which pHash fixes at
+set the kernel's scale — and the size the image is normalized to, which pHash fixes at
 512. The ratio between the kernel's scale and the picture is the only thing in this
 algorithm that decides what it sees, and both knobs move it.
 
 The defaults are pHash's (α = 2, level = 1, 512). Across 24 settings (4 levels × 6 sizes)
 on a 300×300 corpus every one lands between 2.46 and 3.03, with no trend in either
 parameter, so none beats the source's values. The sweep has to use a corpus larger than
-the normalisation sizes: on a corpus near a normalisation size the base image is not
+the normalization sizes: on a corpus near a normalization size the base image is not
 resampled at all while its transformed copies are, and the measurement rewards the
 setting that happens to match the corpus.
 
 Two properties follow:
 
-- **This library's property corpus understates any algorithm that normalises to a size
+- **This library's property corpus understates any algorithm that normalizes to a size
   larger than the corpus** (less so since its feature sizes scale with the corpus; see "The corpus"
   in [`methodology.md`](methodology.md#the-corpus)). On a 300×300 corpus mHash separates at 2.70 (BMH 3.25, wHash 2.88,
   Radial 2.72, aHash 2.31, dHash 2.07, pHash 1.89, ColorHash 1.82); on the 160×160
@@ -478,7 +478,7 @@ source.
 
 **What the source specifies (method 1):**
 
-1. Convert to grayscale and normalise to a preset size.
+1. Convert to grayscale and normalize to a preset size.
 2. Divide the pixels into N non-overlapping blocks I₁…I_N, N being the bit length.
 3. Encrypt the block indices with a secret key K to permute the scan order.
 4. Compute the mean of each block, giving M₁…M_N, and **obtain the median value M_d of
@@ -507,13 +507,13 @@ differ from OpenCV's.
 |---|---|---|
 | Threshold is the median of the block means | conforms | Per step 4 and equation 3.9. It makes the bit distribution balanced by construction, which the paper depends on. On ordinary images the mean and the median of a block-value distribution sit close together, so a mean threshold would measure almost the same; the median is used for conformance and balance, not for a number. |
 | Median of an even count taken as the upper of the two central values | undefined | The paper does not say. This is the choice that preserves its property: with `≥`, exactly half the blocks clear the upper central value. Ties among block values can still unbalance it — they are bytes, and a flat image has many — and nothing in the method addresses that. |
-| No preset normalisation size; the image is resampled straight to the block grid | deliberate, and measured better | See below. |
+| No preset normalization size; the image is resampled straight to the block grid | deliberate, and measured better | See below. |
 | Key-permuted block order omitted | deliberate | Also omitted by pHash. It is a security feature (unpredictability under a key), not a perceptual one, and the paper leaves the cipher unspecified. |
 | `≥` at the threshold | conforms | Matches equation 3.9. This is also the library-wide rule for aHash's own unpinned tie (§1). |
 | Bit packing LSB-first within a byte | documented | The paper defines a bit sequence, not a byte layout, so there is nothing to conform to or diverge from — only a choice to record. See `docs/algorithms.md`'s bit-order table for all nine algorithms; `bmh.c`'s own file header states it too. |
 | Grayscale coefficients | pinned | As for aHash — see §1. |
 
-**The missing normalisation step, and why it is not needed.** Step (a) normalises the
+**The missing normalization step, and why it is not needed.** Step (a) normalizes the
 image to a preset size before blocking, and both implementations of the paper do it at
 256×256. This library resamples straight to the block grid. Resampling straight to the
 grid is the block means for any source size, not only multiples of the grid:
@@ -522,9 +522,9 @@ source region behind it, fractional edges included, in integers, and rounds once
 is the paper's block mean to the nearest byte, which
 `test_area_downscale_matches_brute_force()` checks against a brute-force sum.
 
-Normalising first, the paper's way — to the largest multiple of the grid at or below 256,
+Normalizing first, the paper's way — to the largest multiple of the grid at or below 256,
 then averaging integer blocks — gains nothing: separability on the synthetic corpus is
-5.43 direct and 5.42 normalised. It adds a stage that rounds the intermediate to integer
+5.43 direct and 5.42 normalized. It adds a stage that rounds the intermediate to integer
 pixels, an error the direct area average does not have, and it would tie the grid to
 divisors of the preset: most grid sizes this library accepts (2..32, e.g. 3×3 or 22×22)
 do not divide 256.
@@ -557,7 +557,7 @@ All three paywalled; content below from Zauner §3.1.3 and §3.2.3.
 **What the sources specify:**
 
 Definition 3.6 — the radial variance vector, for **α = 0, 1, …, 179**, over Γ(α), the
-one-pixel-wide strip of pixels on the projection line through the image centre:
+one-pixel-wide strip of pixels on the projection line through the image center:
 
 > R[α] = ( Σ I²(x,y) / #Γ(α) ) − ( Σ I(x,y) / #Γ(α) )²
 
@@ -573,31 +573,31 @@ for which [Z10] reports that "the authors suggest 1 for both variables" — thou
 own header defaults σ to **3.5** and γ to 1.0, so the thesis is right about γ and wrong
 about σ; N = 180 angles by default;
 **comparison by peak of cross-correlation (PCC)** with a default threshold of 0.9; and,
-uniquely among the four hashes in the thesis, **no normalisation of image resolution**.
+uniquely among the four hashes in the thesis, **no normalization of image resolution**.
 
-**What this implementation does** (`src/hashes/radial.c`): a σ-parameterised
+**What this implementation does** (`src/hashes/radial.c`): a σ-parameterized
 Gaussian blur (**default σ = 3.5**, pHash's own header default) and gamma correction with
 a default of **1.0** — an exact identity, `pow(v/max, 1.0) * max == v` for any `max > 0` —
 then for each of `radial_projections` angles (**default 180**) spread over [0, π), sample
 `radial_samples` points (**default 128**) bilinearly along the line through the image
-centre out to `min(w,h)/2` and compute
-the variance with exactly the source's formula. That vector is standardised to zero mean
+center out to `min(w,h)/2` and compute
+the variance with exactly the source's formula. That vector is standardized to zero mean
 and unit variance, as pHash's `ph_feature_vector()` does; a vector with no spread worth
-the name — mean variance at most 1e-6 grey levels², or a spread across angles below 1 % of
+the name — mean variance at most 1e-6 gray levels², or a spread across angles below 1 % of
 the mean (squared coefficient of variation 1e-4) — yields an all-zero digest, which
 `ph_radial_similarity()` refuses to score (`PH_ERR_NO_STRUCTURE`). A 1-D DCT-II follows, and its **first 40 coefficients** are the hash,
-mapped affinely onto 0–255 by their own minimum and maximum, the quantisation pHash's
+mapped affinely onto 0–255 by their own minimum and maximum, the quantization pHash's
 `ph_dct()` uses. Digests are compared by `ph_radial_similarity()`, the peak of the
 cross-correlation over cyclic shifts, against a threshold of 0.9 — pHash's
 `ph_crosscorr()`.
 
 Measured on the synthetic corpus of `tests/src/test_hash_properties.c` (distances
-normalised to [0,1]), compared by peak cross-correlation: mean intra-distance 0.021, mean
+normalized to [0,1]), compared by peak cross-correlation: mean intra-distance 0.021, mean
 inter-distance 0.261, separability **2.72**.
 
-The vector is standardised before the transform. Without that, DCT coefficient 0 is the
-sum of the variances: always the largest of the 40, always quantised to 255, so one byte
-of every digest carries no information *and* pins the top of the quantisation range,
+The vector is standardized before the transform. Without that, DCT coefficient 0 is the
+sum of the variances: always the largest of the 40, always quantized to 255, so one byte
+of every digest carries no information *and* pins the top of the quantization range,
 squeezing the rest into what is left — which pulls every pair of digests towards each
 other.
 
@@ -608,13 +608,13 @@ other.
 | DCT of the radial variance vector, first 40 coefficients | conforms | The DCT of the 180-angle variance vector; the first 40 coefficients are the hash — the step the paper credits for the improvement. |
 | Comparison by the peak of cross-correlation, threshold 0.9 | conforms, one deliberate difference | `ph_radial_similarity()`, pHash's `ph_crosscorr()`. One deliberate difference: pHash divides by the first digest's variance alone, which makes its score asymmetric — `crosscorr(x,y)` and `crosscorr(y,x)` disagree. This uses the symmetric Pearson correlation. |
 | Rotation robustness is a few degrees, not arbitrary | a property of the algorithm | Measured below. The source is not contradicted; the tolerance is a few degrees plus a half turn. |
-| Default gamma 1.0, pixels raised to `gamma` directly, normalised by the buffer's own maximum before the power step and rescaled by it after | matches pHash's code | Default γ = 1.0 (an exact identity), as `ph_compare_images()` defaults it. Pixels are raised to γ after normalising by the buffer's own maximum and rescaled by it, as pHash does. [Z10] reports 1 as the authors' suggestion; that is a suggestion the thesis records, not a formula from the paper. |
-| Blur is σ-parameterised (`ph_gaussian_blur_sigma()`), default σ = 3.5 | matches pHash's code | pHash's own header defaults `sigma` to 3.5. [Z10] reports the authors as suggesting σ = 1, which pHash's header does not follow — so 3.5 is the reference *implementation's* choice, not a value derived from the paper. |
+| Default gamma 1.0, pixels raised to `gamma` directly, normalized by the buffer's own maximum before the power step and rescaled by it after | matches pHash's code | Default γ = 1.0 (an exact identity), as `ph_compare_images()` defaults it. Pixels are raised to γ after normalizing by the buffer's own maximum and rescaled by it, as pHash does. [Z10] reports 1 as the authors' suggestion; that is a suggestion the thesis records, not a formula from the paper. |
+| Blur is σ-parameterized (`ph_gaussian_blur_sigma()`), default σ = 3.5 | matches pHash's code | pHash's own header defaults `sigma` to 3.5. [Z10] reports the authors as suggesting σ = 1, which pHash's header does not follow — so 3.5 is the reference *implementation's* choice, not a value derived from the paper. |
 | 128 samples per projection, bilinearly interpolated | deliberate | The source integrates over the pixels of a one-pixel-wide strip, whose count varies with the angle and the image size; a fixed sample count is a different estimator of the same quantity. Cheaper and resolution-independent, but it is an approximation, not the definition. |
-| Radius capped at `min(w,h)/2` | deliberate | Keeps every projection inside the image. The source does not normalise resolution and does not discuss the cap. |
+| Radius capped at `min(w,h)/2` | deliberate | Keeps every projection inside the image. The source does not normalize resolution and does not discuss the cap. |
 | Grayscale coefficients | pinned | As for aHash — see §1. |
-| Coefficients quantised by their own min and max | deliberate, and pHash's | Not in the paper, which says nothing about quantisation. It is what pHash's `ph_dct()` does, it keeps the sign, and it makes the digest invariant to a rescaling of the whole variance vector. |
-| All-zero digest below a variance of 0.001 on every projection | pinned | Not in the source, and the source could not supply one — it does not discuss degenerate input. `0.001` is chosen, not inherited: small enough that no real image's projection variance falls under it (measured against the full test corpus), large enough to catch the residual floating-point noise a genuinely flat image leaves in `ph_projection_variance()`. Without it the min-max quantiser would stretch that noise across the whole byte range and manufacture detail that is not there. |
+| Coefficients quantized by their own min and max | deliberate, and pHash's | Not in the paper, which says nothing about quantization. It is what pHash's `ph_dct()` does, it keeps the sign, and it makes the digest invariant to a rescaling of the whole variance vector. |
+| All-zero digest below a variance of 0.001 on every projection | pinned | Not in the source, and the source could not supply one — it does not discuss degenerate input. `0.001` is chosen, not inherited: small enough that no real image's projection variance falls under it (measured against the full test corpus), large enough to catch the residual floating-point noise a genuinely flat image leaves in `ph_projection_variance()`. Without it the min-max quantizer would stretch that noise across the whole byte range and manufacture detail that is not there. |
 
 ### What "robust to rotation" amounts to here, measured
 
@@ -646,23 +646,23 @@ stripes and small checkerboards, it is much weaker (mean 0.82 at 1°) — conten
 and the corpus is the pessimistic end of it.
 
 Quarter turns are not absorbed, and no comparison of these 40 coefficients can absorb
-them: pHash's maximisation over cyclic shifts of the coefficients is not the group a
+them: pHash's maximization over cyclic shifts of the coefficients is not the group a
 rotation acts through. pHash behaves identically. Recovering large rotations would mean
 storing something a shift does not destroy — the magnitudes of the first Fourier
 coefficients of the variance vector are exactly shift-invariant, for instance — which
 would be a departure from the source with no defect to justify it. Not done, and not
 planned.
 
-Radial follows its source end to end: projections, standardisation, transform,
-quantisation, comparison, and pHash's blur and gamma defaults. At the default γ = 1.0 the
+Radial follows its source end to end: projections, standardization, transform,
+quantization, comparison, and pHash's blur and gamma defaults. At the default γ = 1.0 the
 gamma step is an exact identity (`(v/max)^1.0 * max == v`); the exponent convention and
-the normalisation by the buffer's maximum matter only to a caller who sets γ explicitly.
+the normalization by the buffer's maximum matter only to a caller who sets γ explicitly.
 
 ---
 
-## 8. ColorHash — colour histogram
+## 8. ColorHash — color histogram
 
-**Authors:** Michael Swain and Dana Ballard, for the method. The quantisation is this
+**Authors:** Michael Swain and Dana Ballard, for the method. The quantization is this
 library's.
 
 **Primary source:** M. Swain, D. Ballard, "Color Indexing", *International Journal of
@@ -671,10 +671,10 @@ Computer Vision* 7(1):11–32, 1991. **Not read.** IJCV is closed, OpenAlex repo
 report (TR 360, 1990) is not freely available either. The intersection formula is
 confirmed by several independent restatements, which by this document's own ranking leaves
 the basis at **rank 4**. No conformance to the paper is claimed. The honest description,
-used in the code and in `references.md` alike: *a colour histogram with histogram
+used in the code and in `references.md` alike: *a color histogram with histogram
 intersection, after Swain & Ballard (1991), implemented from secondary descriptions.*
 
-**What the secondary descriptions agree on:** quantise the colour space, count pixels per
+**What the secondary descriptions agree on:** quantize the color space, count pixels per
 bin, compare two histograms by their intersection
 
 > H(t, r) = Σ min(t_i, r_i) / Σ r_i
@@ -686,18 +686,18 @@ are the opponent ones: `rg = R − G`, `by = 2B − R − G`, `wb = R + G + B`.
 
 **What this implementation does** (`src/hashes/color_histogram.c`): those three axes at
 6 × 6 × 3 = **108 bins**, one byte per bin scaled against the largest bin, compared by
-`ph_histogram_intersection()` with each side normalised by its own total.
+`ph_histogram_intersection()` with each side normalized by its own total.
 
 Measured separability: **4.01**, and 3.87 on a second corpus at a different resolution.
 
-### Choosing the quantisation, since the paper cannot supply it
+### Choosing the quantization, since the paper cannot supply it
 
 This is the measured-property regime, the same one wHash is in, and the measurement is the
 justification. Sixteen candidates, on both corpora; the two agree throughout, which is
 expected — a histogram does not resample the image, so the resolution confound that
 distorts §5's numbers does not arise here.
 
-| quantisation | bins | separability |
+| quantization | bins | separability |
 |---|---|---|
 | RGB 3×3×3 | 27 | 2.74 |
 | RGB 4×4×4 | 64 | 2.38 |
@@ -717,17 +717,17 @@ distorts §5's numbers does not arise here.
 
 **The two highest scores were rejected.** `6×6×1` and `9×9×1` drop the light–dark axis,
 which buys invariance to exposure — and makes a black image and a white image produce the
-same hash, along with every other pair of flat greys. A corpus of colourful pictures never
+same hash, along with every other pair of flat grays. A corpus of colorful pictures never
 notices; `test_color_hash_separates_flat_colours()` does, and exists so that a future
 retuning cannot make that trade quietly. The corpus is never the only instrument: here its
 best score is the wrong answer.
 
 A perceptually spaced intensity axis measures worse than the uniform one (3.67, and *more*
-grey collisions).
+gray collisions).
 
-**What 6 × 6 × 3 still cannot separate**, from the same check: flat colours whose chroma
-matches and whose total intensity falls in the same third — black against dark grey, light
-grey against white. Three intensity bins is what fits beside 6 × 6 chroma inside
+**What 6 × 6 × 3 still cannot separate**, from the same check: flat colors whose chroma
+matches and whose total intensity falls in the same third — black against dark gray, light
+gray against white. Three intensity bins is what fits beside 6 × 6 chroma inside
 `PH_DIGEST_MAX_BYTES`, and chroma resolution is worth more here than intensity resolution
 (5×5×5 has no such collisions and separates at 2.83). The limit is asserted as a limit in
 the tests rather than left to be discovered.
@@ -736,9 +736,9 @@ the tests rather than left to be discovered.
 
 | Difference | Class | Note |
 |---|---|---|
-| Quantisation is 6×6×3 of the opponent axes | this library's, justified by measurement | The paper's own resolution is 16×16×8 = 2048 bins, far past a 128-byte digest. |
-| Bins scaled against the largest bin, not the pixel count | deliberate | With 108 bins the average bin holds under 1% of the image, which as a fraction of the total quantises to two or three of 255 levels. The comparison renormalises each side by its own sum, so nothing depends on the choice. |
-| Intersection normalised by each side's own total | deliberate | The formula as stated normalises by the reference histogram, which makes the score asymmetric when the two images hold different pixel counts. A comparison that depends on the order of its arguments is a defect. The two agree whenever the counts match. |
+| Quantization is 6×6×3 of the opponent axes | this library's, justified by measurement | The paper's own resolution is 16×16×8 = 2048 bins, far past a 128-byte digest. |
+| Bins scaled against the largest bin, not the pixel count | deliberate | With 108 bins the average bin holds under 1% of the image, which as a fraction of the total quantizes to two or three of 255 levels. The comparison renormalises each side by its own sum, so nothing depends on the choice. |
+| Intersection normalized by each side's own total | deliberate | The formula as stated normalizes by the reference histogram, which makes the score asymmetric when the two images hold different pixel counts. A comparison that depends on the order of its arguments is a defect. The two agree whenever the counts match. |
 | Spatial layout discarded entirely | inherent to the method | An image and a shuffling of its pixels hash identically, and a 90° rotation does not move the hash at all — asserted in the tests, since it is the property the algorithm exists for. Use it alongside a structural hash. |
 | A small local edit barely moves it | inherent, measured | A patch covering 4% of the frame moves the distance by 0.03, where the benign transformations move it by 0.09. A global statistic notices a local change in proportion to its area. |
 
@@ -756,7 +756,7 @@ course notes, 10 February 2005 — rank 4. This is the weakest evidence in this 
 and the statements below should be re-checked against the paper before anything is
 changed on their basis.
 
-**What the source specifies** (per that restatement): three central moments per colour
+**What the source specifies** (per that restatement): three central moments per color
 channel i over N pixels p_ij —
 
 - mean `E_i = (1/N) Σ p_ij`

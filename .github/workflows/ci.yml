@@ -103,6 +103,9 @@ jobs:
     - name: Coverage thresholds as documented
       run: python3 scripts/check_coverage.py --check-docs
 
+    - name: American spelling in the documentation
+      run: python3 scripts/check_spelling.py
+
     # Each copied-in stb header is its recorded upstream commit plus the patch in
     # vendor/patches/, byte for byte. Downloads the two upstream files.
     - name: Vendored stb headers = upstream + vendor/patches

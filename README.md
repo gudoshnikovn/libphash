@@ -19,7 +19,7 @@ on by default.
 ## What this library is for
 
 **Finding duplicate and near-duplicate images in a collection you control.** Deduplicating
-an archive, clustering a catalogue, keying a cache, answering "have I stored this before"
+an archive, clustering a catalog, keying a cache, answering "have I stored this before"
 inside a trusted pipeline. Every design decision in this library is made for that job.
 
 **It is not built to withstand someone trying to fool it.** Every hash here is

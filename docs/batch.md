@@ -12,7 +12,7 @@ internal pool of worker threads. Each worker creates and owns its own `ph_contex
 claims the next unstarted item from a shared atomic index, and writes only into that
 item — per-item failures land in the item's `status` and never stop the batch.
 
-`ph_hash_files_ex()`/`ph_hash_buffers_ex()` take a `ph_batch_options_t` (initialise it
+`ph_hash_files_ex()`/`ph_hash_buffers_ex()` take a `ph_batch_options_t` (initialize it
 with `ph_batch_options_init()`) and add what the plain pair cannot do:
 
 - **Configuration.** `options.config` is a template context: its whole configuration —
@@ -56,7 +56,7 @@ thread is left off as well. A caller with one large JPEG and idle cores gains mo
   context (`tests/src/test_thread_safety.c`).
 - **Batch calls take no context**, so several threads may each run their own
   `ph_hash_files()`/`ph_hash_buffers()` at the same time. The calls share nothing but
-  the library's one-time initialisation, which is thread-safe; each starts its own pool,
+  the library's one-time initialization, which is thread-safe; each starts its own pool,
   so their worker counts add up — pass explicit thread counts if several run at once.
 - **The template context** (`options.config`) is only read, on the calling thread, before
   any worker starts. Do not change it from another thread while the call is starting.

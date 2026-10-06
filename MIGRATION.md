@@ -54,7 +54,7 @@ ph_context_set_alpha_mode(ctx, PH_ALPHA_IGNORE);   /* drop alpha, as 1.x did */
 ```
 
 Read the EXIF-orientation and alpha entries below before doing this: both make the hash
-describe something a viewer does not see — the undisplayed sensor buffer, the colour
+describe something a viewer does not see — the undisplayed sensor buffer, the color
 under transparent pixels — which is usually not what you actually want long-term. They
 are offered as a bridge to keep old values valid while you plan a rehash, not as the
 recommended steady state.
@@ -196,7 +196,7 @@ accepted any positive value and truncated the BMH digest to 64 bytes above 22×2
 ## `ph_context_set_gamma()`: exponent `gamma`, default 1.0
 
 1.x raised pixels to `1/gamma` with a default of 2.2. 2.0 follows pHash: pixels are
-normalised by the buffer's maximum, raised to `gamma`, and rescaled, with a default of
+normalized by the buffer's maximum, raised to `gamma`, and rescaled, with a default of
 1.0 — an identity. Gamma affects Radial only, in both versions. If you set gamma
 explicitly, the same number now means the inverse; review it or drop the call.
 
@@ -280,14 +280,14 @@ Regular files are unaffected.
 
 ## Transparent images are hashed as they look
 
-1.x dropped the alpha channel and hashed the colour stored under it, which is invisible
+1.x dropped the alpha channel and hashed the color stored under it, which is invisible
 and differs between encoders: two copies of the same icon, one with black and one with
 white under its transparent pixels, hashed about 30–40 bits apart. 2.0 composites every
 image with alpha (an alpha channel or a PNG `tRNS` chunk, or RGBA passed to
-`ph_load_from_pixels()`) onto mid-grey at load time, so such copies hash identically.
+`ph_load_from_pixels()`) onto mid-gray at load time, so such copies hash identically.
 Every stored hash of an image with transparency changes; opaque images are unaffected.
 `ph_context_set_alpha_mode()` picks a white or black background instead, or
-`PH_ALPHA_IGNORE` for the 1.x behaviour. `ph_context_get_dimensions()` reports 3
+`PH_ALPHA_IGNORE` for the 1.x behavior. `ph_context_get_dimensions()` reports 3
 channels (1 when loaded as grayscale) for such an image: alpha is never stored.
 
 ---
@@ -332,7 +332,7 @@ Each of these changed enough that a stored 1.x value **cannot** be compared agai
 plan a rehash of anything that used them. Full rationale for each is in `CHANGELOG.md`;
 this is the "what do I call now" summary.
 
-- **`ph_compute_color_hash()`** — a 108-byte colour histogram
+- **`ph_compute_color_hash()`** — a 108-byte color histogram
   (`PH_DIGEST_KIND_HISTOGRAM`), not 1.x's 42-bit value; compare with
   `ph_histogram_intersection()`, not `ph_hamming_distance_digest()`.
 
@@ -346,7 +346,7 @@ this is the "what do I call now" summary.
 
 - **`ph_compute_mhash()`** — a Marr–Hildreth hash, 72-byte digest (576 bits), not 1.x's
   64-bit discrete-Laplacian value. `ph_context_set_mhash_params()` exposes the kernel's
-  `alpha`/`level` and the normalisation size.
+  `alpha`/`level` and the normalization size.
 
 - **`ph_compute_color_moments_hash()`** — an 18-byte digest (1.x: 9), each of the nine
   features a signed 16-bit fixed-point value (`PH_DIGEST_KIND_VECTOR16`,

@@ -88,13 +88,13 @@ Implemented as `tests/src/test_formula_conformance.c`:
 - **Block means (BMH).** Each output value must equal the arithmetic mean of its block,
   computed independently: checked on exact multiples of the grid and, against an exact
   area-weighted mean, on non-multiples (`test_block_means_on_a_non_multiple`).
-- **Colour moments.** Mean, standard deviation and skewness are checked against a
+- **Color moments.** Mean, standard deviation and skewness are checked against a
   distribution with hand-computed moments, including a deliberately skewed one where the
   third moment is negative — the case that needs the sign.
 
 These tests are written against the *sources'* formulas. Where the code deliberately
 departs from a source, the test says so in a comment and asserts the implemented
-behaviour.
+behavior.
 
 ## Measurable properties
 
@@ -117,7 +117,7 @@ network, adds nothing to the repository's size, reproduces identically in CI and
 developer's machine, and cannot rot.
 
 The cost is accepted and stated here: synthetic images do not represent photographs. A
-number measured on this corpus describes the algorithm's behaviour on the corpus. It is
+number measured on this corpus describes the algorithm's behavior on the corpus. It is
 suitable for detecting a regression and for comparing two implementations of the same
 algorithm against each other — which is what these tests are for. It is **not** evidence
 about real-world recall, and no such claim should be made from it.
@@ -125,7 +125,7 @@ about real-world recall, and no such claim should be made from it.
 **Resolution.** Every feature size in `make_base()` — checkerboard cells, stripe widths,
 ring periods, disc radii — is a fraction of the corpus resolution (`IMG_W`/`IMG_H`, via
 `BASE_RES`), so resolution and structural fineness are independent knobs. The corpus is
-160×160, deliberately not equal to any algorithm's normalisation preset (8 for
+160×160, deliberately not equal to any algorithm's normalization preset (8 for
 aHash/dHash, 16 for BMH's default `block_size`, 32 for pHash's default `dct_size`, 512 for
 mHash). mHash still upsamples it 3.2× to reach 512, which understates it somewhat — a
 corpus at or above 512 would not,

@@ -107,6 +107,9 @@ enough" section for `make coverage-cmake`, which covers those instead.
 
 ## Commit and PR conventions
 
+- Documentation, doc comments and commit messages use American spelling (color,
+  behavior, normalize, gray); `scripts/check_spelling.py` in the format check flags the
+  British forms. Text quoted from a source keeps the source's spelling.
 - Commit messages: short imperative summary line, in English, with a body when the
   *why* isn't obvious from the diff alone. No fixed prefix format is enforced, but
   `fix:`/`feat:`/`test:`/`docs:`/`ci:`/`refactor:` prefixes are the norm in this
@@ -115,7 +118,7 @@ enough" section for `make coverage-cmake`, which covers those instead.
   behavior, a fixed bug, a changed default) needs a line in `CHANGELOG.md` under
   `[Unreleased]`, in the appropriate `Added`/`Changed`/`Fixed`/`Security` section, or —
   for anything that breaks existing callers — under `BREAKING CHANGES`, with either a
-  one-line "how to restore the old behaviour" or a link to the relevant section of
+  one-line "how to restore the old behavior" or a link to the relevant section of
   [`MIGRATION.md`](MIGRATION.md). A change with no consumer-visible effect (internal
   refactor, test-only, CI-only, comment/doc fix) does not need one.
 - Pull requests target `main`.

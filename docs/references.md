@@ -8,28 +8,28 @@ does, and where they differ — is in
 [`algorithm-provenance.md`](algorithm-provenance.md). The two are meant to be read
 together: this file is what we cite, that file is what we concluded from it.
 
-## Reading other people's code, and the licences on it
+## Reading other people's code, and the licenses on it
 
 Several algorithms here have no paper, so the only way to know what they are is to read an
 implementation. Three appear throughout this document: **pHash** (GPL-3.0, with a separate
-commercial licence), **OpenCV**'s `img_hash` module (Apache-2.0) and **ImageHash** (BSD).
+commercial license), **OpenCV**'s `img_hash` module (Apache-2.0) and **ImageHash** (BSD).
 
 This library is MIT and contains **no third-party hashing code**. Every hash in
 `src/hashes/` is written from the specification; where the specification is somebody's
-program, it is written from a description of that program's behaviour, not from its text.
+program, it is written from a description of that program's behavior, not from its text.
 Those projects are read the way a paper is read.
 
 What is taken from them: what the method is, which constants it uses, what its defaults
 are, what it does on an edge case. Those are facts, they carry no copyright, and each is
 cited here precisely enough to be checked — file, function, and the parameter or the
-behaviour in question.
+behavior in question.
 
 What is not taken: source text, the structure of a function, or documentation prose. Where
 this repository needs to state what another implementation does, it states it in words.
 Short attributed quotations from *papers and theses* are ordinary scholarly citation and
 appear throughout; quotations of *code* do not.
 
-The vendored decoders under `vendor/` are a separate matter with their own licences and are
+The vendored decoders under `vendor/` are a separate matter with their own licenses and are
 not covered here.
 
 
@@ -40,7 +40,7 @@ not covered here.
 | 1 | Peer-reviewed paper, thesis or technical report by the algorithm's author |
 | 2 | Preprint or unrefereed write-up by the algorithm's author |
 | 3 | Code or prose published by the algorithm's author (including a blog post) |
-| 4 | Third-party description or implementation, including a thesis analysing someone else's code |
+| 4 | Third-party description or implementation, including a thesis analyzing someone else's code |
 
 When two sources disagree, the lower-numbered rank wins. A rank-4 source is a hint about where to
 look; it is never the basis for a claim that this code is correct.
@@ -163,7 +163,7 @@ Symposium on Information Technology: Coding and Computing (ITCC)*, vol. 2, IEEE,
 - Rank 1 · **Not read** — described in [Z10] §3.1.3. Source of the discrete
   line-integral definition (the one-pixel-wide strip) quoted in the analysis.
 
-### [SO95] Stricker & Orengo 1995 — colour moments
+### [SO95] Stricker & Orengo 1995 — color moments
 
 Markus Stricker, Markus Orengo, **"Similarity of color images"**, *Proc. SPIE 2420,
 Storage and Retrieval for Image and Video Databases III*, 1995, pp. 381–392.
@@ -274,7 +274,7 @@ correct, and where one of them disagrees with a primary source above, the source
 ### [pHash] The pHash library
 
 Evan Klinger, David Starkweather. <https://www.phash.org/>, source at
-<https://github.com/aetilius/pHash>. GPL-3.0, with a separate commercial licence.
+<https://github.com/aetilius/pHash>. GPL-3.0, with a separate commercial license.
 
 For the **DCT hash** this is not a reference implementation but the algorithm itself:
 there is no paper behind it, so Klinger and Starkweather's code is the primary source and
@@ -302,22 +302,22 @@ The defaults are in the public header, `src/pHash.h.cmake`, and are worth quotin
 There is **no block-mean hash** in pHash today, although [Z10] says its author contributed
 one; see §6 of `algorithm-provenance.md`.
 
-### [SB91] Swain & Ballard 1991 — colour indexing
+### [SB91] Swain & Ballard 1991 — color indexing
 
 M. J. Swain, D. H. Ballard, **"Color Indexing"**, *International Journal of Computer
 Vision* 7(1):11–32, 1991. doi:10.1007/BF00130487.
 
-The source for **ColorHash**: a colour histogram over quantised opponent axes,
+The source for **ColorHash**: a color histogram over quantized opponent axes,
 compared by histogram intersection.
 
 **Not read.** IJCV is closed, OpenAlex reports `oa_status: closed` and no repository holds
 the full text; Swain's Rochester technical report (TR 360, 1990) is not freely available
 either. The method is taken from several independent secondary restatements, which by the
 ranking in [`algorithm-provenance.md`](algorithm-provenance.md) is **rank 4**. Cite it as
-*"a colour histogram with histogram intersection, after Swain & Ballard (1991), implemented
+*"a color histogram with histogram intersection, after Swain & Ballard (1991), implemented
 from secondary descriptions"* — never as a conformant implementation of the paper.
 
-The paper's own quantisation (16×16×8 = 2048 bins) does not fit a `ph_digest_t`; the
+The paper's own quantization (16×16×8 = 2048 bins) does not fit a `ph_digest_t`; the
 resolution this library uses was chosen by measurement, and the table is in §8 of the
 analysis.
 
@@ -328,7 +328,7 @@ analysis.
 Carries the only widely used implementation of **BMH** ([YGN06]) — pHash has none. It is a
 third-party implementation, rank 4, and §6 of
 [`algorithm-provenance.md`](algorithm-provenance.md) follows the paper against it: it
-normalises to 256×256 and then thresholds each block against the arithmetic **mean** of the
+normalizes to 256×256 and then thresholds each block against the arithmetic **mean** of the
 image, in a variable it names `median`. The paper specifies the median. Consequently this
 library's BMH values differ from OpenCV's, deliberately.
 

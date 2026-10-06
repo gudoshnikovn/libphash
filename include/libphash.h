@@ -77,7 +77,7 @@ extern "C" {
  * 1024 bits).
  *
  * The widest digest the library produces is the Marr-Hildreth hash at 576 bits (72
- * bytes); the rest is headroom for the colour histogram's bin count, reserved so that the
+ * bytes); the rest is headroom for the color histogram's bin count, reserved so that the
  * size stays fixed for the whole 2.x series. @c ph_digest_t is passed and stored by
  * value, so it costs 136 bytes wherever one lives. */
 #define PH_DIGEST_MAX_BYTES 128
@@ -202,10 +202,10 @@ typedef enum {
  *        ph_context_set_alpha_mode().
  */
 typedef enum {
-    PH_ALPHA_BLEND_GREY = 0,  ///< Composite onto mid-grey (128, 128, 128) (default).
+    PH_ALPHA_BLEND_GREY = 0,  ///< Composite onto mid-gray (128, 128, 128) (default).
     PH_ALPHA_BLEND_WHITE = 1, ///< Composite onto white.
     PH_ALPHA_BLEND_BLACK = 2, ///< Composite onto black.
-    PH_ALPHA_IGNORE = 3, ///< Drop alpha and hash the colour stored under it, as ImageHash does.
+    PH_ALPHA_IGNORE = 3,      ///< Drop alpha and hash the color stored under it, as ImageHash does.
     PH_ALPHA_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE, ///< Not a mode -- see "Enum width".
 } ph_alpha_mode_t;
 
@@ -245,7 +245,7 @@ PH_API const char *ph_get_last_error_message(const ph_context_t *ctx);
 /**
  * @brief What a digest's bytes mean, and therefore how two of them may be compared.
  *
- * Not every digest is a bit vector. Comparing quantised DCT coefficients by Hamming
+ * Not every digest is a bit vector. Comparing quantized DCT coefficients by Hamming
  * distance, or a histogram by L2, returns a plausible number that means nothing. This
  * tag exists so that such a call **fails** instead: it is never used to pick a metric
  * for you, only to refuse the wrong one. It survives storage: ph_digest_to_hex() writes
@@ -265,7 +265,7 @@ PH_API const char *ph_get_last_error_message(const ph_context_t *ctx);
 typedef enum {
     PH_DIGEST_KIND_UNSPECIFIED = 0,  ///< Not stated. Accepted by every comparison.
     PH_DIGEST_KIND_BITS = 1,         ///< A bit vector. Hamming distance, similarity. BMH, mHash.
-    PH_DIGEST_KIND_COEFFICIENTS = 2, ///< Quantised transform coefficients. Radial.
+    PH_DIGEST_KIND_COEFFICIENTS = 2, ///< Quantized transform coefficients. Radial.
     PH_DIGEST_KIND_VECTOR = 3,       ///< Real-valued features, one unsigned byte each. No
                                      ///< algorithm here produces it: it tags a feature
                                      ///< vector the caller builds, compared with
@@ -373,7 +373,7 @@ PH_API void ph_free(ph_context_t *ctx);
  *
  * @note This follows pHash's own default (`ph_compare_images()`, aetilius/pHash)
  *       exactly: gamma defaults to 1.0, pixels are raised to `gamma` directly, and the
- *       buffer is normalised by its own maximum before the power step and rescaled by
+ *       buffer is normalized by its own maximum before the power step and rescaled by
  *       the same maximum after, so a gamma value ported from pHash means the same thing
  *       here. See docs/algorithm-provenance.md section 7.
  *
@@ -514,14 +514,14 @@ PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projection
 PH_API ph_error_t ph_context_set_block_params(ph_context_t *ctx, int block_size);
 
 /**
- * @brief Sets the Marr-Hildreth hash's scale and normalisation size.
+ * @brief Sets the Marr-Hildreth hash's scale and normalization size.
  *
  * @p alpha and @p level are the algorithm's own two parameters and set the scale of the
  * Laplacian-of-Gaussian kernel: its half-width is `4 * alpha^level` samples, so the kernel
  * is `2 * that + 1` on a side (17x17 at the defaults). Raising either widens the kernel
  * and makes the hash describe coarser structure.
  *
- * @p size is the side the image is normalised to before filtering. The block grid stays
+ * @p size is the side the image is normalized to before filtering. The block grid stays
  * 31x31 whatever it is, so the digest is always 576 bits; what changes is how many pixels
  * a block covers, and therefore the scale of the kernel *relative to the picture* — which
  * is the ratio that decides what the hash actually sees. It is also the cost: the work is
@@ -535,7 +535,7 @@ PH_API ph_error_t ph_context_set_block_params(ph_context_t *ctx, int block_size)
  * @param alpha Scale base, > 1 and finite.
  * @param level Scale exponent, >= 0 and finite. `4 * alpha^level` must be at least 1 and
  *        must keep the kernel side at 65 or below.
- * @param size Normalisation side, 62..4096.
+ * @param size Normalization side, 62..4096.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or any value out of
  *         range, with the configuration left untouched.
  */
@@ -607,18 +607,18 @@ PH_API ph_error_t ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
  * @brief Chooses what an image's alpha channel does to the hash.
  *
  * A perceptual hash describes what an image looks like, and a transparent pixel looks
- * like whatever is behind it. The colour stored under alpha 0 is invisible and arbitrary:
- * one encoder writes black there, another white, an optimiser whatever compresses best.
+ * like whatever is behind it. The color stored under alpha 0 is invisible and arbitrary:
+ * one encoder writes black there, another white, an optimizer whatever compresses best.
  * By default every image with alpha — a PNG or WebP with an alpha channel or a tRNS
  * chunk, or a 4-channel buffer given to ph_load_from_pixels() — is composited onto a fixed
  * background before anything else happens, so the hash follows the visible image only.
  *
  * Measured over 141 PNGs with at least 5% transparency: two copies differing only in the
- * colour under fully transparent pixels (black against white) hash on average 42 (aHash),
+ * color under fully transparent pixels (black against white) hash on average 42 (aHash),
  * 28 (dHash), 34 (pHash) and 35 (wHash) bits apart of 64 when alpha is dropped, and 0 bits
- * apart when it is composited. Mid-grey is the default because it tells those images
+ * apart when it is composited. Mid-gray is the default because it tells those images
  * apart best: white makes light artwork vanish and black dark artwork, and on the same
- * set grey leaves the fewest pairs of different images within 6 bits of each other
+ * set gray leaves the fewest pairs of different images within 6 bits of each other
  * (pHash: 1.7% of pairs, against 3.3% on white and 4.3% on black).
  *
  * The mode applies at load time: set it before ph_load_from_file(),
@@ -628,7 +628,7 @@ PH_API ph_error_t ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
  *
  * @param ctx The context.
  * @param mode @c PH_ALPHA_BLEND_GREY (default), @c PH_ALPHA_BLEND_WHITE,
- *        @c PH_ALPHA_BLEND_BLACK, or @c PH_ALPHA_IGNORE to hash the stored colour
+ *        @c PH_ALPHA_BLEND_BLACK, or @c PH_ALPHA_IGNORE to hash the stored color
  *        whatever its alpha, which is what ImageHash (and PIL's `convert("L")`) does.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or a @p mode that
  *         is not one of the enumerators above (configuration unchanged).
@@ -1137,7 +1137,7 @@ typedef void (*ph_batch_progress_fn)(size_t done, size_t total, void *user_data)
 /**
  * @brief Options for ph_hash_files_ex() and ph_hash_buffers_ex().
  *
- * Initialise with ph_batch_options_init(), then set the fields you need: that fills in
+ * Initialize with ph_batch_options_init(), then set the fields you need: that fills in
  * @c struct_size and the defaults, and keeps working when later versions append fields.
  * A caller that fills the struct by hand must set @c struct_size to sizeof of the struct
  * it was compiled with.
@@ -1301,23 +1301,23 @@ PH_NODISCARD PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
                                                              ph_digest_t *out_digest);
 
 /**
- * @brief Computes the colour histogram hash. Returns a 108-byte digest.
+ * @brief Computes the color histogram hash. Returns a 108-byte digest.
  *
- * The image's pixels are counted into 108 bins of the opponent colour space — red against
+ * The image's pixels are counted into 108 bins of the opponent color space — red against
  * green, blue against yellow, light against dark, at 6 x 6 x 3 — and each bin is scaled
- * against the largest. This is a colour histogram with histogram intersection, after
+ * against the largest. This is a color histogram with histogram intersection, after
  * Swain & Ballard (1991), implemented from secondary descriptions of the paper; no
- * conformance to the paper itself is claimed. The quantisation is
+ * conformance to the paper itself is claimed. The quantization is
  * this library's own, chosen by measurement.
  *
  * Compare with ph_histogram_intersection(), not with the bit or vector metrics.
  *
- * Requires a colour image: the loaded image must have at least 3 channels. On a
+ * Requires a color image: the loaded image must have at least 3 channels. On a
  * single-channel image — one loaded while ph_context_set_load_grayscale() was enabled, or
  * handed to ph_load_from_pixels() with @c channels = 1 — this returns
  * @c PH_ERR_REQUIRES_COLOR and leaves @p out_digest untouched.
  *
- * @note Like every colour histogram it discards spatial layout entirely: an image and a
+ * @note Like every color histogram it discards spatial layout entirely: an image and a
  *       shuffling of its pixels hash identically. Use it alongside a structural hash, not
  *       instead of one.
  */
@@ -1326,8 +1326,8 @@ PH_NODISCARD PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_diges
 /**
  * @brief Computes the Marr-Hildreth hash. Returns a 72-byte (576-bit) digest.
  *
- * The image is blurred at sigma 1, normalised to `size` x `size` (512 by default) and
- * histogram-equalised over 256 levels; the Laplacian-of-Gaussian operator of Marr and
+ * The image is blurred at sigma 1, normalized to `size` x `size` (512 by default) and
+ * histogram-equalized over 256 levels; the Laplacian-of-Gaussian operator of Marr and
  * Hildreth (alpha = 2, level = 1 by default; see ph_context_set_mhash_params()) is
  * correlated with it; the response is summed into a 31x31 grid of blocks (16x16 pixels
  * at the default size); and
@@ -1349,8 +1349,8 @@ PH_NODISCARD PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *
  * @brief Computes the Radial variance hash. Returns a 40-byte digest.
  *
  * The variance of the pixels along each of `radial_projections` lines through the image
- * centre (default 180, one per degree), reduced by a 1-D DCT to its first 40
- * coefficients, which are quantised into the digest. Uses the context gamma, and nothing
+ * center (default 180, one per degree), reduced by a 1-D DCT to its first 40
+ * coefficients, which are quantized into the digest. Uses the context gamma, and nothing
  * else does.
  *
  * An image with no angular structure -- blank, or with nearly the same variance along
@@ -1386,7 +1386,7 @@ PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
  *
  * The `kind` tag is checked too. Each comparison below states the kind it
  * is for, and refuses a digest tagged as something else: Hamming distance over
- * quantised DCT coefficients returns a plausible number that means nothing, and this
+ * quantized DCT coefficients returns a plausible number that means nothing, and this
  * is how that call fails instead. PH_DIGEST_KIND_UNSPECIFIED -- the zero a hand-filled
  * struct holds -- is accepted everywhere, so a binding that does not set the field gets
  * no protection but no error either.
@@ -1454,7 +1454,7 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
  * degrees of rotation, and exactly for a half turn; it is not invariance to an arbitrary
  * rotation, and docs/algorithm-provenance.md section 7 has the measured profile. Use this for
  * digests from ph_compute_radial_hash() — ph_similarity_digest() and ph_hamming_distance_digest()
- * treat a digest as a bit vector, which a radial digest is not: its bytes are quantised
+ * treat a digest as a bit vector, which a radial digest is not: its bytes are quantized
  * DCT coefficients, and comparing them element-wise reports a rotated image as a
  * different one.
  *
@@ -1463,7 +1463,7 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
  * against your own measured cut.
  *
  * An image with no angular structure -- a blank one, or one whose variance is nearly the
- * same along every line through its centre -- hashes to an all-zero digest. It carries no
+ * same along every line through its center -- hashes to an all-zero digest. It carries no
  * information for this descriptor, and no score is defined against it: any number would
  * be invented, and 1.0 would call two unrelated faint images identical. Such a pair is
  * answered with @c PH_ERR_NO_STRUCTURE; whether "no data" counts as a match is the
@@ -1484,18 +1484,18 @@ PH_NODISCARD PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const 
                                                     double *out_pcc);
 
 /**
- * @brief Compares two colour histograms by their intersection: `sum(min(a_i, b_i))` over
- *        bins, each histogram normalised by its own total.
+ * @brief Compares two color histograms by their intersection: `sum(min(a_i, b_i))` over
+ *        bins, each histogram normalized by its own total.
  *
  * The measure Swain & Ballard define, and the reason a histogram is worth keeping: it
  * counts only what the two images have in common, so a change of background or a partial
  * overlap costs only the part that differs.
  *
- * Runs from 0.0 (no colour in common) to 1.0 (identical distributions). Two empty
+ * Runs from 0.0 (no color in common) to 1.0 (identical distributions). Two empty
  * histograms score 1.0; an empty one against a populated one scores 0.0.
  *
- * @note Swain & Ballard normalise by the reference histogram, which makes their score
- *       asymmetric when the two images hold different pixel counts. This normalises each
+ * @note Swain & Ballard normalize by the reference histogram, which makes their score
+ *       asymmetric when the two images hold different pixel counts. This normalizes each
  *       side by its own total, which agrees with them whenever the counts match and is
  *       symmetric when they do not.
  *

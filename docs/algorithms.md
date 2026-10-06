@@ -13,7 +13,7 @@ Two companion documents carry the parts this one deliberately does not:
   works to: what counts as a defect and how the properties are measured.
 
 Where an algorithm below is known to depart from its source, this page says so and links
-there rather than quietly describing the behaviour as if it were intended.
+there rather than quietly describing the behavior as if it were intended.
 
 ## Threat model: what these hashes are not
 
@@ -87,8 +87,8 @@ For a hash database this means:
 | mHash | pHash (construction); Marr & Hildreth 1980 (operator) | implementation + paper | no |
 | BMH | Yang, Gu & Niu | paper, 2006 | no |
 | Radial | De Roover, De Vleeschouwer, Lefèbvre & Macq | paper, 2005 | no |
-| ColorHash | Swain & Ballard (method); this library (quantisation) | paper, 1991 — **not read** | n/a — no conformance claimed |
-| ColorMoments | Stricker & Orengo | paper, 1995 | **yes** — colour space (RGB, not HSV) |
+| ColorHash | Swain & Ballard (method); this library (quantization) | paper, 1991 — **not read** | n/a — no conformance claimed |
+| ColorMoments | Stricker & Orengo | paper, 1995 | **yes** — color space (RGB, not HSV) |
 
 One cross-cutting caveat: no source specifies a resampling filter. aHash, pHash, wHash and
 BMH reduce by an exact area average (the mean of the source area behind each output
@@ -111,21 +111,21 @@ integer approximation of the **ITU-R BT.601** luma coefficients (0.299/0.587/0.1
 cited as an external standard, not because any source here asks for it. The closer
 77/150/29-over-256 approximation measures worse (it regresses BMH and wHash separability
 on this library's test corpus with no gain elsewhere), so 38/75/15 is used. Used by every algorithm that reduces to grayscale: aHash, dHash, pHash,
-wHash, mHash, BMH, Radial. ColorHash and ColorMoments work in colour and never call
+wHash, mHash, BMH, Radial. ColorHash and ColorMoments work in color and never call
 this path.
 
 **Alpha.** None of the sources hash transparent images; they describe what a picture
-looks like, and a transparent pixel looks like whatever is behind it. The colour stored
+looks like, and a transparent pixel looks like whatever is behind it. The color stored
 under alpha 0 is invisible and arbitrary — one encoder writes black, another white — so
 by default an image with alpha (an alpha channel or a PNG `tRNS` chunk, from any decoder,
-or RGBA given to `ph_load_from_pixels()`) is composited onto mid-grey at load time,
+or RGBA given to `ph_load_from_pixels()`) is composited onto mid-gray at load time,
 `(c·a + 128·(255 − a) + 127) / 255` per channel, and every algorithm sees the visible
 image only. Over 141 PNGs with at least 5 % transparency, two copies differing only in
-the colour under alpha 0 hash 28–42 bits apart (of 64) when alpha is dropped, and 0 when
-it is composited. Grey rather than white or black because it keeps those images the most
+the color under alpha 0 hash 28–42 bits apart (of 64) when alpha is dropped, and 0 when
+it is composited. Gray rather than white or black because it keeps those images the most
 distinct: white erases light artwork and black dark artwork (pHash pairs within 6 bits:
-1.7 % on grey, 3.3 % on white, 4.3 % on black). `ph_context_set_alpha_mode()` chooses
-white, black, or `PH_ALPHA_IGNORE` — hash the stored colour whatever its alpha, which is
+1.7 % on gray, 3.3 % on white, 4.3 % on black). `ph_context_set_alpha_mode()` chooses
+white, black, or `PH_ALPHA_IGNORE` — hash the stored color whatever its alpha, which is
 what ImageHash and PIL's `convert("L")` do.
 
 **Tie-break at the threshold (`value == threshold`).** Two different rules are in force,
@@ -153,7 +153,7 @@ portability and comparison against a foreign implementation.
 | BMH | LSB first within each byte, blocks in raster order | The paper defines a bit *sequence* (equation 3.9), not a byte layout — undefined, recorded as a choice. |
 | ColorHash | not bit-packed — 108 one-byte histogram bins | n/a |
 | ColorMoments | not bit-packed — 18-byte signed 16-bit fixed-point vector | n/a |
-| Radial | not bit-packed — 40-byte min-max-quantised DCT vector | n/a |
+| Radial | not bit-packed — 40-byte min-max-quantized DCT vector | n/a |
 
 ---
 
@@ -170,7 +170,7 @@ portability and comparison against a foreign implementation.
 ## 2. dHash (Difference Hash)
 
 - **Call**: `ph_compute_dhash()`.
-- **Concept**: downscale to 9×8 and compare each pixel with its right-hand neighbour,
+- **Concept**: downscale to 9×8 and compare each pixel with its right-hand neighbor,
   giving 8 differences per row over 8 rows.
 - **Output**: 64-bit.
 - **Strength**: as cheap as aHash on small images and markedly better at it — gradients survive brightness
@@ -228,19 +228,19 @@ portability and comparison against a foreign implementation.
 ## 5. mHash (Marr–Hildreth)
 
 - **Call**: `ph_compute_mhash()`.
-- **Concept**: normalise to 512×512, equalise the histogram, correlate with a
+- **Concept**: normalize to 512×512, equalize the histogram, correlate with a
   Laplacian-of-Gaussian kernel (the Mexican hat of Marr & Hildreth 1980), sum the response
   over 16×16 blocks into a 31×31 grid, and emit nine bits per 3×3 window of that grid,
   each thresholded against its window's mean.
 - **Output**: `ph_digest_t`, 72 bytes (576 bits). Compare with
   `ph_hamming_distance_digest()`.
 - **Tuning**: `ph_context_set_mhash_params(alpha, level, size)` — `alpha` and `level` set
-  the kernel's scale (pHash's own two parameters), `size` the normalisation preset. The
+  the kernel's scale (pHash's own two parameters), `size` the normalization preset. The
   defaults are 2, 1 and 512, and are the reference implementation's; across 24
   combinations nothing reliably beats them. `alpha` > 1, `level` ≥ 0, with the kernel
   (`2 · 4 · alpha^level + 1` on a side) at most 65; `size` 62–4096, the cost roughly
   quadratic in it.
-- **Strength**: a coarse-structure edge descriptor, indifferent to colour — a colour shift
+- **Strength**: a coarse-structure edge descriptor, indifferent to color — a color shift
   moves 25 of 576 bits on the test photograph where an unrelated image moves 288.
 - **Weakness**: the second most expensive hash here, after Radial — 13 to 20 times aHash
   (see "Cost" below) — and it notices a small local edit *less* than it notices a rescale — see
@@ -265,37 +265,37 @@ portability and comparison against a foreign implementation.
 
 ## 7. ColorHash and ColorMoments
 
-Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
+Both need color: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
 
-- **ColorHash** (`ph_compute_color_hash`) — a colour histogram: every pixel is counted
-  into one of 108 bins of the opponent colour space (red–green × blue–yellow × light–dark,
+- **ColorHash** (`ph_compute_color_hash`) — a color histogram: every pixel is counted
+  into one of 108 bins of the opponent color space (red–green × blue–yellow × light–dark,
   6 × 6 × 3), and two of them are compared with **`ph_histogram_intersection()`**, not with
-  a bit or vector metric. A colour histogram with histogram intersection, after Swain &
+  a bit or vector metric. A color histogram with histogram intersection, after Swain &
   Ballard (1991), implemented from secondary descriptions of the paper, so no conformance
-  to it is claimed; the quantisation is this library's, chosen by measurement over sixteen
+  to it is claimed; the quantization is this library's, chosen by measurement over sixteen
   candidates. Separability on the test corpus: 4.01.
   **Blind spots**, both inherent to a histogram and both asserted in the tests: it ignores
-  where the colours are, so a 90° rotation does not move it at all and neither does
-  shuffling the pixels; and flat colours that share a chroma bin and an intensity third —
-  black against dark grey, light grey against white — are indistinguishable.
+  where the colors are, so a 90° rotation does not move it at all and neither does
+  shuffling the pixels; and flat colors that share a chroma bin and an intensity third —
+  black against dark gray, light gray against white — are indistinguishable.
 - **ColorMoments** (`ph_compute_color_moments_hash`) — the mean, standard deviation and
   skewness of each channel: nine features in an 18-byte digest, each a signed 16-bit
   big-endian fixed-point number in units of 1/128. Follows the formulas of Stricker &
   Orengo, including the sign of the skewness, which is the direction of the asymmetry.
   Compare with `ph_l2_distance()`, which decodes the pairs.
   **Deliberate divergence**: the moments are taken on RGB where the source uses HSV.
-- **Use case**: telling apart images that are structurally identical but coloured
+- **Use case**: telling apart images that are structurally identical but colored
   differently — recoloured product photography, for instance — where the luminance hashes
   agree by design.
 
 ## 8. Radial Hash
 
 - **Concept**: the variance of pixel values along projection lines through the image
-  centre, one per degree over 180°; that 180-element vector is standardised, transformed
+  center, one per degree over 180°; that 180-element vector is standardized, transformed
   with a 1-D DCT, and its first 40 coefficients are the hash.
 - **Output**: `ph_digest_t`, 40 bytes.
 - **Compare with `ph_radial_similarity()`**, not with `ph_similarity_digest()` or the
-  distance functions: the digest is quantised coefficients, not a bit vector. The score is
+  distance functions: the digest is quantized coefficients, not a bit vector. The score is
   the peak of the cross-correlation, and `PH_RADIAL_PCC_THRESHOLD` (0.9) is the source's
   cut — a documented starting point, not a tuned recommendation for your corpus.
 - **Tuning**: `ph_context_set_radial_params(projections, samples, sigma)`:
@@ -320,7 +320,7 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
   such a digest with `PH_ERR_NO_STRUCTURE` instead of inventing a score. "Nearly the same"
   is relative to the image's own contrast: below a 1 % spread of the variance profile
   across angles the digest would describe rounding noise (against the same image with ±2
-  levels of noise it correlates at 0.4–0.7), while a faint pattern of one grey level still
+  levels of noise it correlates at 0.4–0.7), while a faint pattern of one gray level still
   gets a digest of its own.
 
 ## Computing several `uint64_t` hashes at once
@@ -337,7 +337,7 @@ the other three with the shared grayscale and area pass 2.5 ms. Results are iden
 functions yourself, which share the same cached work — the same saving
 `ph_hash_files()`/`ph_hash_buffers()` get for each file of a batch. mHash, BMH, Radial,
 ColorHash and ColorMoments are not part of this — their digests don't fit a `uint64_t`,
-and BMH's median threshold plus the colour algorithms' `PH_ERR_REQUIRES_COLOR` failure
+and BMH's median threshold plus the color algorithms' `PH_ERR_REQUIRES_COLOR` failure
 mode don't fit the "stops at the first failure, other slots partially written" contract
 either — call them directly.
 
@@ -389,7 +389,7 @@ marked. For measured robustness numbers, see the property tests described in the
 | ColorHash | ★★★★★ | ★★★ | ★★★★★ | digest, 108 bytes |
 | ColorMoments | ★★★★ | ★★★ | ★★★★★ | digest, 18 bytes |
 
-The two colour hashes are insensitive to rotation and scaling for a reason that is worth
+The two color hashes are insensitive to rotation and scaling for a reason that is worth
 stating: they discard spatial layout entirely. That makes them robust and, on their own,
 weak discriminators — use them alongside a structural hash, not instead of one.
 

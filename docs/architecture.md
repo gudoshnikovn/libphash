@@ -62,8 +62,8 @@ Optimized low-level primitives for image manipulation, split into dedicated modu
 - **`color.c`**: color conversion (NEON-accelerated on Arm) and grayscale
   transformation using configurable weights (`PH_GRAY_R/G/B`, BT.601-derived — see
   `docs/algorithm-provenance.md`).
-- **`filters.c`**: Gaussian blur (σ-parameterised; mHash and Radial, see
-  `docs/algorithms.md`) and histogram equalisation (mHash).
+- **`filters.c`**: Gaussian blur (σ-parameterized; mHash and Radial, see
+  `docs/algorithms.md`) and histogram equalization (mHash).
 - **`orient.c`**: the EXIF/WebP auto-orientation layer described above.
 - **Gamma Correction** (in `color.c`): `(v/max)^γ · max` per image, default γ = 1.0
   (identity), Radial only; see `docs/algorithm-provenance.md` §7.
@@ -78,9 +78,9 @@ Divided into specific implementations corresponding to unique theoretical proper
   cascade) modes.
 - `bmh.c`: Block Mean Hash, producing a `block_size²`-bit digest (256 bits at the
   default 16×16, up to 1024 bits/128 bytes at the maximum 32×32).
-- `radial.c`: variance along projection lines through the centre, standardized and
+- `radial.c`: variance along projection lines through the center, standardized and
   reduced by a 1-D DCT to 40 quantized coefficients.
-- `color_histogram.c`: ColorHash — a 108-bin opponent-colour-space histogram, compared
+- `color_histogram.c`: ColorHash — a 108-bin opponent-color-space histogram, compared
   by histogram intersection, not a bit vector.
 - `color_moments.c`: mean/std-dev/skew of each RGB channel as nine signed fixed-point
   features.
@@ -90,7 +90,7 @@ Divided into specific implementations corresponding to unique theoretical proper
   in one call, over the context's cached grayscale and shared area-average pass.
 - `common.c`: the median threshold pHash and wHash share (`ph_median_bitpack*`).
 
-Comparison and serialisation of finished digests (`ph_hamming_distance*`,
+Comparison and serialization of finished digests (`ph_hamming_distance*`,
 `ph_similarity*`, `ph_l2_distance`, `ph_radial_similarity`, the hex helpers) live in
 `src/compare.c`, outside the algorithms directory.
 
@@ -112,7 +112,7 @@ where the code lives, not what it computes or why; see `docs/algorithms.md` for 
   classified here as `PH_ERR_IO`, before a decoder sees a byte.
 - `batch.c`: `ph_hash_files()`/`ph_hash_buffers()` and their `_ex` forms, the worker
   pool and the CPU count behind `threads = 0` (see [`batch.md`](batch.md)).
-- `compare.c`: comparison and hex serialisation of finished digests.
+- `compare.c`: comparison and hex serialization of finished digests.
 - `version.c`: `ph_version()`, `ph_version_number()`, `ph_get_build_info()` and the
   `ph_can_use_*()` queries.
 

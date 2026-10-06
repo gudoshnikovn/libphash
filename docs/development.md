@@ -257,7 +257,7 @@ A line may be left out only when no test can reach it: a defensive check that
 validation upstream makes impossible, or a size check that can fail only where
 `size_t` is 32 bits. It is marked in the code with `LCOV_EXCL_START -- <reason>` and
 `LCOV_EXCL_STOP` around the block, and the reason says why it cannot run. One kind of
-branch is left out although tests do reach it: in a first-use initialisation behind a
+branch is left out although tests do reach it: in a first-use initialization behind a
 spinlock (the decoder warm-up and the PNG CRC table in `src/loader.c`, pHash's DCT matrix),
 waiting for the lock and finding the work already done happen only when two threads race
 for the first call, and whether a run takes them is the scheduler's choice. Counted, they
@@ -329,7 +329,7 @@ directory of the release build, deleted once the archive is written.
   rpath). The library's install name on macOS is `@rpath/libphash.<N>.dylib`, and on
   Linux a prefix outside the loader's default path is equally invisible without it.
 - `smoke_install.sh` also asserts on the text of the generated `.pc` — `prefix` starts
-  with `${pcfiledir}/`, `libdir`/`includedir` with `${prefix}/` — because the behavioural
+  with `${pcfiledir}/`, `libdir`/`includedir` with `${prefix}/` — because the behavioral
   check alone depends on the `pkg-config` implementation in use.
 - `GNUInstallDirs` allows `CMAKE_INSTALL_LIBDIR`/`CMAKE_INSTALL_INCLUDEDIR` to be
   absolute paths, and some distribution toolchain files set them that way. Such a value
@@ -484,7 +484,7 @@ on any pull request targeting either, and by hand through `workflow_dispatch` (s
 
 | Job | What it checks |
 |---|---|
-| `format-check` | `scripts/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`; `scripts/check_docs_coverage.sh`; `scripts/check_final_state_voice.sh`, which fails on tracker ids, paths into local planning notes and release-cycle wording (a feature "since" a version) in tracked text; `shellcheck --severity=warning` over `scripts/*.sh`; `scripts/check_casts.py`, the explicit-cast count per file in `src/` against `scripts/explicit_casts.txt`; `scripts/check_coverage.py --check-docs`, which keeps the coverage table below equal to `scripts/coverage_thresholds.txt`; and `make docs`, the Doxygen API reference, which fails on any undocumented public declaration and is uploaded as the `api-reference-html` artifact. Fast, no library build, catches these before the slower jobs run. |
+| `format-check` | `scripts/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`; `scripts/check_docs_coverage.sh`; `scripts/check_final_state_voice.sh`, which fails on tracker ids, paths into local planning notes and release-cycle wording (a feature "since" a version) in tracked text; `shellcheck --severity=warning` over `scripts/*.sh`; `scripts/check_casts.py`, the explicit-cast count per file in `src/` against `scripts/explicit_casts.txt`; `scripts/check_coverage.py --check-docs`, which keeps the coverage table below equal to `scripts/coverage_thresholds.txt`; `scripts/check_spelling.py`, American spelling in the documentation and the public header; and `make docs`, the Doxygen API reference, which fails on any undocumented public declaration and is uploaded as the `api-reference-html` artifact. Fast, no library build, catches these before the slower jobs run. |
 | `build-and-test` | Full vendored build (libjpeg-turbo + libpng + libwebp + zlib-ng) across linux-x86_64 (gcc, clang), linux-arm64, macos-arm64, plus the shared library on linux-x86_64 (gcc). `PHASH_STRICT_DEPS=ON`, so a decoder silently falling back to stb_image is a hard configure failure, not a quiet pass. |
 | `build-and-test-windows` | The same full vendored build under MSVC on windows-latest, with NASM for libjpeg-turbo's SIMD: the configuration of the windows-x86_64 release archives, built and tested before a tag. |
 | `build-options` | stb_image-only builds with `PHASH_ENABLE_THREADS=OFF` (the batch API's sequential path) and with `PHASH_ENABLE_MOCK_BACKEND=ON` (the test-only `DE AD` decoder and the test branches written for it). `PHASH_OPTIMIZE_NATIVE` has no job: `-march=native` compiles for whatever CPU the runner has, so a result would describe that machine rather than the option. |
@@ -563,7 +563,7 @@ decoder reads — 4:4:4, 4:2:2, 4:4:0, 4:2:0, 4:1:1, grayscale, progressive, res
 arithmetic coding — encoded by `scripts/gen_jpeg_fixtures.py` with libjpeg-turbo's `cjpeg`
 (the script's docstring shows how to build it from the submodule). JPEG is lossy, so
 `tests/src/test_jpeg_variants.c` cannot recompute the pixels from a formula; it pins the
-size and a checksum of what the native decoder returns for each file, in colour and in
+size and a checksum of what the native decoder returns for each file, in color and in
 grayscale, at every `decode_scale`. The golden hashes see a 32×32 reduction and miss a
 shift of a few levels; this table does not. A change to the decoder's settings or to the
 libjpeg-turbo version fails it, and the failure prints the new table — accepting it is a
@@ -614,7 +614,7 @@ deliberate change to what it computes moves them. A difference between builds is
 absorbed into the files, by a tolerance or by a per-platform copy.
 
 ### 2. Stability Tests (`tests/src/test_stability.c`)
-A colour load and a grayscale load of the same file must hash identically wherever both
+A color load and a grayscale load of the same file must hash identically wherever both
 reach gray through the library's own weights (every PNG decoder, WebP, JPEG through
 stb_image). JPEG through libjpeg-turbo returns the luma it decoded from YCbCr, so there the
 bound is 3 bits.

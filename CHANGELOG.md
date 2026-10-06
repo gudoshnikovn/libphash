@@ -18,22 +18,22 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
 
 ### BREAKING CHANGES
 
-- **`ph_compute_color_hash()` is a colour histogram, returns a 108-byte digest.** 1.x
+- **`ph_compute_color_hash()` is a color histogram, returns a 108-byte digest.** 1.x
   returned a `uint64_t` of 42 bits ported from ImageHash's `colorhash`, which cites no
-  source. It is 108 bins of the opponent colour space (red–green × blue–yellow ×
-  light–dark, 6 × 6 × 3), compared with **`ph_histogram_intersection()`** — a colour
+  source. It is 108 bins of the opponent color space (red–green × blue–yellow ×
+  light–dark, 6 × 6 × 3), compared with **`ph_histogram_intersection()`** — a color
   histogram with histogram intersection, after Swain & Ballard (1991), implemented from
   secondary descriptions of the paper. The signature takes a `ph_digest_t *`.
-  *Restore the old behaviour:* not possible; recompute any stored ColorHash values.
+  *Restore the old behavior:* not possible; recompute any stored ColorHash values.
 
 - **`ph_compute_mhash()` is a Marr–Hildreth hash and returns a 72-byte digest.** 1.x
-  returned a `uint64_t`: the sign of a four-neighbour discrete Laplacian on an 18×18 grid.
-  It normalises the image to 512×512, equalises it, correlates it with the
+  returned a `uint64_t`: the sign of a four-neighbor discrete Laplacian on an 18×18 grid.
+  It normalizes the image to 512×512, equalizes it, correlates it with the
   Laplacian-of-Gaussian operator of Marr and Hildreth, and emits 576 bits — the
   construction pHash's `ph_mh_imagehash()` defines. The signature takes a `ph_digest_t *`.
   `ph_context_set_mhash_params()` exposes the kernel's scale (`alpha`, `level`) and the
-  normalisation size; the defaults are the reference implementation's.
-  *Restore the old behaviour:* not possible; recompute any stored mHash values.
+  normalization size; the defaults are the reference implementation's.
+  *Restore the old behavior:* not possible; recompute any stored mHash values.
 
 - **`ph_compute_color_moments_hash()` returns an 18-byte digest, not 9, and keeps the sign
   of the skewness.** 1.x stored each moment in one unsigned byte, clamped at 255, and
@@ -42,7 +42,7 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   1/128** (`PH_VECTOR16_SCALE`), tagged `PH_DIGEST_KIND_VECTOR16`. No attainable moment
   exceeds a magnitude of 255, so nothing clamps. `ph_l2_distance()` decodes the pairs and
   returns the distance in the moments' own units.
-  *Restore the old behaviour:* not possible; recompute any stored ColorMoments values.
+  *Restore the old behavior:* not possible; recompute any stored ColorMoments values.
 
 - **`ph_digest_t` is 136 bytes, not 72, and carries a `kind` tag.** `PH_DIGEST_MAX_BYTES`
   is 128 (1.x: 64): the Marr–Hildreth hash is 576 bits, and the rest is headroom for the
@@ -50,10 +50,10 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   bytes are — a bit vector, transform coefficients, a feature vector, a histogram — so a
   comparison meant for one **refuses** the others instead of returning a plausible number
   that means nothing: `ph_hamming_distance_digest()` returns -1 for a radial or
-  colour-moments digest, `ph_l2_distance()` for a BMH digest. The tag never chooses a
+  color-moments digest, `ph_l2_distance()` for a BMH digest. The tag never chooses a
   metric for you. `PH_DIGEST_KIND_UNSPECIFIED` is zero, so a hand-filled struct is
   accepted everywhere and gets no protection.
-  *Restore the old behaviour:* rebuild any FFI binding that hardcodes the layout; where a
+  *Restore the old behavior:* rebuild any FFI binding that hardcodes the layout; where a
   comparison returns -1, switch to the metric for that digest.
 
 - **aHash reduces the image by an exact area average and sets the bit of a pixel exactly
@@ -66,29 +66,29 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   the rule BMH follows, against the exact mean: an image that is uniform at 8×8 hashes to
   all ones instead of all zeros. Across 807 photographs and textures about seven in ten
   aHash values move, half of those by 5 bits or fewer.
-  *Restore the old behaviour:* not possible; recompute stored aHash values.
+  *Restore the old behavior:* not possible; recompute stored aHash values.
 
 - **pHash thresholds its DCT block at the median plus 0.1 % of the AC coefficients'
   range, not at the bare median.** On an image with little low-frequency structure many
-  AC coefficients crowd the median and their bits followed rounding and noise: ±1 grey
-  level moved pHash by 11 bits or more on 140 of 800 photographs, and flat greys hashed
+  AC coefficients crowd the median and their bits followed rounding and noise: ±1 gray
+  level moved pHash by 11 bits or more on 140 of 800 photographs, and flat grays hashed
   like unrelated images. The margin sends that crowd to 0 together: 98 of 800, and on the
   same photographs false matches at 95 % recall fall from 14.2 % to 6.8 %. pHash values
   differ from the reference `ph_dct_imagehash()` (and from 1.x) wherever coefficients sit
   within the margin of the median: across 807 photographs and textures, about three in
   five, half of those by 5 bits or fewer.
-  *Restore the old behaviour:* not possible; recompute stored pHash values.
+  *Restore the old behavior:* not possible; recompute stored pHash values.
 
 - **Images with transparency are hashed as they look.** 1.x dropped the alpha channel and
-  hashed the colour stored under it — invisible, and different from encoder to encoder:
-  over 141 PNGs with at least 5 % transparency, two copies differing only in the colour
+  hashed the color stored under it — invisible, and different from encoder to encoder:
+  over 141 PNGs with at least 5 % transparency, two copies differing only in the color
   under alpha 0 hashed 28–42 bits apart of 64. Every image with alpha (an alpha channel or
   a PNG `tRNS` chunk, from any decoder, or RGBA passed to `ph_load_from_pixels()`) is
-  composited onto mid-grey at load time, and such copies hash identically. The new
+  composited onto mid-gray at load time, and such copies hash identically. The new
   **`ph_context_set_alpha_mode()`** chooses a white or black background instead, or
   `PH_ALPHA_IGNORE`. A loaded image never stores alpha: `ph_context_get_dimensions()`
   reports 3 channels (1 when loaded as grayscale).
-  *Restore the old behaviour:* `ph_context_set_alpha_mode(ctx, PH_ALPHA_IGNORE)`.
+  *Restore the old behavior:* `ph_context_set_alpha_mode(ctx, PH_ALPHA_IGNORE)`.
 
 - **JPEG is decoded with libjpeg-turbo's accurate IDCT.** 1.x used the fast integer IDCT
   (`TJFLAG_FASTDCT`), whose approximation error lands in the hashes: over 120 crops of a
@@ -96,7 +96,7 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   accurate one (at q90–95) and puts dHash, pHash and BMH 1.7–3× further from the hash of
   the original pixels. Every hash of a JPEG decoded by the native backend can change, by a
   few bits; the stb_image build, PNG and WebP are unaffected. Decoding costs about 5 % more.
-  *Restore the old behaviour:* not possible — recompute stored JPEG hashes.
+  *Restore the old behavior:* not possible — recompute stored JPEG hashes.
 
 - **The Block Mean Hash thresholds against the median of the block means, not their
   arithmetic mean, so most BMH values change.** That is what Yang, Gu and Niu's method 1
@@ -107,17 +107,17 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   deal. BMH values differ
   from OpenCV's `BlockMeanHash`, which thresholds on the mean (in a variable it calls
   `median`).
-  *Restore the old behaviour:* not possible; recompute any stored BMH digests.
+  *Restore the old behavior:* not possible; recompute any stored BMH digests.
 
 - **The Radial hash is reimplemented after its source, and every radial value changes.**
-  It takes the variance along one projection line per degree over 180°, standardises that
+  It takes the variance along one projection line per degree over 180°, standardizes that
   vector, applies a 1-D DCT and keeps the first 40 coefficients — always a 40-byte
   digest (De Roover et al. 2005, as pHash implements it). 1.x took 40 angles, no
   transform, and a digest one byte per angle.
   `ph_context_set_radial_params()`'s first argument is the number of angles (40..4096,
   default 180), and it takes a new third argument, `sigma`, the Gaussian blur before the
   projections (default 3.5, pHash's own default; 1.x used a fixed 3×3 kernel). Gamma
-  follows pHash: default 1.0, pixels normalised by the buffer's maximum and raised to
+  follows pHash: default 1.0, pixels normalized by the buffer's maximum and raised to
   `gamma` (1.x raised them to `1/gamma`, default 2.2). Compare digests with
   **`ph_radial_similarity()`** — the peak of their cross-correlation over cyclic shifts,
   with the source's threshold as `PH_RADIAL_PCC_THRESHOLD` (0.9); the bit and vector
@@ -125,7 +125,7 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   to. The hash tolerates a few degrees of rotation plus an exact half turn (measured on a
   photograph: 1° → 0.993, 5° → 0.870, 15° → 0.437, 90° → 0.243, 180° → 0.993, against
   0.69 for an unrelated image).
-  *Restore the old behaviour:* not possible; recompute any stored radial digests. A caller
+  *Restore the old behavior:* not possible; recompute any stored radial digests. A caller
   that sets gamma explicitly must review the value: the same number means the inverse
   exponent.
 
@@ -135,13 +135,13 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   **Every hash you have stored for such an image changes.** There is no error and no
   warning — only a silently lower recall in deduplication, so plan a rehash of the
   affected corpus.
-  *Restore the old behaviour:* `ph_context_set_auto_orient(ctx, 0)` after `ph_create()`.
+  *Restore the old behavior:* `ph_context_set_auto_orient(ctx, 0)` after `ph_create()`.
 
 - **`PH_ERR_DECODE_FAILED` is removed from `ph_error_t`.** In 1.x it was returned for every
   load failure; 2.0 returns the specific cause (see "Specific error codes" under Added).
   Removing the name makes the change visible at compile time. Its value `-2` is reserved
   and never reused.
-  *Restore the old behaviour:* not possible, and not desirable — replace the check with the
+  *Restore the old behavior:* not possible, and not desirable — replace the check with the
   specific codes. A code-to-code mapping table is in `MIGRATION.md`.
 
 - **Hashing a context with no image returns `PH_ERR_EMPTY_IMAGE`, and
@@ -150,7 +150,7 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   `PH_ERR_EMPTY_IMAGE` — the code that describes exactly that — was never returned.
   Arguments are checked first, so a NULL pointer stays `PH_ERR_INVALID_ARGUMENT`.
   `PH_ERR_NOT_IMPLEMENTED` was returned from nowhere; its value `-4` is reserved like `-2`.
-  *Restore the old behaviour:* treat `PH_ERR_EMPTY_IMAGE` the way you treated
+  *Restore the old behavior:* treat `PH_ERR_EMPTY_IMAGE` the way you treated
   `PH_ERR_INVALID_ARGUMENT` after a hash call, and delete any check for
   `PH_ERR_NOT_IMPLEMENTED`. See `MIGRATION.md`.
 
@@ -171,7 +171,7 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   `block_size` 2..32 (a single block cannot threshold against a median; 32×32 bits is the
   largest grid a digest holds — 1.x accepted any positive value and truncated the BMH
   digest to 64 bytes above 22×22); `whash_mode` a declared enumerator only.
-  *Restore the old behaviour:* not possible — pass values inside the documented bounds,
+  *Restore the old behavior:* not possible — pass values inside the documented bounds,
   and check the return value wherever the argument comes from outside your own code.
 
 - **Public helpers reading a `ph_digest_t` reject `size > PH_DIGEST_MAX_BYTES` instead of
@@ -181,23 +181,23 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   distance/similarity functions return `-1`. A `size` of `0` is `-1` from every
   comparison function (1.x returned `0`, i.e. "identical", from
   `ph_hamming_distance_digest()` and `ph_l2_distance()` for two digests without a bit).
-  *Restore the old behaviour:* not possible — it was an out-of-bounds read. Make sure
+  *Restore the old behavior:* not possible — it was an out-of-bounds read. Make sure
   hand-assembled digests carry a `size` of at most `PH_DIGEST_MAX_BYTES`.
 
-- **The colour algorithms refuse grayscale images.** `ph_compute_color_hash()` and
+- **The color algorithms refuse grayscale images.** `ph_compute_color_hash()` and
   `ph_compute_color_moments_hash()` return the new `PH_ERR_REQUIRES_COLOR` when the loaded
   image has fewer than 3 channels, and leave the output untouched. 1.x read r/g/b out of
   one replicated channel and returned `PH_SUCCESS` with an outwardly valid but meaningless
   result.
-  *Restore the old behaviour:* not possible — load the image in colour
+  *Restore the old behavior:* not possible — load the image in color
   (`ph_context_set_load_grayscale(ctx, 0)`, the default, or pass 3/4 channels to
-  `ph_load_from_pixels()`) before asking for a colour hash.
+  `ph_load_from_pixels()`) before asking for a color hash.
 
 - **Images above 256 Mi pixels are rejected by default.** 1.x decoded any size. 2.0
   refuses an image whose width × height exceeds `max_pixels` (default 268,435,456) before
   allocating it, with `PH_ERR_IMAGE_TOO_LARGE`; see `ph_context_set_max_pixels()` under
   Added.
-  *Restore the old behaviour:* raise the limit with `ph_context_set_max_pixels()`; an
+  *Restore the old behavior:* raise the limit with `ph_context_set_max_pixels()`; an
   implementation ceiling of `INT_MAX` pixels always applies.
 
 - **A single image dimension may not exceed 1000000 pixels.** The cap applies to every
@@ -207,37 +207,37 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   sits exactly on the default limit, yet makes the decoder size a single row of ~800 MB.
   Real photographs are nowhere near this. `ph_load_from_pixels()` is not subject to the
   cap.
-  *Restore the old behaviour:* not possible — split such an image yourself, or decode it
+  *Restore the old behavior:* not possible — split such an image yourself, or decode it
   with your own decoder and pass the pixels to `ph_load_from_pixels()`.
 
 - **Non-regular files are rejected instead of decoded.** Passing a FIFO, a character
   device or `/dev/stdin` to `ph_load_from_file()` returns `PH_ERR_IO`; 1.x's `stb_image`
   fallback read such a path. Regular files are unaffected.
-  *Restore the old behaviour:* not possible by path — read the stream into memory yourself
+  *Restore the old behavior:* not possible by path — read the stream into memory yourself
   and call `ph_load_from_memory()`, the supported way to hash something that is not a file
   on disk.
 
 - **`ph_can_use_libjpeg()`/`ph_can_use_libpng()` are renamed `ph_can_use_jpeg()`/
   `ph_can_use_png()`**, so all three capability checks, with `ph_can_use_webp()`, are named
   after the format they answer for; `ph_get_build_info()` names the library behind each.
-  *Restore the old behaviour:* rename the calls; the return values are unchanged.
+  *Restore the old behavior:* rename the calls; the return values are unchanged.
 
 - **Public enums are 32 bits wide under `-fshort-enums`.** Each public enum ends in a
   `*_FORCE_INT32_` enumerator that is not a real value. Under `-fshort-enums` — the default
   ABI on ARM EABI — 1.x's enums shrank to one byte, so a library and a consumer built with
   different settings silently disagreed on every `ph_error_t` return value. Only code
   built with that flag sees a change.
-  *Restore the old behaviour:* not applicable — rebuild against the 2.0 header.
+  *Restore the old behavior:* not applicable — rebuild against the 2.0 header.
 
 - **Shared builds carry a versioned soname, `SOVERSION = 2`** (`libphash.so.2` /
   `libphash.2.dylib`). Consumers linked against an unversioned 1.x shared library must
   relink.
-  *Restore the old behaviour:* not applicable — relink against the installed 2.x library.
+  *Restore the old behavior:* not applicable — relink against the installed 2.x library.
 
 - **The test-only mock decoder is not compiled into the library.** 1.x registered, in
   every build, a backend that claimed any buffer starting with `DE AD` and "decoded" it
   into a 1×1 image. Such a buffer yields `PH_ERR_UNSUPPORTED_FORMAT`.
-  *Restore the old behaviour:* configure with `-DPHASH_ENABLE_MOCK_BACKEND=ON` (OFF by
+  *Restore the old behavior:* configure with `-DPHASH_ENABLE_MOCK_BACKEND=ON` (OFF by
   default; it warns at configure time). It is for testing only and must not be enabled in
   a shipped build.
 
@@ -246,13 +246,13 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   faster than libpng — within a few percent on 8-bit color images, 30–70% slower on
   16-bit and grayscale ones, on x86-64 and arm64 — and its last release is v0.7.4 of
   May 2023. CMake reports `-DPHASH_USE_SPNG` as an unused variable.
-  *Restore the old behaviour:* not possible — drop the flag; the default build decodes PNG
+  *Restore the old behavior:* not possible — drop the flag; the default build decodes PNG
   with libpng, and `-DPHASH_USE_LIBPNG=OFF` decodes it with `stb_image`.
 
 - **The JPEG backend option is `PHASH_USE_LIBJPEG_TURBO`** (1.x: `PHASH_USE_TURBOJPEG`),
   named after the codec. CMake reports the old name as an unused variable and builds the
   default backend set, so `-DPHASH_USE_TURBOJPEG=OFF` builds with libjpeg-turbo.
-  *Restore the old behaviour:* not applicable — pass `-DPHASH_USE_LIBJPEG_TURBO=…`.
+  *Restore the old behavior:* not applicable — pass `-DPHASH_USE_LIBJPEG_TURBO=…`.
 
 ### Added
 
@@ -278,7 +278,7 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   algorithm, so new `uint64_t` algorithms can be added inside 2.x without changing the
   structs' size or layout. Peak memory grows linearly with the worker count; the header
   documents the bound.
-- **`ph_hash_files_ex()`/`ph_hash_buffers_ex()`** take a `ph_batch_options_t` (initialise
+- **`ph_hash_files_ex()`/`ph_hash_buffers_ex()`** take a `ph_batch_options_t` (initialize
   it with `ph_batch_options_init()`): a template context whose whole configuration,
   `max_pixels` included, applies to every item; a `should_continue` callback that stops the
   batch, returning the new **`PH_ERR_CANCELLED`** and storing it in every item not started;
@@ -441,7 +441,7 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
 - CMake pins `CMAKE_C_STANDARD` to 17 (1.x left it to the compiler's default), with
   `CMAKE_C_EXTENSIONS` off; the Makefile uses `-std=c17` too. The minimum CMake version is
   3.21 (1.x: 3.10), needed to recognize the C17/C23 standard values.
-- Each CMake build type gets its own optimisation level (`Debug` unoptimised, `Release`
+- Each CMake build type gets its own optimization level (`Debug` unoptimised, `Release`
   `-O3`, `RelWithDebInfo` `-O2`, `MinSizeRel` `-Os`); 1.x forced `-O3` on top of every
   build type. A standalone configure that names no build type defaults to `Release`; under
   `add_subdirectory()` the parent's build type applies. The project's warning flags are not
@@ -520,7 +520,7 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   hash then described nothing. A decoded image without a positive width and height fails
   with `PH_ERR_CORRUPT_DATA`, whichever decoder produced it.
 - **pHash with an odd `dct_size` read and wrote misaligned `float`s.** Every odd value from
-  3 to 31 placed the DCT buffers at an odd address: undefined behaviour, reported by UBSan
+  3 to 31 placed the DCT buffers at an odd address: undefined behavior, reported by UBSan
   and a crash on strict-alignment targets. Hash values do not change.
 - `ph_compute_phash()` returned a hash computed from **uninitialized memory** when the DCT
   parameters were out of range; out-of-range parameters are rejected.
@@ -531,14 +531,14 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
 - Resizing and Gaussian blur reported an allocation failure as `PH_SUCCESS` with a hash
   computed over garbage. aHash, dHash, pHash, wHash, mHash, BMH and Radial return
   `PH_ERR_ALLOCATION_FAILED` instead. No hash value changes on the success path.
-- Pixel counts were computed in `int` and could overflow (undefined behaviour); they are
+- Pixel counts were computed in `int` and could overflow (undefined behavior); they are
   computed in `size_t`.
 - **A gray + alpha image decoded by stb_image read one byte past its pixel buffer** and
   hashed a mixture of gray and alpha values, in every build without a native PNG decoder
   (the Makefile build). stb_image also hands back a grayscale PNG as one channel, so
   ColorHash and ColorMoments refused an image that a libpng build accepted, and
   grayscale loading used stb_image's own gray weights instead of the library's. libpng,
-  for its part, converted a 16-bit colour PNG to gray before reducing it to 8 bits, a level
+  for its part, converted a 16-bit color PNG to gray before reducing it to 8 bits, a level
   away from the other decoders. Every PNG decoder produces the same channel layout and the
   same gray values.
 - **`ph_hamming_distance_digest()` silently undercounted on x86_64** for a digest whose
@@ -549,7 +549,7 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
   hand-written vector paths that bought nothing on a digest of at most 128 bytes; the
   function is one portable loop over 64-bit words on every target.
 - **32-bit x86 (`i686`) builds could produce a different hash than a 64-bit build for the
-  same image**, including a degenerate all-zero pHash for a uniform-colour input that a
+  same image**, including a degenerate all-zero pHash for a uniform-color input that a
   64-bit build hashes normally: GCC/Clang default to x87 extended-precision intermediates
   on 32-bit x86. See "Changed" for the SSE2 floor.
 - **The library did not compile for any target where `size_t` is not `unsigned long`.**
