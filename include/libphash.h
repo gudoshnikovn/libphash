@@ -569,7 +569,7 @@ PH_API ph_error_t ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t m
  * It is offered for callers who need to mirror ImageHash's configuration, and it defaults
  * to off because the only thing it can change is the tie-breaking of coefficients that
  * land exactly on the median, which the extra transform pair decides by rounding error.
- * On this library's synthetic corpus that costs separability 4.34 -> 3.43 and buys
+ * On this library's synthetic corpus that costs separability 4.10 -> 3.41 and buys
  * nothing. See tests/src/test_whash.c and docs/algorithm-provenance.md.
  *
  * @param ctx The context.

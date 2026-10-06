@@ -202,7 +202,7 @@ static void flat_digest(int r, int g, int b, ph_digest_t *out) {
 /* What the quantisation can and cannot tell apart, stated rather than discovered later.
  *
  * The resolution was picked by measurement, and two candidates that scored *higher* on the
- * property corpus -- 6x6x1 at 4.28 and 9x9x1 at 3.94, against 3.95 for the one chosen --
+ * property corpus -- 6x6x1 at 4.28 and 9x9x1 at 3.92, against 4.01 for the one chosen --
  * were rejected because they drop the light-dark axis, which makes a black image and a
  * white image hash identically. A corpus of colourful pictures cannot see that. This test
  * can, and it exists so that a future retuning cannot make the same trade quietly. */

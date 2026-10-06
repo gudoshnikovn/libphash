@@ -490,8 +490,9 @@ static void test_block_means_on_an_exact_multiple(void) {
  * the source region behind it, fractional edges included. This test states that as an
  * invariant on deliberately awkward sizes, because it is what licenses skipping the
  * normalisation step -- and it is the better end of the trade: going through a 256x256
- * intermediate adds a resampling stage, and measured on the corpus it costs separability
- * (5.11 against 5.24). It also constrains the grid to divisors of the preset. */
+ * intermediate adds a resampling stage that rounds to integer pixels and gains nothing
+ * measured on the corpus (separability 5.42 against 5.43). It also constrains the grid
+ * to divisors of the preset. */
 static double exact_fractional_block_mean(const uint8_t *img, int w, int h, int bx, int by,
                                           int grid) {
     double x0 = (double)bx * w / grid, x1 = (double)(bx + 1) * w / grid;

@@ -92,12 +92,11 @@ suite).
   the per-dimension cap, and `PH_MAX_SUPPORTED_PIXELS` bound memory use for a given
   configuration, but a caller who raises those limits accepts the corresponding
   memory/CPU cost — that is a caller decision, not a library defect.
-- **Determinism of the *value* a hash takes across machines, in the strict sense.**
-  Ordinary photographs hash identically everywhere this library is tested, but two
-  algorithms (pHash, Radial) can differ by a few bits between CPU architectures for
-  near-uniform/degenerate input — see `CHANGELOG.md`'s `## [2.0.0]` Changed section.
-  This is a floating-point reproducibility caveat, not a security property, and does
-  not affect ordinary use.
+- **The same hash value from builds with different JPEG decoders.** Every algorithm gives
+  the same bits on every OS, architecture and compiler the CI matrix covers, but
+  libjpeg-turbo and stb_image decode a JPEG to slightly different pixels, so the hash of a
+  JPEG depends on which one the build uses — see `docs/algorithms.md`, "Same hash on every
+  machine". This is a reproducibility property, not a security one.
 - **Resistance to a deliberate adversary trying to produce a hash collision or a
   hash mismatch for two images.** See "What counts as a vulnerability here" above —
   this is out of scope by design, not an oversight.

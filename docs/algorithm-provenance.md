@@ -109,7 +109,7 @@ MSB first, left to right, top to bottom, big-endian.
 | Difference | Class | Note |
 |---|---|---|
 | Resampling filter | undefined | Source says only "shrink". The reduction is an exact area average — each of the 64 values is the mean of the part of the image it covers — which is what "shrink" computes when nothing more is said. Nothing in the source is violated, and it is not the filter ImageHash uses (PIL `LANCZOS`). Against stb's Mitchell filter it measures better: separability 3.63 → 4.55 and false matches at 95 % recall 8.0 % → 2.9 % on the synthetic corpus; on 800 photographs 1208 → 1051 pairs of different images with identical hashes, the rest level. It is also shared: aHash, pHash, wHash and BMH read one area-average pass over the image. |
-| Grayscale coefficients | pinned | Source says only "convert to a grayscale". `PH_GRAY_R/G/B` = 38/75/15 over 128 (`src/image/image.h`) — an integer approximation of the **ITU-R BT.601** luma coefficients (0.299/0.587/0.114), cited as an external standard because none of this library's nine primary sources define a grayscale formula at all. The 77/150/29-over-256 triple, closer to BT.601 in decimal, measures worse on the separability corpus — BMH 5.24 → 4.97, wHash 4.34 → 4.27, no gain elsewhere — so 38/75/15 is used. Affects every algorithm that reduces to grayscale — aHash, dHash, pHash, wHash, mHash, BMH, Radial (all seven that call `ph_get_gray()`); noted once here, cross-referenced from the others. |
+| Grayscale coefficients | pinned | Source says only "convert to a grayscale". `PH_GRAY_R/G/B` = 38/75/15 over 128 (`src/image/image.h`) — an integer approximation of the **ITU-R BT.601** luma coefficients (0.299/0.587/0.114), cited as an external standard because none of this library's nine primary sources define a grayscale formula at all. The 77/150/29-over-256 triple, closer to BT.601 in decimal, measures worse on the separability corpus — aHash 4.55 → 3.46, BMH 5.43 → 5.02, wHash 4.10 → 4.02, mHash 2.62 → 2.51, with Radial the one gain (2.72 → 2.89) — so 38/75/15 is used. Affects every algorithm that reduces to grayscale — aHash, dHash, pHash, wHash, mHash, BMH, Radial (all seven that call `ph_get_gray()`); noted once here, cross-referenced from the others. |
 | Ties (`pixel == mean` → 1) | pinned | "Above or below" leaves the tie unstated, and no reference implementation is cited here to defer to (contrast pHash/wHash below, which are). `>=` is the library-wide rule for an unpinned tie: it agrees with the one source that states a direction (Zauner eq. 3.9, for BMH). |
 | Mean compared exactly, not rounded | conforms | "Above or below the mean" is a comparison with the mean itself. A mean truncated to an integer would move every pixel equal to `floor(mean)` — below a fractional mean — onto the tie and set its bit, which on a low-contrast image sets nearly all 64. |
 
@@ -233,13 +233,13 @@ own: LSB first (see the bit-order table in [`algorithms.md`](algorithms.md)).
 
 | Difference | Class | Note |
 |---|---|---|
-| DC excluded from the median | matches pHash's code | As `ph_dct_imagehash()` does, and as both descriptions ask. It changes no bit except on an exact tie (measured below). |
+| DC excluded from the median | matches pHash's code | As `ph_dct_imagehash()` does, and as both descriptions ask. For the median alone it changes no bit except on an exact tie; it also keeps DC out of the range the margin is taken from (both measured below). |
 | DC keeps its bit, so one bit of the 64 is constant | deliberate — pHash's own behaviour | DCT(0,0) is non-negative and larger than every AC term, so it is above the median every time and its bit is 1 every time. The hash is effectively 63 bits. Removing the dead bit means moving the block to (1,1), which the prose describes and the code does not; measured below and rejected. |
-| No 7×7 mean prefilter before the resize | deliberate | `ph_resize_box()` already averages over each source region, which is a low-pass step of a similar kind. Not identical to a 7×7 mean at full resolution; worth measuring rather than assuming. |
+| No 7×7 mean prefilter before the resize | deliberate | The exact area average already averages over each source region, which is a low-pass step of a similar kind. Not identical to a 7×7 mean at full resolution; worth measuring rather than assuming. |
 | Threshold is the median | deliberate | The two sources disagree; the rank-1 source (Zauner/pHash) says median. |
 | Threshold is the median plus 0.1 % of the AC range, not the bare median | deliberate | Coefficients crowding the median decide their bits by noise; the margin sends them to 0 together. Measured below: false matches at 95 % recall on photographs halve. `ph_dct_imagehash()` thresholds at the bare median, so pHash values differ from it. |
 | `>` rather than `≥` | matches pHash's code | Zauner's 3.10 says `≥`; `ph_dct_imagehash()` writes `>`, and so does this. With floating-point coefficients the two differ only on an exact tie against the median, i.e. on degenerate input such as a solid colour. `>` because it is pinned to the reference implementation's code, which outranks a library-wide convention. |
-| Box resampling | undefined | No source specifies a filter. Zauner's account of pHash has a 7×7 mean filter and then a resize, so a box filter is at least the same kind of operation. |
+| Area-average resampling | undefined | No source specifies a filter. Zauner's account of pHash has a 7×7 mean filter and then a resize, so an exact area average — each value the mean of the region it covers, shared with aHash, wHash and BMH — is at least the same kind of operation. |
 | Grayscale coefficients | pinned | As for aHash — see §1. `ph_median_bitpack_from()` (shared with wHash) operates on the DCT of the grayscale buffer, so the same BT.601 triple applies here too. |
 
 **What the DC term actually costs, measured.** The received explanation — that including
@@ -250,16 +250,21 @@ values sorted ascending as v0..v63 and DC the largest, the median of all 64 is
 them, so the same coefficients clear the threshold either way. The two can only disagree
 when v31 and v32 are so close that the float average rounds onto v32, and then by one bit.
 
-Measured: excluding DC from the median or not gives an identical pHash on every fixture in
-`tests/data`, and identical separability (2.48) across the synthetic corpus.
+The margin is a different matter. It is a fraction of the range of the values that set
+the median, and DC is many times larger than any AC term: counted in, it would stretch
+that range and with it the margin, and the margin would send most AC bits to 0. Measured
+on the synthetic corpus with DC counted in both: inter-image distance 0.425 → 0.319,
+intra-image 0.073 → 0.035, separability 3.17 → 3.23 — hashes pulled towards zero rather
+than a better descriptor. DC therefore stays out of the median and out of the margin's
+range, as in pHash.
 
 Taking the 8×8 block at DCT(1,1) instead, so all 64 bits carry information, measures
 worse:
 
 | | mean intra | mean inter | separability |
 |---|---|---|---|
-| block at (0,0), median over AC (pHash) | 0.177 | 0.490 | **2.48** |
-| block at (1,1), median over all 64 | 0.190 | 0.499 | 2.27 |
+| block at (0,0), median over AC (pHash) | 0.168 | 0.486 | **2.69** |
+| block at (1,1), median over all 64 | 0.182 | 0.483 | 2.33 |
 
 Trading the dead DC bit for one more row and column of higher-frequency coefficients buys
 a bit of width and loses more robustness than it gains, so the block is at (0,0), as in
@@ -267,7 +272,7 @@ pHash.
 
 Both measurements take the threshold at the bare median, without the margin described
 below. The DC term does not explain pHash's weaker robustness there (mean intra-distance
-0.177 against 0.03–0.07 for the other structural hashes): neither treatment of DC moves
+0.168 against 0.03–0.06 for the other structural hashes): neither treatment of DC moves
 that number.
 
 **Where the weakness is: coefficients crowding the median.** Every bit is a comparison
@@ -368,7 +373,7 @@ median too.
 |---|---|---|
 | `remove_max_haar_ll` implemented, defaults to off | deliberate (a proved identity) | The operation is the identity for a hash thresholded at the median, here and in ImageHash. Zeroing the single coarsest LL coefficient and reconstructing subtracts the image mean from every sample and nothing else (verified: max deviation 1.9e-07 against `orig − mean`, on a cascade whose round-trip error is 4.2e-07). A constant subtracted from every sample shifts every working-LL coefficient and their median by that same constant, so `value > median` is unchanged. Measured accordingly: all six real fixtures hash bit for bit identically in both modes. On the synthetic corpus 49 of 192 images do move, 536 bit flips in total, separability 4.34 → 3.43 — entirely tie-breaking noise, since bits move only where coefficients land exactly on the median (a disc with 34 such ties flips 2 bits; stripes, quadrants and noise have no ties and flip none), and that corpus is rich in the flat regions that produce ties while photographs produce none. Omitting it does not leave brightness in the hash: the +25 brightness row is 0.028 without the removal and 0.050 with it. Exposed as `ph_context_set_whash_remove_max_haar_ll()` for callers mirroring ImageHash's configuration; default off, because the only thing it can do is let rounding error decide ties. Pinned by `test_remove_max_haar_ll_subtracts_the_mean`, `test_remove_max_haar_ll_leaves_the_hash_alone` and `test_remove_max_haar_ll_on_a_solid_fill`. |
 | Default mode fixes the scale at 16×16 | deliberate | `PH_WHASH_FULL` implements the power-of-two rule. Speed/robustness trade-off. |
-| Box resampling, where the reference implementation resamples with PIL's `LANCZOS` | undefined | Neither ImageHash's own choice of `LANCZOS` nor this library's `ph_resize_box()` is asked for by anything upstream of ImageHash — there being no primary source for wHash at all (see above), there is nothing to conform to or diverge from, only a reference implementation to differ from by choice. Box resampling was picked for the same reason `ph_resize_box()` exists at all: cheap, and a defensible low-pass step ahead of a wavelet decomposition that is itself a filter bank. |
+| Area-average resampling (fast mode) and box resampling (full mode), where the reference implementation resamples with PIL's `LANCZOS` | undefined | Neither ImageHash's own choice of `LANCZOS` nor this library's averaging filters is asked for by anything upstream of ImageHash — there being no primary source for wHash at all (see above), there is nothing to conform to or diverge from, only a reference implementation to differ from by choice. Averaging was picked because it is cheap and a defensible low-pass step ahead of a wavelet decomposition that is itself a filter bank; the fast mode's 16×16 comes from the exact area average shared with aHash, pHash and BMH, the full mode's power-of-two size from `ph_resize_box()`. |
 | Grayscale coefficients | pinned | As for aHash — see §1. |
 | Tie (`value == median` → `>`) | matches the reference implementation | Same convention ImageHash's `whash` uses ("what the reference implementation does" above). Not changed to `≥` for the same reason as pHash's: an actual reference implementation to match beats a general convention adopted for everything that has neither. |
 
@@ -418,13 +423,13 @@ and what is left inside is a 16×16 box over the edge-replicated image, which an
 image answers in four lookups. That is 31·31·289 multiply-adds instead of 496·496·289 —
 **1.75 ms instead of 50 ms**, measured on a 400×400 JPEG.
 
-The accuracy matters more than the speed. The LoG kernel sums to nearly zero, so
-evaluating it per pixel in single precision is a sum of large products that almost
-entirely cancel; the error survives into the block sum. Folded, the inner sums are exact
-integers and only 289 terms accumulate, in double. Measured on the property corpus:
-**separability 1.81 evaluating the definition directly in float, 2.49 this way.** The test
-`test_mh_block_sums_match_the_direct_definition()` checks the folded result against the
-definition evaluated in double.
+The folded sums are also exact: the inner sums are integers and only 289 terms
+accumulate, in double, where evaluating the near-zero-sum LoG kernel per pixel in single
+precision sums large products that almost entirely cancel. On the property corpus the
+difference does not show in the hash's quality — separability 2.62 folded, 2.67 with the
+definition evaluated directly in float — so the reason for folding is the time, and
+exactness is what makes it safe: `test_mh_block_sums_match_the_direct_definition()`
+checks the folded result against the definition evaluated in double.
 
 One step of the source is dropped, provably without effect: it normalises the response to
 [0,1] before summing. The block sums are affine in the response, the window mean is affine
@@ -518,11 +523,11 @@ is the paper's block mean to the nearest byte, which
 `test_area_downscale_matches_brute_force()` checks against a brute-force sum.
 
 Normalising first, the paper's way — to the largest multiple of the grid at or below 256,
-then averaging integer blocks — measures worse: separability on the synthetic corpus falls
-from 5.24 to **5.11**, which is what an extra resampling stage
-costs — the intermediate is rounded to integer pixels, so it adds error the direct area
-average does not have. It would also tie the grid to divisors of the preset, and
-most grid sizes this library accepts (2..32, e.g. 3×3 or 22×22) do not divide 256.
+then averaging integer blocks — gains nothing: separability on the synthetic corpus is
+5.43 direct and 5.42 normalised. It adds a stage that rounds the intermediate to integer
+pixels, an error the direct area average does not have, and it would tie the grid to
+divisors of the preset: most grid sizes this library accepts (2..32, e.g. 3×3 or 22×22)
+do not divide 256.
 
 So the step is skipped deliberately, and the invariant that licenses skipping it is pinned
 by `test_block_means_on_a_non_multiple()`.
@@ -637,7 +642,7 @@ turn is not the transform's doing: a projection line at α and at α+180 is the 
 so it is the identity on the variance vector before the DCT ever runs. On the smoother
 `photo_complex.png` the sweep holds out to 10° (0.939); on the deliberately
 high-frequency synthetic corpus, where a one-degree resample already moves its narrow
-stripes and small checkerboards, it is much weaker (mean 0.77 at 1°) — content matters,
+stripes and small checkerboards, it is much weaker (mean 0.82 at 1°) — content matters,
 and the corpus is the pessimistic end of it.
 
 Quarter turns are not absorbed, and no comparison of these 40 coefficients can absorb
@@ -683,7 +688,7 @@ are the opponent ones: `rg = R − G`, `by = 2B − R − G`, `wb = R + G + B`.
 6 × 6 × 3 = **108 bins**, one byte per bin scaled against the largest bin, compared by
 `ph_histogram_intersection()` with each side normalised by its own total.
 
-Measured separability: **3.95**, and 3.87 on a second corpus at a different resolution.
+Measured separability: **4.01**, and 3.87 on a second corpus at a different resolution.
 
 ### Choosing the quantisation, since the paper cannot supply it
 
@@ -699,15 +704,15 @@ distorts §5's numbers does not arise here.
 | RGB 5×5×5 | 125 | 2.02 |
 | HSV 8×4×4 | 128 | 3.07 |
 | HSV 12×3×3 | 108 | 2.90 |
-| opponent 4×4×4 | 64 | 2.13 |
-| opponent 5×5×4 | 100 | 2.48 |
-| opponent 5×5×5 | 125 | 2.77 |
-| opponent 6×4×4 | 96 | 2.45 |
-| opponent 6×5×4 | 120 | 2.58 |
-| opponent 6×6×2 | 72 | 2.69 |
-| **opponent 6×6×3** | **108** | **3.95** |
-| opponent 8×4×4 | 128 | 2.51 |
-| opponent 9×9×1 | 81 | 3.94 |
+| opponent 4×4×4 | 64 | 2.09 |
+| opponent 5×5×4 | 100 | 2.47 |
+| opponent 5×5×5 | 125 | 2.83 |
+| opponent 6×4×4 | 96 | 2.40 |
+| opponent 6×5×4 | 120 | 2.56 |
+| opponent 6×6×2 | 72 | 2.67 |
+| **opponent 6×6×3** | **108** | **4.01** |
+| opponent 8×4×4 | 128 | 2.47 |
+| opponent 9×9×1 | 81 | 3.92 |
 | opponent 6×6×1 | 36 | **4.28** |
 
 **The two highest scores were rejected.** `6×6×1` and `9×9×1` drop the light–dark axis,
@@ -724,7 +729,7 @@ grey collisions).
 matches and whose total intensity falls in the same third — black against dark grey, light
 grey against white. Three intensity bins is what fits beside 6 × 6 chroma inside
 `PH_DIGEST_MAX_BYTES`, and chroma resolution is worth more here than intensity resolution
-(5×5×5 has no such collisions and separates at 2.77). The limit is asserted as a limit in
+(5×5×5 has no such collisions and separates at 2.83). The limit is asserted as a limit in
 the tests rather than left to be discovered.
 
 **Delta:**

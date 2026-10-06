@@ -183,9 +183,8 @@ void test_gaussian_blur_sigma_matches_direct_form() {
  *
  * The tolerance is relative, because the values run to millions. Note that the direct
  * evaluation is the one that has to be done carefully: in float it loses several digits,
- * since the LoG kernel sums to nearly zero and the products cancel. That is not a
- * hypothetical -- computing the hash that way measured a separability of 1.81 against 2.49
- * for this one. */
+ * since the LoG kernel sums to nearly zero and the products cancel, which is why the
+ * reference here runs in double. */
 static void test_mh_block_sums_match_the_direct_definition() {
     const int n = 128; /* smaller than the hash's 512: this is about the arithmetic */
     uint8_t *img = (uint8_t *)malloc((size_t)n * n);

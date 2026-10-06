@@ -273,7 +273,7 @@ Both need colour: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
   a bit or vector metric. A colour histogram with histogram intersection, after Swain &
   Ballard (1991), implemented from secondary descriptions of the paper, so no conformance
   to it is claimed; the quantisation is this library's, chosen by measurement over sixteen
-  candidates. Separability on the test corpus: 3.95.
+  candidates. Separability on the test corpus: 4.01.
   **Blind spots**, both inherent to a histogram and both asserted in the tests: it ignores
   where the colours are, so a 90° rotation does not move it at all and neither does
   shuffling the pixels; and flat colours that share a chroma bin and an intensity third —
