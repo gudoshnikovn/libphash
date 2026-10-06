@@ -41,9 +41,11 @@ check_one() {
     # THIRD-PARTY-NOTICES.md records two hashes per file: "as vendored" and
     # "as imported from upstream, before the local patch" -- only the second one is
     # comparable to a fresh upstream download, since both files carry local patches.
+    # The backtick in the second pattern stays unescaped: GNU grep reads \` as the
+    # start-of-buffer anchor, BSD grep as a literal backtick.
     local recorded
     recorded=$(grep -A2 "^\* \*\*Vendored version:\*\*.*\`vendor/${name}\`" "$NOTICES" \
-        | grep -oE 'before the local patch: \`[0-9a-f]{64}' \
+        | grep -oE 'before the local patch: `[0-9a-f]{64}' \
         | grep -oE '[0-9a-f]{64}$')
     [ -n "$recorded" ] || fail "could not find a recorded upstream hash for $name in $NOTICES"
 
