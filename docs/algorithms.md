@@ -175,7 +175,11 @@ portability and comparison against a foreign implementation.
 - **Concept**: downscale to 9×8 and compare each pixel with its right-hand neighbor,
   giving 8 differences per row over 8 rows.
 - **Output**: 64-bit.
-- **Strength**: as cheap as aHash on small images.
+- **Strength**: as cheap as aHash on small images, and on photographs it separates
+  copies from different images more clearly than aHash
+  ([measured](theory/dhash.md#copies-and-different-images)).
+- **Weakness**: rotation and cropping, more steeply than aHash; and pairs of nearly equal
+  neighbors, which small edits tip, so copies sit a few bits further away.
 - **Conformance**: follows its source exactly, including the direction of the comparison
   (`1` means the left pixel is darker than the right).
 

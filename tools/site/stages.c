@@ -11,6 +11,12 @@
  *       from the grid and checked against ph_compute_ahash(); a mismatch exits 1, so a
  *       picture of the steps is always a picture of what the library does.
  *
+ *   site_stages dhash <image> <outdir>
+ *       The same for dHash: original.ppm, gray.pgm, and dhash.json (the 9x8 grid, the
+ *       64 bits and the hash), checked against ph_compute_dhash(). The JSON also holds
+ *       the grid and hash of the same image loaded with ph_context_set_load_grayscale(),
+ *       where the decoder converts to grayscale, checked the same way.
+ *
  *   site_stages measure <reference> <variant>...
  *       Prints one JSON object per variant: for each of the nine algorithms, the
  *       variant compared with the reference by that algorithm's own metric (similarity
@@ -223,6 +229,95 @@ static int stages_ahash(int argc, char **argv) {
     return status;
 }
 
+/* dHash of a loaded image, from its own 9x8 Mitchell grid: the bits are recomputed from
+ * `grid` and checked against ph_compute_dhash(). Returns 0 on a match. */
+static int dhash_stages(ph_context_t *ctx, const uint8_t *gray, uint8_t grid[72], uint64_t *bits) {
+    enum {
+        W = 9,
+        H = 8,
+    };
+
+    if (!ph_resize_mitchell(gray, ctx->image.width, ctx->image.height, grid, W, H)) {
+        return fail("ph_resize_mitchell failed", NULL);
+    }
+    *bits = 0;
+    for (int row = 0; row < H; row++) {
+        for (int col = 0; col < W - 1; col++) {
+            if (grid[row * W + col] < grid[row * W + col + 1]) {
+                *bits |= 1ULL << (63 - (row * (W - 1) + col));
+            }
+        }
+    }
+    uint64_t lib = 0;
+    if (ph_compute_dhash(ctx, &lib) != PH_SUCCESS) {
+        return fail("ph_compute_dhash failed", NULL);
+    }
+    if (lib != *bits) {
+        fprintf(stderr,
+                "site_stages: dHash recomputed from the grid (%016llx) differs from "
+                "ph_compute_dhash() (%016llx)\n",
+                (unsigned long long)*bits, (unsigned long long)lib);
+        return 1;
+    }
+    return 0;
+}
+
+/* site_stages dhash <image> <outdir> */
+static int stages_dhash(int argc, char **argv) {
+    (void)argc;
+    const char *outdir = argv[1];
+    ph_context_t *ctx = NULL;
+    if (load(&ctx, argv[0])) {
+        return 1;
+    }
+    int w = ctx->image.width, h = ctx->image.height;
+    int status = 0;
+    const uint8_t *gray = write_gray_stages(ctx, outdir, &status);
+    uint8_t grid[72];
+    uint64_t bits = 0;
+    if (!gray || dhash_stages(ctx, gray, grid, &bits)) {
+        ph_free(ctx);
+        return 1;
+    }
+    ph_free(ctx);
+
+    /* The decoder's grayscale: a JPEG decoder converts with its own coefficients. */
+    uint8_t dec_grid[72];
+    uint64_t dec_bits = 0;
+    if (ph_create(&ctx) != PH_SUCCESS) {
+        return fail("ph_create failed", NULL);
+    }
+    if (ph_context_set_load_grayscale(ctx, 1) != PH_SUCCESS ||
+        ph_load_from_file(ctx, argv[0]) != PH_SUCCESS) {
+        ph_free(ctx);
+        return fail("cannot load in grayscale", argv[0]);
+    }
+    gray = ph_get_gray(ctx);
+    if (!gray || dhash_stages(ctx, gray, dec_grid, &dec_bits)) {
+        ph_free(ctx);
+        return 1;
+    }
+    ph_free(ctx);
+
+    FILE *f = open_out(outdir, "dhash.json");
+    if (!f) {
+        return 1;
+    }
+    json_t j = {f, 0};
+    json_int(&j, "width", w);
+    json_int(&j, "height", h);
+    json_int(&j, "grid_width", 9);
+    json_int(&j, "grid_height", 8);
+    json_u8s(&j, "grid", grid, 72);
+    json_bits(&j, "bits", bits, 64);
+    json_hex64(&j, "hash", bits);
+    json_u8s(&j, "grid_load_grayscale", dec_grid, 72);
+    json_hex64(&j, "hash_load_grayscale", dec_bits);
+    json_end(&j);
+    status |= fclose(f) != 0;
+    return status;
+}
+
 /* --8<-- [start:compare] */
 /* One algorithm's comparison of two digests by its own metric; 0 when it does not apply. */
 static int compare(const ph_digest_t *a, const ph_digest_t *b, double *out) {
@@ -355,6 +450,7 @@ static const struct {
     int (*run)(int argc, char **argv);
 } modes[] = {
     {"ahash", "<image> <outdir>", 2, 0, stages_ahash},
+    {"dhash", "<image> <outdir>", 2, 0, stages_dhash},
     {"measure", "<reference> <variant>...", 2, 1, measure},
     {"pairs", "<image> <image>...", 2, 1, pairs},
     {"corpus", "<outdir>", 1, 0, corpus},
