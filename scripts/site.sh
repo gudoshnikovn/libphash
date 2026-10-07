@@ -40,10 +40,12 @@ cd "$ROOT_DIR"
 
 # The API reference is generated, not tracked: Doxygen writes it to build/api-docs/html/,
 # and it is copied into docs/api/ (ignored by git) so the site serves it as static files
-# and the navigation's link to api/index.html resolves.
+# and the navigation's link to api/index.html resolves; each page of the copy gets the
+# site's navigation on top, a way back that plain Doxygen output does not have.
 scripts/api_docs.sh
 rm -rf docs/api
 cp -R build/api-docs/html docs/api
+python3 scripts/site_api_nav.py docs/api
 
 # The figures and measured tables on the algorithm pages are drawn by
 # tools/site/render.py from what tools/site/stages.c measures, against the release build
