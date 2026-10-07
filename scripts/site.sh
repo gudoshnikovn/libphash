@@ -69,9 +69,20 @@ cd "$ROOT_DIR"
 # into Markdown pages in docs/api/ (ignored by git), one per topic. They are pages of the
 # site like any other -- its theme, its search, and anchors the strict build checks when
 # a page links to a function.
+#
+# Generated files reach docs/ through sync_into(): written elsewhere first, then copied
+# over only where their bytes differ, and the directory itself is never removed. A running
+# `zensical serve` watches docs/, and rewriting a whole generated tree under it, even with
+# the same bytes, sends the server into a rebuild loop that reloads an open page every
+# second.
+sync_into() {
+    mkdir -p "$2"
+    rsync -a --delete --checksum "$1/" "$2/"
+}
 scripts/api_docs.sh
-rm -rf docs/api
-python3 scripts/api_pages.py build/api-docs/xml docs/api
+rm -rf build/api-pages
+python3 scripts/api_pages.py build/api-docs/xml build/api-pages
+sync_into build/api-pages docs/api
 
 # The figures and measured tables on the algorithm pages are drawn by
 # tools/site/render.py from what tools/site/stages.c measures, against the release build
@@ -83,9 +94,12 @@ python3 scripts/api_pages.py build/api-docs/xml docs/api
 # build/site-cache/ and repeated only when the library, the tool or a corpus changes.
 cmake --preset release >/dev/null
 cmake --build --preset release --target site_stages
+rm -rf build/site-generated
 "$PY" tools/site/render.py --tool build/release/site_stages --image tests/data/photo.jpeg \
-    --out docs/assets/generated
-"$PY" tools/site/fetch_corpus.py page --out docs/project/corpus.md
+    --out build/site-generated
+sync_into build/site-generated docs/assets/generated
+"$PY" tools/site/fetch_corpus.py page --out build/site-corpus.md
+cmp -s build/site-corpus.md docs/project/corpus.md || cp build/site-corpus.md docs/project/corpus.md
 
 python3 scripts/check_site_links.py
 
