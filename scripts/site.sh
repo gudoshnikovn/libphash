@@ -85,13 +85,14 @@ python3 scripts/api_pages.py build/api-docs/xml build/api-pages
 sync_into build/api-pages docs/api
 
 # The figures and measured tables on the algorithm pages are drawn by
-# tools/site/render.py from what tools/site/stages.c measures, against the release build
-# (every bundled decoder, as the published archives), into docs/assets/generated/
-# (ignored by git): a page always shows the code it is built with. The charts over the
-# photo corpus need its files: the first build downloads them (tools/site/fetch_corpus.py,
-# into ~/.cache/libphash-site/), and a build without a network or a cached copy draws them
-# without the photographs and says so on the chart. The measurements are cached in
-# build/site-cache/ and repeated only when the library, the tool or a corpus changes.
+# tools/site/render.py from what site_stages (tools/site/stages/) measures, against the
+# release build (every bundled decoder, as the published archives), into
+# docs/assets/generated/ (ignored by git): a page always shows the code it is built with.
+# The charts over the photo corpus need its files: the first build downloads them
+# (tools/site/fetch_corpus.py, into ~/.cache/libphash-site/), and a build without a
+# network or a cached copy draws them without the photographs and says so on the chart.
+# The measurements are cached in build/site-cache/ and repeated only when the library,
+# the tool or a corpus changes.
 cmake --preset release >/dev/null
 cmake --build --preset release --target site_stages
 rm -rf build/site-generated

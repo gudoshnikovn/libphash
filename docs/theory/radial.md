@@ -210,12 +210,12 @@ below.
     of the original, then of each copy, and compares the two by that algorithm's own
     metric.
 
-    ```c title="tools/site/stages.c"
-    --8<-- "tools/site/stages.c:measure"
+    ```c title="tools/site/stages/measure.c"
+    --8<-- "tools/site/stages/measure.c:measure"
     ```
 
-    ```c title="tools/site/stages.c"
-    --8<-- "tools/site/stages.c:compare"
+    ```c title="tools/site/stages/measure.c"
+    --8<-- "tools/site/stages/measure.c:compare"
     ```
 
     To reproduce, `make site` builds the tool and redraws every figure. The tool can also
@@ -295,8 +295,8 @@ the same broad shape, and the threshold lets a large share of their pairs throug
 
     Comparing every pair of originals:
 
-    ```c title="tools/site/stages.c"
-    --8<-- "tools/site/stages.c:pairs"
+    ```c title="tools/site/stages/measure.c"
+    --8<-- "tools/site/stages/measure.c:pairs"
     ```
 
     The edits that make a copy, and the numbers on the second chart:
@@ -414,15 +414,15 @@ vertical axis has odd coefficients near zero, and its mirror image keeps the dig
     --8<-- "tools/site/algo_radial.py:similarity"
     ```
 
-    ```c title="tools/site/stages.c"
-    --8<-- "tools/site/stages.c:radial-profiles"
+    ```c title="tools/site/stages/radial.c"
+    --8<-- "tools/site/stages/radial.c:radial-profiles"
     ```
 
     The profile and the digest are computed from the stages as in the steps above, and
     each digest is checked against `ph_compute_radial_hash()`:
 
-    ```c title="tools/site/stages.c"
-    --8<-- "tools/site/stages.c:radial"
+    ```c title="tools/site/stages/radial.c"
+    --8<-- "tools/site/stages/radial.c:radial"
     ```
 
 How the nine algorithms compare is on
@@ -449,8 +449,8 @@ cases `radial_sigma_*` below separate the two parts.
     library caches are dropped before every run, so each run is the first hash on a
     loaded image. The cases, and the timing loop:
 
-    ```c title="tools/site/stages.c"
-    --8<-- "tools/site/stages.c:time"
+    ```c title="tools/site/stages/timing.c"
+    --8<-- "tools/site/stages/timing.c:time"
     ```
 
     The times are measured again only when the library, the tool or the machine changes:
@@ -550,8 +550,12 @@ hash reads the setting.
     --8<-- "tools/site/corpus.py:variants"
     ```
 
-    ```c title="tools/site/stages.c"
-    --8<-- "tools/site/stages.c:radial-variants"
+    ```c title="tools/site/stages/radial.c"
+    --8<-- "tools/site/stages/radial.c:radial-variants-list"
+    ```
+
+    ```c title="tools/site/stages/radial.c"
+    --8<-- "tools/site/stages/radial.c:radial-variants"
     ```
 
 ## Settings that affect it

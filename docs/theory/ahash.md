@@ -111,12 +111,12 @@ below.
     of the original, then of each copy, and compares the two by that algorithm's own
     metric.
 
-    ```c title="tools/site/stages.c"
-    --8<-- "tools/site/stages.c:measure"
+    ```c title="tools/site/stages/measure.c"
+    --8<-- "tools/site/stages/measure.c:measure"
     ```
 
-    ```c title="tools/site/stages.c"
-    --8<-- "tools/site/stages.c:compare"
+    ```c title="tools/site/stages/measure.c"
+    --8<-- "tools/site/stages/measure.c:compare"
     ```
 
     The number on the chart:
@@ -196,8 +196,8 @@ more.
 
     Comparing every pair of originals:
 
-    ```c title="tools/site/stages.c"
-    --8<-- "tools/site/stages.c:pairs"
+    ```c title="tools/site/stages/measure.c"
+    --8<-- "tools/site/stages/measure.c:pairs"
     ```
 
     The edits that make a copy, and the numbers on the second chart:
@@ -279,8 +279,8 @@ from the same grid.
     library caches are dropped before every run, so each run is the first hash on a
     loaded image. The cases, and the timing loop:
 
-    ```c title="tools/site/stages.c"
-    --8<-- "tools/site/stages.c:time"
+    ```c title="tools/site/stages/timing.c"
+    --8<-- "tools/site/stages/timing.c:time"
     ```
 
     The times are measured again only when the library, the tool or the machine changes:

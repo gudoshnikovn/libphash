@@ -1,6 +1,6 @@
 """The robustness measurement: every transform applied to one image, every variant hashed
-and compared with the original by tools/site/stages.c, drawn as small multiples and
-written as the table a page shows under the chart."""
+and compared with the original by site_stages (tools/site/stages/), drawn as small
+multiples and written as the table a page shows under the chart."""
 import json
 import os
 import subprocess

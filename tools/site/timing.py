@@ -20,7 +20,7 @@ import subprocess
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CACHE = os.path.join(ROOT, "build", "site-cache", "timing.json")
 IMAGES = {"small": "tests/data/photo.jpeg", "large": "tests/data/photo_large.jpeg"}
-KEY_FILES = ["src/**/*.c", "src/**/*.h", "include/libphash.h", "tools/site/stages.c",
+KEY_FILES = ["src/**/*.c", "src/**/*.h", "include/libphash.h", "tools/site/stages/*",
              "tools/site/timing.py"]
 
 

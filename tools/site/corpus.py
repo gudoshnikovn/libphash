@@ -42,7 +42,7 @@ LABELS = {
 
 # The files whose content decides a measurement: a change to any of them measures again.
 KEY_FILES = ["src/**/*.c", "src/**/*.h", "include/libphash.h", "tests/src/synthetic_corpus.h",
-             "tools/site/stages.c", "tools/site/transforms.py", "tools/site/measure.py",
+             "tools/site/stages/*", "tools/site/transforms.py", "tools/site/measure.py",
              "tools/site/corpus.py"]
 
 

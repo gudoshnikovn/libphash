@@ -4,7 +4,7 @@
  * The synthetic corpus: 24 generated images, and the benign edits applied to them. One
  * definition, used by tests/src/test_hash_properties.c, which measures robustness,
  * discrimination and separability on it, and by the documentation site's measuring tool
- * (tools/site/stages.c), which draws the same measurements, so a chart on the site and
+ * (tools/site/stages/), which draws the same measurements, so a chart on the site and
  * the test's OBSERVED table describe the same images.
  *
  * Generated rather than loaded, from a fixed seed: it needs no network, adds nothing to

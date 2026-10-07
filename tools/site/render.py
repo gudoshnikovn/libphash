@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draws the documentation site's figures from what tools/site/stages.c measures.
+"""Draws the documentation site's figures from what site_stages (tools/site/stages/) measures.
 
 Every figure is drawn twice, for the light and the dark theme (`name.light.svg`,
 `name.dark.svg`; a page shows them with `#only-light` / `#only-dark`), and every measured
