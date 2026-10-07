@@ -27,8 +27,9 @@ import tempfile
 from PIL import Image
 
 import fetch_corpus
+from corpus_charts import COPY_STRENGTHS
 from measure import measure_variants
-from transforms import content_edits
+from transforms import content_edits, transforms
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CACHE = os.path.join(ROOT, "build", "site-cache")
@@ -133,3 +134,63 @@ def measure_corpus(tool, corpus):
         json.dump(data, f)
     return data
 # --8<-- [end:corpus]
+
+
+# --8<-- [start:variants]
+def write_copies(base, tmp, stem):
+    """The copies of the separability measurement: one moderate strength of each of the
+    nine edits (COPY_STRENGTHS), saved as measure.py saves them; their paths."""
+    files = []
+    for name, _, steps in transforms():
+        op = dict(steps)[COPY_STRENGTHS[name]]
+        im, (ext, q) = op(base)
+        path = os.path.join(tmp, f"{stem}-{len(files)}.{ext}")
+        im.save(path, **({"quality": q} if ext == "jpg" else {}))
+        files.append(path)
+    return files
+
+
+def _variants_one(args):
+    """One original and its copies, through `site_stages <mode>`: one row per file."""
+    tool, mode, path, tmp, stem = args
+    base = Image.open(path).convert("RGB")
+    ref = os.path.join(tmp, f"{stem}.ppm")
+    base.save(ref)
+    files = [ref] + write_copies(base, tmp, stem)
+    rows = subprocess.run([tool, mode, *files], check=True, capture_output=True,
+                          text=True).stdout.splitlines()
+    for f in files:
+        os.remove(f)
+    return [{k: v for k, v in json.loads(r).items() if k != "file"} for r in rows]
+
+
+def measure_settings(tool, mode):
+    """{corpus: {"n", "label", "images": [[original, copy…] rows per image]}}: every
+    original of both corpora and its nine copies through `site_stages <mode>`, which
+    prints one JSON row of digests per file, one digest per setting it tries. Cached like
+    the corpora themselves, in build/site-cache/<mode>-<corpus>.json."""
+    result = {}
+    for key in ("synthetic", "photos"):
+        paths = images(tool, key, os.path.join(CACHE, "work"))
+        label = LABELS[key].format(n=len(paths))
+        if not paths:
+            result[key] = {"n": 0, "label": label, "images": []}
+            continue
+        cache = os.path.join(CACHE, f"{mode}-{key}.json")
+        ck = cache_key(paths)
+        if os.path.exists(cache):
+            with open(cache) as f:
+                saved = json.load(f)
+            if saved.get("key") == ck:
+                result[key] = {"n": len(paths), "label": label, "images": saved["images"]}
+                continue
+        print(f"render: {mode}: measuring {len(paths)} images and their copies")
+        with tempfile.TemporaryDirectory() as tmp, \
+                concurrent.futures.ProcessPoolExecutor() as pool:
+            rows = list(pool.map(_variants_one, [(tool, mode, p, tmp, f"{i:04d}")
+                                                 for i, p in enumerate(paths)]))
+        with open(cache, "w") as f:
+            json.dump({"key": ck, "images": rows}, f)
+        result[key] = {"n": len(paths), "label": label, "images": rows}
+    return result
+# --8<-- [end:variants]

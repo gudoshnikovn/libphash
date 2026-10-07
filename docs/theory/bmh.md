@@ -393,6 +393,10 @@ of the copies lets through.
     tool checks that the default size gives the same *d′* as they do. aHash's numbers are
     those of [its page](ahash.md#copies-and-different-images).
 
+    ```python title="tools/site/corpus.py"
+    --8<-- "tools/site/corpus.py:variants"
+    ```
+
     ```python title="tools/site/algo_bmh.py"
     --8<-- "tools/site/algo_bmh.py:variants"
     ```

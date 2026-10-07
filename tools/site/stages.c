@@ -74,6 +74,25 @@
  *       Prints one JSON object per image: its BMH digest at each of those block sizes,
  *       as ph_compute_bmh() computes it, and the digest thresholded at the mean.
  *
+ *   site_stages radial <image> <outdir>
+ *       The same for Radial: original.ppm, gray.pgm, blurred.pgm (the blur, and the gamma,
+ *       which is the identity at its default), sigma-<s>.pgm and gamma-<g>.pgm for the other
+ *       settings shown, and radial.json (the center and radius; for the default, the
+ *       variance along every line, the profile standardized, the 40 DCT coefficients and
+ *       the digest, and the points each line reads; the same without the points for the
+ *       other sigmas and gammas), every digest checked against ph_compute_radial_hash()
+ *       with those settings; and the digest of the image loaded with
+ *       ph_context_set_load_grayscale(), checked the same way.
+ *
+ *   site_stages radial-profiles <reference> <image>...
+ *       Prints one JSON object per image, the reference first: its variance profile and
+ *       digest, checked as above, and the digest compared with the reference's by
+ *       ph_radial_similarity().
+ *
+ *   site_stages radial-variants <image>...
+ *       Prints one JSON object per image: its Radial digest as ph_compute_radial_hash()
+ *       computes it under each setting of radial_variants_list[].
+ *
  *   site_stages time <image>
  *       Times decoding the image and every hash on it (the first hash on a loaded image,
  *       caches dropped before each run), and the variants of time_cases[]; prints the
@@ -91,6 +110,7 @@
 #include "synthetic_corpus.h"
 
 #include <errno.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1306,6 +1326,359 @@ static int bmh_variants(int argc, char **argv) {
 
 /* --8<-- [end:bmh-variants] */
 
+/* --8<-- [start:radial] */
+/* One Radial computation with the given settings, recomputed from its stages and checked
+ * against ph_compute_radial_hash() with the same settings: the grayscale image blurred at
+ * `sigma` and put through `gamma`; the variance along each of `projections` lines through
+ * the center, `samples` points on each; the profile's mean and spread; the profile
+ * standardized; its first PH_RADIAL_COEFFS DCT coefficients; and the digest, the
+ * coefficients mapped onto 0..255 by their own minimum and maximum (all zero when the
+ * profile has no spread worth the name). */
+typedef struct {
+    int projections, samples;
+    float sigma, gamma;
+    double center_x, center_y, radius;
+    double *variance, *standardized; /* projections each */
+    double mean, spread_sq;
+    int structure;
+    double coefficients[PH_RADIAL_COEFFS];
+    uint8_t digest[PH_RADIAL_COEFFS];
+    uint8_t *blurred; /* width x height */
+} radial_stages_t;
+
+static void radial_free(radial_stages_t *s) {
+    free(s->variance);
+    free(s->standardized);
+    free(s->blurred);
+    s->variance = s->standardized = NULL;
+    s->blurred = NULL;
+}
+
+static int radial_settings(ph_context_t *ctx, int projections, int samples, float sigma,
+                           float gamma) {
+    return ph_context_set_radial_params(ctx, projections, samples, sigma) == PH_SUCCESS &&
+           ph_context_set_gamma(ctx, gamma) == PH_SUCCESS;
+}
+
+static int radial_run(ph_context_t *ctx, int projections, int samples, float sigma, float gamma,
+                      radial_stages_t *s) {
+    const int w = ctx->image.width, h = ctx->image.height;
+    const size_t npix = (size_t)w * (size_t)h;
+    memset(s, 0, sizeof(*s));
+    s->projections = projections;
+    s->samples = samples;
+    s->sigma = sigma;
+    s->gamma = gamma;
+    s->variance = malloc((size_t)projections * sizeof(double));
+    s->standardized = calloc((size_t)projections, sizeof(double));
+    s->blurred = malloc(npix);
+    float *scratch = malloc(npix * sizeof(float));
+    const uint8_t *gray = ph_get_gray(ctx);
+    if (!s->variance || !s->standardized || !s->blurred || !scratch || !gray ||
+        !radial_settings(ctx, projections, samples, sigma, gamma)) {
+        free(scratch);
+        return fail("cannot set up Radial", NULL);
+    }
+    ph_gaussian_blur_sigma(gray, w, h, sigma, scratch, s->blurred);
+    free(scratch);
+    ph_apply_gamma(ctx, s->blurred, w, h);
+
+    s->center_x = w / 2.0;
+    s->center_y = h / 2.0;
+    s->radius = (w < h ? w : h) / 2.0;
+    double sum = 0.0, sum_sq = 0.0;
+    for (int i = 0; i < projections; i++) {
+        double theta = i * M_PI / projections;
+        s->variance[i] =
+            ph_projection_variance(s->blurred, w, h, s->center_x, s->center_y, s->radius,
+                                   (float)cos(theta), (float)sin(theta), samples);
+        sum += s->variance[i];
+        sum_sq += s->variance[i] * s->variance[i];
+    }
+    s->mean = sum / projections;
+    s->spread_sq = sum_sq / projections - s->mean * s->mean;
+    s->structure = s->mean > PH_RADIAL_MIN_MEAN_VARIANCE &&
+                   s->spread_sq > PH_RADIAL_MIN_RELATIVE_SPREAD * s->mean * s->mean;
+    if (s->structure) {
+        for (int i = 0; i < projections; i++) {
+            s->standardized[i] = (s->variance[i] - s->mean) / sqrt(s->spread_sq);
+        }
+        if (ph_dct1d_partial(s->standardized, projections, PH_RADIAL_COEFFS, s->coefficients) !=
+            PH_SUCCESS) {
+            return fail("ph_dct1d_partial failed", NULL);
+        }
+        double lo = s->coefficients[0], hi = s->coefficients[0];
+        for (int k = 1; k < PH_RADIAL_COEFFS; k++) {
+            lo = s->coefficients[k] < lo ? s->coefficients[k] : lo;
+            hi = s->coefficients[k] > hi ? s->coefficients[k] : hi;
+        }
+        for (int k = 0; k < PH_RADIAL_COEFFS; k++) {
+            s->digest[k] = (uint8_t)(255.0 * (s->coefficients[k] - lo) / (hi - lo));
+        }
+    }
+
+    ph_digest_t lib;
+    int bad = ph_compute_radial_hash(ctx, &lib) != PH_SUCCESS;
+    if (!radial_settings(ctx, PH_RADIAL_PROJECTIONS, PH_RADIAL_SAMPLES, PH_RADIAL_DEFAULT_SIGMA,
+                         1.0f) ||
+        bad) {
+        return fail("ph_compute_radial_hash failed", NULL);
+    }
+    if (lib.size != PH_RADIAL_COEFFS || memcmp(lib.data, s->digest, PH_RADIAL_COEFFS) != 0) {
+        fprintf(stderr,
+                "site_stages: Radial (%d x %d, sigma %g, gamma %g) recomputed from its stages "
+                "differs from ph_compute_radial_hash()\n",
+                projections, samples, (double)sigma, (double)gamma);
+        return 1;
+    }
+    return 0;
+}
+
+/* --8<-- [end:radial] */
+
+static void json_doubles(json_t *j, const char *key, const double *v, int n) {
+    json_key(j, key);
+    for (int i = 0; i < n; i++) {
+        fprintf(j->f, "%s%.9g", i ? ", " : "[", v[i]);
+    }
+    fputs("]", j->f);
+}
+
+/* One run as a bare JSON object; the profile only when asked for. */
+static void radial_json(FILE *f, const radial_stages_t *s, int with_profile) {
+    json_t o = {f, 0};
+    json_int(&o, "projections", s->projections);
+    json_int(&o, "samples", s->samples);
+    json_double(&o, "sigma", s->sigma);
+    json_double(&o, "gamma", s->gamma);
+    if (with_profile) {
+        json_doubles(&o, "variance", s->variance, s->projections);
+        json_doubles(&o, "standardized", s->standardized, s->projections);
+    }
+    json_double(&o, "mean", s->mean);
+    json_double(&o, "relative_spread", s->mean > 0.0 ? s->spread_sq / (s->mean * s->mean) : 0.0);
+    json_int(&o, "structure", s->structure);
+    json_doubles(&o, "coefficients", s->coefficients, PH_RADIAL_COEFFS);
+    json_hexbytes(&o, "digest", s->digest, PH_RADIAL_COEFFS);
+    fputs("}", f);
+}
+
+/* The points one projection reads, as ph_projection_variance() places them: `samples`
+ * points spaced radius / (samples / 2) apart from -radius on, each value bilinear, -1
+ * where the point falls outside the image. */
+static void radial_line(const radial_stages_t *s, int w, int h, int i, float *out) {
+    double theta = i * M_PI / s->projections;
+    float c = (float)cos(theta), sn = (float)sin(theta);
+    float half = (float)s->samples / 2.0f, scale = (float)s->radius / half;
+    for (int r = 0; r < s->samples; r++) {
+        float dist = ((float)r - half) * scale;
+        out[r] = ph_get_pixel_bilinear(s->blurred, w, h, (float)s->center_x + dist * c,
+                                       (float)s->center_y + dist * sn);
+    }
+}
+
+/* The settings `site_stages radial` shows besides the default, one at a time. */
+static const float radial_sigmas[] = {1.0f, 8.0f};
+static const float radial_gammas[] = {0.5f, 2.0f};
+
+/* site_stages radial <image> <outdir> */
+static int stages_radial(int argc, char **argv) {
+    (void)argc;
+    const char *outdir = argv[1];
+    ph_context_t *ctx = NULL;
+    if (load(&ctx, argv[0])) {
+        return 1;
+    }
+    int w = ctx->image.width, h = ctx->image.height;
+    int status = 0;
+
+    enum {
+        N_SIGMAS = sizeof(radial_sigmas) / sizeof(radial_sigmas[0]),
+        N_GAMMAS = sizeof(radial_gammas) / sizeof(radial_gammas[0]),
+    };
+
+    radial_stages_t def, sig[N_SIGMAS], gam[N_GAMMAS], dec;
+    memset(sig, 0, sizeof(sig));
+    memset(gam, 0, sizeof(gam));
+    memset(&dec, 0, sizeof(dec));
+    int bad = !write_gray_stages(ctx, outdir, &status) ||
+              radial_run(ctx, PH_RADIAL_PROJECTIONS, PH_RADIAL_SAMPLES, PH_RADIAL_DEFAULT_SIGMA,
+                         1.0f, &def);
+    for (int k = 0; k < N_SIGMAS && !bad; k++) {
+        bad = radial_run(ctx, PH_RADIAL_PROJECTIONS, PH_RADIAL_SAMPLES, radial_sigmas[k], 1.0f,
+                         &sig[k]);
+    }
+    for (int k = 0; k < N_GAMMAS && !bad; k++) {
+        bad = radial_run(ctx, PH_RADIAL_PROJECTIONS, PH_RADIAL_SAMPLES, PH_RADIAL_DEFAULT_SIGMA,
+                         radial_gammas[k], &gam[k]);
+    }
+    ph_free(ctx);
+
+    /* The decoder's grayscale, as for the other hashes. */
+    if (!bad) {
+        bad = ph_create(&ctx) != PH_SUCCESS ||
+              ph_context_set_load_grayscale(ctx, 1) != PH_SUCCESS ||
+              ph_load_from_file(ctx, argv[0]) != PH_SUCCESS ||
+              radial_run(ctx, PH_RADIAL_PROJECTIONS, PH_RADIAL_SAMPLES, PH_RADIAL_DEFAULT_SIGMA,
+                         1.0f, &dec);
+        ph_free(ctx);
+    }
+
+    float *lines = bad ? NULL : malloc((size_t)def.projections * def.samples * sizeof(float));
+    FILE *f = NULL;
+    if (lines) {
+        for (int i = 0; i < def.projections; i++) {
+            radial_line(&def, w, h, i, lines + (size_t)i * def.samples);
+        }
+        status |= write_pnm(outdir, "blurred.pgm", def.blurred, w, h, 1);
+        for (int k = 0; k < N_SIGMAS; k++) {
+            char name[32];
+            snprintf(name, sizeof(name), "sigma-%g.pgm", (double)radial_sigmas[k]);
+            status |= write_pnm(outdir, name, sig[k].blurred, w, h, 1);
+        }
+        for (int k = 0; k < N_GAMMAS; k++) {
+            char name[32];
+            snprintf(name, sizeof(name), "gamma-%g.pgm", (double)radial_gammas[k]);
+            status |= write_pnm(outdir, name, gam[k].blurred, w, h, 1);
+        }
+        f = open_out(outdir, "radial.json");
+    }
+    if (f) {
+        json_t j = {f, 0};
+        json_int(&j, "width", w);
+        json_int(&j, "height", h);
+        json_double(&j, "center_x", def.center_x);
+        json_double(&j, "center_y", def.center_y);
+        json_double(&j, "radius", def.radius);
+        json_double(&j, "min_mean_variance", PH_RADIAL_MIN_MEAN_VARIANCE);
+        json_double(&j, "min_relative_spread", PH_RADIAL_MIN_RELATIVE_SPREAD);
+        json_key(&j, "default");
+        radial_json(f, &def, 1);
+        json_floats(&j, "lines", lines, def.projections * def.samples);
+        json_key(&j, "sigmas");
+        for (int k = 0; k < N_SIGMAS; k++) {
+            fputs(k ? ", " : "[", f);
+            radial_json(f, &sig[k], 1);
+        }
+        fputs("]", f);
+        json_key(&j, "gammas");
+        for (int k = 0; k < N_GAMMAS; k++) {
+            fputs(k ? ", " : "[", f);
+            radial_json(f, &gam[k], 1);
+        }
+        fputs("]", f);
+        json_hexbytes(&j, "digest_load_grayscale", dec.digest, PH_RADIAL_COEFFS);
+        json_end(&j);
+        status |= fclose(f) != 0;
+    }
+    free(lines);
+    radial_free(&def);
+    radial_free(&dec);
+    for (int k = 0; k < N_SIGMAS; k++) {
+        radial_free(&sig[k]);
+    }
+    for (int k = 0; k < N_GAMMAS; k++) {
+        radial_free(&gam[k]);
+    }
+    return bad || !f ? 1 : status;
+}
+
+/* --8<-- [start:radial-profiles] */
+/* site_stages radial-profiles <reference> <image>...: for every image, the default
+ * Radial's variance profile and digest, recomputed from its stages and checked against
+ * ph_compute_radial_hash(), and the digest compared with the reference's by
+ * ph_radial_similarity() (null where the library refuses, an image with no angular
+ * structure): one JSON line per image, the reference first. */
+static int radial_profiles(int argc, char **argv) {
+    ph_digest_t ref = {0};
+    for (int i = 0; i < argc; i++) {
+        ph_context_t *ctx = NULL;
+        if (load(&ctx, argv[i])) {
+            return 1;
+        }
+        radial_stages_t s;
+        int bad = radial_run(ctx, PH_RADIAL_PROJECTIONS, PH_RADIAL_SAMPLES, PH_RADIAL_DEFAULT_SIGMA,
+                             1.0f, &s);
+        ph_digest_t d;
+        bad = bad || ph_compute_radial_hash(ctx, &d) != PH_SUCCESS;
+        ph_free(ctx);
+        if (bad) {
+            radial_free(&s);
+            return 1;
+        }
+        if (i == 0) {
+            ref = d;
+        }
+        json_t j = {stdout, 0};
+        json_string(&j, "file", argv[i]);
+        json_key(&j, "radial");
+        radial_json(stdout, &s, 1);
+        double pcc = 0.0;
+        if (ph_radial_similarity(&ref, &d, &pcc) == PH_SUCCESS) {
+            json_double(&j, "similarity", pcc);
+        } else {
+            json_null(&j, "similarity");
+        }
+        json_end(&j);
+        radial_free(&s);
+    }
+    return 0;
+}
+
+/* --8<-- [end:radial-profiles] */
+
+/* --8<-- [start:radial-variants] */
+/* The settings `site_stages radial-variants` hashes every image with: the default first,
+ * then one setting changed at a time. */
+static const struct {
+    const char *name;
+    int projections, samples;
+    float sigma, gamma;
+} radial_variants_list[] = {
+    {"default", PH_RADIAL_PROJECTIONS, PH_RADIAL_SAMPLES, PH_RADIAL_DEFAULT_SIGMA, 1.0f},
+    {"sigma_1", PH_RADIAL_PROJECTIONS, PH_RADIAL_SAMPLES, 1.0f, 1.0f},
+    {"sigma_8", PH_RADIAL_PROJECTIONS, PH_RADIAL_SAMPLES, 8.0f, 1.0f},
+    {"gamma_0.5", PH_RADIAL_PROJECTIONS, PH_RADIAL_SAMPLES, PH_RADIAL_DEFAULT_SIGMA, 0.5f},
+    {"gamma_2", PH_RADIAL_PROJECTIONS, PH_RADIAL_SAMPLES, PH_RADIAL_DEFAULT_SIGMA, 2.0f},
+    {"grid_40x32", 40, 32, PH_RADIAL_DEFAULT_SIGMA, 1.0f},
+    {"grid_90x64", 90, 64, PH_RADIAL_DEFAULT_SIGMA, 1.0f},
+    {"grid_360x256", 360, 256, PH_RADIAL_DEFAULT_SIGMA, 1.0f},
+    {"grid_1440x1024", 1440, 1024, PH_RADIAL_DEFAULT_SIGMA, 1.0f},
+    {"grid_4096x4096", PH_RADIAL_MAX_PROJECTIONS, PH_RADIAL_MAX_SAMPLES, PH_RADIAL_DEFAULT_SIGMA,
+     1.0f},
+};
+
+/* site_stages radial-variants <image>...: every image's Radial digest under each setting
+ * of radial_variants_list[], as ph_compute_radial_hash() computes it: one JSON line per
+ * image. */
+static int radial_variants(int argc, char **argv) {
+    for (int i = 0; i < argc; i++) {
+        ph_context_t *ctx = NULL;
+        if (load(&ctx, argv[i])) {
+            return 1;
+        }
+        json_t j = {stdout, 0};
+        json_string(&j, "file", argv[i]);
+        for (size_t k = 0; k < sizeof(radial_variants_list) / sizeof(radial_variants_list[0]);
+             k++) {
+            ph_digest_t d;
+            if (!radial_settings(ctx, radial_variants_list[k].projections,
+                                 radial_variants_list[k].samples, radial_variants_list[k].sigma,
+                                 radial_variants_list[k].gamma) ||
+                ph_compute_radial_hash(ctx, &d) != PH_SUCCESS) {
+                ph_free(ctx);
+                return fail("ph_compute_radial_hash failed", radial_variants_list[k].name);
+            }
+            json_hexbytes(&j, radial_variants_list[k].name, d.data, d.size);
+        }
+        json_end(&j);
+        ph_free(ctx);
+    }
+    return 0;
+}
+
+/* --8<-- [end:radial-variants] */
+
 /* --8<-- [start:compare] */
 /* One algorithm's comparison of two digests by its own metric; 0 when it does not apply. */
 static int compare(const ph_digest_t *a, const ph_digest_t *b, double *out) {
@@ -1463,6 +1836,19 @@ static int time_mhash_size(ph_context_t *ctx, const char *path, int size) {
            bad;
 }
 
+/* Radial with the settings of radial_variants_list[arg]. */
+static int time_radial(ph_context_t *ctx, const char *path, int arg) {
+    (void)path;
+    ph_digest_t d;
+    int bad = !radial_settings(ctx, radial_variants_list[arg].projections,
+                               radial_variants_list[arg].samples, radial_variants_list[arg].sigma,
+                               radial_variants_list[arg].gamma) ||
+              ph_compute_radial_hash(ctx, &d) != PH_SUCCESS;
+    return !radial_settings(ctx, PH_RADIAL_PROJECTIONS, PH_RADIAL_SAMPLES, PH_RADIAL_DEFAULT_SIGMA,
+                            1.0f) ||
+           bad;
+}
+
 static const time_case_t time_cases[] = {
     {"decode", time_decode, 0},
     {"ahash", time_hash, PH_ALGO_AHASH},
@@ -1482,6 +1868,14 @@ static const time_case_t time_cases[] = {
     {"mhash_size_1024", time_mhash_size, 1024},
     {"mhash_size_2048", time_mhash_size, 2048},
     {"mhash_size_4096", time_mhash_size, 4096},
+    {"radial_sigma_1", time_radial, 1},
+    {"radial_sigma_8", time_radial, 2},
+    {"radial_gamma_2", time_radial, 4},
+    {"radial_grid_40x32", time_radial, 5},
+    {"radial_grid_90x64", time_radial, 6},
+    {"radial_grid_360x256", time_radial, 7},
+    {"radial_grid_1440x1024", time_radial, 8},
+    {"radial_grid_4096x4096", time_radial, 9},
 };
 
 static int cmp_double(const void *a, const void *b) {
@@ -1583,6 +1977,9 @@ static const struct {
     {"mhash-direct", "<image>...", 1, 1, mhash_direct},
     {"bmh", "<image> <outdir>", 2, 0, stages_bmh},
     {"bmh-variants", "<image>...", 1, 1, bmh_variants},
+    {"radial", "<image> <outdir>", 2, 0, stages_radial},
+    {"radial-profiles", "<reference> <image>...", 1, 1, radial_profiles},
+    {"radial-variants", "<image>...", 1, 1, radial_variants},
     {"measure", "<reference> <variant>...", 2, 1, measure},
     {"pairs", "<image> <image>...", 2, 1, pairs},
     {"corpus", "<outdir>", 1, 0, corpus},

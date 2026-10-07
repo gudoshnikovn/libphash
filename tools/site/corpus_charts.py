@@ -1,9 +1,11 @@
 """What a corpus measurement shows on an algorithm's page: robustness as a spread over the
 corpus, and separability, the gap between copies and different images.
 
-Each algorithm page module says how its metric reads: BITS for a bit hash (the chart
-shows the bits that differ, lower is closer); a module with BITS = None names its own
-METRIC label and LOWER_IS_CLOSER.
+Each algorithm page module says how its metric reads (measure.metric()): BITS for a bit
+hash (the chart shows the bits that differ, lower is closer); a module with BITS = None
+names its own METRIC, LOWER_IS_CLOSER, METRIC_RANGE and FORMAT. A comparison the library
+refuses (None, Radial's image with no angular structure) is left out, and the tables say
+how many.
 """
 import os
 
@@ -11,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from common import save, style_axes
-from measure import bits_that_differ
+from measure import metric, reference_line, reference_note, robust_limits
 from transforms import content_edits, transforms
 
 # --8<-- [start:copies]
@@ -31,20 +33,6 @@ COPY_STRENGTHS = {
 # --8<-- [end:copies]
 
 RECALL = 0.95
-
-
-def num(v):
-    """A value as a table shows it: a bit count from a similarity carries float noise
-    (9.49997), so one decimal at most."""
-    return f"{round(float(v), 1):g}"
-
-
-def metric(mod):
-    """(axis label, lower is closer, raw value -> value on the chart, axis limits)."""
-    if mod.BITS:
-        return ("bits that differ", True, lambda v: bits_that_differ(v, mod.BITS),
-                (0, mod.BITS))
-    return (mod.METRIC, mod.LOWER_IS_CLOSER, lambda v: v, mod.METRIC_RANGE)
 
 
 # --8<-- [start:separability]
@@ -80,15 +68,20 @@ def copies_and_different(data, algo, convert):
 def corpus_robustness_figure(datasets, algo, mod, out_dir):
     """Small multiples, one panel per transform: the median over each corpus, with the
     band from the 25th to the 75th percentile."""
-    label, _, convert, limits = metric(mod)
+    label, _, convert, limits, _ = metric(mod)
     specs = transforms()
     available = [(k, d) for k, d in datasets if d["n"]]
+    if not mod.BITS:
+        limits = robust_limits(mod, [convert(x) for _, d in available
+                                     for points in d["robust"][algo].values()
+                                     for _, values in points for x in values if x is not None])
 
     def fig(c):
         colors = {"photos": c["accent"], "synthetic": c["accent2"]}
         figure, axes = plt.subplots(3, 3, figsize=(10, 7.6), sharey=True)
         for ax, (name, xlabel, steps) in zip(axes.flat, specs):
             xs = list(range(len(steps)))
+            reference_line(ax, mod, c)
             for key, data in available:
                 med, lo, hi = [], [], []
                 for strength, values in data["robust"][algo][name]:
@@ -101,7 +94,8 @@ def corpus_robustness_figure(datasets, algo, mod, out_dir):
                 ax.plot(xs, med, color=colors[key], linewidth=2, marker="o", markersize=4,
                         solid_capstyle="round")
             ax.set_xticks(xs, [f"{s:g}" for s, _ in steps])
-            ax.set_ylim(limits[0], limits[0] + (limits[1] - limits[0]) / 2)
+            ax.set_ylim(limits[0], limits[0] + (limits[1] - limits[0]) / 2 if mod.BITS
+                        else limits[1])
             ax.set_title(name, color=c["ink"], fontsize=10)
             ax.set_xlabel(xlabel, color=c["muted"], fontsize=9)
             style_axes(ax, c)
@@ -115,7 +109,7 @@ def corpus_robustness_figure(datasets, algo, mod, out_dir):
                       bbox_to_anchor=(0.5, 1.0))
         missing = [d for k, d in datasets if not d["n"]]
         note = ("Line: median over the corpus; band: the middle half of its images "
-                "(25th to 75th percentile).")
+                "(25th to 75th percentile)." + reference_note(mod))
         if missing:
             note += " The photographs were not available to this build."
         figure.text(0.5, -0.01, note, ha="center", color=c["muted"], fontsize=9)
@@ -127,7 +121,7 @@ def corpus_robustness_figure(datasets, algo, mod, out_dir):
 def separability_figure(datasets, algo, mod, out_dir):
     """Per corpus, the distribution of copies against the distribution of different
     images, on one axis, with the threshold that keeps RECALL of the copies."""
-    label, lower, convert, limits = metric(mod)
+    label, lower, convert, limits, fmt = metric(mod)
 
     def fig(c):
         figure, axes = plt.subplots(1, len(datasets), figsize=(10, 3.6), sharey=False)
@@ -150,18 +144,25 @@ def separability_figure(datasets, algo, mod, out_dir):
                 hist, edges = np.histogram(values, bins=bins, weights=w)
                 ax.stairs(hist, edges, color=color, linewidth=1.5)
                 peak = int(np.argmax(hist))
-                # A label beside its peak, on the side away from the y axis.
-                at_edge = peak < len(hist) // 8
+                # A label beside its peak, on the side away from the edge it is near.
+                at_left = peak < len(hist) // 8
+                at_right = peak >= len(hist) - len(hist) // 8
                 ax.annotate(name, ((edges[peak] + edges[peak + 1]) / 2, hist[peak]),
-                            xytext=(8 if at_edge else 0, -4 if at_edge else 4),
-                            textcoords="offset points", ha="left" if at_edge else "center",
-                            va="top" if at_edge else "bottom", color=c["ink"], fontsize=9,
+                            xytext=(8 if at_left else -8 if at_right else 0,
+                                    -4 if at_left or at_right else 4),
+                            textcoords="offset points",
+                            ha="left" if at_left else "right" if at_right else "center",
+                            va="top" if at_left or at_right else "bottom", color=c["ink"],
+                            fontsize=9,
                             bbox={"facecolor": c["surface"], "edgecolor": "none", "pad": 1})
             ax.axvline(t, color=c["ink"], linewidth=1, linestyle=(0, (4, 3)))
-            ax.annotate(f"threshold {num(t)}: accepts\n{RECALL:.0%} of copies and\n"
+            # The threshold's label on the side of the different images.
+            ax.annotate(f"threshold {fmt(t)}: accepts\n{RECALL:.0%} of copies and\n"
                         f"{share(fmr, len(different))} of different pairs",
-                        (t, 0.97), xycoords=("data", "axes fraction"), xytext=(6, 0),
-                        textcoords="offset points", va="top", color=c["ink"], fontsize=8.5)
+                        (t, 0.97), xycoords=("data", "axes fraction"),
+                        xytext=(6 if lower else -6, 0), textcoords="offset points",
+                        ha="left" if lower else "right", va="top", color=c["ink"],
+                        fontsize=8.5)
             # Headroom above the tallest bar for the threshold's label.
             ax.set_ylim(0, ax.get_ylim()[1] * 1.45)
             ax.set_title(f"{data['label']}\nd′ = {dprime:.2f}", color=c["ink"], fontsize=9.5)
@@ -181,9 +182,28 @@ def share(fraction, n):
     return f"{fraction:.1%}" if fraction >= 0.001 else f"{k} of {n:,}"
 
 
+def refused_note(datasets, algo, mod):
+    """A sentence on the comparisons the library refused and the charts leave out, per
+    corpus; empty when there are none."""
+    parts = []
+    for _, data in datasets:
+        if not data["n"]:
+            continue
+        copies = sum(v is None for points in data["robust"][algo].values()
+                     for _, values in points for v in values)
+        pairs = sum(v is None for v in data["different"][algo])
+        if copies or pairs:
+            parts.append(f"{data['label']}: {copies} edited images and {pairs} pairs of "
+                         "different images")
+    if not parts:
+        return ""
+    return (f"Left out, because the comparison refuses {mod.REFUSED}: " + "; ".join(parts)
+            + ".")
+
+
 def corpus_tables(datasets, algo, mod, out_dir):
     """The numbers behind both corpus figures, as Markdown."""
-    label, lower, convert, _ = metric(mod)
+    label, lower, convert, _, fmt = metric(mod)
     lines = []
     lines += ["| Corpus | Copies | Different pairs | d′ | Threshold | Different pairs within it |",
               "|---|---|---|---|---|---|"]
@@ -194,7 +214,10 @@ def corpus_tables(datasets, algo, mod, out_dir):
         copies, different = copies_and_different(data, algo, convert)
         dprime, t, fmr = separability(copies, different, lower)
         lines.append(f"| {data['label']} | {len(copies)} | {len(different)} | {dprime:.2f} | "
-                     f"{num(t)} | {share(fmr, len(different))} |")
+                     f"{fmt(t)} | {share(fmr, len(different))} |")
+    refused = refused_note(datasets, algo, mod)
+    if refused:
+        lines += ["", refused]
     lines += ["", f"Median {label} over each corpus, with the 25th and 75th percentiles:", ""]
     present = [(k, d) for k, d in datasets if d["n"]]
     lines.append("| Transform | Strength | " + " | ".join(d["label"] for _, d in present) + " |")
@@ -205,7 +228,7 @@ def corpus_tables(datasets, algo, mod, out_dir):
             for _, data in present:
                 v = [convert(x) for x in data["robust"][algo][name][i][1] if x is not None]
                 q = np.percentile(v, [25, 50, 75])
-                cells.append(f"{num(q[1])} ({num(q[0])}–{num(q[2])})")
+                cells.append(f"{fmt(q[1])} ({fmt(q[0])}–{fmt(q[2])})")
             lines.append(f"| {name} | {strength:g} | " + " | ".join(cells) + " |")
     path = os.path.join(out_dir, algo, "corpus-table.md")
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -239,7 +262,7 @@ def edits_figure(datasets, algo, mod, out_dir):
     """One panel per edit that changes the picture: the median over each corpus with the
     band of its middle half, against the threshold that accepts RECALL of that corpus's
     copies; an edit below its corpus's line would be taken for a copy."""
-    label, lower, convert, limits = metric(mod)
+    label, lower, convert, limits, _ = metric(mod)
     specs = content_edits()
     available = [(k, d) for k, d in datasets if d["n"]]
     thresholds = {k: separability(*copies_and_different(d, algo, convert), lower)[1]
@@ -291,7 +314,8 @@ def edits_figure(datasets, algo, mod, out_dir):
         figure.legend(handles, names, loc="upper center", ncol=2, frameon=False,
                       labelcolor=c["ink"], fontsize=9, bbox_to_anchor=(0.5, 1.02))
         note = ("Line or dot: median over the corpus; band: the middle half of its images. "
-                "Below its corpus's dashed line, an edited image would be taken for a copy.")
+                f"{'Below' if lower else 'Above'} its corpus's dashed line, an edited image "
+                "would be taken for a copy.")
         if len(available) < len(datasets):
             note += " The photographs were not available to this build."
         figure.text(0.5, -0.02, note, ha="center", color=c["muted"], fontsize=9)
@@ -303,7 +327,7 @@ def edits_figure(datasets, algo, mod, out_dir):
 def edits_table(datasets, algo, mod, out_dir):
     """The numbers behind edits_figure(): per corpus, the median with its quartiles, and
     the share of edited images the copies' threshold accepts."""
-    label, lower, convert, _ = metric(mod)
+    label, lower, convert, _, fmt = metric(mod)
     present = [(k, d) for k, d in datasets if d["n"]]
     short = {"photos": "Photographs", "synthetic": "Synthetic"}
     head = "| Edit | " + " | ".join(
@@ -322,7 +346,7 @@ def edits_table(datasets, algo, mod, out_dir):
                 q = np.percentile(values, [25, 50, 75])
                 t = thresholds[key]
                 accepted = np.mean([(v <= t) if lower else (v >= t) for v in values])
-                cells += [f"{num(q[1])} ({num(q[0])}–{num(q[2])})", f"{accepted:.0%}"]
+                cells += [f"{fmt(q[1])} ({fmt(q[0])}–{fmt(q[2])})", f"{accepted:.0%}"]
             lines.append(f"| {_edit(name, strength)} | " + " | ".join(cells) + " |")
     if not present:
         lines = [f"{LABEL_MISSING}."]

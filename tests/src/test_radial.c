@@ -153,10 +153,10 @@ void test_radial_with_real_rotation() {
 /* Rotation on real photographs, which is where the algorithm's claim has to hold.
  *
  * The source is credited with robustness to rotation, and this measures what that
- * amounts to. Measured on tests/data/photo.jpeg, against a 0.6924 baseline for an
- * unrelated image: 1 degree 0.9932, 2 degrees 0.9745, 3 degrees 0.9444, 5 degrees 0.8703,
- * 10 degrees 0.6892, 15 degrees 0.4371, 90 degrees 0.2434, 180 degrees 0.9927. On the
- * smoother photo_complex.png the same sweep holds to 10 degrees (0.9385).
+ * amounts to. Measured on tests/data/photo.jpeg, against 0.8639 for photo_complex.png:
+ * 1 degree 0.9948, 2 degrees 0.9797, 3 degrees 0.9572, 15 degrees 0.5256, 90 degrees
+ * 0.3518, 180 degrees 0.9984. On the smoother photo_complex.png the same sweep holds to
+ * 10 degrees (0.94).
  *
  * So: a few degrees of rotation, which is the kind a rescan or a re-encode introduces and
  * the kind the perceptual-hashing literature evaluates, and an exact half turn. Not

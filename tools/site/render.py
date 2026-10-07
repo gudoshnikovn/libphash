@@ -25,6 +25,7 @@ import algo_bmh
 import algo_dhash
 import algo_mhash
 import algo_phash
+import algo_radial
 import algo_whash
 from corpus import measure_corpus
 from corpus_charts import (corpus_robustness_figure, corpus_tables, edits_examples, edits_figure,
@@ -33,7 +34,7 @@ from measure import measure_robustness, robustness_figure, robustness_table
 from timing import measure_timing, write_timing
 
 ALGORITHMS = {m.ALGO: m for m in (algo_ahash, algo_dhash, algo_phash, algo_whash, algo_mhash,
-                                     algo_bmh)}
+                                     algo_bmh, algo_radial)}
 
 
 def main():
@@ -55,8 +56,8 @@ def main():
     data = measure_robustness(args.tool, args.image)
     caption = "One image, the example above; each transform applied alone to the original."
     for name in names:
-        robustness_figure(data, name, args.out, ALGORITHMS[name].BITS, caption)
-        robustness_table(data, name, args.out, ALGORITHMS[name].BITS)
+        robustness_figure(data, name, args.out, ALGORITHMS[name], caption)
+        robustness_table(data, name, args.out, ALGORITHMS[name])
     datasets = [(c, measure_corpus(args.tool, c)) for c in ("synthetic", "photos")]
     for name in names:
         corpus_robustness_figure(datasets, name, ALGORITHMS[name], args.out)

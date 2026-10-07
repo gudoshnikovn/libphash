@@ -64,42 +64,84 @@ def bits_that_differ(similarity, bits_total):
 # --8<-- [end:bits]
 
 
-def robustness_figure(data, algo, out_dir, bits_total, caption):
-    """Small multiples, one panel per transform: bits that differ from the original."""
-    specs = transforms()
+def metric(mod):
+    """How an algorithm page module's metric reads: (axis label, lower is closer, raw value
+    -> value on the chart, the metric's range, format of one value).
 
-    # Half the bits is where unrelated images land; an edit can go a little past it.
-    top = max([bits_total / 2] + [bits_that_differ(v, bits_total) * 1.05
-                                  for name, _, _ in specs for _, v in data[algo][name]
-                                  if v is not None])
+    A bit hash sets BITS, and its charts show the bits that differ, lower closer. A
+    module with BITS = None names its own METRIC, LOWER_IS_CLOSER, METRIC_RANGE and
+    FORMAT, and the raw value is the chart's value.
+    """
+    if mod.BITS:
+        return ("bits that differ", True, lambda v: bits_that_differ(v, mod.BITS),
+                (0, mod.BITS), lambda v: f"{round(float(v), 1):g}")
+    return (mod.METRIC, mod.LOWER_IS_CLOSER, lambda v: v, mod.METRIC_RANGE,
+            lambda v: mod.FORMAT.format(v))
+
+
+def robust_limits(mod, values=()):
+    """The y range of a robustness chart. For bits, half of them, where unrelated images
+    land, raised if an edit goes past it; for another metric, its whole range, widened to
+    any value outside it."""
+    if mod.BITS:
+        return 0, max([mod.BITS / 2] + [v * 1.05 for v in values])
+    lo, hi = mod.METRIC_RANGE
+    return min([lo] + list(values)), max([hi] + list(values))
+
+
+def reference_line(ax, mod, c):
+    """The module's REFERENCE, a value the metric is read against (Radial's threshold), as
+    a dashed line; nothing for a module without one. reference_note() names it."""
+    ref = getattr(mod, "REFERENCE", None)
+    if ref:
+        ax.axhline(ref[0], color=c["muted"], linewidth=1, linestyle=(0, (4, 3)))
+
+
+def reference_note(mod):
+    """The caption's sentence for reference_line(); empty without one."""
+    ref = getattr(mod, "REFERENCE", None)
+    return f" Dashed: {ref[1]}, {ref[0]:g}." if ref else ""
+
+
+def robustness_figure(data, algo, out_dir, mod, caption):
+    """Small multiples, one panel per transform: the algorithm's metric against the
+    original (for a bit hash, the bits that differ)."""
+    specs = transforms()
+    label, _, convert, _, _ = metric(mod)
+    limits = robust_limits(mod, [convert(v) for name, _, _ in specs for _, v in data[algo][name]
+                                 if v is not None])
 
     def fig(c):
         figure, axes = plt.subplots(3, 3, figsize=(10, 7.2), sharey=True)
         for ax, (name, xlabel, _) in zip(axes.flat, specs):
-            pts = [(s, bits_that_differ(v, bits_total)) for s, v in data[algo][name]
-                   if v is not None]
+            pts = [(s, convert(v)) for s, v in data[algo][name] if v is not None]
             xs = list(range(len(pts)))
+            reference_line(ax, mod, c)
             ax.plot(xs, [p[1] for p in pts], color=c["accent"], linewidth=2, marker="o",
                     markersize=4.5, solid_capstyle="round")
             ax.set_xticks(xs, [f"{p[0]:g}" for p in pts])
-            ax.set_ylim(0, top)
+            ax.set_ylim(*limits)
             ax.set_title(name, color=c["ink"], fontsize=10)
             ax.set_xlabel(xlabel, color=c["muted"], fontsize=9)
             style_axes(ax, c)
         for ax in axes[:, 0]:
-            ax.set_ylabel("bits that differ", color=c["muted"], fontsize=9)
-        figure.text(0.5, -0.03, caption, ha="center", color=c["muted"], fontsize=9)
+            ax.set_ylabel(label, color=c["muted"], fontsize=9)
+        figure.text(0.5, -0.03, caption + reference_note(mod), ha="center", color=c["muted"],
+                    fontsize=9)
         figure.tight_layout()
         return figure
 
     save(fig, os.path.join(out_dir, algo), "robustness")
 
 
-def robustness_table(data, algo, out_dir, bits_total):
-    lines = ["| Transform | Strength | Bits that differ |", "|---|---|---|"]
+def robustness_table(data, algo, out_dir, mod):
+    label, _, convert, _, fmt = metric(mod)
+    head = "Bits that differ" if mod.BITS else label[0].upper() + label[1:]
+    lines = [f"| Transform | Strength | {head} |", "|---|---|---|"]
     for name, _, _ in transforms():
         for strength, value in data[algo][name]:
-            cell = "—" if value is None else f"{round(bits_that_differ(value, bits_total))}"
+            cell = ("—" if value is None else f"{round(convert(value))}" if mod.BITS
+                    else fmt(value))
             lines.append(f"| {name} | {strength:g} | {cell} |")
     path = os.path.join(out_dir, algo, "robustness-table.md")
     os.makedirs(os.path.dirname(path), exist_ok=True)

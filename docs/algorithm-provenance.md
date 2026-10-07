@@ -624,7 +624,7 @@ other.
 | Radius capped at `min(w,h)/2` | deliberate | Keeps every projection inside the image. The source does not normalize resolution and does not discuss the cap. |
 | Grayscale coefficients | pinned | As for aHash — see §1. |
 | Coefficients quantized by their own min and max | deliberate, and pHash's | Not in the paper, which says nothing about quantization. It is what pHash's `ph_dct()` does, it keeps the sign, and it makes the digest invariant to a rescaling of the whole variance vector. |
-| All-zero digest below a variance of 0.001 on every projection | pinned | Not in the source, and the source could not supply one — it does not discuss degenerate input. `0.001` is chosen, not inherited: small enough that no real image's projection variance falls under it (measured against the full test corpus), large enough to catch the residual floating-point noise a genuinely flat image leaves in `ph_projection_variance()`. Without it the min-max quantizer would stretch that noise across the whole byte range and manufacture detail that is not there. |
+| All-zero digest for a profile without angular structure: mean variance at most 1e-6 gray levels², or a spread across angles of at most 1 % of the mean | pinned | Not in the source, and the source could not supply one — it does not discuss degenerate input. Both bounds are chosen, not inherited, and measured next to `PH_RADIAL_MIN_RELATIVE_SPREAD`: a flat image leaves interpolation residue around 1e-8, and below a relative spread of 1e-4 the digest of an image correlates with that of the same image plus ±2 levels of noise at 0.4–0.7, where it describes the rounding rather than the image. Without the bound the standardization and the min-max quantizer would stretch that noise across the whole byte range and manufacture detail that is not there. The bound is relative, so a faint pattern keeps a digest of its own. |
 
 ### What "robust to rotation" amounts to here, measured
 
@@ -639,12 +639,11 @@ exactly 90 places** — the rotation is in there, cleanly and completely.
 The hash is not that vector. It is 40 DCT coefficients of it, and the DCT is not
 shift-equivariant: a cyclic shift of a signal is not a cyclic shift of its transform. So
 what survives is a transform's tolerance to a small perturbation, not invariance to an
-arbitrary rotation. Measured on `tests/data/photo.jpeg` with the source's comparison and
-its 0.9 threshold, against 0.69 for an unrelated image:
-
-| rotation | 1° | 2° | 3° | 5° | 10° | 15° | 90° | 180° |
-|---|---|---|---|---|---|---|---|---|
-| peak cross-correlation | 0.993 | 0.975 | 0.944 | 0.870 | 0.689 | 0.437 | 0.243 | 0.993 |
+arbitrary rotation. On `tests/data/photo.jpeg`, with the source's comparison and its 0.9
+threshold, the score is 0.995 at 1°, 0.957 at 3°, 0.53 at 15°, 0.35 at a quarter turn
+and 0.998 at a half turn (`test_radial_rotation_on_a_photograph`), where the variance
+profiles of the same pairs, compared at their best shift, stay above 0.998 at every whole
+degree ([measured](theory/radial.md#turning-the-image)).
 
 A few degrees — the kind a rescan, a crop-and-straighten or a re-encode introduces, and
 the kind the perceptual-hashing literature evaluates — and an exact half turn. The half

@@ -270,14 +270,14 @@ const float *ph_get_dct_matrix_32(void);
  * (squared L2 over the 40 bytes) against a 16384 x 16384 reference:
  *
  *   projections x samples   time      squared L2 to the reference
- *     180 x  128 (default)   0.6 ms    146 / 272
- *    1440 x 1024             5.5 ms      8 /  17
+ *     180 x  128 (default)   0.6 ms    147 / 272
+ *    1440 x 1024             5.5 ms      7 /  17
  *    4096 x 4096              56 ms      4 /   2
  *
- * 4096 x 4096 is already within one or two units per coefficient of a grid 16 times as
- * fine, and its cost, 56 ms, is that of decoding a large JPEG. A higher ceiling would buy
- * no information and would let a configuration taken from an untrusted source spend
- * seconds of CPU on one call, which cannot be cancelled.
+ * 4096 x 4096 is already within one unit per coefficient of a grid 16 times as fine, and its cost,
+ * 56 ms, is that of decoding a large JPEG. A higher ceiling would buy no information and would let
+ * a configuration taken from an untrusted source spend seconds of CPU on one call, which cannot be
+ * cancelled.
  *
  * The lower bound on projections is a hard one: a DCT of an n-element vector has n
  * coefficients, so fewer angles than PH_RADIAL_COEFFS cannot produce the hash at all. */

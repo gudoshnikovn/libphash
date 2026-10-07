@@ -414,33 +414,18 @@ PH_API void ph_free(ph_context_t *ctx);
 /**
  * @brief Sets the gamma value applied by ph_compute_radial_hash(), and by nothing else.
  *
- * Applied per image, not through a precomputed table: `out = (in / max)^gamma * max`,
- * where `max` is the largest value already present in the blurred grayscale buffer.
- * Default value is 1.0 -- an identity transform, exactly, for any image, because
- * `(v/max)^1.0 * max == v` algebraically whenever `max > 0`.
+ * Applied to the blurred grayscale image before the radial projections:
+ * `out = (in / max)^gamma * max`, where `max` is the brightest value in it, as pHash
+ * applies it. The default, 1.0, is the identity, and the step is skipped.
  *
  * @warning Despite living on the context, this setting affects **only** the Radial
- *          hash, applied to the blurred grayscale buffer before the radial projections
- *          are taken. aHash, dHash, pHash, wHash, mHash, BMH, ColorHash and
- *          ColorMoments ignore it entirely.
- *
- * @note This follows pHash's own default (`ph_compare_images()`, aetilius/pHash)
- *       exactly: gamma defaults to 1.0, pixels are raised to `gamma` directly, and the
- *       buffer is normalized by its own maximum before the power step and rescaled by
- *       the same maximum after, so a gamma value ported from pHash means the same thing
- *       here. See docs/algorithm-provenance.md section 7.
- *
- * @note Gamma is deliberately confined to Radial: none of the reference implementations
- *       this library follows applies it to the other algorithms (ImageHash applies no
- *       gamma at all).
+ *          hash; every other algorithm ignores it. See docs/theory/radial.md.
  *
  * @param ctx The context.
- * @param gamma The gamma value (e.g., 1.0). Must be finite and in (0.001, 1000].
+ * @param gamma The gamma value (e.g., 1.0). Must be finite and in (0.001, 1000]; NaN and
+ *        infinities are rejected.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
  *         out-of-range @p gamma.
- *
- * @note Non-finite values (NaN, +/-infinity) are rejected: a NaN gamma compares false
- *       against both bounds and would otherwise pass.
  * @ingroup params
  */
 PH_API ph_error_t ph_context_set_gamma(ph_context_t *ctx, float gamma);
@@ -505,37 +490,23 @@ PH_API ph_error_t ph_context_set_phash_params(ph_context_t *ctx, int dct_size, i
 /**
  * @brief Sets Radial Hash parameters.
  *
- * The projections cost projections * samples bilinear samples, whatever the image size
- * (the blur before them grows with the image), and the digest converges long before the
- * ceilings. Measured on a 400 x 400
- * photograph, squared L2 distance of the 40-byte digest to a 16384 x 16384 reference:
- *
- * | projections x samples | time    | squared L2 to the reference |
- * |-----------------------|---------|-----------------------------|
- * | 180 x 128 (default)   | 0.6 ms  | 146                         |
- * | 1440 x 1024           | 5.5 ms  | 8                           |
- * | 4096 x 4096 (maximum) | 56 ms   | 4                           |
- *
- * Values above the point of convergence do not add information.
+ * The digest is 40 bytes whatever the settings, so digests computed with different ones
+ * cannot be told apart by size; compare only digests computed alike. The cost of the
+ * projections is projections * samples, whatever the image size, and the digest converges
+ * long before the upper bounds, which keep a configuration from an untrusted source from
+ * costing seconds per call. See docs/theory/radial.md.
  *
  * @param ctx The context.
- * @param projections Number of angular projections over [0, pi), 40..4096
- *        (default 180). This is the number of **angles** only: the digest is always 40
- *        bytes, the first 40 coefficients of a DCT of the projection vector, as the
- *        algorithm's source specifies. The lower bound is the coefficient count (a
- *        DCT of an n-element vector has n coefficients).
- * @param samples Number of samples per projection, 2..4096 (default 128). The
- *        lower bound is 2, not 1: variance of a single observation is 0 by definition, so
- *        samples == 1 makes every projection's variance 0 regardless of image content,
- *        and the digest is the all-zero "no structure" answer for every image. 2 is the
- *        smallest count for which a projection's variance can be nonzero.
- * @param sigma Gaussian blur sigma applied before the projections are taken, in
- *        (0, 64/3] (default 3.5, pHash's own header default -- see
- *        ph_context_set_gamma()). The upper bound is where the underlying blur's kernel radius,
- * ceil(3*sigma), reaches its fixed-buffer cap of 64 -- a larger sigma would be silently narrower
- * than requested, which this setter refuses rather than clamp.
+ * @param projections Number of lines through the center, spread over [0, pi), 40..4096
+ *        (default 180). Fewer than 40 would give fewer than the 40 DCT coefficients the
+ *        digest holds.
+ * @param samples Points read on each line, 2..4096 (default 128). One point has no
+ *        variance, so every image would have no angular structure.
+ * @param sigma Gaussian blur sigma applied before the projections, in (0, 64/3]
+ *        (default 3.5, pHash's). Above 64/3 the blur's kernel would be silently
+ *        narrower than requested.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
- *         out-of-range value.
+ *         out-of-range value; the configuration is unchanged on error.
  * @ingroup params
  */
 PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projections, int samples,
@@ -1474,16 +1445,13 @@ PH_NODISCARD PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *
  * An image with no angular structure -- blank, or with nearly the same variance along
  * every line, as a radially symmetric one has -- gets an all-zero digest and
  * @c PH_SUCCESS; ph_radial_similarity() answers any comparison with it by
- * @c PH_ERR_NO_STRUCTURE. The threshold is relative to the image's own contrast, so a
- * faint pattern still gets a digest of its own.
+ * @c PH_ERR_NO_STRUCTURE.
  *
  * @warning Compare these digests with ph_radial_similarity(), not with
- *          ph_hamming_distance_digest(), ph_l2_distance() or ph_similarity_digest(). Those
- *          three treat a digest as a bit vector or a point in space; a radial digest is
- *          neither, and comparing it that way reports a rotated image as a different one.
- *          The rotation tolerance the algorithm is known for comes from the comparison,
- *          not from the hash -- and it is a few degrees plus an exact half turn, not
- *          invariance to an arbitrary rotation. See docs/algorithms.md section 8.
+ *          ph_hamming_distance_digest(), ph_l2_distance() or ph_similarity_digest(): the
+ *          bytes are quantized coefficients, not bits or a point in space. The digest
+ *          tolerates a rotation of a few degrees and an exact half turn, not an arbitrary
+ *          one. See docs/theory/radial.md.
  * @return @c PH_SUCCESS (the all-zero digest included), @c PH_ERR_INVALID_ARGUMENT for a
  *         NULL argument, @c PH_ERR_EMPTY_IMAGE if no image is loaded, or
  *         @c PH_ERR_ALLOCATION_FAILED.
@@ -1582,31 +1550,24 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
  * @brief Compares two radial digests the way the algorithm's source specifies: by the
  *        peak of their cross-correlation over all cyclic shifts.
  *
- * A rotation of the image cyclically shifts the radial projection vector, so taking the
- * best shift is what lets a rotated image match. On a photograph that holds for a few
- * degrees of rotation, and exactly for a half turn; it is not invariance to an arbitrary
- * rotation, and docs/algorithm-provenance.md section 7 has the measured profile. Use this for
- * digests from ph_compute_radial_hash() — ph_similarity_digest() and ph_hamming_distance_digest()
- * treat a digest as a bit vector, which a radial digest is not: its bytes are quantized
- * DCT coefficients, and comparing them element-wise reports a rotated image as a
- * different one.
+ * The Pearson correlation of the two digests' bytes, computed with @p b shifted
+ * cyclically by each of 0 to size - 1 places; the largest of them. It runs from -1.0 to
+ * 1.0, and 1.0 means the same profile up to a shift. Compare it against
+ * @c PH_RADIAL_PCC_THRESHOLD, or against your own measured cut. The score is symmetric in
+ * @p a and @p b. See docs/theory/radial.md.
  *
- * The score is a Pearson correlation, so it runs from -1.0 to 1.0 and 1.0 means the two
- * profiles are identical up to a shift. Compare it against @c PH_RADIAL_PCC_THRESHOLD, or
- * against your own measured cut.
- *
- * An image with no angular structure -- a blank one, or one whose variance is nearly the
- * same along every line through its center -- hashes to an all-zero digest. It carries no
- * information for this descriptor, and no score is defined against it: any number would
- * be invented, and 1.0 would call two unrelated faint images identical. Such a pair is
+ * A digest with all bytes equal -- the all-zero digest ph_compute_radial_hash() gives an
+ * image with no angular structure -- has no correlation with anything: any number would
+ * be invented, and 1.0 would call two unrelated flat images identical. Such a pair is
  * answered with @c PH_ERR_NO_STRUCTURE; whether "no data" counts as a match is the
  * caller's decision.
  *
- * @param a,b Digests of equal size, both valid per the contract above.
+ * @param a,b Digests of equal size and kind @c PH_DIGEST_KIND_COEFFICIENTS (or
+ *        unspecified), both valid per the contract above.
  * @param out_pcc Receives the score. Untouched on error.
  * @return @c PH_SUCCESS; @c PH_ERR_NO_STRUCTURE if either digest has all bytes equal;
- *         @c PH_ERR_INVALID_ARGUMENT for a NULL argument, an invalid or empty digest, or
- *         two digests of different sizes.
+ *         @c PH_ERR_INVALID_ARGUMENT for a NULL argument, an invalid or empty digest, two
+ *         digests of different sizes, or a digest of another kind.
  *
  * @note This returns its result through @p out_pcc rather than as the return value, as
  *       the other comparison functions here do. They signal failure with -1.0, and -1.0

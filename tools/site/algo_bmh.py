@@ -1,8 +1,5 @@
 """The figures of docs/theory/bmh.md, from `site_stages bmh` and `site_stages bmh-variants`."""
-import concurrent.futures
-import json
 import os
-import subprocess
 import tempfile
 
 import matplotlib.pyplot as plt
@@ -11,9 +8,8 @@ from PIL import Image
 
 import corpus
 from common import draw_bits, hide_axes, read_pnm, run_stages, save, style_axes
-from corpus_charts import COPY_STRENGTHS, copies_and_different, separability, share
+from corpus_charts import copies_and_different, separability, share
 from measure import bits_that_differ
-from transforms import transforms
 
 ALGO = "bmh"
 BITS = 256  # the robustness chart's scale: bits of the digest at the default block size
@@ -120,7 +116,7 @@ def figures(tool, image, out_dir):
     save(size_fig, out, "sizes")
     _write_load_grayscale(st, out)
 
-    measured = _measure_variants(tool)
+    measured = corpus.measure_settings(tool, "bmh-variants")
     _threshold_figure(tool, measured, out)
     _write_threshold_table(measured, out)
     _sizes_figure_and_table(tool, measured, out)
@@ -138,63 +134,6 @@ def _write_load_grayscale(st, out):
 
 
 # --8<-- [start:variants]
-def _copies(base, tmp, stem):
-    """The copies of the separability measurement: one moderate strength of each of the
-    nine edits (COPY_STRENGTHS), saved as measure.py saves them."""
-    files = []
-    for name, _, steps in transforms():
-        op = dict(steps)[COPY_STRENGTHS[name]]
-        im, (ext, q) = op(base)
-        path = os.path.join(tmp, f"{stem}-{len(files)}.{ext}")
-        im.save(path, **({"quality": q} if ext == "jpg" else {}))
-        files.append(path)
-    return files
-
-
-def _variants_one(args):
-    """One original and its copies, through `site_stages bmh-variants`."""
-    tool, path, tmp, stem = args
-    base = Image.open(path).convert("RGB")
-    ref = os.path.join(tmp, f"{stem}.ppm")
-    base.save(ref)
-    files = [ref] + _copies(base, tmp, stem)
-    rows = subprocess.run([tool, "bmh-variants", *files], check=True, capture_output=True,
-                          text=True).stdout.splitlines()
-    for f in files:
-        os.remove(f)
-    return [{k: v for k, v in json.loads(r).items() if k != "file"} for r in rows]
-
-
-def _measure_variants(tool):
-    """{corpus: {"n", "label", "images": [[original, copy…] digests per image]}}: every
-    original and its nine copies, BMH at every block size of `site_stages bmh-variants`,
-    thresholded at the median and at the mean. Cached like the corpora themselves."""
-    result = {}
-    for key in ("synthetic", "photos"):
-        paths = corpus.images(tool, key, os.path.join(corpus.CACHE, "work"))
-        label = corpus.LABELS[key].format(n=len(paths))
-        if not paths:
-            result[key] = {"n": 0, "label": label, "images": []}
-            continue
-        cache = os.path.join(corpus.CACHE, f"bmh-variants-{key}.json")
-        ck = corpus.cache_key(paths)
-        if os.path.exists(cache):
-            with open(cache) as f:
-                saved = json.load(f)
-            if saved.get("key") == ck:
-                result[key] = {"n": len(paths), "label": label, "images": saved["images"]}
-                continue
-        print(f"render: bmh: measuring block sizes and thresholds over {len(paths)} images")
-        with tempfile.TemporaryDirectory() as tmp, \
-                concurrent.futures.ProcessPoolExecutor() as pool:
-            images = list(pool.map(_variants_one, [(tool, p, tmp, f"{i:04d}")
-                                                   for i, p in enumerate(paths)]))
-        with open(cache, "w") as f:
-            json.dump({"key": ck, "images": images}, f)
-        result[key] = {"n": len(paths), "label": label, "images": images}
-    return result
-
-
 def _variant_distances(images, variant, size):
     """(copies, different): bits that differ between each original and its copies, and
     between every pair of distinct originals, for one variant ("median_16", …)."""

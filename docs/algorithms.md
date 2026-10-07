@@ -328,17 +328,19 @@ Both need color: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
   - `samples` — default 128 samples per projection, 2–4096.
   - The projections cost `projections × samples` samples whatever the image size (the
     blur before them is what grows with the image), and the digest converges long before
-    the ceilings: 1440 × 1024 costs 5.5 ms on a 400×400 photograph, 4096 × 4096 costs
-    56 ms and lies within one or two units per coefficient of a 16384² grid. Raising
-    either value past the low thousands buys time, not information.
+    the ceilings: at 4096 × 4096 it lies within one unit per coefficient of a 16384²
+    grid, and the default already scores 0.999 against it. Raising either value past the
+    low thousands buys time, not information
+    ([measured](theory/radial.md#projections-and-samples)).
   - `sigma` — Gaussian-blur σ applied before the projections, default 3.5, (0, 64/3].
   - gamma (`ph_context_set_gamma()`) — default 1.0 (identity), affects Radial only.
-- **Rotation: a few degrees, plus an exact half turn — not arbitrary rotation.** Measured
-  on `tests/data/photo.jpeg` against a 0.69 baseline for an unrelated image: 1° → 0.993,
-  3° → 0.944, 5° → 0.870, 15° → 0.437, 90° → 0.243, 180° → 0.993. That is what the
-  algorithm delivers; the half turn matches because a projection line at α and at α+180 is the same line. See
-  [`algorithm-provenance.md`](algorithm-provenance.md) §7 for why the transform does not
-  carry a larger rotation.
+- **Rotation: a few degrees, plus an exact half turn — not arbitrary rotation.** On
+  `tests/data/photo.jpeg` the score falls below 0.9 at about 5°, scores like an unrelated
+  image from 15° to well past a quarter turn, and returns to 0.99 at 180°, because a
+  projection line at α and at α+180 is the same line. The variance profile itself follows
+  any turn; its DCT does not, and the digest is the DCT
+  ([measured](theory/radial.md#turning-the-image); why in
+  [`algorithm-provenance.md`](algorithm-provenance.md) §7).
 - **No angular structure, no score**: an image whose variance is nearly the same at every
   angle — a blank one, or a radially symmetric one — has nothing for this descriptor to
   describe and hashes to all zeroes. `ph_radial_similarity()` answers any comparison with
