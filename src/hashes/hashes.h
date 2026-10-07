@@ -222,9 +222,10 @@ const float *ph_get_dct_matrix_32(void);
 #define PH_DCT_MAX_SIZE           32
 #define PH_DCT_MAX_REDUCTION_SIZE 8
 
-/* Hard lower bound for reduction_size. The DC coefficient is excluded from the hash
- * (ph_median_bitpack_from(dct_out, n = reduction_size^2, median_from = 1)), so a block of
- * r x r coefficients leaves r^2 - 1 AC bits. The bound is where the hash stops being
+/* Hard lower bound for reduction_size. The DC coefficient takes no part in choosing the
+ * threshold (ph_median_bitpack_margin(dct_out, n = reduction_size^2, median_from = 1, ...))
+ * and its own bit is always set, so a block of r x r coefficients leaves r^2 - 1 bits that
+ * carry information. The bound is where the hash stops being
  * degenerate, measured over 400 photographs (at most 350 distinct at r = 8: the rest are
  * near-duplicates) and the synthetic corpus of tests/src/test_hash_properties.c:
  *

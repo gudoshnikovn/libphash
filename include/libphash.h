@@ -974,8 +974,7 @@ PH_NODISCARD PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint
  * @brief Average hash: one bit per cell of an 8x8 grayscale reduction, set where the
  *        cell is at or above the reduction's mean.
  *
- * The fastest of the four, and sensitive to anything that moves the mean (brightness,
- * contrast).
+ * What moves it and what does not, measured: docs/theory/ahash.md.
  * @return @c PH_SUCCESS, @c PH_ERR_INVALID_ARGUMENT, @c PH_ERR_EMPTY_IMAGE or
  *         @c PH_ERR_ALLOCATION_FAILED, as the shared contract above says.
  * @ingroup hash64
@@ -986,7 +985,7 @@ PH_NODISCARD PH_API ph_error_t ph_compute_ahash(ph_context_t *ctx, uint64_t *out
  * @brief Difference hash: a 9x8 grayscale reduction, one bit per pair of horizontal
  *        neighbors, set where the left one is darker.
  *
- * As fast as aHash and more tolerant of brightness and contrast changes.
+ * What moves it and what does not, measured: docs/theory/dhash.md.
  * @return @c PH_SUCCESS, @c PH_ERR_INVALID_ARGUMENT, @c PH_ERR_EMPTY_IMAGE or
  *         @c PH_ERR_ALLOCATION_FAILED, as the shared contract above says.
  * @ingroup hash64
@@ -999,7 +998,7 @@ PH_NODISCARD PH_API ph_error_t ph_compute_dhash(ph_context_t *ctx, uint64_t *out
  *
  * Sizes from ph_context_set_phash_params() (default: a 32x32 reduction, an 8x8 block). With
  * a block smaller than 8x8 only its `reduction_size` squared low bits are used. The DC
- * coefficient's bit is set for any ordinary image, as in pHash.
+ * coefficient's bit is set for any ordinary image, as in pHash. See docs/theory/phash.md.
  * @return @c PH_SUCCESS, @c PH_ERR_INVALID_ARGUMENT, @c PH_ERR_EMPTY_IMAGE or
  *         @c PH_ERR_ALLOCATION_FAILED, as the shared contract above says.
  * @ingroup hash64
