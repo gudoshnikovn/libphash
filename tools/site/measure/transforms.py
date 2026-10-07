@@ -12,6 +12,15 @@ import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
 
 
+def write_edit(op, image, stem):
+    """Applies one edit of either group to a Pillow image and saves the result as the
+    edit says (PPM, or JPEG at the edit's quality) at <stem>.<extension>; the path."""
+    im, (ext, quality) = op(image)
+    path = f"{stem}.{ext}"
+    im.save(path, **({"quality": quality} if ext == "jpg" else {}))
+    return path
+
+
 # --8<-- [start:transforms]
 def transforms():
     """(name, x-axis label, [(strength, PIL image -> (image, (file extension, quality)))]).

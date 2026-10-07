@@ -1,14 +1,16 @@
 """The figures of docs/theory/phash.md, from `site_stages phash`."""
-import glob
 import os
-import subprocess
-import tempfile
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LogNorm
 
-from common import draw_bits, hide_axes, run_stages, save
+from draw.markdown import load_grayscale_hash, write_text
+from draw.style import (draw_bits, gray_panel, hash_footer, hide_axes, image_panel, save,
+                        stage_strip, value_cells)
+from measure import corpus
+from measure.digests import bits_apart
+from measure.tool import run_stages
 
 ALGO = "phash"
 BITS = 64  # the robustness chart's scale: bits of the hash
@@ -18,13 +20,11 @@ def _crowded_synthetic(tool):
     """The image of the synthetic corpus whose AC coefficients crowd its pHash median the
     most, with its stages: (index, stages, pixels)."""
     best = None
-    with tempfile.TemporaryDirectory() as tmp:
-        subprocess.run([tool, "corpus", tmp], check=True)
-        for path in sorted(glob.glob(os.path.join(tmp, "*.ppm"))):
-            st, px = run_stages(tool, ALGO, path, ("original.ppm",))
-            near = _within_margin(st).sum()
-            if best is None or near > best[0]:
-                best = (near, int(os.path.basename(path)[:2]), st, px["original.ppm"])
+    for path in corpus.images(tool, "synthetic"):
+        st, px = run_stages(tool, ALGO, path, ("original.ppm",))
+        near = _within_margin(st).sum()
+        if best is None or near > best[0]:
+            best = (near, int(os.path.basename(path)[:2]), st, px["original.ppm"])
     return best[1:]
 
 
@@ -49,21 +49,16 @@ def _bare_bits(st):
     return (block > _median(block[1:])).astype(int)
 
 
-def _block_cells(ax, values, bits, c, size=8, fmt="{:.0f}", fontsize=8):
+def _block_cells(ax, values, bits, c, size=8):
     """An r×r block of coefficients: each value in its cell, the cell in the accent where
     its bit is set; DC, the top-left cell, outlined."""
-    for k, v in enumerate(values):
-        i, j = divmod(k, size)
-        ax.add_patch(plt.Rectangle((j - 0.46, i - 0.46), 0.92, 0.92, linewidth=0,
-                                   color=c["accent"] if bits[k] else c["off"]))
-        ax.text(j, i, fmt.format(v), ha="center", va="center", fontsize=fontsize,
-                color=c["on_text"] if bits[k] else c["ink"])
+    value_cells(ax, values, bits, c, size, fmt="{:.0f}")
+    _outline_dc(ax, c)
+
+
+def _outline_dc(ax, c):
     ax.add_patch(plt.Rectangle((-0.5, -0.5), 1, 1, fill=False, linewidth=2,
                                edgecolor=c["accent2"]))
-    ax.set_xlim(-0.5, size - 0.5)
-    ax.set_ylim(size - 0.5, -0.5)
-    ax.set_aspect("equal")
-    hide_axes(ax)
 
 
 def figures(tool, image, out_dir):
@@ -85,21 +80,19 @@ def figures(tool, image, out_dir):
                                    edgecolor=c["accent"]))
 
     def pipeline(c):
-        fig, axes = plt.subplots(1, 5, figsize=(12, 2.9))
-        titles = ["Decoded image", "Grayscale", f"Reduced to {n}×{n}", "DCT, |coefficients|",
-                  f"Bits of the {r}×{r} block"]
-        axes[0].imshow(original)
-        axes[1].imshow(gray, cmap="gray", vmin=0, vmax=255)
-        axes[2].imshow(grid, cmap="gray", vmin=0, vmax=255, interpolation="nearest")
-        axes[3].imshow(np.maximum(magnitude, norm.vmin), cmap="gray", norm=norm,
-                       interpolation="nearest")
-        outline_block(axes[3], c)
-        draw_bits(axes[4], bits.reshape(r, r), c, numbers=False)
-        for ax, t in zip(axes, titles):
-            hide_axes(ax)
-            ax.set_title(t, color=c["ink"], fontsize=10)
-        fig.text(0.5, -0.02, f"hash = {st['hash']}", ha="center", color=c["ink"],
-                 family="monospace", fontsize=11)
+        def coefficients(ax):
+            ax.imshow(np.maximum(magnitude, norm.vmin), cmap="gray", norm=norm,
+                      interpolation="nearest")
+            outline_block(ax, c)
+
+        fig = stage_strip(c, (12, 2.9), [
+            ("Decoded image", image_panel(original)),
+            ("Grayscale", gray_panel(gray)),
+            (f"Reduced to {n}×{n}", gray_panel(grid, grid=True)),
+            ("DCT, |coefficients|", coefficients),
+            (f"Bits of the {r}×{r} block", lambda ax: draw_bits(ax, bits.reshape(r, r), c,
+                                                                numbers=False))])
+        hash_footer(fig, c, st["hash"])
         return fig
 
     def dct_map(c):
@@ -188,8 +181,7 @@ def figures(tool, image, out_dir):
     def bit_grid(c):
         fig, ax = plt.subplots(figsize=(4.6, 4.6))
         draw_bits(ax, bits.reshape(r, r), c, numbers=True)
-        ax.add_patch(plt.Rectangle((-0.5, -0.5), 1, 1, fill=False, linewidth=2,
-                                   edgecolor=c["accent2"]))
+        _outline_dc(ax, c)
         ax.set_title("bit set where coefficient > threshold", color=c["ink"], fontsize=10)
         return fig
 
@@ -202,8 +194,7 @@ def figures(tool, image, out_dir):
             ax.add_patch(plt.Rectangle((j - 0.46, i - 0.46), 0.92, 0.92, color=c["off"],
                                        linewidth=0))
             ax.text(j, i, str(k), ha="center", va="center", fontsize=9, color=c["ink"])
-        ax.add_patch(plt.Rectangle((-0.5, -0.5), 1, 1, fill=False, linewidth=2,
-                                   edgecolor=c["accent2"]))
+        _outline_dc(ax, c)
         hide_axes(ax)
         ax.set_aspect("equal")
         ax.set_title("bit number of each coefficient (0 = least significant)",
@@ -244,17 +235,12 @@ def _write_margin_facts(st, syn_index, syn, out):
         flipped = int((bare != np.array(s["bits"])).sum())
         rows.append(f"| {name} | {int(_within_margin(s).sum())} of 63 | "
                     f"`{s['hash']}` | {flipped} |")
-    with open(os.path.join(out, "margin-table.md"), "w") as f:
-        f.write("| Image | AC coefficients in the margin | Hash | Bits the margin clears |\n"
-                "|---|---|---|---|\n" + "\n".join(rows) + "\n")
+    write_text(out, "margin-table.md",
+               "| Image | AC coefficients in the margin | Hash | Bits the margin clears |\n"
+               "|---|---|---|---|\n" + "\n".join(rows))
 
 
 def _write_load_grayscale(st, out):
     """One sentence on the example photograph hashed from the decoder's grayscale."""
     a, b = st["hash"], st["hash_load_grayscale"]
-    n = bin(int(a, 16) ^ int(b, 16)).count("1")
-    text = (f"The example photograph hashes to `{a}` both ways." if n == 0 else
-            f"The example photograph hashes to `{a}` with the library's grayscale and to "
-            f"`{b}` with the decoder's, {n} bit{'' if n == 1 else 's'} apart.")
-    with open(os.path.join(out, "load-grayscale.md"), "w") as f:
-        f.write(text + "\n")
+    write_text(out, "load-grayscale.md", load_grayscale_hash(a, b, bits_apart(a, b)))

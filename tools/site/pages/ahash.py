@@ -4,7 +4,9 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
-from common import draw_bits, hide_axes, run_stages, save
+from draw.style import (draw_bits, gray_panel, hash_footer, hide_axes, image_panel, save,
+                        stage_strip)
+from measure.tool import run_stages
 
 ALGO = "ahash"
 BITS = 64  # the robustness chart's scale: bits of the hash
@@ -20,17 +22,12 @@ def figures(tool, image, out_dir):
     out = os.path.join(out_dir, ALGO)
 
     def pipeline(c):
-        fig, axes = plt.subplots(1, 4, figsize=(10, 2.9))
-        titles = ["Decoded image", "Grayscale", f"Reduced to {n}×{n}", "Bits"]
-        axes[0].imshow(original)
-        axes[1].imshow(gray, cmap="gray", vmin=0, vmax=255)
-        axes[2].imshow(grid, cmap="gray", vmin=0, vmax=255, interpolation="nearest")
-        draw_bits(axes[3], bits, c, numbers=False)
-        for ax, t in zip(axes, titles):
-            hide_axes(ax)
-            ax.set_title(t, color=c["ink"], fontsize=10)
-        fig.text(0.5, -0.02, f"hash = {st['hash']}", ha="center", color=c["ink"],
-                 family="monospace", fontsize=11)
+        fig = stage_strip(c, (10, 2.9), [
+            ("Decoded image", image_panel(original)),
+            ("Grayscale", gray_panel(gray)),
+            (f"Reduced to {n}×{n}", gray_panel(grid, grid=True)),
+            ("Bits", lambda ax: draw_bits(ax, bits, c, numbers=False))])
+        hash_footer(fig, c, st["hash"])
         return fig
 
     def grid_values(c):

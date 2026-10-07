@@ -92,7 +92,7 @@ sync_into build/api-pages docs/api
 # (tools/site/fetch_corpus.py, into ~/.cache/libphash-site/), and a build without a
 # network or a cached copy draws them without the photographs and says so on the chart.
 # The measurements are cached in build/site-cache/ and repeated only when the library,
-# the tool or a corpus changes.
+# the tool or a corpus changes. tools/site/README.md describes the tool.
 cmake --preset release >/dev/null
 cmake --build --preset release --target site_stages
 rm -rf build/site-generated

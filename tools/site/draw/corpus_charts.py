@@ -1,7 +1,7 @@
 """What a corpus measurement shows on an algorithm's page: robustness as a spread over the
 corpus, and separability, the gap between copies and different images.
 
-Each algorithm page module says how its metric reads (measure.metric()): BITS for a bit
+Each algorithm page module says how its metric reads (measure/metric.py): BITS for a bit
 hash (the chart shows the bits that differ, lower is closer); a module with BITS = None
 names its own METRIC, LOWER_IS_CLOSER, METRIC_RANGE and FORMAT. A comparison the library
 refuses (None, Radial's image with no angular structure) is left out, and the tables say
@@ -11,58 +11,16 @@ import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+from PIL import Image
 
-from common import save, style_axes
-from measure import close_range, metric, reference_line, reference_note, robust_limits
-from transforms import content_edits, transforms
+from draw.markdown import write_text
+from draw.robustness_charts import close_range, reference_line, reference_note, robust_limits
+from draw.style import hide_axes, save, style_axes
+from measure.metric import metric
+from measure.separability import RECALL, copies_and_different, separability
+from measure.transforms import content_edits, transforms
 
-# --8<-- [start:copies]
-# A "copy" is an original after one moderate edit: one strength of each transform, the
-# kind of change a picture goes through between two places it is stored.
-COPY_STRENGTHS = {
-    "JPEG quality": 50,
-    "Downscale": 0.5,
-    "Rotation": 2,
-    "Brightness": 1.15,
-    "Contrast": 1.15,
-    "Gamma": 1.2,
-    "Gaussian blur": 1,
-    "Noise": 5,
-    "Crop": 5,
-}
-# --8<-- [end:copies]
-
-RECALL = 0.95
-
-
-# --8<-- [start:separability]
-def separability(copies, different, lower_is_closer):
-    """d', the threshold that keeps RECALL of the copies, and the share of different
-    pairs that threshold also accepts.
-
-    d' is the gap between the two means in units of their pooled spread, as
-    tests/src/test_hash_properties.c defines it (separability()), signed so that a
-    positive d' means copies are closer than different images.
-    """
-    c, d = np.asarray(copies, float), np.asarray(different, float)
-    sign = 1.0 if lower_is_closer else -1.0
-    pooled = np.sqrt((c.std() ** 2 + d.std() ** 2) / 2.0)
-    dprime = sign * (d.mean() - c.mean()) / pooled if pooled > 0 else float("inf")
-    # The threshold: the closest value that still accepts RECALL of the copies.
-    t = sign * np.quantile(sign * c, RECALL, method="inverted_cdf")
-    accepted = (d <= t) if lower_is_closer else (d >= t)
-    return dprime, t, accepted.mean()
-# --8<-- [end:separability]
-
-
-def copies_and_different(data, algo, convert):
-    copies = []
-    for name, points in data["robust"][algo].items():
-        for strength, values in points:
-            if strength == COPY_STRENGTHS[name]:
-                copies += [convert(v) for v in values if v is not None]
-    different = [convert(v) for v in data["different"][algo] if v is not None]
-    return copies, different
+LABEL_MISSING = "photographs: not available to this build"
 
 
 def corpus_robustness_figure(datasets, algo, mod, out_dir):
@@ -175,9 +133,6 @@ def separability_figure(datasets, algo, mod, out_dir):
     save(fig, os.path.join(out_dir, algo), "separability")
 
 
-LABEL_MISSING = "photographs: not available to this build"
-
-
 def share(fraction, n):
     """A share of n pairs, with the count when the percentage alone would round to 0."""
     k = round(fraction * n)
@@ -232,10 +187,7 @@ def corpus_tables(datasets, algo, mod, out_dir):
                 q = np.percentile(v, [25, 50, 75])
                 cells.append(f"{fmt(q[1])} ({fmt(q[0])}–{fmt(q[2])})")
             lines.append(f"| {name} | {strength:g} | " + " | ".join(cells) + " |")
-    path = os.path.join(out_dir, algo, "corpus-table.md")
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
-        f.write("\n".join(lines) + "\n")
+    write_text(os.path.join(out_dir, algo), "corpus-table.md", "\n".join(lines))
 
 
 def _quartiles(values, convert):
@@ -356,17 +308,12 @@ def edits_table(datasets, algo, mod, out_dir):
             lines.append(f"| {_edit(name, strength)} | " + " | ".join(cells) + " |")
     if not present:
         lines = [f"{LABEL_MISSING}."]
-    path = os.path.join(out_dir, algo, "edits-table.md")
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w") as f:
-        f.write("\n".join(lines) + "\n")
+    write_text(os.path.join(out_dir, algo), "edits-table.md", "\n".join(lines))
 
 
 def edits_examples(image, out_dir):
     """What the edits that change the picture do, on the example photograph: the
     strongest of each graded edit and every orientation."""
-    from PIL import Image
-
     base = Image.open(image).convert("RGB")
     shown = []
     for name, _, steps in content_edits():
@@ -378,10 +325,7 @@ def edits_examples(image, out_dir):
         figure, axes = plt.subplots(1, len(shown) + 1, figsize=(12, 1.9))
         for ax, (title, im) in zip(axes, [("Original", base)] + shown):
             ax.imshow(np.asarray(im))
-            ax.set_xticks([])
-            ax.set_yticks([])
-            for sp in ax.spines.values():
-                sp.set_visible(False)
+            hide_axes(ax)
             # Two short lines: "Patch", "4% of the frame".
             title = title.replace("patch over ", "patch\n").replace("hue turned ", "hue\n")
             ax.set_title(title[0].upper() + title[1:], color=c["ink"], fontsize=8.5)

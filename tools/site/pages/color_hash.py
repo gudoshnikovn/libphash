@@ -1,21 +1,24 @@
 """The figures of docs/theory/color-hash.md, from `site_stages color_hash` and
 `site_stages measure`."""
 import concurrent.futures
-import hashlib
-import json
 import math
 import os
-import subprocess
 import tempfile
 
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
-import corpus
-from common import hide_axes, run_stages, save, style_axes
-from corpus_charts import copies_and_different, separability, share
-from transforms import content_edits
+from draw.corpus_charts import share
+from draw.markdown import write_text
+from draw.style import hide_axes, save, style_axes
+from measure import corpus
+from measure.cache import cached
+from measure.corpus import SHORT
+from measure.digests import digest_bytes
+from measure.separability import copies_and_different, separability
+from measure.tool import run_lines, run_stages
+from measure.transforms import content_edits
 
 ALGO = "color_hash"
 BITS = None  # not a bit vector: the charts show the library's own score
@@ -24,8 +27,6 @@ LOWER_IS_CLOSER = False
 METRIC_RANGE = (0.0, 1.0)
 FORMAT = "{:.3f}"
 REFUSED = "a grayscale image"
-
-SHORT = {"photos": "photographs", "synthetic": "synthetic images"}
 
 # The opponent axes, as src/hashes/hashes.h defines them: (name, offset, distinct values).
 AXES = {"rg": ("R − G", 255, 2 * 255 + 1), "by": ("2B − R − G", 510, 2 * 510 + 1),
@@ -36,10 +37,6 @@ AXES = {"rg": ("R − G", 255, 2 * 255 + 1), "by": ("2B − R − G", 510, 2 * 5
 TINTS = [("red +1", (1, 0, 0)), ("red +2", (2, 0, 0)), ("blue +2", (0, 0, 2)),
          ("all +3", (3, 3, 3))]
 # --8<-- [end:tints]
-
-
-def _digest(hexstr):
-    return np.frombuffer(bytes.fromhex(hexstr), np.uint8)
 
 
 # --8<-- [start:intersection]
@@ -58,19 +55,11 @@ def edges(axis, bins):
     return [math.ceil(k * values / bins) - offset for k in range(1, bins)]
 
 
-def _measure(tool, ref, variants):
-    """`site_stages measure`: every algorithm's score of each variant against `ref`."""
-    out = subprocess.run([tool, "measure", ref, *variants], check=True, capture_output=True,
-                         text=True).stdout
-    return [json.loads(line) for line in out.splitlines()]
-
-
 def figures(tool, image, out_dir):
     st, px = run_stages(tool, ALGO, image, ("original.ppm", "bins.pgm"))
     out = os.path.join(out_dir, ALGO)
     nrg, nby, nwb = st["bins_rg"], st["bins_by"], st["bins_wb"]
-    digest = _digest(st["digest"])
-    counts = np.array(st["counts"])
+    digest = digest_bytes(st["digest"])
     volume = np.array(st["volume"])
     color = np.array(st["bin_color"]) / 255.0
     original = px["original.ppm"]
@@ -203,10 +192,10 @@ def figures(tool, image, out_dir):
     save(plane, out, "plane")
     save(layout, out, "bit-order")
     _write_stage_numbers(st, out)
-    with open(os.path.join(out, "load-grayscale.md"), "w") as f:
-        f.write("With `ph_context_set_load_grayscale()` enabled, the example photograph is "
-                "decoded to one channel, and "
-                f"`ph_compute_color_hash()` refuses it: \"{st['load_grayscale']}\".\n")
+    write_text(out, "load-grayscale.md",
+               "With `ph_context_set_load_grayscale()` enabled, the example photograph is "
+               "decoded to one channel, and "
+               f"`ph_compute_color_hash()` refuses it: \"{st['load_grayscale']}\".")
 
     base = Image.open(image).convert("RGB")
     _intersection_figure(tool, base, digest, out)
@@ -217,17 +206,17 @@ def figures(tool, image, out_dir):
 def _write_stage_numbers(st, out):
     counts = np.array(st["counts"])
     volume = np.array(st["volume"])
-    digest = _digest(st["digest"])
+    digest = digest_bytes(st["digest"])
     total = counts.sum()
     top = np.sort(counts)[::-1]
-    with open(os.path.join(out, "stage-numbers.md"), "w") as f:
-        f.write(f"Of the 108 bins, {int((volume > 0).sum())} hold some 8-bit color; the "
-                f"other {int((volume == 0).sum())} are combinations of the three axes no "
-                f"color can take, and stay zero in every digest. The example photograph's "
-                f"{total:,} pixels fall into {int((counts > 0).sum())} bins, "
-                f"{int((digest > 0).sum())} of which get a nonzero byte; the largest holds "
-                f"{top[0] / total:.0%} of the pixels and the five largest "
-                f"{top[:5].sum() / total:.0%}.\n")
+    write_text(out, "stage-numbers.md",
+               f"Of the 108 bins, {int((volume > 0).sum())} hold some 8-bit color; the "
+               f"other {int((volume == 0).sum())} are combinations of the three axes no "
+               f"color can take, and stay zero in every digest. The example photograph's "
+               f"{total:,} pixels fall into {int((counts > 0).sum())} bins, "
+               f"{int((digest > 0).sum())} of which get a nonzero byte; the largest holds "
+               f"{top[0] / total:.0%} of the pixels and the five largest "
+               f"{top[:5].sum() / total:.0%}.")
 
 
 def _save_ppm(im, path):
@@ -244,8 +233,8 @@ def _intersection_figure(tool, base, digest, out):
         ref = _save_ppm(base, os.path.join(tmp, "a.ppm"))
         var = _save_ppm(turned, os.path.join(tmp, "b.ppm"))
         st, _ = run_stages(tool, ALGO, var)
-        lib = _measure(tool, ref, [var])[0][ALGO]
-    other = _digest(st["digest"])
+        lib = run_lines(tool, "measure", ref, var)[0][ALGO]
+    other = digest_bytes(st["digest"])
     mine = intersection(digest, other)
     if abs(mine - lib) > 1e-6:
         raise SystemExit(f"render: color_hash: intersection {mine:.6f} here, "
@@ -303,13 +292,13 @@ def _blind_spots(tool, base, out):
              ("gray", (128, 128, 128), "gray, red +1", (129, 128, 128))]
     with tempfile.TemporaryDirectory() as tmp:
         ref = _save_ppm(base, os.path.join(tmp, "ref.ppm"))
-        rows = _measure(tool, ref, [_save_ppm(shuffled, os.path.join(tmp, "s.ppm")),
-                                    _save_ppm(turned, os.path.join(tmp, "t.ppm"))])
+        rows = run_lines(tool, "measure", ref, _save_ppm(shuffled, os.path.join(tmp, "s.ppm")),
+                         _save_ppm(turned, os.path.join(tmp, "t.ppm")))
         flat_scores = []
         for n, (_, c1, _, c2) in enumerate(flats):
             p1 = _save_ppm(Image.new("RGB", (64, 64), c1), os.path.join(tmp, f"f{n}a.ppm"))
             p2 = _save_ppm(Image.new("RGB", (64, 64), c2), os.path.join(tmp, f"f{n}b.ppm"))
-            flat_scores.append(_measure(tool, p1, [p2])[0][ALGO])
+            flat_scores.append(run_lines(tool, "measure", p1, p2)[0][ALGO])
 
     def fig(c):
         f, axes = plt.subplots(1, 3 + len(flats), figsize=(12, 2.9),
@@ -339,8 +328,7 @@ def _blind_spots(tool, base, out):
               f"| example and the example turned 90° | — | {FORMAT.format(rows[1][ALGO])} |"]
     for (n1, c1, n2, c2), score in zip(flats, flat_scores):
         lines.append(f"| {n1} and {n2} | {c1} and {c2} | {FORMAT.format(score)} |")
-    with open(os.path.join(out, "blind-spots.md"), "w") as f:
-        f.write("\n".join(lines) + "\n")
+    write_text(out, "blind-spots.md", "\n".join(lines))
 
 
 # --8<-- [start:tint]
@@ -356,7 +344,7 @@ def _tint_one(args):
     for n, (_, shift) in enumerate(TINTS):
         files.append(os.path.join(tmp, f"{stem}-{n}.ppm"))
         Image.fromarray(np.clip(a + np.array(shift), 0, 255).astype(np.uint8)).save(files[-1])
-    rows = _measure(tool, ref, files)
+    rows = run_lines(tool, "measure", ref, *files)
     for f in [ref] + files:
         os.remove(f)
     return [row[ALGO] for row in rows]
@@ -366,27 +354,22 @@ def measure_tints(tool):
     """{corpus: [[score per tint] per image]}, cached in build/site-cache/ like the
     corpora, under their key and the list of tints."""
     result = {}
-    for key in ("synthetic", "photos"):
-        paths = corpus.images(tool, key, os.path.join(corpus.CACHE, "work"))
+    for key in corpus.CORPORA:
+        paths = corpus.images(tool, key)
         if not paths:
             result[key] = []
             continue
-        ck = hashlib.sha256((corpus.cache_key(paths) + repr(TINTS)).encode()).hexdigest()
-        cache = os.path.join(corpus.CACHE, f"color-tints-{key}.json")
-        if os.path.exists(cache):
-            with open(cache) as f:
-                saved = json.load(f)
-            if saved.get("key") == ck:
-                result[key] = saved["scores"]
-                continue
-        print(f"render: color_hash: tinting {len(paths)} images")
-        with tempfile.TemporaryDirectory() as tmp, \
-                concurrent.futures.ProcessPoolExecutor() as pool:
-            scores = list(pool.map(_tint_one, [(tool, p, tmp, f"{i:04d}")
-                                               for i, p in enumerate(paths)]))
-        with open(cache, "w") as f:
-            json.dump({"key": ck, "scores": scores}, f)
-        result[key] = scores
+
+        def measure():
+            with tempfile.TemporaryDirectory() as tmp, \
+                    concurrent.futures.ProcessPoolExecutor() as pool:
+                return list(pool.map(_tint_one, [(tool, p, tmp, f"{i:04d}")
+                                                 for i, p in enumerate(paths)]))
+
+        # This module's own code makes the tints: a change to it measures again.
+        ck = corpus.cache_key(paths, repr(TINTS), also=[f"tools/site/pages/{ALGO}.py"])
+        result[key] = cached(f"color-tints-{key}", ck, measure,
+                             f"color_hash: tinting {len(paths)} images")
     return result
 # --8<-- [end:tint]
 
@@ -439,5 +422,4 @@ def _tint_figure(tool, out):
                          f"{FORMAT.format(np.percentile(col, 10))} | "
                          f"{FORMAT.format(col.min())} | "
                          f"{share(float(np.mean(col < thresholds[key])), len(col))} |")
-    with open(os.path.join(out, "tints-table.md"), "w") as f:
-        f.write("\n".join(lines) + "\n")
+    write_text(out, "tints-table.md", "\n".join(lines))

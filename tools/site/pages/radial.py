@@ -1,18 +1,21 @@
 """The figures of docs/theory/radial.md, from `site_stages radial`, `site_stages
 radial-profiles` and `site_stages radial-variants`."""
-import json
 import os
-import subprocess
-import tempfile
 
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
-import corpus
-from common import hide_axes, run_stages, save, style_axes
-from corpus_charts import copies_and_different, separability, share
-from timing import measure_timing, ms
+from draw.corpus_charts import share
+from draw.markdown import write_text
+from draw.style import gray_panel, hide_axes, image_panel, save, stage_strip, style_axes
+from draw.timing_tables import ms
+from measure import corpus
+from measure.corpus import SHORT
+from measure.digests import digest_bytes
+from measure.separability import copies_and_different, separability
+from measure.timing import measure_timing
+from measure.tool import run_lines, run_on_images, run_stages
 
 ALGO = "radial"
 BITS = None  # not a bit vector: the charts show the library's own score
@@ -23,7 +26,6 @@ FORMAT = "{:.3f}"
 REFERENCE = (0.9, "PH_RADIAL_PCC_THRESHOLD")
 REFUSED = "an image with no angular structure"
 
-SHORT = {"photos": "photographs", "synthetic": "synthetic images"}
 
 # The settings of `site_stages radial-variants`, grouped as the page shows them.
 SIGMAS = [("sigma_1", "σ 1"), ("default", "σ 3.5 (default)"), ("sigma_8", "σ 8")]
@@ -31,10 +33,6 @@ GAMMAS = [("gamma_0.5", "γ 0.5"), ("default", "γ 1 (default)"), ("gamma_2", "�
 GRIDS = [("grid_40x32", 40, 32), ("grid_90x64", 90, 64), ("default", 180, 128),
          ("grid_360x256", 360, 256), ("grid_1440x1024", 1440, 1024),
          ("grid_4096x4096", 4096, 4096)]
-
-
-def _digest(hexstr):
-    return np.frombuffer(bytes.fromhex(hexstr), np.uint8)
 
 
 # --8<-- [start:similarity]
@@ -66,14 +64,7 @@ def peak_profile_correlation(p, q):
 def _profiles(tool, reference, images):
     """`site_stages radial-profiles` on PIL images: one row per image, the reference's
     first."""
-    with tempfile.TemporaryDirectory() as tmp:
-        files = []
-        for i, im in enumerate([reference] + images):
-            files.append(os.path.join(tmp, f"{i:04d}.ppm"))
-            im.save(files[-1])
-        out = subprocess.run([tool, "radial-profiles", *files], check=True,
-                             capture_output=True, text=True).stdout
-    return [json.loads(line) for line in out.splitlines()]
+    return run_on_images(tool, "radial-profiles", [reference] + images)
 
 
 def figures(tool, image, out_dir):
@@ -113,16 +104,11 @@ def figures(tool, image, out_dir):
                  multialignment="left", color=c["ink"], family="monospace", fontsize=10)
 
     def pipeline(c):
-        fig, axes = plt.subplots(1, 4, figsize=(10.4, 3.1))
-        axes[0].imshow(px["original.ppm"])
-        axes[1].imshow(px["gray.pgm"], cmap="gray", vmin=0, vmax=255)
-        axes[2].imshow(px["blurred.pgm"], cmap="gray", vmin=0, vmax=255)
-        fan(axes[3], c)
-        titles = ["Decoded image", "Grayscale", f"Blurred, σ {d['sigma']:g}",
-                  f"{d['projections']} lines, every 10th drawn"]
-        for ax, t in zip(axes, titles):
-            hide_axes(ax)
-            ax.set_title(t, color=c["ink"], fontsize=10)
+        fig = stage_strip(c, (10.4, 3.1), [
+            ("Decoded image", image_panel(px["original.ppm"])),
+            ("Grayscale", gray_panel(px["gray.pgm"])),
+            (f"Blurred, σ {d['sigma']:g}", gray_panel(px["blurred.pgm"])),
+            (f"{d['projections']} lines, every 10th drawn", lambda ax: fan(ax, c))])
         digest_text(fig, c, -0.02)
         return fig
 
@@ -213,7 +199,7 @@ def figures(tool, image, out_dir):
         return fig
 
     def layout(c):
-        b = _digest(d["digest"])
+        b = digest_bytes(d["digest"])
         fig, axes = plt.subplots(2, 1, figsize=(10.4, 4.6), sharex=True,
                                  gridspec_kw={"height_ratios": [1, 1.2]})
         k = np.arange(len(b))
@@ -265,26 +251,25 @@ def figures(tool, image, out_dir):
 def _write_stage_numbers(st, out):
     """The numbers the steps quote, for the example photograph."""
     d = st["default"]
-    b = _digest(d["digest"])
+    b = digest_bytes(d["digest"])
     coef = np.array(d["coefficients"])
-    with open(os.path.join(out, "stage-numbers.md"), "w") as f:
-        f.write(f"On the example photograph, {st['width']}×{st['height']}, the lines run "
-                f"{st['radius']:g} pixels each side of the center; the variance ranges from "
-                f"{min(d['variance']):,.0f} to {max(d['variance']):,.0f} gray levels², the "
-                f"largest coefficient is number {int(np.argmax(coef))} and the smallest "
-                f"number {int(np.argmin(coef))}, and the zero of coefficient 0 lands at byte "
-                f"value {b[0]}.\n")
+    write_text(out, "stage-numbers.md",
+               f"On the example photograph, {st['width']}×{st['height']}, the lines run "
+               f"{st['radius']:g} pixels each side of the center; the variance ranges from "
+               f"{min(d['variance']):,.0f} to {max(d['variance']):,.0f} gray levels², the "
+               f"largest coefficient is number {int(np.argmax(coef))} and the smallest "
+               f"number {int(np.argmin(coef))}, and the zero of coefficient 0 lands at byte "
+               f"value {b[0]}.")
 
 
 def _write_load_grayscale(st, out):
-    a = _digest(st["default"]["digest"])
-    b = _digest(st["digest_load_grayscale"])
+    a = digest_bytes(st["default"]["digest"])
+    b = digest_bytes(st["digest_load_grayscale"])
     text = ("The example photograph gives the same digest both ways." if (a == b).all() else
             f"On the example photograph the two digests differ in {int((a != b).sum())} of "
             f"40 bytes, by at most {int(np.abs(a.astype(int) - b).max())}, and "
             f"`ph_radial_similarity()` scores them {FORMAT.format(float(similarity(a, b)[0]))}.")
-    with open(os.path.join(out, "load-grayscale.md"), "w") as f:
-        f.write(text + "\n")
+    write_text(out, "load-grayscale.md", text)
 
 
 def _settings_figure(st, px, out):
@@ -324,7 +309,7 @@ def _settings_figure(st, px, out):
 def _structure_figure(tool, base, out):
     """Two synthetic images, one without angular structure and one just above the bound,
     and the example photograph: each profile relative to its mean, and the verdict."""
-    synth = corpus.images(tool, "synthetic", os.path.join(corpus.CACHE, "work"))
+    synth = corpus.images(tool, "synthetic")
     rows = _profiles(tool, base, [Image.open(p).convert("RGB") for p in synth])
     synth_rows = rows[1:]
     spread = [r["radial"]["relative_spread"] for r in synth_rows]
@@ -366,25 +351,22 @@ def _structure_figure(tool, base, out):
 
     save(fig, out, "structure")
     n_flat = len(flat)
-    with open(os.path.join(out, "structure.md"), "w") as f:
-        f.write(f"{n_flat} of the {len(synth)} synthetic images, both sets of concentric "
-                f"rings, have no structure by this measure; the smallest spread among the "
-                f"others is {np.sqrt(min(spread[i] for i in above)):.1%} of the mean"
-                if n_flat == 2 else
-                f"{n_flat} of the {len(synth)} synthetic images have no structure by this "
-                "measure")
-        f.write(", and the smallest among the photographs "
-                f"{_min_photo_spread(tool):.1%}.\n")
+    synthetic = (f"{n_flat} of the {len(synth)} synthetic images, both sets of concentric "
+                 f"rings, have no structure by this measure; the smallest spread among the "
+                 f"others is {np.sqrt(min(spread[i] for i in above)):.1%} of the mean"
+                 if n_flat == 2 else
+                 f"{n_flat} of the {len(synth)} synthetic images have no structure by this "
+                 "measure")
+    write_text(out, "structure.md", synthetic + ", and the smallest among the photographs "
+               f"{_min_photo_spread(tool):.1%}.")
 
 
 def _min_photo_spread(tool):
-    paths = corpus.images(tool, "photos", os.path.join(corpus.CACHE, "work"))
+    paths = corpus.images(tool, "photos")
     if not paths:
         return float("nan")
-    out = subprocess.run([tool, "radial-profiles", *paths], check=True, capture_output=True,
-                         text=True).stdout
-    return min(np.sqrt(json.loads(line)["radial"]["relative_spread"])
-               for line in out.splitlines())
+    return min(np.sqrt(row["radial"]["relative_spread"])
+               for row in run_lines(tool, "radial-profiles", *paths))
 
 
 # --8<-- [start:rotation]
@@ -470,15 +452,14 @@ def _rotation_figures(tool, base, out):
         r = by[a]
         lines.append(f"| {a}° | {FORMAT.format(r['digest'])} | {FORMAT.format(r['profile'])} | "
                      f"{r['shift']} |")
-    with open(os.path.join(out, "rotation-table.md"), "w") as f:
-        f.write("\n".join(lines) + "\n")
+    write_text(out, "rotation-table.md", "\n".join(lines))
     first = next(a for a in angles if by[a]["digest"] < REFERENCE[0])
-    with open(os.path.join(out, "rotation-numbers.md"), "w") as f:
-        f.write(f"On this photograph the digests stay at or above {REFERENCE[0]:g} up to "
-                f"{first - 1}°; at a quarter turn they score "
-                f"{FORMAT.format(by[90]['digest'])}, and at a half turn "
-                f"{FORMAT.format(by[180]['digest'])}. The profiles never fall below "
-                f"{FORMAT.format(min(r['profile'] for r in sweep))}.\n")
+    write_text(out, "rotation-numbers.md",
+               f"On this photograph the digests stay at or above {REFERENCE[0]:g} up to "
+               f"{first - 1}°; at a quarter turn they score "
+               f"{FORMAT.format(by[90]['digest'])}, and at a half turn "
+               f"{FORMAT.format(by[180]['digest'])}. The profiles never fall below "
+               f"{FORMAT.format(min(r['profile'] for r in sweep))}.")
 
 
 def _mirror_table(tool, base, out):
@@ -495,18 +476,18 @@ def _mirror_table(tool, base, out):
     same = np.corrcoef(pm, back)[0, 1]
     odd = np.corrcoef(cm[k % 2 == 1], -c0[k % 2 == 1])[0, 1]
     even = np.corrcoef(cm[k % 2 == 0][1:], c0[k % 2 == 0][1:])[0, 1]
-    with open(os.path.join(out, "mirror.md"), "w") as f:
-        f.write(f"On the example photograph the mirrored image's profile correlates with the "
-                f"original's read backwards at {same:.3f}; its odd coefficients correlate "
-                f"with the original's turned in sign at {odd:.2f}, its even ones with the "
-                f"original's unchanged at {even:.2f}, and `ph_radial_similarity()` scores the "
-                f"two digests {FORMAT.format(rows[1]['similarity'])}.\n")
+    write_text(out, "mirror.md",
+               f"On the example photograph the mirrored image's profile correlates with the "
+               f"original's read backwards at {same:.3f}; its odd coefficients correlate "
+               f"with the original's turned in sign at {odd:.2f}, its even ones with the "
+               f"original's unchanged at {even:.2f}, and `ph_radial_similarity()` scores the "
+               f"two digests {FORMAT.format(rows[1]['similarity'])}.")
 
 
 def _variant_scores(images, variant):
     """(copies, different) scores for one setting: each original against its copies, and
     every pair of distinct originals; refused pairs (NaN) dropped."""
-    dig = np.array([[_digest(row[variant]) for row in img] for img in images])
+    dig = np.array([[digest_bytes(row[variant]) for row in img] for img in images])
     n, k = dig.shape[0], dig.shape[1] - 1
     copies = similarity(np.repeat(dig[:, 0], k, axis=0), dig[:, 1:].reshape(n * k, -1))
     i, j = np.triu_indices(n, 1)
@@ -549,26 +530,21 @@ def _settings_tables(tool, measured, out):
                 dp, t, fmr, npairs = rows[key][v]
                 lines.append(f"| {SHORT[key]} | {label} | {dp:.2f} | {FORMAT.format(t)} | "
                              f"{share(fmr, npairs)} |")
-        with open(os.path.join(out, f"{name}-corpus.md"), "w") as f:
-            f.write("\n".join(lines) + "\n")
+        write_text(out, f"{name}-corpus.md", "\n".join(lines))
 
 
 def _grid_figure(tool, image, out):
     """For each number of lines and points, the time on both images of the timing table
     and how close the example photograph's digest comes to the finest grid's."""
-    with tempfile.TemporaryDirectory() as tmp:
-        ppm = os.path.join(tmp, "image.ppm")
-        Image.open(image).convert("RGB").save(ppm)
-        row = json.loads(subprocess.run([tool, "radial-variants", ppm], check=True,
-                                        capture_output=True, text=True).stdout)
-    finest = _digest(row["grid_4096x4096"])
+    row = run_on_images(tool, "radial-variants", [Image.open(image).convert("RGB")])[0]
+    finest = digest_bytes(row["grid_4096x4096"])
     timing = measure_timing(tool)
     pts = []
     for g, p, s in GRIDS:
         case = "radial" if g == "default" else f"radial_{g}"
         pts.append((p, s, timing["small"]["cases"][case]["min_ms"],
                     timing["large"]["cases"][case]["min_ms"],
-                    float(similarity(_digest(row[g]), finest)[0])))
+                    float(similarity(digest_bytes(row[g]), finest)[0])))
 
     def fig(c):
         f, axes = plt.subplots(1, 2, figsize=(10.4, 3.6))
@@ -601,5 +577,4 @@ def _grid_figure(tool, image, out):
     for p, s, t_small, t_large, sim in pts:
         lines.append(f"| {p} × {s} | {ms(t_small)} ms | {ms(t_large)} ms | "
                      f"{FORMAT.format(sim)} |")
-    with open(os.path.join(out, "grid-table.md"), "w") as f:
-        f.write("\n".join(lines) + "\n")
+    write_text(out, "grid-table.md", "\n".join(lines))

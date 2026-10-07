@@ -6,41 +6,30 @@ import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
-import corpus
-from common import draw_bits, hide_axes, read_pnm, run_stages, save, style_axes
-from corpus_charts import copies_and_different, separability, share
-from measure import bits_that_differ
+from draw.corpus_charts import share
+from draw.markdown import write_text
+from draw.style import (draw_bits, gray_panel, hide_axes, image_panel, save, stage_strip,
+                        style_axes, value_cells)
+from measure import corpus
+from measure.corpus import SHORT
+from measure.digests import digest_bits
+from measure.metric import bits_that_differ
+from measure.separability import copies_and_different, separability
+from measure.tool import run_stages
 
 ALGO = "bmh"
 BITS = 256  # the robustness chart's scale: bits of the digest at the default block size
 
-SHORT = {"photos": "photographs", "synthetic": "synthetic images"}
-
-
 def _bits(digest_hex, size):
     """The digest's bits in block order: bit i is bit i % 8 of byte i / 8 (LSB first)."""
-    raw = np.frombuffer(bytes.fromhex(digest_hex), np.uint8)
-    return np.unpackbits(raw, bitorder="little")[:size * size]
+    return digest_bits(digest_hex, size * size, lsb_first=True)
 
 
 def _cells(ax, grid, bits, c, fontsize, changed=None):
     """A grid of block means: each value in its cell, the cell in the accent where its bit
     is set; cells listed in `changed` outlined in the second accent."""
-    n = grid.shape[0]
-    for (i, j), v in np.ndenumerate(grid):
-        b = bits[i * n + j]
-        ax.add_patch(plt.Rectangle((j - 0.46, i - 0.46), 0.92, 0.92, linewidth=0,
-                                   color=c["accent"] if b else c["off"]))
-        if fontsize:
-            ax.text(j, i, str(v), ha="center", va="center", fontsize=fontsize,
-                    color=c["on_text"] if b else c["ink"])
-        if changed is not None and changed[i * n + j]:
-            ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False, linewidth=1.6,
-                                       edgecolor=c["accent2"]))
-    ax.set_xlim(-0.5, n - 0.5)
-    ax.set_ylim(n - 0.5, -0.5)
-    ax.set_aspect("equal")
-    hide_axes(ax)
+    value_cells(ax, grid.ravel(), bits, c, grid.shape[0], fontsize=fontsize, changed=changed,
+                changed_width=1.6)
 
 
 def figures(tool, image, out_dir):
@@ -54,16 +43,12 @@ def figures(tool, image, out_dir):
     out = os.path.join(out_dir, ALGO)
 
     def pipeline(c):
-        fig, axes = plt.subplots(1, 4, figsize=(10.4, 3.1))
-        titles = ["Decoded image", "Grayscale", f"Block means, {n}×{n}",
-                  f"{n * n} bits: block ≥ median"]
-        axes[0].imshow(original)
-        axes[1].imshow(gray, cmap="gray", vmin=0, vmax=255)
-        axes[2].imshow(grid, cmap="gray", vmin=0, vmax=255, interpolation="nearest")
-        draw_bits(axes[3], bits.reshape(n, n), c, numbers=False)
-        for ax, t in zip(axes, titles):
-            hide_axes(ax)
-            ax.set_title(t, color=c["ink"], fontsize=10)
+        fig = stage_strip(c, (10.4, 3.1), [
+            ("Decoded image", image_panel(original)),
+            ("Grayscale", gray_panel(gray)),
+            (f"Block means, {n}×{n}", gray_panel(grid, grid=True)),
+            (f"{n * n} bits: block ≥ median",
+             lambda ax: draw_bits(ax, bits.reshape(n, n), c, numbers=False))])
         half = len(d["digest"]) // 2
         pad = chr(0xA0) * len("digest = ")  # a no-break space survives in the SVG
         fig.text(0.5, -0.02, f"digest = {d['digest'][:half]}\n{pad}{d['digest'][half:]}",
@@ -129,8 +114,7 @@ def _write_load_grayscale(st, out):
     text = ("The example photograph gives the same digest both ways." if k == 0 else
             f"On the example photograph the two digests are {k} of {d['size'] ** 2} bits "
             "apart.")
-    with open(os.path.join(out, "load-grayscale.md"), "w") as f:
-        f.write(text + "\n")
+    write_text(out, "load-grayscale.md", text)
 
 
 # --8<-- [start:variants]
@@ -238,8 +222,7 @@ def _sizes_figure_and_table(tool, measured, out):
         for what, nbits, dprime, t, fmr, npairs in rows[key]:
             lines.append(f"| {SHORT[key]} | {what} | {nbits} | {dprime:.2f} | "
                          f"{t:g} of {nbits} ({t / nbits:.0%}) | {share(fmr, npairs)} |")
-    with open(os.path.join(out, "sizes-corpus-table.md"), "w") as f:
-        f.write("\n".join(lines) + "\n")
+    write_text(out, "sizes-corpus-table.md", "\n".join(lines))
 
 
 def _balance(images, variant, size):
@@ -270,8 +253,7 @@ def _write_threshold_table(measured, out):
                      f"{np.median(apart):g}, {apart.max()} | "
                      f"{spread(_balance(data['images'], f'median_{s}', s))} | "
                      f"{spread(_balance(data['images'], f'mean_{s}', s))} |")
-    with open(os.path.join(out, "thresholds.md"), "w") as f:
-        f.write("\n".join(lines) + "\n")
+    write_text(out, "thresholds.md", "\n".join(lines))
 
 
 def _threshold_figure(tool, measured, out):
@@ -284,7 +266,7 @@ def _threshold_figure(tool, measured, out):
     ones = _balance(images, f"mean_{s}", s)
     pick = int(np.argmax(np.abs(ones - s * s / 2)))
     with tempfile.TemporaryDirectory() as tmp:
-        path = corpus.images(tool, key, os.path.join(corpus.CACHE, "work"))[pick]
+        path = corpus.images(tool, key)[pick]
         ppm = os.path.join(tmp, "image.ppm")
         Image.open(path).convert("RGB").save(ppm)
         st, px = run_stages(tool, ALGO, ppm, ("original.ppm",))

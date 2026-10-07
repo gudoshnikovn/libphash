@@ -1,18 +1,20 @@
 """The figures of docs/theory/color-moments.md, from `site_stages color_moments`,
 `site_stages color_moments-digests` and `site_stages measure`."""
-import json
 import os
-import subprocess
 import tempfile
 
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image
 
-import corpus
-from common import hide_axes, run_stages, save, style_axes
-from corpus_charts import COPY_STRENGTHS, copies_and_different, separability, share
-from transforms import content_edits, transforms
+from draw.corpus_charts import share
+from draw.markdown import write_text
+from draw.style import hide_axes, save, style_axes
+from measure import corpus
+from measure.corpus import SHORT
+from measure.separability import COPY_STRENGTHS, copies_and_different, separability
+from measure.tool import run_lines, run_stages
+from measure.transforms import content_edits, transforms
 
 ALGO = "color_moments"
 BITS = None  # not a bit vector: the charts show the library's own distance
@@ -22,7 +24,6 @@ METRIC_RANGE = (0.0, None)  # no top: the axis ends just above the largest dista
 FORMAT = "{:.1f}"
 REFUSED = "a grayscale image"
 
-SHORT = {"photos": "photographs", "synthetic": "synthetic images"}
 CHANNELS = ("red", "green", "blue")
 MOMENTS = ("mean", "standard deviation", "skewness")
 MOMENT_SHORT = ("mean", "σ", "skew")
@@ -47,17 +48,8 @@ def l2(a, b):
 # --8<-- [end:decode]
 
 
-def _measure(tool, ref, variants):
-    """`site_stages measure`: every algorithm's score of each variant against `ref`."""
-    out = subprocess.run([tool, "measure", ref, *variants], check=True, capture_output=True,
-                         text=True).stdout
-    return [json.loads(line) for line in out.splitlines()]
-
-
 def _digests(tool, paths):
-    out = subprocess.run([tool, "color_moments-digests", *paths], check=True,
-                         capture_output=True, text=True).stdout
-    return [moments(json.loads(line)["digest"]) for line in out.splitlines()]
+    return [moments(row["digest"]) for row in run_lines(tool, "color_moments-digests", *paths)]
 
 
 def figures(tool, image, out_dir):
@@ -132,10 +124,10 @@ def figures(tool, image, out_dir):
     save(pipeline, out, "pipeline")
     save(layout, out, "bit-order")
     _write_stage_numbers(m, values, raw, out)
-    with open(os.path.join(out, "load-grayscale.md"), "w") as f:
-        f.write("With `ph_context_set_load_grayscale()` enabled, the example photograph is "
-                "decoded to one channel, and "
-                f"`ph_compute_color_moments_hash()` refuses it: \"{st['load_grayscale']}\".\n")
+    write_text(out, "load-grayscale.md",
+               "With `ph_context_set_load_grayscale()` enabled, the example photograph is "
+               "decoded to one channel, and "
+               f"`ph_compute_color_moments_hash()` refuses it: \"{st['load_grayscale']}\".")
 
     base = Image.open(image).convert("RGB")
     _distance_figure(tool, base, values, out)
@@ -159,8 +151,7 @@ def _write_stage_numbers(m, values, raw, out):
             i = ch * 3 + k
             lines.append(f"| {CHANNELS[ch]} | {MOMENTS[k]} | {m[ch, k]:.4f} | {raw[i]:+d} | "
                          f"`{int(raw[i]) & 0xFFFF:04x}` |")
-    with open(os.path.join(out, "stage-numbers.md"), "w") as f:
-        f.write("\n".join(lines) + "\n")
+    write_text(out, "stage-numbers.md", "\n".join(lines))
 
 
 def _distance_figure(tool, base, values, out):
@@ -172,7 +163,7 @@ def _distance_figure(tool, base, values, out):
         base.save(ref)
         turned.save(var)
         other = _digests(tool, [var])[0]
-        lib = _measure(tool, ref, [var])[0][ALGO]
+        lib = run_lines(tool, "measure", ref, var)[0][ALGO]
     mine = l2(values, other)
     if abs(mine - lib) > 1e-6:
         raise SystemExit(f"render: color_moments: L2 {mine:.9f} here, {lib:.9f} from the library")
@@ -271,8 +262,7 @@ def _tone_color(data, present, thresholds, out):
                          f"({FORMAT.format(q[0])}–{FORMAT.format(q[2])}) | "
                          f"{np.mean(v <= thresholds[key]):.0%} | "
                          f"{np.mean(h >= hash_thresholds[key]):.0%} |")
-    with open(os.path.join(out, "tone-color-table.md"), "w") as f:
-        f.write("\n".join(lines) + "\n")
+    write_text(out, "tone-color-table.md", "\n".join(lines))
 
 
 # --8<-- [start:skew]
@@ -389,5 +379,4 @@ def _write_skew_table(measured, edits, out):
             pair = np.sqrt(((orig[:, None] - orig[None])[..., keep] ** 2).sum(axis=(2, 3)))[iu]
             cells.append(f"{separability(copies, pair, True)[0]:.2f}")
         lines.append(f"| {SHORT[key]} | " + " | ".join(cells) + " |")
-    with open(os.path.join(out, "skew-table.md"), "w") as f:
-        f.write("\n".join(lines) + "\n")
+    write_text(out, "skew-table.md", "\n".join(lines))

@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Draws the documentation site's figures from what site_stages (tools/site/stages/) measures.
+"""Draws the documentation site's figures from what site_stages (tools/site/stages/)
+measures.
 
 Every figure is drawn twice, for the light and the dark theme (`name.light.svg`,
 `name.dark.svg`; a page shows them with `#only-light` / `#only-dark`), and every measured
 chart also gets a Markdown table of the same numbers, which a page includes under the
 figure so the values are readable without the picture.
 
-One module per algorithm page draws its figures (`algo_<name>.py`); the robustness
-measurement (measure.py) runs once, over the transforms of transforms.py, and serves
-every page, on the example image and over both corpora (corpus.py), whose figures
-corpus_charts.py draws.
+One module per algorithm page draws its own figures (pages/<algo>.py). The figures every
+page has are drawn here, once per page, from measurements made once for all of them
+(measure/): the robustness of the example image and of both corpora under the edits of
+measure/transforms.py, and the times. tools/site/README.md has the whole layout.
 
 Usage: tools/site/render.py --tool build/release/site_stages --image tests/data/photo.jpeg
                             --out docs/assets/generated [--algo ahash,...|all]
@@ -20,24 +21,16 @@ PNG on its theme's background (common.save), to look at before the page is built
 import argparse
 import sys
 
-import algo_ahash
-import algo_bmh
-import algo_color_hash
-import algo_color_moments
-import algo_dhash
-import algo_mhash
-import algo_phash
-import algo_radial
-import algo_whash
-from corpus import measure_corpus
-from corpus_charts import (corpus_robustness_figure, corpus_tables, edits_examples, edits_figure,
-                           edits_table, separability_figure)
-from measure import measure_robustness, robustness_figure, robustness_table
-from timing import measure_timing, write_timing
+from draw.corpus_charts import (corpus_robustness_figure, corpus_tables, edits_examples,
+                                edits_figure, edits_table, separability_figure)
+from draw.robustness_charts import robustness_figure, robustness_table
+from draw.timing_tables import write_timing
+from measure.corpus import CORPORA, measure_corpus
+from measure.robustness import measure_robustness
+from measure.timing import measure_timing
+from pages import PAGES
 
-ALGORITHMS = {m.ALGO: m for m in (algo_ahash, algo_dhash, algo_phash, algo_whash, algo_mhash,
-                                     algo_bmh, algo_radial, algo_color_hash,
-                                     algo_color_moments)}
+ALGORITHMS = {m.ALGO: m for m in PAGES}
 
 
 def main():
@@ -61,7 +54,7 @@ def main():
     for name in names:
         robustness_figure(data, name, args.out, ALGORITHMS[name], caption)
         robustness_table(data, name, args.out, ALGORITHMS[name])
-    datasets = [(c, measure_corpus(args.tool, c)) for c in ("synthetic", "photos")]
+    datasets = [(c, measure_corpus(args.tool, c)) for c in CORPORA]
     for name in names:
         corpus_robustness_figure(datasets, name, ALGORITHMS[name], args.out)
         separability_figure(datasets, name, ALGORITHMS[name], args.out)

@@ -1,17 +1,17 @@
 """The figures of docs/theory/whash.md, from `site_stages whash` and `site_stages whash-modes`."""
-import glob
-import json
 import os
-import subprocess
-import tempfile
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-import corpus
-from common import draw_bits, hide_axes, run_stages, save, style_axes
-from measure import bits_that_differ
-from transforms import transforms
+from draw.markdown import load_grayscale_hash, write_text
+from draw.style import (draw_bits, gray_panel, hash_footer, hide_axes, image_panel, save,
+                        stage_strip, style_axes, value_cells)
+from measure import corpus
+from measure.digests import bits_apart
+from measure.metric import bits_that_differ
+from measure.tool import run_lines, run_stages
+from measure.transforms import transforms
 
 ALGO = "whash"
 BITS = 64  # the robustness chart's scale: bits of the hash
@@ -30,48 +30,26 @@ BANDS = (("LL: sums both ways", 0, 0), ("differences across", 0, 1),
          ("differences down", 1, 0), ("differences both ways", 1, 1))
 
 
-def _bits_apart(a, b):
-    return bin(int(a, 16) ^ int(b, 16)).count("1")
-
-
 def _whash_modes(tool, paths):
-    if not paths:
-        return []
-    out = subprocess.run([tool, "whash-modes", *paths], check=True, capture_output=True,
-                         text=True).stdout
-    return [json.loads(line) for line in out.splitlines()]
+    return run_lines(tool, "whash-modes", *paths) if paths else []
 
 
 def _ties_synthetic(tool):
     """The image of the synthetic corpus whose FAST hash the removal moves the most, with
     its stages: (index, stages, pixels)."""
     best = None
-    with tempfile.TemporaryDirectory() as tmp:
-        subprocess.run([tool, "corpus", tmp], check=True)
-        for path in sorted(glob.glob(os.path.join(tmp, "*.ppm"))):
-            st, px = run_stages(tool, ALGO, path, ("original.ppm",))
-            moved = _bits_apart(st["fast"]["hash"], st["fast_removed"]["hash"])
-            if best is None or moved > best[0]:
-                best = (moved, int(os.path.basename(path)[:2]), st, px["original.ppm"])
+    for path in corpus.images(tool, "synthetic"):
+        st, px = run_stages(tool, ALGO, path, ("original.ppm",))
+        moved = bits_apart(st["fast"]["hash"], st["fast_removed"]["hash"])
+        if best is None or moved > best[0]:
+            best = (moved, int(os.path.basename(path)[:2]), st, px["original.ppm"])
     return best[1:]
 
 
 def _ll_cells(ax, values, bits, c, fmt="{:.3f}", fontsize=7.5, changed=None):
     """The 8×8 LL band: each value in its cell, the cell in the accent where its bit is
     set; cells listed in `changed` outlined in the second accent."""
-    for k, v in enumerate(values):
-        i, j = divmod(k, 8)
-        ax.add_patch(plt.Rectangle((j - 0.46, i - 0.46), 0.92, 0.92, linewidth=0,
-                                   color=c["accent"] if bits[k] else c["off"]))
-        ax.text(j, i, fmt.format(v), ha="center", va="center", fontsize=fontsize,
-                color=c["on_text"] if bits[k] else c["ink"])
-        if changed is not None and changed[k]:
-            ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False, linewidth=2,
-                                       edgecolor=c["accent2"]))
-    ax.set_xlim(-0.5, 7.5)
-    ax.set_ylim(7.5, -0.5)
-    ax.set_aspect("equal")
-    hide_axes(ax)
+    value_cells(ax, values, bits, c, 8, fmt=fmt, fontsize=fontsize, changed=changed)
 
 
 def _show_coef(ax, coef, size, levels):
@@ -108,21 +86,19 @@ def figures(tool, image, out_dir):
     out = os.path.join(out_dir, ALGO)
 
     def pipeline(c):
-        fig, axes = plt.subplots(1, 5, figsize=(12, 2.9))
-        titles = ["Decoded image", "Grayscale", f"Reduced to {n}×{n}", "One Haar level",
-                  "Bits of the 8×8 LL band"]
-        axes[0].imshow(original)
-        axes[1].imshow(gray, cmap="gray", vmin=0, vmax=255)
-        axes[2].imshow(grid, cmap="gray", vmin=0, vmax=255, interpolation="nearest")
-        _show_coef(axes[3], coef, n, 1)
-        axes[3].add_patch(plt.Rectangle((-0.5, -0.5), 8, 8, fill=False, linewidth=1.5,
-                                        edgecolor=c["accent"]))
-        draw_bits(axes[4], bits.reshape(8, 8), c, numbers=False)
-        for ax, t in zip(axes, titles):
-            hide_axes(ax)
-            ax.set_title(t, color=c["ink"], fontsize=10)
-        fig.text(0.5, -0.02, f"hash = {fast['hash']}", ha="center", color=c["ink"],
-                 family="monospace", fontsize=11)
+        def one_level(ax):
+            _show_coef(ax, coef, n, 1)
+            ax.add_patch(plt.Rectangle((-0.5, -0.5), 8, 8, fill=False, linewidth=1.5,
+                                       edgecolor=c["accent"]))
+
+        fig = stage_strip(c, (12, 2.9), [
+            ("Decoded image", image_panel(original)),
+            ("Grayscale", gray_panel(gray)),
+            (f"Reduced to {n}×{n}", gray_panel(grid, grid=True)),
+            ("One Haar level", one_level),
+            ("Bits of the 8×8 LL band", lambda ax: draw_bits(ax, bits.reshape(8, 8), c,
+                                                              numbers=False))])
+        hash_footer(fig, c, fast["hash"])
         return fig
 
     def haar_level(c):
@@ -177,7 +153,7 @@ def figures(tool, image, out_dir):
         axes[1].add_patch(plt.Rectangle((-0.5, -0.5), zoom, zoom, fill=False, linewidth=1,
                                         edgecolor=c["accent2"]))
         axes[1].set_title(f"{levels} Haar levels", color=c["ink"], fontsize=10)
-        axes[2].set_title(f"the orange corner, enlarged; the LL band in blue",
+        axes[2].set_title("the orange corner, enlarged; the LL band in blue",
                           color=c["ink"], fontsize=10)
         return fig
 
@@ -213,7 +189,7 @@ def figures(tool, image, out_dir):
         # Both modes' LL bands as block means: each divided by 2 to the number of levels
         # and multiplied by 255, so the two read on the scale of the grayscale image.
         fig, axes = plt.subplots(1, 2, figsize=(9.6, 5.0))
-        apart = _bits_apart(fast["hash"], full["hash"])
+        apart = bits_apart(fast["hash"], full["hash"])
         for ax, s, name in ((axes[0], fast, "PH_WHASH_FAST"), (axes[1], full, "PH_WHASH_FULL")):
             means = np.array(s["ll"]) * 255 / 2 ** s["levels"]
             changed = np.array(fast["bits"]) != np.array(full["bits"])
@@ -269,10 +245,8 @@ def _write_modes_tables(tool, out):
     """How the FAST hash relates to the median-thresholded grid and to the FULL hash, and
     each mode's hash to itself with remove_max_haar_ll, over both corpora: tables the page
     includes, so the text holds no number that moves with the code."""
-    with tempfile.TemporaryDirectory() as tmp:
-        sets = [("synthetic", corpus.images(tool, "synthetic", tmp)),
-                ("photos", corpus.images(tool, "photos", tmp))]
-        measured = [(name, _whash_modes(tool, paths)) for name, paths in sets]
+    measured = [(name, _whash_modes(tool, corpus.images(tool, name)))
+                for name in corpus.CORPORA]
     # table: (what a row is called, (mode, one hash, the other)) per row group
     tables = {"modes-grid": (None, (("", "fast", "grid_median"),)),
               "modes-full": (None, (("", "fast", "full"),)),
@@ -285,15 +259,14 @@ def _write_modes_tables(tool, out):
         for mode, a, b in groups:
             lead = f"| {mode} " if head else ""
             for name, rs in measured:
-                label = corpus.LABELS[name].format(n=len(rs))
+                label = corpus.label(name, len(rs))
                 if not rs:
                     lines.append(f"{lead}| {label}: not available to this build | | | |")
                     continue
-                d = [_bits_apart(r[a], r[b]) for r in rs]
+                d = [bits_apart(r[a], r[b]) for r in rs]
                 lines.append(f"{lead}| {label} | {sum(x == 0 for x in d)} | "
                              f"{sum(x == 1 for x in d)} | {max(d)} |")
-        with open(os.path.join(out, f"{table}.md"), "w") as f:
-            f.write("\n".join(lines) + "\n")
+        write_text(out, f"{table}.md", "\n".join(lines))
 
 
 def _mean_bits(values):
@@ -344,11 +317,9 @@ def _vs_ahash(tool, out):
             cells = [f"{_mean_bits(d['robust'][a][name][k][1]):.1f}"
                      for _, d in datasets for a in ("ahash", "whash")]
             lines.append(f"| {name} | {strength:g} | " + " | ".join(cells) + " |")
-    with open(os.path.join(out, "vs-ahash-table.md"), "w") as f:
-        f.write("\n".join(lines) + "\n")
+    write_text(out, "vs-ahash-table.md", "\n".join(lines))
 
-    with tempfile.TemporaryDirectory() as tmp:
-        photos = _whash_modes(tool, corpus.images(tool, "photos", tmp))
+    photos = _whash_modes(tool, corpus.images(tool, "photos"))
     if photos:
         n = np.array([bin(int(r["ahash"], 16)).count("1") for r in photos])
         lo, hi = np.percentile(n, [10, 90])
@@ -357,16 +328,10 @@ def _vs_ahash(tool, out):
                 f"{hi:.0f}.")
     else:
         text = "The photographs were not available to this build."
-    with open(os.path.join(out, "ahash-bits.md"), "w") as f:
-        f.write(text + "\n")
+    write_text(out, "ahash-bits.md", text)
 
 
 def _write_load_grayscale(st, out):
     """One sentence on the example photograph hashed from the decoder's grayscale."""
     a, b = st["fast"]["hash"], st["hash_load_grayscale"]
-    n = _bits_apart(a, b)
-    text = (f"The example photograph hashes to `{a}` both ways." if n == 0 else
-            f"The example photograph hashes to `{a}` with the library's grayscale and to "
-            f"`{b}` with the decoder's, {n} bit{'' if n == 1 else 's'} apart.")
-    with open(os.path.join(out, "load-grayscale.md"), "w") as f:
-        f.write(text + "\n")
+    write_text(out, "load-grayscale.md", load_grayscale_hash(a, b, bits_apart(a, b)))

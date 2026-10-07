@@ -1,18 +1,20 @@
 """The figures of docs/theory/mhash.md, from `site_stages mhash`."""
 import concurrent.futures
-import json
 import os
-import subprocess
-import tempfile
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
 
-import corpus
-from common import hide_axes, read_pnm, save, style_axes
-from corpus_charts import COPY_STRENGTHS
-from timing import measure_timing, ms
+from draw.markdown import write_text
+from draw.style import gray_panel, hide_axes, image_panel, save, stage_strip, style_axes
+from draw.timing_tables import ms
+from measure import corpus
+from measure.cache import cached
+from measure.digests import digest_bits
+from measure.separability import COPY_STRENGTHS
+from measure.timing import measure_timing
+from measure.tool import run_lines, run_stages
 
 ALGO = "mhash"
 BITS = 576  # the robustness chart's scale: bits of the digest
@@ -20,20 +22,16 @@ BITS = 576  # the robustness chart's scale: bits of the digest
 
 def _stages(tool, image):
     """`site_stages mhash` on `image`: (json, {name: pixels}, response as an n×n array)."""
-    with tempfile.TemporaryDirectory() as tmp:
-        subprocess.run([tool, ALGO, image, tmp], check=True)
-        with open(os.path.join(tmp, "mhash.json")) as f:
-            st = json.load(f)
-        px = {n: read_pnm(os.path.join(tmp, n)) for n in
-              ("original.ppm", "gray.pgm", "blurred.pgm", "resized.pgm", "equalized.pgm")}
-        n = st["default"]["size"]
-        response = np.fromfile(os.path.join(tmp, "response.f32"), dtype=np.float32)
-    return st, px, response.reshape(n, n)
+    st, px = run_stages(tool, ALGO, image, ("original.ppm", "gray.pgm", "blurred.pgm",
+                                            "resized.pgm", "equalized.pgm"),
+                        floats=("response.f32",))
+    n = st["default"]["size"]
+    return st, px, px.pop("response.f32").reshape(n, n)
 
 
 def _bits(digest_hex):
     """The digest's 576 bits in order, MSB of byte 0 first, as the library packs them."""
-    return np.unpackbits(np.frombuffer(bytes.fromhex(digest_hex), np.uint8))
+    return digest_bits(digest_hex)
 
 
 def _apart(a, b):
@@ -100,19 +98,13 @@ def figures(tool, image, out_dir):
     out = os.path.join(out_dir, ALGO)
 
     def pipeline(c):
-        fig, axes = plt.subplots(1, 6, figsize=(13, 2.7))
-        titles = ["Decoded image", f"Blurred, {n}×{n}", "Equalized", "Kernel response",
-                  f"{g}×{g} block sums", "576 bits"]
-        axes[0].imshow(px["original.ppm"])
-        axes[1].imshow(px["resized.pgm"], cmap="gray", vmin=0, vmax=255)
-        axes[2].imshow(px["equalized.pgm"], cmap="gray", vmin=0, vmax=255)
-        _signed(axes[3], response, c)
-        _signed(axes[4], blocks, c)
-        _draw_mosaic(axes[5], bits, c)
-        for ax, t in zip(axes, titles):
-            hide_axes(ax)
-            ax.set_title(t, color=c["ink"], fontsize=10)
-        return fig
+        return stage_strip(c, (13, 2.7), [
+            ("Decoded image", image_panel(px["original.ppm"])),
+            (f"Blurred, {n}×{n}", gray_panel(px["resized.pgm"])),
+            ("Equalized", gray_panel(px["equalized.pgm"])),
+            ("Kernel response", lambda ax: _signed(ax, response, c)),
+            (f"{g}×{g} block sums", lambda ax: _signed(ax, blocks, c)),
+            ("576 bits", lambda ax: _draw_mosaic(ax, bits, c))])
 
     def kernel_fig(c):
         fig, (a, b) = plt.subplots(1, 2, figsize=(9, 3.6), gridspec_kw={"width_ratios": [1, 1.6]})
@@ -298,13 +290,13 @@ def figures(tool, image, out_dir):
 def _write_facts(st, kernel, out):
     """The numbers the text quotes, as sentences the page includes."""
     d = st["default"]
-    with open(os.path.join(out, "load-grayscale.md"), "w") as f:
-        k = _apart(d["digest"], st["digest_load_grayscale"])
-        f.write("The example photograph gives the same digest both ways.\n" if k == 0 else
-                f"On the example photograph the two digests are {k} of 576 bits apart.\n")
-    with open(os.path.join(out, "kernel-sum.md"), "w") as f:
-        f.write(f"The {d['side']}×{d['side']} kernel at the defaults sums to "
-                f"{kernel.sum():.3f}, against a weight of {kernel.max():g} at its center.\n")
+    k = _apart(d["digest"], st["digest_load_grayscale"])
+    write_text(out, "load-grayscale.md",
+               "The example photograph gives the same digest both ways." if k == 0 else
+               f"On the example photograph the two digests are {k} of 576 bits apart.")
+    write_text(out, "kernel-sum.md",
+               f"The {d['side']}×{d['side']} kernel at the defaults sums to "
+               f"{kernel.sum():.3f}, against a weight of {kernel.max():g} at its center.")
 
 
 def _cost_figure(tool, out):
@@ -342,14 +334,13 @@ def _cost_figure(tool, out):
     for s in sizes:
         rows.append(f"| {s} | " + " | ".join(f"{ms(e['cases'][f'mhash_size_{s}']['min_ms'])} ms"
                                              for e, _ in series) + " |")
-    with open(os.path.join(out, "cost-size.md"), "w") as f:
-        f.write("\n".join(rows) + "\n")
+    write_text(out, "cost-size.md", "\n".join(rows))
 
 
 def _patch_figure(tool, out):
     """mHash's median distance after each copy edit and after each patch, per corpus: the
     patches against the edits a copy goes through."""
-    datasets = [(k, corpus.measure_corpus(tool, k)) for k in ("synthetic", "photos")]
+    datasets = [(k, corpus.measure_corpus(tool, k)) for k in corpus.CORPORA]
     datasets = [(k, d) for k, d in datasets if d["n"]]
 
     def rows(data):
@@ -385,34 +376,26 @@ def _patch_figure(tool, out):
 
 def _direct_one(args):
     tool, paths = args
-    res = subprocess.run([tool, "mhash-direct", *paths], check=True, capture_output=True,
-                         text=True).stdout
-    return [json.loads(line) for line in res.splitlines()]
+    return run_lines(tool, "mhash-direct", *paths)
 
 
 def _write_direct(tool, st, out):
     """How often evaluating the definition pixel by pixel, in double and in float, gives
     another digest than the folded block sums, over both corpora; cached like them."""
     lines = []
-    for key in ("synthetic", "photos"):
-        work = os.path.join(corpus.CACHE, "work")
-        paths = corpus.images(tool, key, work)
+    for key in corpus.CORPORA:
+        paths = corpus.images(tool, key)
         if not paths:
             continue
-        cache = os.path.join(corpus.CACHE, f"mhash-direct-{key}.json")
-        ck = corpus.cache_key(paths)
-        rows = None
-        if os.path.exists(cache):
-            with open(cache) as f:
-                saved = json.load(f)
-            rows = saved["rows"] if saved.get("key") == ck else None
-        if rows is None:
+
+        def measure():
             chunks = [(tool, paths[i:i + 8]) for i in range(0, len(paths), 8)]
             with concurrent.futures.ProcessPoolExecutor() as pool:
-                rows = [r for part in pool.map(_direct_one, chunks) for r in part]
-            with open(cache, "w") as f:
-                json.dump({"key": ck, "rows": rows}, f)
-        label = corpus.LABELS[key].format(n=len(paths))
+                return [r for part in pool.map(_direct_one, chunks) for r in part]
+
+        rows = cached(f"mhash-direct-{key}", corpus.cache_key(paths), measure,
+                      f"mhash-direct, {len(paths)} images")
+        label = corpus.label(key, len(paths))
         for kind in ("double", "float"):
             diff = [r[kind] for r in rows if r[kind]]
             text = ("the same digest on every image" if not diff else
@@ -426,6 +409,6 @@ def _write_direct(tool, st, out):
                ("the same digest" if _apart(d["digest"], st[f"digest_direct_{kind}"]) == 0 else
                 f"{_apart(d['digest'], st[f'digest_direct_{kind}'])} bits apart") + " |"
                for kind in ("double", "float")]
-    with open(os.path.join(out, "direct.md"), "w") as f:
-        f.write("| Images | Response computed in | Against the folded block sums |\n"
-                "|---|---|---|\n" + "\n".join(example + lines) + "\n")
+    write_text(out, "direct.md",
+               "| Images | Response computed in | Against the folded block sums |\n"
+               "|---|---|---|\n" + "\n".join(example + lines))

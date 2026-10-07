@@ -1,8 +1,6 @@
-"""What every figure of the site shares: the two themes, the saving, the axes, the readers."""
-import json
+"""What every figure of the site shares: the two themes, the saving, the axes, and the
+panels several pages draw (a strip of stages, a grid of values, a grid of bits)."""
 import os
-import subprocess
-import tempfile
 
 import matplotlib
 
@@ -71,27 +69,9 @@ def hide_axes(ax):
         s.set_visible(False)
 
 
-def read_pnm(path):
-    with open(path, "rb") as f:
-        magic = f.readline().strip()
-        w, h = map(int, f.readline().split())
-        f.readline()
-        data = np.frombuffer(f.read(), dtype=np.uint8)
-    return data.reshape(h, w, 3) if magic == b"P6" else data.reshape(h, w)
-
-
-def run_stages(tool, mode, image, images=()):
-    """Runs `site_stages <mode> <image> <dir>` and returns ({json}, {image name: pixels})
-    for the `<mode>.json` and the named PNM files it wrote."""
-    with tempfile.TemporaryDirectory() as tmp:
-        subprocess.run([tool, mode, image, tmp], check=True)
-        with open(os.path.join(tmp, f"{mode}.json")) as f:
-            stages = json.load(f)
-        pixels = {name: read_pnm(os.path.join(tmp, name)) for name in images}
-    return stages, pixels
-
-
 def draw_bits(ax, bits, c, numbers):
+    """A square grid of bits: the accent where a bit is set; with `numbers`, 0 or 1 in
+    each cell."""
     n = bits.shape[0]
     ax.set_xlim(-0.5, n - 0.5)
     ax.set_ylim(n - 0.5, -0.5)
@@ -103,3 +83,56 @@ def draw_bits(ax, bits, c, numbers):
                     color=c["on_text"] if b else c["muted"])
     hide_axes(ax)
     ax.set_aspect("equal")
+
+
+def value_cells(ax, values, bits, c, size, fmt="{}", fontsize=8, changed=None,
+                changed_width=2):
+    """A size×size grid of values, row by row: each value in its cell (none when
+    `fontsize` is 0), the cell in the accent where its bit is set, and the cells listed in
+    `changed` outlined in the second accent."""
+    for k, v in enumerate(values):
+        i, j = divmod(k, size)
+        ax.add_patch(plt.Rectangle((j - 0.46, i - 0.46), 0.92, 0.92, linewidth=0,
+                                   color=c["accent"] if bits[k] else c["off"]))
+        if fontsize:
+            ax.text(j, i, fmt.format(v), ha="center", va="center", fontsize=fontsize,
+                    color=c["on_text"] if bits[k] else c["ink"])
+        if changed is not None and changed[k]:
+            ax.add_patch(plt.Rectangle((j - 0.5, i - 0.5), 1, 1, fill=False,
+                                       linewidth=changed_width, edgecolor=c["accent2"]))
+    ax.set_xlim(-0.5, size - 0.5)
+    ax.set_ylim(size - 0.5, -0.5)
+    ax.set_aspect("equal")
+    hide_axes(ax)
+
+
+def stage_strip(c, figsize, panels):
+    """The strip at the top of "The steps": one panel per stage, `panels` being
+    [(title, draw(ax))], each drawn and then titled. Returns the figure."""
+    fig, axes = plt.subplots(1, len(panels), figsize=figsize)
+    for ax, (_, draw) in zip(axes, panels):
+        draw(ax)
+    for ax, (title, _) in zip(axes, panels):
+        hide_axes(ax)
+        ax.set_title(title, color=c["ink"], fontsize=10)
+    return fig
+
+
+def image_panel(image):
+    """A stage_strip() panel showing a decoded (RGB) image."""
+    return lambda ax: ax.imshow(image)
+
+
+def gray_panel(image, grid=False):
+    """A stage_strip() panel showing a grayscale image on the full 0–255 scale; a `grid`
+    (a reduction to a few cells) is drawn with sharp cells."""
+    if grid:
+        return lambda ax: ax.imshow(image, cmap="gray", vmin=0, vmax=255,
+                                    interpolation="nearest")
+    return lambda ax: ax.imshow(image, cmap="gray", vmin=0, vmax=255)
+
+
+def hash_footer(fig, c, hexhash):
+    """The hash under a strip of stages, as ph_compute_*() returned it."""
+    fig.text(0.5, -0.02, f"hash = {hexhash}", ha="center", color=c["ink"], family="monospace",
+             fontsize=11)
