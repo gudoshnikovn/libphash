@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **A load rejected for its arguments leaves no image behind.** `ph_load_from_file()` with
+  a NULL path, and `ph_load_from_memory()` with a NULL buffer or a length of 0, returned
+  `PH_ERR_INVALID_ARGUMENT` but kept the previously loaded image, so a following
+  `ph_compute_*` call hashed that image instead of failing. They drop it, as every other
+  failed load does: the context holds no image and a hash returns `PH_ERR_EMPTY_IMAGE`.
+  An empty file already behaved this way (`PH_ERR_IO`); an empty buffer now matches it.
+  `ph_load_from_pixels()` is unchanged and keeps the previous image on any error.
 
 ## [2.0.0] - 2026-10-07
 

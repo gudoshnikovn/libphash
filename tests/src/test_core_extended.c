@@ -315,6 +315,22 @@ void test_dimensions_follow_the_loaded_image(void) {
     ph_context_get_dimensions(ctx, &w, &h, &c);
     ASSERT(w == 0 && h == 0 && c == 0);
 
+    /* A rejected argument is a failed load like any other: an empty buffer must not leave
+     * the previous image there to be hashed in its place. */
+    uint64_t hash = 0;
+    for (int bad = 0; bad < 3; bad++) {
+        ASSERT_OK(ph_load_from_pixels(ctx, pixels, 7, 5, 3, 7 * 3));
+        ph_error_t rc = bad == 0   ? ph_load_from_file(ctx, NULL)
+                        : bad == 1 ? ph_load_from_memory(ctx, NULL, sizeof(junk))
+                                   : ph_load_from_memory(ctx, junk, 0);
+        ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, rc);
+        ASSERT_INT_EQ(0, ph_is_loaded(ctx));
+        w = h = c = -1;
+        ph_context_get_dimensions(ctx, &w, &h, &c);
+        ASSERT(w == 0 && h == 0 && c == 0);
+        ASSERT_INT_EQ(PH_ERR_EMPTY_IMAGE, ph_compute_ahash(ctx, &hash));
+    }
+
     /* The exception: a rejected ph_load_from_pixels() leaves the image it found. */
     ASSERT_OK(ph_load_from_pixels(ctx, pixels, 7, 5, 3, 7 * 3));
     ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_load_from_pixels(ctx, pixels, 7, 5, 2, 7 * 3));

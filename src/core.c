@@ -175,11 +175,10 @@ PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath) {
     if (!ctx) {
         return PH_ERR_INVALID_ARGUMENT;
     }
-    ph_clear_last_error(ctx);
+    ph_reset_loaded_image(ctx);
     if (!filepath) {
         return PH_ERR_INVALID_ARGUMENT;
     }
-    ph_reset_loaded_image(ctx);
 
     ph_file_bytes_t bytes;
     ph_error_t err = ph_open_file_bytes(filepath, &bytes, ctx->last_error, sizeof(ctx->last_error));
@@ -196,11 +195,10 @@ PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint8_t *buffer, 
     if (!ctx) {
         return PH_ERR_INVALID_ARGUMENT;
     }
-    ph_clear_last_error(ctx);
+    ph_reset_loaded_image(ctx);
     if (!buffer || length == 0) {
         return PH_ERR_INVALID_ARGUMENT;
     }
-    ph_reset_loaded_image(ctx);
     return ph_load_encoded_bytes(ctx, buffer, length);
 }
 
