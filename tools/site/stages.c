@@ -36,7 +36,8 @@
  *   site_stages whash-modes <image>...
  *       Prints one JSON object per image: its wHash as ph_compute_whash() computes it in
  *       both modes, each with and without remove_max_haar_ll; and aHash's 8x8 area grid
- *       thresholded at its median and packed the same way, which the LL band amounts to.
+ *       thresholded at its median and packed the same way, which the LL band amounts to;
+ *       and its aHash, for the count of bits each sets.
  *
  *   site_stages measure <reference> <variant>...
  *       Prints one JSON object per variant: for each of the nine algorithms, the
@@ -742,6 +743,12 @@ static int whash_modes(int argc, char **argv) {
             values[k] = grid[k];
         }
         json_hex64(&j, "grid_median", whash_bits(values, &median));
+        uint64_t ahash = 0;
+        if (ph_compute_ahash(ctx, &ahash) != PH_SUCCESS) {
+            ph_free(ctx);
+            return fail("ph_compute_ahash failed", argv[i]);
+        }
+        json_hex64(&j, "ahash", ahash);
         json_end(&j);
         ph_free(ctx);
     }

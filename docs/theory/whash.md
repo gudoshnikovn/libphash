@@ -16,10 +16,12 @@ instead of the mean.
 
 ## The steps
 
-Every picture on this page is computed by the library from the same photograph, and the
-hash at the end is what `ph_compute_whash()` returns for it in its default mode,
-[`PH_WHASH_FAST`](../api/params.md#PH_WHASH_FAST). The other mode, `PH_WHASH_FULL`, is
-[below](#the-full-mode).
+The steps below are those of the default mode,
+[`PH_WHASH_FAST`](../api/params.md#PH_WHASH_FAST), which is the one to use unless a hash
+must follow ImageHash's choice of scale; the other mode, `PH_WHASH_FULL`, differs only in
+steps 2 and 3 and is [below](#the-full-mode). Every picture on this page is computed by
+the library from the same photograph, and the hash at the end is what
+`ph_compute_whash()` returns for it.
 
 ![The five stages of wHash on the example photograph](../assets/generated/whash/pipeline.light.svg#only-light)
 ![The five stages of wHash on the example photograph](../assets/generated/whash/pipeline.dark.svg#only-dark)
@@ -109,9 +111,8 @@ FAST hash against the 8×8 area grid thresholded at its median and packed the sa
 
 --8<-- "docs/assets/generated/whash/modes-grid.md"
 
-The median gives the hash the one property aHash's mean does not: half of its bits are
-set, whatever the image. With the mean, the count follows the picture; a single bright
-cell on a dark field sets a single bit.
+Reading the same grid does not make the two the same hash: where they cut it decides
+which edits move them, as [measured below](#whash-and-ahash).
 
 ## Bit layout
 
@@ -278,6 +279,53 @@ on these images the cut matters little.
     `tests/src/synthetic_corpus.h`, the same code the tests use. `make site` measures
     both corpora and draws every figure.
 
+### wHash and aHash
+
+The two hashes read the same 8×8 grid and differ in one thing, the threshold: aHash
+compares each cell with the grid's mean, wHash with its median. That one difference
+shows in what moves them. Here are both, edit by edit, over both corpora, as the mean
+number of bits that differ from the original, for the edits where they part and for
+contrast, where they do not:
+
+![Mean bits that differ from the original for aHash and wHash under gamma, contrast, rotation, crop and noise, over the photographs and the synthetic images](../assets/generated/whash/vs-ahash.light.svg#only-light)
+![Mean bits that differ from the original for aHash and wHash under gamma, contrast, rotation, crop and noise, over the photographs and the synthetic images](../assets/generated/whash/vs-ahash.dark.svg#only-dark)
+
+- **Gamma: wHash moves less.** A median depends only on the order of the values. A tone
+  curve keeps the order of the block means nearly intact, so the median stays between the
+  same two cells, while the mean moves against the cells and those next to it cross. The
+  gap is widest on the synthetic images.
+- **Brightness and contrast: no difference on photographs.** Scaling the values moves
+  the mean and the median alike. On the synthetic images the strongest settings move
+  one hash or the other a bit more, in either direction (the table has the numbers).
+- **Rotation and cropping: wHash moves a little more.** Unless values tie, wHash always
+  has 32 bits set, so a value that crosses the median pushes another one back across it,
+  and a reordering costs two bits where it costs aHash one.
+- **Noise on the synthetic images: wHash moves more.** Their flat areas give many equal
+  block means, which tie at the median; noise breaks the tie one way or the other. On
+  photographs ties are rare, and neither hash moves.
+
+Separating copies from different images, the two are close on both corpora (the tables
+of this page and of [aHash's](ahash.md#copies-and-different-images)). The median also
+sets exactly half of the bits on every image, which a mean does not:
+
+--8<-- "docs/assets/generated/whash/ahash-bits.md"
+
+On photographs, then, aHash's count stays near half on its own, and the median's
+balance seldom changes the outcome.
+
+??? info "The numbers behind the chart"
+
+    Mean bits that differ from the original, over each corpus:
+
+    --8<-- "docs/assets/generated/whash/vs-ahash-table.md"
+
+??? info "How this was measured"
+
+    The values are those of the corpus charts above, from the same cached measurement,
+    for both algorithms; the figure and the table take their mean over the corpus
+    instead of the median, since the median of a small edit is 0 for both. The count of
+    aHash bits is [`ph_compute_ahash()`](../api/hash64.md#ph_compute_ahash) on each photograph, by `site_stages whash-modes`.
+
 How the nine algorithms compare is on
 [choosing an algorithm](../algorithms.md#comparison-summary).
 
@@ -308,16 +356,16 @@ Hashes are comparable only when computed with the same settings.
 
 `PH_WHASH_FULL` follows ImageHash's choice of scale. The grayscale image is resampled
 with a box filter to the largest power of two that fits its shorter side, at least 8 (256
-for the 400×400 example), and the Haar level of step 3 is applied again and again, each
+for the 400×400 example), and the Haar level of step 3 is applied repeatedly, each
 time to the LL band of the previous one, until LL is 8×8. Every detail band of every level
 is set aside; only the last LL is thresholded, as in step 5.
 
-![The example resampled to 256×256 and its five-level Haar decomposition, each level's LL band split again in its top-left corner, with the 8×8 LL band at the very corner](../assets/generated/whash/pyramid.light.svg#only-light)
-![The example resampled to 256×256 and its five-level Haar decomposition, each level's LL band split again in its top-left corner, with the 8×8 LL band at the very corner](../assets/generated/whash/pyramid.dark.svg#only-dark)
+![The example resampled to 256×256 and its five-level Haar decomposition, each level's LL band split in its own top-left corner, with the 8×8 LL band at the very corner](../assets/generated/whash/pyramid.light.svg#only-light)
+![The example resampled to 256×256 and its five-level Haar decomposition, each level's LL band split in its own top-left corner, with the 8×8 LL band at the very corner](../assets/generated/whash/pyramid.dark.svg#only-dark)
 
 After $k$ levels an LL value is $2^k$ times the mean of its $2^k \times 2^k$ block, so the
-8×8 band is again the image averaged over an 8×8 grid: the same 64 numbers as the fast
-mode's, up to resampling and rounding. Here they are side by side, both divided by
+8×8 band is the image averaged over an 8×8 grid: the same 64 numbers as the fast mode's,
+up to resampling and rounding. Here they are side by side, both divided by
 $2^k$ and scaled back to gray levels; cells whose bit differs between the two would be
 outlined in orange.
 
@@ -330,7 +378,9 @@ the rest; FAST against FULL:
 --8<-- "docs/assets/generated/whash/modes-full.md"
 
 The full mode buys closeness to the reference implementation's scale rule, not a
-different hash, at about three times the cost on a large image.
+different hash, at about three times the cost on a large image. Use it when hashes must
+be computed the way ImageHash computes them; otherwise the fast mode gives the same
+result for less.
 
 ### remove_max_haar_ll
 

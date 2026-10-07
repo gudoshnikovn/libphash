@@ -9,10 +9,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import corpus
-from common import draw_bits, hide_axes, run_stages, save
+from common import draw_bits, hide_axes, run_stages, save, style_axes
+from measure import bits_that_differ
+from transforms import transforms
 
 ALGO = "whash"
 BITS = 64  # the robustness chart's scale: bits of the hash
+
+# The edits the comparison with aHash draws: those where the two differ, and contrast,
+# where they do not; every edit is in the table under it.
+VS_AHASH = ("Gamma", "Contrast", "Rotation", "Crop", "Noise")
+SHORT = {"photos": "photographs", "synthetic": "synthetic"}
 
 # The four bands of one Haar level, in the layout the library leaves them in: the
 # horizontal pass puts the sums of pairs in the left half and their differences in the
@@ -252,6 +259,7 @@ def figures(tool, image, out_dir):
     save(modes, out, "modes")
     save(removal, out, "removal")
     _write_modes_tables(tool, out)
+    _vs_ahash(tool, out)
     _write_load_grayscale(st, out)
 
 
@@ -284,6 +292,71 @@ def _write_modes_tables(tool, out):
                              f"{sum(x == 1 for x in d)} | {max(d)} |")
         with open(os.path.join(out, f"{table}.md"), "w") as f:
             f.write("\n".join(lines) + "\n")
+
+
+def _mean_bits(values):
+    v = [bits_that_differ(x, BITS) for x in values if x is not None]
+    return float(np.mean(v)) if v else float("nan")
+
+
+def _vs_ahash(tool, out):
+    """wHash against aHash over both corpora, edit by edit: the mean bits that differ from
+    the original, as a figure of the edits where they part and a table of all of them;
+    and how many bits aHash sets, which the median fixes at half for wHash."""
+    datasets = [(k, d) for k, d in ((k, corpus.measure_corpus(tool, k))
+                                    for k in ("photos", "synthetic")) if d["n"]]
+    steps = {name: s for name, _, s in transforms()}
+    xlabels = {name: x for name, x, _ in transforms()}
+
+    def fig(c):
+        series = (("ahash", "aHash", c["accent2"]), ("whash", "wHash", c["accent"]))
+        figure, axes = plt.subplots(len(datasets), len(VS_AHASH), sharey=True,
+                                    figsize=(12, 2.9 * len(datasets) + 0.6), squeeze=False)
+        for row, (key, data) in zip(axes, datasets):
+            for ax, name in zip(row, VS_AHASH):
+                xs = list(range(len(steps[name])))
+                for algo, _, color in series:
+                    ys = [_mean_bits(v) for _, v in data["robust"][algo][name]]
+                    ax.plot(xs, ys, color=color, linewidth=2, marker="o", markersize=4)
+                ax.set_xticks(xs, [f"{v:g}" for v, _ in steps[name]], fontsize=8)
+                ax.set_title(name, color=c["ink"], fontsize=10)
+                ax.set_xlabel(xlabels[name], color=c["muted"], fontsize=8.5)
+                style_axes(ax, c)
+            row[0].set_ylabel(f"{SHORT[key]} ({data['n']})\nmean bits that differ",
+                              color=c["muted"], fontsize=8.5)
+        figure.tight_layout(rect=(0, 0, 1, 0.93))
+        handles = [plt.Line2D([], [], color=col, linewidth=2, marker="o", markersize=4)
+                   for _, _, col in series]
+        figure.legend(handles, [n for _, n, _ in series], loc="upper center", ncol=2,
+                      frameon=False, labelcolor=c["ink"], fontsize=9.5,
+                      bbox_to_anchor=(0.5, 1.0))
+        return figure
+
+    save(fig, out, "vs-ahash")
+
+    head = "| Transform | Strength | " + " | ".join(
+        f"{SHORT[k]}, {a}" for k, _ in datasets for a in ("aHash", "wHash")) + " |"
+    lines = [head, "|---|---|" + "---|" * (2 * len(datasets))]
+    for name, _, s in transforms():
+        for k, (strength, _) in enumerate(s):
+            cells = [f"{_mean_bits(d['robust'][a][name][k][1]):.1f}"
+                     for _, d in datasets for a in ("ahash", "whash")]
+            lines.append(f"| {name} | {strength:g} | " + " | ".join(cells) + " |")
+    with open(os.path.join(out, "vs-ahash-table.md"), "w") as f:
+        f.write("\n".join(lines) + "\n")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        photos = _whash_modes(tool, corpus.images(tool, "photos", tmp))
+    if photos:
+        n = np.array([bin(int(r["ahash"], 16)).count("1") for r in photos])
+        lo, hi = np.percentile(n, [10, 90])
+        text = (f"Over the {len(n)} photographs, aHash sets between {n.min()} and {n.max()} "
+                f"of its 64 bits, and on the middle 80 % of them between {lo:.0f} and "
+                f"{hi:.0f}.")
+    else:
+        text = "The photographs were not available to this build."
+    with open(os.path.join(out, "ahash-bits.md"), "w") as f:
+        f.write(text + "\n")
 
 
 def _write_load_grayscale(st, out):
