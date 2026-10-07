@@ -221,8 +221,8 @@ PH_API const char *ph_get_error_string(ph_error_t err);
  * @ingroup params
  */
 typedef enum {
-    PH_WHASH_FAST = 0, ///< High-speed 8x8 median approximation (default).
-    PH_WHASH_FULL = 1, ///< Academically accurate full 2D DWT matching ImageHash.
+    PH_WHASH_FAST = 0, ///< A 16x16 reduction and one Haar level (default).
+    PH_WHASH_FULL = 1, ///< ImageHash's scale: the largest power of two that fits, down to 8x8.
     PH_WHASH_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE, ///< Not a mode -- see "Enum width".
 } ph_whash_mode_t;
 
@@ -601,7 +601,8 @@ PH_API ph_error_t ph_context_set_mhash_params(ph_context_t *ctx, float alpha, fl
  * @param mode PH_WHASH_FAST (0, the default): a fixed 16x16 scale and one Haar level, a
  *             cost independent of the image beyond the shared downscale. PH_WHASH_FULL (1):
  *             the largest power-of-two scale that fits the image, cascaded down to 8x8 --
- *             closer to ImageHash, and its cost grows with the image.
+ *             closer to ImageHash, and its cost grows with the image. The two hashes
+ *             are not interchangeable. See docs/theory/whash.md.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or a @p mode that
  *         is not one of the declared enumerators.
  * @ingroup params
@@ -610,20 +611,13 @@ PH_API ph_error_t ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t m
 
 /**
  * @brief Controls wHash's removal of the coarsest LL band (ImageHash's
- *        @c remove_max_haar_ll). Off by default, and it does nothing either way.
+ *        @c remove_max_haar_ll). Off by default.
  *
- * ImageHash enables this by default so that overall brightness stays out of the hash.
- * Zeroing the coarsest LL coefficient and reconstructing is exactly a subtraction of the
- * image mean from every sample; a constant subtracted from every sample shifts every
- * coefficient of the working LL band and its median by that same constant, so a hash
- * thresholded at the median comes out bit for bit identical. The median threshold has
- * already removed what this option is meant to remove.
- *
- * It is offered for callers who need to mirror ImageHash's configuration, and it defaults
- * to off because the only thing it can change is the tie-breaking of coefficients that
- * land exactly on the median, which the extra transform pair decides by rounding error.
- * On this library's synthetic corpus that costs separability 4.10 -> 3.41 and buys
- * nothing. See tests/src/test_whash.c and docs/algorithm-provenance.md.
+ * Zeroing the coarsest LL coefficient and reconstructing subtracts the image mean from
+ * every sample, which shifts the working LL band and its median alike: the only bits it
+ * can change are those of values that tie with the median, and it decides them by
+ * rounding error. Offered for callers who mirror ImageHash's configuration, where it is
+ * on. See docs/theory/whash.md.
  *
  * @param ctx The context.
  * @param enable Non-zero to zero the coarsest LL coefficient before the working
@@ -1010,7 +1004,8 @@ PH_NODISCARD PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out
  *        at its median.
  *
  * The scale and depth come from ph_context_set_whash_mode(); the coarsest band can be
- * zeroed with ph_context_set_whash_remove_max_haar_ll().
+ * zeroed with ph_context_set_whash_remove_max_haar_ll(). What the band amounts to, and
+ * what moves the hash, measured: docs/theory/whash.md.
  * @return @c PH_SUCCESS, @c PH_ERR_INVALID_ARGUMENT, @c PH_ERR_EMPTY_IMAGE or
  *         @c PH_ERR_ALLOCATION_FAILED, as the shared contract above says.
  * @ingroup hash64

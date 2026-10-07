@@ -25,6 +25,19 @@
  *       against ph_compute_phash() with that size; and the hash of the image loaded with
  *       ph_context_set_load_grayscale(), checked the same way.
  *
+ *   site_stages whash <image> <outdir>
+ *       The same for wHash, in both modes and each with and without remove_max_haar_ll:
+ *       original.ppm, gray.pgm, and whash.json (for each of the four, the side of the
+ *       grayscale reduction, the 8x8 LL band, its median, the bits in coefficient order
+ *       and the hash; without the removal also the reduction and its whole decomposition),
+ *       every hash checked against ph_compute_whash() with those settings; and the hash of
+ *       the image loaded with ph_context_set_load_grayscale(), checked the same way.
+ *
+ *   site_stages whash-modes <image>...
+ *       Prints one JSON object per image: its wHash as ph_compute_whash() computes it in
+ *       both modes, each with and without remove_max_haar_ll; and aHash's 8x8 area grid
+ *       thresholded at its median and packed the same way, which the LL band amounts to.
+ *
  *   site_stages measure <reference> <variant>...
  *       Prints one JSON object per variant: for each of the nine algorithms, the
  *       variant compared with the reference by that algorithm's own metric (similarity
@@ -505,6 +518,236 @@ static int stages_phash(int argc, char **argv) {
     return status;
 }
 
+/* ImageHash's remove_max_haar_ll on a size x size image: Haar levels down to one LL
+ * coefficient, that coefficient zeroed, and the inverse levels back up, with the
+ * library's own transforms in the library's order. */
+static void whash_remove_max_haar_ll(float *d, int size) {
+    float ta[4096], tb[4096];
+    int s = size;
+    while (s > 1) {
+        ph_haar_2d_level(d, s, size, ta, tb);
+        s /= 2;
+    }
+    d[0] = 0.0f;
+    while (s < size) {
+        s *= 2;
+        ph_haar_2d_level_inverse(d, s, size, ta, tb);
+    }
+}
+
+/* The median of wHash's 8x8 LL band and its bits, as ph_median_bitpack() sets them. */
+static uint64_t whash_bits(const float ll[64], float *median) {
+    float sorted[64];
+    memcpy(sorted, ll, sizeof(sorted));
+    for (int i = 1; i < 64; i++) {
+        for (int k = i; k > 0 && sorted[k - 1] > sorted[k]; k--) {
+            float t = sorted[k];
+            sorted[k] = sorted[k - 1];
+            sorted[k - 1] = t;
+        }
+    }
+    *median = (sorted[31] + sorted[32]) * 0.5f;
+    uint64_t bits = 0;
+    for (int i = 0; i < 64; i++) {
+        if (ll[i] > *median) {
+            bits |= 1ULL << i;
+        }
+    }
+    return bits;
+}
+
+/* One wHash computation, recomputed from its stages and checked against
+ * ph_compute_whash() in the same mode and with the same removal setting: `size` is the
+ * side of the grayscale reduction (16 in PH_WHASH_FAST), `grid` that reduction,
+ * `coef` its decomposition in Mallat's layout (each level's LL band in the top-left
+ * quarter of the previous one, its three detail bands around it), down to 8x8. */
+typedef struct {
+    int size, levels, remove;
+    uint8_t *grid;
+    float *coef;
+    float ll[64], median;
+    uint64_t bits;
+} whash_stages_t;
+
+static int whash_run(ph_context_t *ctx, ph_whash_mode_t mode, int remove, whash_stages_t *s) {
+    int w = ctx->image.width, h = ctx->image.height, min_dim = w < h ? w : h;
+    s->remove = remove;
+    if (mode == PH_WHASH_FAST) {
+        s->size = 2 * PH_CORE_HASH_SIZE;
+    } else {
+        s->size = 1;
+        while (s->size * 2 <= min_dim) {
+            s->size *= 2;
+        }
+        if (s->size < PH_CORE_HASH_SIZE) {
+            s->size = PH_CORE_HASH_SIZE;
+        }
+    }
+    if (s->size > 4096) {
+        return fail("image too large for the wHash stages", NULL);
+    }
+    const size_t n = (size_t)s->size * (size_t)s->size;
+    s->grid = malloc(n);
+    s->coef = malloc(n * sizeof(float));
+    if (!s->grid || !s->coef) {
+        return fail("out of memory", NULL);
+    }
+    const uint8_t *gray = ph_get_gray(ctx);
+    int ok = mode == PH_WHASH_FAST ? ph_area_downscale(ctx, s->size, s->size, s->grid)
+                                   : gray && ph_resize_box(gray, w, h, s->grid, s->size, s->size);
+    if (!ok) {
+        return fail("cannot reduce the image for wHash", NULL);
+    }
+    for (size_t i = 0; i < n; i++) {
+        s->coef[i] = s->grid[i] / 255.0f;
+    }
+    if (remove) {
+        whash_remove_max_haar_ll(s->coef, s->size);
+    }
+    float ta[4096], tb[4096];
+    s->levels = 0;
+    for (int size = s->size; size > PH_CORE_HASH_SIZE; size /= 2) {
+        ph_haar_2d_level(s->coef, size, s->size, ta, tb);
+        s->levels++;
+    }
+    for (int i = 0; i < 64; i++) {
+        s->ll[i] = s->coef[(i / 8) * s->size + i % 8];
+    }
+    s->bits = whash_bits(s->ll, &s->median);
+
+    uint64_t lib = 0;
+    if (ph_context_set_whash_mode(ctx, mode) != PH_SUCCESS ||
+        ph_context_set_whash_remove_max_haar_ll(ctx, remove) != PH_SUCCESS ||
+        ph_compute_whash(ctx, &lib) != PH_SUCCESS) {
+        return fail("ph_compute_whash failed", NULL);
+    }
+    if (lib != s->bits) {
+        fprintf(stderr,
+                "site_stages: wHash (%s, removal %s) recomputed from the LL band (%016llx) "
+                "differs from ph_compute_whash() (%016llx)\n",
+                mode == PH_WHASH_FAST ? "fast" : "full", remove ? "on" : "off",
+                (unsigned long long)s->bits, (unsigned long long)lib);
+        return 1;
+    }
+    return 0;
+}
+
+static void whash_json(json_t *j, const char *key, const whash_stages_t *s, int with_coef) {
+    json_key(j, key);
+    json_t o = {j->f, 0};
+    json_int(&o, "size", s->size);
+    json_int(&o, "levels", s->levels);
+    json_int(&o, "remove_max_haar_ll", s->remove);
+    if (with_coef) {
+        json_u8s(&o, "grid", s->grid, s->size * s->size);
+        json_floats(&o, "coef", s->coef, s->size * s->size);
+    }
+    json_floats(&o, "ll", s->ll, 64);
+    json_key(&o, "median");
+    fprintf(j->f, "%.9g", (double)s->median); /* exactly the float, for ties */
+    json_bits_lsb(&o, "bits", s->bits, 64);
+    json_hex64(&o, "hash", s->bits);
+    fputs("}", j->f);
+}
+
+/* site_stages whash <image> <outdir> */
+static int stages_whash(int argc, char **argv) {
+    (void)argc;
+    const char *outdir = argv[1];
+    ph_context_t *ctx = NULL;
+    if (load(&ctx, argv[0])) {
+        return 1;
+    }
+    int w = ctx->image.width, h = ctx->image.height;
+    int status = 0;
+    whash_stages_t runs[4] = {{0}};
+
+    static const struct {
+        ph_whash_mode_t mode;
+        int remove;
+        const char *key;
+    } kinds[4] = {{PH_WHASH_FAST, 0, "fast"},
+                  {PH_WHASH_FAST, 1, "fast_removed"},
+                  {PH_WHASH_FULL, 0, "full"},
+                  {PH_WHASH_FULL, 1, "full_removed"}};
+
+    int bad = !write_gray_stages(ctx, outdir, &status);
+    for (int k = 0; k < 4 && !bad; k++) {
+        bad = whash_run(ctx, kinds[k].mode, kinds[k].remove, &runs[k]);
+    }
+    ph_free(ctx);
+
+    /* The decoder's grayscale, as for dHash: the default mode on what the decoder gives. */
+    whash_stages_t dec = {0};
+    if (!bad) {
+        bad =
+            ph_create(&ctx) != PH_SUCCESS || ph_context_set_load_grayscale(ctx, 1) != PH_SUCCESS ||
+            ph_load_from_file(ctx, argv[0]) != PH_SUCCESS || whash_run(ctx, PH_WHASH_FAST, 0, &dec);
+        ph_free(ctx);
+    }
+
+    FILE *f = bad ? NULL : open_out(outdir, "whash.json");
+    if (f) {
+        json_t j = {f, 0};
+        json_int(&j, "width", w);
+        json_int(&j, "height", h);
+        for (int k = 0; k < 4; k++) {
+            whash_json(&j, kinds[k].key, &runs[k], !kinds[k].remove);
+        }
+        json_hex64(&j, "hash_load_grayscale", dec.bits);
+        json_end(&j);
+        status |= fclose(f) != 0;
+    }
+    for (int k = 0; k < 4; k++) {
+        free(runs[k].grid);
+        free(runs[k].coef);
+    }
+    free(dec.grid);
+    free(dec.coef);
+    return bad || !f ? 1 : status;
+}
+
+/* site_stages whash-modes <image>...: the wHash of every image in both modes, each with
+ * and without remove_max_haar_ll, as the library computes them: one JSON line per image. */
+static int whash_modes(int argc, char **argv) {
+    for (int i = 0; i < argc; i++) {
+        ph_context_t *ctx = NULL;
+        if (load(&ctx, argv[i])) {
+            return 1;
+        }
+        json_t j = {stdout, 0};
+        json_string(&j, "file", argv[i]);
+        static const char *keys[2][2] = {{"fast", "fast_removed"}, {"full", "full_removed"}};
+        for (int mode = 0; mode < 2; mode++) {
+            for (int remove = 0; remove < 2; remove++) {
+                uint64_t hash = 0;
+                if (ph_context_set_whash_mode(ctx, (ph_whash_mode_t)mode) != PH_SUCCESS ||
+                    ph_context_set_whash_remove_max_haar_ll(ctx, remove) != PH_SUCCESS ||
+                    ph_compute_whash(ctx, &hash) != PH_SUCCESS) {
+                    ph_free(ctx);
+                    return fail("ph_compute_whash failed", argv[i]);
+                }
+                json_hex64(&j, keys[mode][remove], hash);
+            }
+        }
+        /* aHash's 8x8 area grid thresholded at its median instead of its mean, packed as
+         * wHash packs its LL band: what the LL band amounts to. */
+        uint8_t grid[64];
+        float values[64], median;
+        if (!ph_area_downscale(ctx, 8, 8, grid)) {
+            ph_free(ctx);
+            return fail("ph_area_downscale failed", argv[i]);
+        }
+        for (int k = 0; k < 64; k++) {
+            values[k] = grid[k];
+        }
+        json_hex64(&j, "grid_median", whash_bits(values, &median));
+        json_end(&j);
+        ph_free(ctx);
+    }
+    return 0;
+}
+
 /* --8<-- [start:compare] */
 /* One algorithm's comparison of two digests by its own metric; 0 when it does not apply. */
 static int compare(const ph_digest_t *a, const ph_digest_t *b, double *out) {
@@ -639,6 +882,8 @@ static const struct {
     {"ahash", "<image> <outdir>", 2, 0, stages_ahash},
     {"dhash", "<image> <outdir>", 2, 0, stages_dhash},
     {"phash", "<image> <outdir>", 2, 0, stages_phash},
+    {"whash", "<image> <outdir>", 2, 0, stages_whash},
+    {"whash-modes", "<image>...", 1, 1, whash_modes},
     {"measure", "<reference> <variant>...", 2, 1, measure},
     {"pairs", "<image> <image>...", 2, 1, pairs},
     {"corpus", "<outdir>", 1, 0, corpus},

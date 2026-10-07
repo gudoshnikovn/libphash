@@ -15,17 +15,23 @@
  * separability -- rather than by conformance, and under this library's threat model that
  * is the right instrument rather than a fallback: no paper describes an unkeyed
  * deterministic wavelet hash because the security literature has nothing to prove about
- * one. Measured separability on the synthetic corpus is 4.34, second best of the nine
- * (tests/src/test_hash_properties.c). Kept deliberately for that reason; see the premise
- * section of docs/algorithm-provenance.md.
+ * one. Measured separability on the synthetic corpus is third best of the nine (OBSERVED
+ * in tests/src/test_hash_properties.c). Kept deliberately for that reason; see the
+ * premise section of docs/algorithm-provenance.md.
+ *
+ * Only the final LL band reaches the hash. After k levels an LL value is 2^k times the
+ * mean of its 2^k x 2^k block, so the band is the image averaged over an 8x8 grid, and
+ * both modes come close to aHash's grid thresholded at its median; docs/theory/whash.md
+ * has the measurement.
  *
  * One documented difference from the reference implementation: ImageHash zeroes the
  * coarsest LL band by default (remove_max_haar_ll=True) so the hash describes local
  * structure rather than overall brightness. This code implements the operation but leaves
- * it off, because it is the identity here and there: zeroing that single coefficient and
- * reconstructing subtracts the image mean from every sample, a constant subtraction
- * shifts the working LL band and its median alike, and a median threshold is blind to
- * that. See ph_context_set_whash_remove_max_haar_ll().
+ * it off, because under a median threshold it can change nothing but ties: zeroing that
+ * single coefficient and reconstructing subtracts the image mean from every sample, a
+ * constant subtraction shifts the working LL band and its median alike, and only a value
+ * equal to the median can land on the other side of it, by rounding error. See
+ * ph_context_set_whash_remove_max_haar_ll().
  *
  * The transform itself is the orthonormal Haar wavelet: sums and differences of
  * adjacent samples, both divided by sqrt(2).
@@ -138,7 +144,7 @@ static void ph_haar_2d_level_ll(float *data, int size, int stride, float *temp) 
 }
 
 /* ImageHash's remove_max_haar_ll: decompose all the way down to a 1x1 LL, zero that single
- * coefficient, and reconstruct. See the note at ph_compute_whash() for what this is worth. */
+ * coefficient, and reconstruct. See the note at the top of this file for what this is worth. */
 static void ph_whash_remove_max_haar_ll(float *d, int size, int stride, float *temp_a,
                                         float *temp_b) {
     int current_size = size;

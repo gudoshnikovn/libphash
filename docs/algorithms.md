@@ -215,14 +215,23 @@ portability and comparison against a foreign implementation.
 ## 4. wHash (Wavelet Hash)
 
 - **Call**: `ph_compute_whash()`.
-- **Concept**: Haar wavelet decomposition; threshold the low-frequency band against its
-  median.
+- **Concept**: Haar wavelet decomposition down to an 8×8 low-frequency (LL) band,
+  thresholded against its median. The LL band is the image averaged over an 8×8 grid,
+  scaled, so the hash comes close to aHash's grid thresholded at its median instead of
+  its mean ([measured](theory/whash.md#what-the-wavelet-adds)).
 - **Output**: 64-bit.
 - **Modes** (`ph_context_set_whash_mode()`):
   - `PH_WHASH_FAST` (default) — a fixed 16×16 scale, one decomposition level.
   - `PH_WHASH_FULL` — scale chosen as the largest power of two fitting the image,
-    cascaded down to 8×8. Slower, more faithful to the reference implementation.
+    cascaded down to 8×8, as the reference implementation does. About three times
+    slower on a large image, for the same hash on most photographs and a few bits apart
+    on the rest.
 - `ph_context_set_whash_remove_max_haar_ll()` — see the ImageHash-compatibility note below.
+- **Strength**: robust to scaling, compression, blur, noise and brightness on
+  photographs, as aHash is, and every hash has half of its bits set
+  ([measured](theory/whash.md#what-changes-the-hash)).
+- **Weakness**: rotation and cropping; and images with uniform areas, whose equal values
+  tie at the median.
 - **No primary source, deliberately.** wHash has no paper, and it is *not* the ICIP 2000
   algorithm of Venkatesan et al. that is often cited for wavelet hashing — that one is
   keyed, and its key is not optional. No paper describes an unkeyed deterministic wavelet
