@@ -319,15 +319,20 @@ def _cost_figure(tool, out):
         for entry, color in series:
             t = [entry["cases"][f"mhash_size_{s}"]["min_ms"] for s in sizes]
             ax.plot(sizes, t, color=c[color], linewidth=2, marker="o", markersize=4.5)
-            ax.annotate(f"{entry['width']}×{entry['height']} image", (sizes[-1], t[-1]),
-                        xytext=(-6, 8), textcoords="offset points", ha="right", fontsize=9,
-                        color=c["ink"])
+            # At the left end, where the two lines are furthest apart.
+            ax.annotate(f"{entry['width']}×{entry['height']} image", (sizes[0], t[0]),
+                        xytext=(0, 14), textcoords="offset points", ha="left", fontsize=9,
+                        color=c["ink"], bbox={"facecolor": c["surface"], "edgecolor": "none",
+                                              "pad": 1})
         ax.set_xscale("log", base=2)
         ax.set_yscale("log")
         ax.set_xticks(sizes, [str(s) for s in sizes])
+        ticks = [v for v in (0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500)
+                 if ax.get_ylim()[0] <= v <= ax.get_ylim()[1]]
+        ax.set_yticks(ticks, [f"{v:g}" for v in ticks])
         ax.minorticks_off()
         ax.set_xlabel("size", color=c["muted"], fontsize=9)
-        ax.set_ylabel("ms, log scale", color=c["muted"], fontsize=9)
+        ax.set_ylabel("ms, logarithmic scale", color=c["muted"], fontsize=9)
         style_axes(ax, c)
         return f
 
