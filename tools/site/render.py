@@ -22,11 +22,12 @@ import sys
 
 import algo_ahash
 import algo_dhash
+import algo_phash
 from corpus import measure_corpus
 from corpus_charts import corpus_robustness_figure, corpus_tables, separability_figure
 from measure import measure_robustness, robustness_figure, robustness_table
 
-ALGORITHMS = {m.ALGO: m for m in (algo_ahash, algo_dhash)}
+ALGORITHMS = {m.ALGO: m for m in (algo_ahash, algo_dhash, algo_phash)}
 
 
 def main():

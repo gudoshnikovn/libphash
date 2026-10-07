@@ -17,6 +17,14 @@
  *       the grid and hash of the same image loaded with ph_context_set_load_grayscale(),
  *       where the decoder converts to grayscale, checked the same way.
  *
+ *   site_stages phash <image> <outdir>
+ *       The same for pHash: original.ppm, gray.pgm, and phash.json (the 32x32 grid, its
+ *       whole DCT, the first eight DCT basis vectors, the 8x8 block, the threshold, the
+ *       bits in coefficient order and the hash), checked against ph_compute_phash(); and
+ *       the block, threshold and hash for every block size from 4 to 8, each checked
+ *       against ph_compute_phash() with that size; and the hash of the image loaded with
+ *       ph_context_set_load_grayscale(), checked the same way.
+ *
  *   site_stages measure <reference> <variant>...
  *       Prints one JSON object per variant: for each of the nine algorithms, the
  *       variant compared with the reference by that algorithm's own metric (similarity
@@ -32,6 +40,7 @@
  *       00.ppm ... 23.ppm, so the site measures the very images the tests do.
  */
 #include "context.h"
+#include "hashes/hashes.h"
 #include "image/image.h"
 #include "libphash.h"
 
@@ -318,6 +327,184 @@ static int stages_dhash(int argc, char **argv) {
     return status;
 }
 
+/* pHash's block of r x r DCT coefficients of the 32x32 grid, by the library's own
+ * ph_dct2_partial(), its threshold (the median of the AC terms raised by the margin), and
+ * its hash recomputed from them and checked against ph_compute_phash() with that block
+ * size. Returns 0 on a match. */
+static int phash_block(ph_context_t *ctx, const uint8_t *grid, int r, float block[64],
+                       float *threshold, uint64_t *bits) {
+    if (ph_dct2_partial(ph_get_dct_matrix_32(), grid, 32, r, block) != PH_SUCCESS) {
+        return fail("ph_dct2_partial failed", NULL);
+    }
+    float ac[63];
+    int m = r * r - 1;
+    for (int i = 0; i < m; i++) {
+        ac[i] = block[i + 1];
+    }
+    for (int i = 1; i < m; i++) { /* sorted, for the median and the range */
+        for (int k = i; k > 0 && ac[k - 1] > ac[k]; k--) {
+            float t = ac[k];
+            ac[k] = ac[k - 1];
+            ac[k - 1] = t;
+        }
+    }
+    float median = m % 2 ? ac[m / 2] : (ac[m / 2 - 1] + ac[m / 2]) * 0.5f;
+    *threshold = median + PH_PHASH_MEDIAN_MARGIN * (ac[m - 1] - ac[0]);
+    *bits = 0;
+    for (int i = 0; i < r * r; i++) {
+        if (block[i] > *threshold) {
+            *bits |= 1ULL << i;
+        }
+    }
+    uint64_t lib = 0;
+    if (ph_context_set_phash_params(ctx, 32, r) != PH_SUCCESS ||
+        ph_compute_phash(ctx, &lib) != PH_SUCCESS) {
+        return fail("ph_compute_phash failed", NULL);
+    }
+    if (lib != *bits) {
+        fprintf(stderr,
+                "site_stages: pHash (block %d) recomputed from the DCT (%016llx) differs from "
+                "ph_compute_phash() (%016llx)\n",
+                r, (unsigned long long)*bits, (unsigned long long)lib);
+        return 1;
+    }
+    return 0;
+}
+
+static void json_floats(json_t *j, const char *key, const float *v, int n) {
+    json_key(j, key);
+    for (int i = 0; i < n; i++) {
+        fprintf(j->f, "%s%.9g", i ? ", " : "[", (double)v[i]);
+    }
+    fputs("]", j->f);
+}
+
+/* The n bits of `bits` from the least significant one up, as 0/1: bit i is coefficient i
+ * for pHash, which packs LSB first. */
+static void json_bits_lsb(json_t *j, const char *key, uint64_t bits, int n) {
+    json_key(j, key);
+    for (int i = 0; i < n; i++) {
+        fprintf(j->f, "%s%d", i ? ", " : "[", (int)((bits >> i) & 1));
+    }
+    fputs("]", j->f);
+}
+
+/* site_stages phash <image> <outdir> */
+static int stages_phash(int argc, char **argv) {
+    (void)argc;
+    const char *outdir = argv[1];
+    ph_context_t *ctx = NULL;
+    if (load(&ctx, argv[0])) {
+        return 1;
+    }
+    int w = ctx->image.width, h = ctx->image.height;
+    int status = 0;
+
+    enum {
+        N = 32,
+        MIN_R = PH_DCT_MIN_REDUCTION_SIZE,
+        MAX_R = PH_DCT_MAX_REDUCTION_SIZE,
+    };
+
+    uint8_t grid[N * N];
+    if (!write_gray_stages(ctx, outdir, &status) || !ph_area_downscale(ctx, N, N, grid)) {
+        ph_free(ctx);
+        return fail("cannot reduce the image to 32x32", NULL);
+    }
+
+    /* Every block size the API accepts; the default, 8, last, so the context is left at
+     * it. */
+    float blocks[MAX_R - MIN_R + 1][64], thresholds[MAX_R - MIN_R + 1];
+    uint64_t hashes[MAX_R - MIN_R + 1];
+    for (int r = MIN_R; r <= MAX_R; r++) {
+        if (phash_block(ctx, grid, r, blocks[r - MIN_R], &thresholds[r - MIN_R],
+                        &hashes[r - MIN_R])) {
+            ph_free(ctx);
+            return 1;
+        }
+    }
+    ph_free(ctx);
+    const float *block = blocks[MAX_R - MIN_R];
+
+    /* The decoder's grayscale, as for dHash: the same steps on what the decoder gives. */
+    uint8_t dec_grid[N * N];
+    float dec_block[64], dec_threshold;
+    uint64_t dec_hash = 0;
+    if (ph_create(&ctx) != PH_SUCCESS) {
+        return fail("ph_create failed", NULL);
+    }
+    if (ph_context_set_load_grayscale(ctx, 1) != PH_SUCCESS ||
+        ph_load_from_file(ctx, argv[0]) != PH_SUCCESS || !ph_area_downscale(ctx, N, N, dec_grid) ||
+        phash_block(ctx, dec_grid, MAX_R, dec_block, &dec_threshold, &dec_hash)) {
+        ph_free(ctx);
+        return fail("cannot hash the image loaded in grayscale", argv[0]);
+    }
+    ph_free(ctx);
+
+    /* The whole 32x32 transform, for the map of coefficients: the same two passes as
+     * ph_dct2_partial() in the same order, over every row and column, so its top-left
+     * 8x8 is the library's block bit for bit (checked). */
+    const float *mat = ph_get_dct_matrix_32();
+    static float temp[N * N], dct[N * N];
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            float sum = 0;
+            for (int k = 0; k < N; k++) {
+                sum += mat[j * N + k] * grid[i * N + k];
+            }
+            temp[i * N + j] = sum;
+        }
+    }
+    for (int j = 0; j < N; j++) {
+        for (int i = 0; i < N; i++) {
+            float sum = 0;
+            for (int k = 0; k < N; k++) {
+                sum += mat[i * N + k] * temp[k * N + j];
+            }
+            dct[i * N + j] = sum;
+        }
+    }
+    for (int i = 0; i < MAX_R * MAX_R; i++) {
+        if (dct[(i / MAX_R) * N + i % MAX_R] != block[i]) {
+            return fail("the full DCT differs from ph_dct2_partial()", NULL);
+        }
+    }
+
+    FILE *f = open_out(outdir, "phash.json");
+    if (!f) {
+        return 1;
+    }
+    json_t j = {f, 0};
+    json_int(&j, "width", w);
+    json_int(&j, "height", h);
+    json_int(&j, "dct_size", N);
+    json_int(&j, "block_size", MAX_R);
+    json_u8s(&j, "grid", grid, N * N);
+    json_floats(&j, "dct", dct, N * N);
+    json_floats(&j, "matrix", mat, MAX_R * N); /* the first 8 basis vectors */
+    json_floats(&j, "block", block, MAX_R * MAX_R);
+    json_double(&j, "margin", PH_PHASH_MEDIAN_MARGIN);
+    json_double(&j, "threshold", thresholds[MAX_R - MIN_R]);
+    json_bits_lsb(&j, "bits", hashes[MAX_R - MIN_R], MAX_R * MAX_R);
+    json_hex64(&j, "hash", hashes[MAX_R - MIN_R]);
+    json_hex64(&j, "hash_load_grayscale", dec_hash);
+    json_key(&j, "reductions");
+    for (int r = MIN_R; r <= MAX_R; r++) {
+        json_t o = {f, 0};
+        fputs(r > MIN_R ? ", " : "[", f);
+        json_int(&o, "size", r);
+        json_floats(&o, "block", blocks[r - MIN_R], r * r);
+        json_double(&o, "threshold", thresholds[r - MIN_R]);
+        json_bits_lsb(&o, "bits", hashes[r - MIN_R], r * r);
+        json_hex64(&o, "hash", hashes[r - MIN_R]);
+        fputs("}", f);
+    }
+    fputs("]", f);
+    json_end(&j);
+    status |= fclose(f) != 0;
+    return status;
+}
+
 /* --8<-- [start:compare] */
 /* One algorithm's comparison of two digests by its own metric; 0 when it does not apply. */
 static int compare(const ph_digest_t *a, const ph_digest_t *b, double *out) {
@@ -451,6 +638,7 @@ static const struct {
 } modes[] = {
     {"ahash", "<image> <outdir>", 2, 0, stages_ahash},
     {"dhash", "<image> <outdir>", 2, 0, stages_dhash},
+    {"phash", "<image> <outdir>", 2, 0, stages_phash},
     {"measure", "<reference> <variant>...", 2, 1, measure},
     {"pairs", "<image> <image>...", 2, 1, pairs},
     {"corpus", "<outdir>", 1, 0, corpus},

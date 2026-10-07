@@ -198,8 +198,12 @@ portability and comparison against a foreign implementation.
   and sees less detail); `reduction_size` 4–8, default 8 (giving 8×8 = 64 bits). Below 4 the hash is degenerate: over 400 photographs,
   `reduction_size` 3 gives 70 distinct hashes and 2 gives 4, against 304 at 4 and 350 at
   8. Between 4 and 8 a smaller block trades precision for a shorter hash.
-- **Strength**: robust to scaling and moderate compression; the usual first choice when
-  aHash and dHash are not tolerant enough.
+- **Strength**: robust to scaling, compression, blur and noise on photographs, and on
+  them it separates copies from different images more clearly than the other 64-bit
+  hashes ([measured](theory/phash.md#copies-and-different-images)).
+- **Weakness**: rotation and cropping, at least as steeply as aHash; and images whose
+  low frequencies hold little, such as regular patterns and near-flat fields, where a
+  few coefficients decide the hash and small edits move many bits.
 - **The DC coefficient**: DCT(0,0) is thresholded like the other 63 but takes no part in
   choosing the threshold, which is what pHash's `ph_dct_imagehash()` does. Since DC is
   above that threshold for any ordinary image, its bit is always 1 and the hash is

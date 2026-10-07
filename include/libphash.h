@@ -484,26 +484,18 @@ PH_NODISCARD PH_API ph_error_t ph_context_get_gray_weights(const ph_context_t *c
 /**
  * @brief Sets pHash parameters.
  *
- * Both values are hard-bounded by the implementation:
- *   - @p reduction_size must be in [4, 8] (the hash has to fit into the 64 bits of
- *     @c uint64_t);
- *   - @p dct_size must be in [@p reduction_size, 32].
- *
- * Out-of-range values are rejected and the current configuration is left
- * unchanged — they are never clamped. If an out-of-range value reaches
- * ph_compute_phash() by other means, it returns @c PH_ERR_INVALID_ARGUMENT
- * and leaves the output digest untouched.
+ * Out-of-range values are rejected and the current configuration is left unchanged; they
+ * are never clamped. If an out-of-range value reaches ph_compute_phash() by other means,
+ * it returns @c PH_ERR_INVALID_ARGUMENT and leaves the output untouched. See
+ * docs/theory/phash.md.
  *
  * @param ctx The context.
- * @param dct_size Size of the DCT matrix, @p reduction_size..32 (default 32).
- * @param reduction_size Size of the low-frequency coefficient block to keep,
- *                       4..8 and <= @p dct_size (default 8). The hash has
- *                       reduction_size^2 - 1 bits (the DC coefficient is excluded). The
- *                       lower bound is where the hash stops being degenerate: over 400
- *                       photographs, reduction_size 3 (8 bits) gives 70 distinct hashes
- *                       and 2 gives 4, while 4 (15 bits) gives 304 of the 350 an 8x8
- *                       block tells apart. Between 4 and 8, a smaller block trades
- *                       precision for length.
+ * @param dct_size The side of the grid the image is reduced to and of its DCT,
+ *                 @p reduction_size..32 (default 32).
+ * @param reduction_size The side of the low-frequency block of coefficients the hash is
+ *                       made of, 4..8 (default 8): the hash has reduction_size^2 bits, of
+ *                       which the DC coefficient's is always set. Below 4 the hash is
+ *                       degenerate; above 8 it would not fit 64 bits.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
  *         out-of-range pair.
  * @ingroup params
