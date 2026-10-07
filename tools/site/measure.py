@@ -10,13 +10,14 @@ import matplotlib.pyplot as plt
 from PIL import Image
 
 from common import save, style_axes
-from transforms import transforms
+from transforms import content_edits, transforms
 
 
 # --8<-- [start:measure]
 def measure_variants(tool, base, ref):
     """{algorithm: {transform: [(strength, value)]}}: every edit of `base` (a Pillow
-    image) compared with `ref`, the same pixels saved losslessly.
+    image), of both groups of transforms.py, compared with `ref`, the same pixels saved
+    losslessly.
 
     Every variant is written to a file, and `site_stages measure` hashes them with the
     library and compares each variant with the reference, by each algorithm's own
@@ -24,7 +25,7 @@ def measure_variants(tool, base, ref):
     """
     with tempfile.TemporaryDirectory() as tmp:
         files, keys = [], []
-        for name, _, steps in transforms():
+        for name, _, steps in transforms() + content_edits():
             for strength, op in steps:
                 im, (ext, q) = op(base)
                 path = os.path.join(tmp, f"{len(files)}.{ext}")

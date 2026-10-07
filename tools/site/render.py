@@ -25,8 +25,10 @@ import algo_dhash
 import algo_phash
 import algo_whash
 from corpus import measure_corpus
-from corpus_charts import corpus_robustness_figure, corpus_tables, separability_figure
+from corpus_charts import (corpus_robustness_figure, corpus_tables, edits_examples, edits_figure,
+                           edits_table, separability_figure)
 from measure import measure_robustness, robustness_figure, robustness_table
+from timing import measure_timing, write_timing
 
 ALGORITHMS = {m.ALGO: m for m in (algo_ahash, algo_dhash, algo_phash, algo_whash)}
 
@@ -57,6 +59,10 @@ def main():
         corpus_robustness_figure(datasets, name, ALGORITHMS[name], args.out)
         separability_figure(datasets, name, ALGORITHMS[name], args.out)
         corpus_tables(datasets, name, ALGORITHMS[name], args.out)
+        edits_figure(datasets, name, ALGORITHMS[name], args.out)
+        edits_table(datasets, name, ALGORITHMS[name], args.out)
+    edits_examples(args.image, args.out)
+    write_timing(measure_timing(args.tool), {n: ALGORITHMS[n] for n in names}, args.out)
     print(f"render: figures in {args.out}")
     return 0
 

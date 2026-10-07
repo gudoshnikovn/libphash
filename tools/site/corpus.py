@@ -28,6 +28,7 @@ from PIL import Image
 
 import fetch_corpus
 from measure import measure_variants
+from transforms import content_edits
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CACHE = os.path.join(ROOT, "build", "site-cache")
@@ -80,9 +81,10 @@ def _measure_one(args):
 # --8<-- [start:corpus]
 def measure_corpus(tool, corpus):
     """{"n", "label", "robust": {algo: {transform: [[strength, [value per image]]]}},
-    "different": {algo: [value per pair]}} for one corpus, from the cache when nothing
-    that decides it has changed. Values are each algorithm's own metric, as
-    `site_stages measure` and `site_stages pairs` print it; None where it does not apply."""
+    "edits": {the same, for the edits that change the picture}, "different": {algo:
+    [value per pair]}} for one corpus, from the cache when nothing that decides it has
+    changed. Values are each algorithm's own metric, as `site_stages measure` and
+    `site_stages pairs` print it; None where it does not apply."""
     os.makedirs(CACHE, exist_ok=True)
     workdir = os.path.join(CACHE, "work")
     paths = images(tool, corpus, workdir)
@@ -110,11 +112,13 @@ def measure_corpus(tool, corpus):
                                  text=True).stdout
             rows = [json.loads(line) for line in out.splitlines()]
 
-    robust = {}
+    robust, edits = {}, {}
+    content = {name for name, _, _ in content_edits()}
     for result in per_image:
         for algo, by_transform in result.items():
             for name, points in by_transform.items():
-                slot = robust.setdefault(algo, {}).setdefault(name, [[s, []] for s, _ in points])
+                group = edits if name in content else robust
+                slot = group.setdefault(algo, {}).setdefault(name, [[s, []] for s, _ in points])
                 for (strength, value), cell in zip(points, slot):
                     cell[1].append(value)
     different = {}
@@ -124,7 +128,7 @@ def measure_corpus(tool, corpus):
                 different.setdefault(algo, []).append(value)
 
     data = {"key": key, "n": len(paths), "label": LABELS[corpus].format(n=len(paths)),
-            "robust": robust, "different": different}
+            "robust": robust, "edits": edits, "different": different}
     with open(cached, "w") as f:
         json.dump(data, f)
     return data

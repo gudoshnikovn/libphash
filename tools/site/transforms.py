@@ -1,7 +1,12 @@
-"""The edits the robustness charts apply to an image: the one list every page measures.
+"""The edits the site applies to an image: the one registry every page measures.
 
-A transform added here appears on every algorithm's chart, so the pages always compare
-the algorithms under the same edits.
+Two groups. transforms() are the edits a copy of a picture goes through, which a hash
+should survive: they make the robustness charts and the copies of the separability
+measurement. content_edits() change what the picture shows, its content, its colors or
+its orientation, and whether a hash should notice them depends on what it is used for:
+they make the chart of edits that change the picture. An edit added to either group
+appears on every algorithm's page, so the pages always compare the algorithms under the
+same edits.
 """
 import numpy as np
 from PIL import Image, ImageEnhance, ImageFilter
@@ -71,3 +76,44 @@ def transforms():
         ("Crop", "border removed, %", [(p, crop(p / 100)) for p in (5, 10, 20, 30)]),
     ]
 # --8<-- [end:transforms]
+
+
+# --8<-- [start:content_edits]
+def content_edits():
+    """The edits that change the picture, in the shape of transforms(); a strength is a
+    number, or a word where the edit has no scale.
+
+    A patch replaces a square at the center, covering the given share of the frame, with
+    the square of the same size at the top-left corner of the same image: a local edit
+    with content the image itself supplies. A hue rotation turns every pixel's hue by the
+    given angle and keeps its saturation and value, a recoloring. The turns and the mirror
+    change only the orientation.
+    """
+    def patch(area):
+        def f(im):
+            side = area ** 0.5
+            w, h = round(im.width * side), round(im.height * side)
+            x0, y0 = (im.width - w) // 2, (im.height - h) // 2
+            out = im.copy()
+            out.paste(im.crop((0, 0, w, h)), (x0, y0))
+            return out, ("ppm", None)
+        return f
+
+    def hue(degrees):
+        def f(im):
+            hsv = np.asarray(im.convert("HSV")).copy()
+            hsv[..., 0] = (hsv[..., 0].astype(int) + round(degrees * 256 / 360)) % 256
+            return Image.fromarray(hsv, "HSV").convert("RGB"), ("ppm", None)
+        return f
+
+    def turn(method):
+        return lambda im: (im.transpose(method), ("ppm", None))
+
+    return [
+        ("Local patch", "share of the frame, %", [(a, patch(a / 100)) for a in (1, 4, 9, 16)]),
+        ("Hue rotation", "degrees", [(d, hue(d)) for d in (30, 90, 180)]),
+        ("Turn and mirror", "", [("90°", turn(Image.Transpose.ROTATE_90)),
+                                 ("180°", turn(Image.Transpose.ROTATE_180)),
+                                 ("mirror", turn(Image.Transpose.FLIP_LEFT_RIGHT))]),
+    ]
+# --8<-- [end:content_edits]

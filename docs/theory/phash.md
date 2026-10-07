@@ -11,7 +11,7 @@ and the detail finer than that never reaches it.
 | **Call** | [`ph_compute_phash()`](../api/hash64.md#ph_compute_phash), or [`PH_HASH_PHASH`](../api/hash64.md#PH_HASH_PHASH) in [`ph_compute_multi()`](../api/hash64.md#ph_compute_multi) |
 | **Output** | 64-bit hash, compared with [`ph_hamming_distance()`](../api/compare.md#ph_hamming_distance) |
 | **Source** | the pHash library by Evan Klinger and David Starkweather, as documented by Christoph Zauner, 2010 ([provenance](../algorithm-provenance.md#3-phash--dct-based-hash)) |
-| **Cost** | 0.05 ms on a 400×400 image, 2.5 ms on 20 Mpx, after decoding |
+--8<-- "docs/assets/generated/phash/cost-row.md"
 
 ## The steps
 
@@ -299,16 +299,79 @@ narrowest of the four.
     `tests/src/synthetic_corpus.h`, the same code the tests use. `make site` measures
     both corpora and draws every figure.
 
+### Edits that change the picture
+
+The edits above are those a copy goes through. The ones here change what the picture
+shows: a patch of the image's own top-left corner pasted over its center, covering 1 to
+16 % of the frame; the hue of every pixel turned, which recolors the picture; and a
+quarter turn, a half turn and a mirror image. Whether a hash should notice them depends
+on what it is for: a search for copies wants to ignore a recoloring, a search for
+retouched pictures wants to catch the patch.
+
+![The example photograph with a patch over 4 and 16 % of the frame, its hue turned by 90 and 180 degrees, turned by 90 and 180 degrees, and mirrored](../assets/generated/edits/examples.light.svg#only-light)
+![The example photograph with a patch over 4 and 16 % of the frame, its hue turned by 90 and 180 degrees, turned by 90 and 180 degrees, and mirrored](../assets/generated/edits/examples.dark.svg#only-dark)
+
+Each panel shows how far the edited images land from their originals over both corpora.
+The dashed line is the threshold of the chart above, the one that accepts 95 % of the
+copies, in each corpus's color: an edited image below it would be taken for a copy.
+
+![Bits that differ from the original for a patch, a hue rotation, and turns and a mirror, median and middle half over each corpus, against the threshold that accepts 95 % of copies](../assets/generated/phash/edits.light.svg#only-light)
+![Bits that differ from the original for a patch, a hue rotation, and turns and a mirror, median and middle half over each corpus, against the threshold that accepts 95 % of copies](../assets/generated/phash/edits.dark.svg#only-dark)
+
+- **A patch** moves pHash further than the area hashes. Every DCT coefficient of the block
+  is a sum over the whole 32×32 grid, so a change anywhere reaches all 64 of them;
+  over 16 % of the frame few edited photographs pass for copies.
+- **Turning the hue** hardly moves the hash on photographs, whose muted colors keep their
+  luminance under a hue rotation. On the flat, saturated colors of the synthetic images
+  it moves the hash far.
+- **A turn or a mirror image** moves the hash as far as an unrelated image. A mirror
+  reverses the sign of every cosine pattern that is odd from left to right, half the
+  block, so it lands as far as a turn.
+
+??? info "The numbers behind the chart"
+
+    --8<-- "docs/assets/generated/phash/edits-table.md"
+
+??? info "How this was measured"
+
+    The same measurement as for the copies, over the same images: each edit is applied
+    alone to the original, the copy is saved losslessly, and the library compares it with
+    the original. The threshold is the one of the chart above, computed from the copies.
+    Below is the code of the edits.
+
+    ```python title="tools/site/transforms.py"
+    --8<-- "tools/site/transforms.py:content_edits"
+    ```
+
 How the nine algorithms compare is on
 [choosing an algorithm](../algorithms.md#comparison-summary).
 
 ## Cost
 
-pHash costs what aHash does, on a small image and on a large one
-([measured](../algorithms.md#cost)). The 32×32 grid comes from the same cached area pass
-over the grayscale image as aHash's, wHash's and BMH's, which is what grows with the
-image; the transform that follows works on 1024 values whatever the image's size, and
-computes only the 64 coefficients of the block, not all 1024.
+pHash costs what aHash does, on a small image and on a large one (the times are in the
+table at the top of the page). The 32×32 grid comes from the same cached area pass over
+the grayscale image as aHash's, wHash's and BMH's, which is what grows with the image;
+the transform that follows works on 1024 values whatever the image's size, and computes
+only the 64 coefficients of the block, not all 1024.
+
+??? info "How this was measured"
+
+    --8<-- "docs/assets/generated/timing/table.md"
+
+    Each case runs once to warm up, then until it has run at least five times and for at
+    least 0.3 s; the time is the minimum. The grayscale image and the area grid the
+    library caches are dropped before every run, so each run is the first hash on a
+    loaded image. The cases, and the timing loop:
+
+    ```c title="tools/site/stages.c"
+    --8<-- "tools/site/stages.c:time"
+    ```
+
+    The times are measured again only when the library, the tool or the machine changes:
+
+    ```python title="tools/site/timing.py"
+    --8<-- "tools/site/timing.py:timing"
+    ```
 
 ## Parameters
 
@@ -384,3 +447,5 @@ The margin of step 5 is this library's own, so the hash values are not pHash's. 
 bit order, which no source specifies, is this library's choice. The comparison, with the
 numbers behind each choice, is in
 [provenance § 3](../algorithm-provenance.md#3-phash--dct-based-hash).
+
+--8<-- "docs/assets/generated/timing/footnote.md"

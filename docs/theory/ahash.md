@@ -9,7 +9,7 @@ the whole idea of perceptual hashing in two lines of arithmetic.
 | **Call** | [`ph_compute_ahash()`](../api/hash64.md#ph_compute_ahash), or [`PH_HASH_AHASH`](../api/hash64.md#PH_HASH_AHASH) in [`ph_compute_multi()`](../api/hash64.md#ph_compute_multi) |
 | **Output** | 64-bit hash, compared with [`ph_hamming_distance()`](../api/compare.md#ph_hamming_distance) |
 | **Source** | Neal Krawetz, "Looks Like It", 2011 ([provenance](../algorithm-provenance.md#1-ahash--average-hash)) |
-| **Cost** | 0.05 ms on a 400×400 image, 2.6 ms on 20 Mpx, after decoding |
+--8<-- "docs/assets/generated/ahash/cost-row.md"
 
 ## The steps
 
@@ -214,8 +214,80 @@ more.
     `tests/src/synthetic_corpus.h`, the same code the tests use. `make site` measures
     both corpora and draws every figure.
 
+### Edits that change the picture
+
+The edits above are those a copy goes through. The ones here change what the picture
+shows: a patch of the image's own top-left corner pasted over its center, covering 1 to
+16 % of the frame; the hue of every pixel turned, which recolors the picture; and a
+quarter turn, a half turn and a mirror image. Whether a hash should notice them depends
+on what it is for: a search for copies wants to ignore a recoloring, a search for
+retouched pictures wants to catch the patch.
+
+![The example photograph with a patch over 4 and 16 % of the frame, its hue turned by 90 and 180 degrees, turned by 90 and 180 degrees, and mirrored](../assets/generated/edits/examples.light.svg#only-light)
+![The example photograph with a patch over 4 and 16 % of the frame, its hue turned by 90 and 180 degrees, turned by 90 and 180 degrees, and mirrored](../assets/generated/edits/examples.dark.svg#only-dark)
+
+Each panel shows how far the edited images land from their originals over both corpora.
+The dashed line is the threshold of the chart above, the one that accepts 95 % of the
+copies, in each corpus's color: an edited image below it would be taken for a copy.
+
+![Bits that differ from the original for a patch, a hue rotation, and turns and a mirror, median and middle half over each corpus, against the threshold that accepts 95 % of copies](../assets/generated/ahash/edits.light.svg#only-light)
+![Bits that differ from the original for a patch, a hue rotation, and turns and a mirror, median and middle half over each corpus, against the threshold that accepts 95 % of copies](../assets/generated/ahash/edits.dark.svg#only-dark)
+
+- **A patch** changes only the cells it covers, and moves the hash in proportion to its
+  area: over 4 % of the frame most edited photographs still pass for copies, over 16 %
+  most do not.
+- **Turning the hue** hardly moves the hash on photographs. A hue rotation keeps each
+  pixel's saturation and its brightest channel, and on the muted colors of most
+  photographs the luminance barely changes. The synthetic images are flat, saturated
+  colors, whose luminance a hue rotation changes a great deal, and there the hash moves
+  as far as for an unrelated image.
+- **A quarter or half turn** moves the hash as far as an unrelated image. A mirror image
+  moves it about half as far: it reverses the layout from left to right and keeps it
+  from top to bottom.
+
+??? info "The numbers behind the chart"
+
+    --8<-- "docs/assets/generated/ahash/edits-table.md"
+
+??? info "How this was measured"
+
+    The same measurement as for the copies, over the same images: each edit is applied
+    alone to the original, the copy is saved losslessly, and the library compares it with
+    the original. The threshold is the one of the chart above, computed from the copies.
+    Below is the code of the edits.
+
+    ```python title="tools/site/transforms.py"
+    --8<-- "tools/site/transforms.py:content_edits"
+    ```
+
 How the nine algorithms compare is on
 [choosing an algorithm](../algorithms.md#comparison-summary).
+
+## Cost
+
+aHash costs a grayscale conversion and one area-average pass over the image, which read
+every pixel and so grow with it; the 64 comparisons that follow do not (the times are in
+the table at the top of the page). The area pass is cached: pHash, wHash and BMH reduce
+from the same grid.
+
+??? info "How this was measured"
+
+    --8<-- "docs/assets/generated/timing/table.md"
+
+    Each case runs once to warm up, then until it has run at least five times and for at
+    least 0.3 s; the time is the minimum. The grayscale image and the area grid the
+    library caches are dropped before every run, so each run is the first hash on a
+    loaded image. The cases, and the timing loop:
+
+    ```c title="tools/site/stages.c"
+    --8<-- "tools/site/stages.c:time"
+    ```
+
+    The times are measured again only when the library, the tool or the machine changes:
+
+    ```python title="tools/site/timing.py"
+    --8<-- "tools/site/timing.py:timing"
+    ```
 
 ## Settings that affect it
 
@@ -247,3 +319,5 @@ average), the grayscale weights (BT.601) and the rule for a pixel equal to the m
 bit is set). With those, the implementation follows the post exactly, bit order included.
 The comparison, with the numbers behind each choice, is in
 [provenance § 1](../algorithm-provenance.md#1-ahash--average-hash).
+
+--8<-- "docs/assets/generated/timing/footnote.md"

@@ -12,7 +12,7 @@ instead of the mean.
 | **Call** | [`ph_compute_whash()`](../api/hash64.md#ph_compute_whash), or [`PH_HASH_WHASH`](../api/hash64.md#PH_HASH_WHASH) in [`ph_compute_multi()`](../api/hash64.md#ph_compute_multi) |
 | **Output** | 64-bit hash, compared with [`ph_hamming_distance()`](../api/compare.md#ph_hamming_distance) |
 | **Source** | none: the `whash` of Johannes Buchner's ImageHash library is the reference implementation ([provenance](../algorithm-provenance.md#4-whash--wavelet-hash)) |
-| **Cost** | 0.05 ms on a 400×400 image, 2.6 ms on 20 Mpx, after decoding; 0.09 and 7.8 ms in the full mode |
+--8<-- "docs/assets/generated/whash/cost-row.md"
 
 ## The steps
 
@@ -279,6 +279,48 @@ on these images the cut matters little.
     `tests/src/synthetic_corpus.h`, the same code the tests use. `make site` measures
     both corpora and draws every figure.
 
+### Edits that change the picture
+
+The edits above are those a copy goes through. The ones here change what the picture
+shows: a patch of the image's own top-left corner pasted over its center, covering 1 to
+16 % of the frame; the hue of every pixel turned, which recolors the picture; and a
+quarter turn, a half turn and a mirror image. Whether a hash should notice them depends
+on what it is for: a search for copies wants to ignore a recoloring, a search for
+retouched pictures wants to catch the patch.
+
+![The example photograph with a patch over 4 and 16 % of the frame, its hue turned by 90 and 180 degrees, turned by 90 and 180 degrees, and mirrored](../assets/generated/edits/examples.light.svg#only-light)
+![The example photograph with a patch over 4 and 16 % of the frame, its hue turned by 90 and 180 degrees, turned by 90 and 180 degrees, and mirrored](../assets/generated/edits/examples.dark.svg#only-dark)
+
+Each panel shows how far the edited images land from their originals over both corpora.
+The dashed line is the threshold of the chart above, the one that accepts 95 % of the
+copies, in each corpus's color: an edited image below it would be taken for a copy.
+
+![Bits that differ from the original for a patch, a hue rotation, and turns and a mirror, median and middle half over each corpus, against the threshold that accepts 95 % of copies](../assets/generated/whash/edits.light.svg#only-light)
+![Bits that differ from the original for a patch, a hue rotation, and turns and a mirror, median and middle half over each corpus, against the threshold that accepts 95 % of copies](../assets/generated/whash/edits.dark.svg#only-dark)
+
+- **A patch** changes the block means it covers, as for aHash: over 4 % of the frame most
+  edited photographs still pass for copies, over 16 % most do not.
+- **Turning the hue** hardly moves the hash on photographs, whose muted colors keep their
+  luminance under a hue rotation. On the flat, saturated colors of the synthetic images
+  it moves the hash far.
+- **A quarter or half turn** moves the hash as far as an unrelated image, and a mirror
+  image about half as far: it keeps the layout from top to bottom.
+
+??? info "The numbers behind the chart"
+
+    --8<-- "docs/assets/generated/whash/edits-table.md"
+
+??? info "How this was measured"
+
+    The same measurement as for the copies, over the same images: each edit is applied
+    alone to the original, the copy is saved losslessly, and the library compares it with
+    the original. The threshold is the one of the chart above, computed from the copies.
+    Below is the code of the edits.
+
+    ```python title="tools/site/transforms.py"
+    --8<-- "tools/site/transforms.py:content_edits"
+    ```
+
 ### wHash and aHash
 
 The two hashes read the same 8×8 grid and differ in one thing, the threshold: aHash
@@ -331,12 +373,31 @@ How the nine algorithms compare is on
 
 ## Cost
 
-In the default mode wHash costs what aHash does, on a small image and on a large one
-([measured](../algorithms.md#cost)). The 16×16 grid comes from the same cached area pass
-over the grayscale image as aHash's, pHash's and BMH's, which is what grows with the
-image; the transform that follows works on 256 values whatever the image's size. The full
-mode resamples the whole grayscale image to a power of two of its own size, and costs
-about three times as much on a large one.
+In the default mode wHash costs what aHash does, on a small image and on a large one (the
+times are in the table at the top of the page). The 16×16 grid comes from the same cached
+area pass over the grayscale image as aHash's, pHash's and BMH's, which is what grows with
+the image; the transform that follows works on 256 values whatever the image's size. The
+full mode resamples the whole grayscale image to a power of two of its own size, and
+costs about three times as much on a large one.
+
+??? info "How this was measured"
+
+    --8<-- "docs/assets/generated/timing/table.md"
+
+    Each case runs once to warm up, then until it has run at least five times and for at
+    least 0.3 s; the time is the minimum. The grayscale image and the area grid the
+    library caches are dropped before every run, so each run is the first hash on a
+    loaded image. The cases, and the timing loop:
+
+    ```c title="tools/site/stages.c"
+    --8<-- "tools/site/stages.c:time"
+    ```
+
+    The times are measured again only when the library, the tool or the machine changes:
+
+    ```python title="tools/site/timing.py"
+    --8<-- "tools/site/timing.py:timing"
+    ```
 
 ## Parameters
 
@@ -460,3 +521,5 @@ that. The image is resampled by an area average, or a box filter in the full mod
 ImageHash uses Lanczos. And `remove_max_haar_ll`, on by default in ImageHash, is off here,
 for the reason above. The bit order, which nothing specifies, is this library's choice.
 The comparison is in [provenance § 4](../algorithm-provenance.md#4-whash--wavelet-hash).
+
+--8<-- "docs/assets/generated/timing/footnote.md"

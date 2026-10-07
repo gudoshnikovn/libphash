@@ -15,6 +15,8 @@ from transforms import transforms
 
 ALGO = "whash"
 BITS = 64  # the robustness chart's scale: bits of the hash
+# The Cost row's second pair of times: (timed case, what it is).
+COST_VARIANTS = [("whash_full", "in the full mode")]
 
 # The edits the comparison with aHash draws: those where the two differ, and contrast,
 # where they do not; every edit is in the table under it.

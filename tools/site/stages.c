@@ -49,6 +49,11 @@
  *       The same comparison for every pair of distinct images: one JSON object per pair
  *       (i < j, in the order given), with the indices "a" and "b".
  *
+ *   site_stages time <image>
+ *       Times decoding the image and every hash on it (the first hash on a loaded image,
+ *       caches dropped before each run), and the variants of time_cases[]; prints the
+ *       minimum and the median of the runs, in milliseconds, as one JSON object.
+ *
  *   site_stages corpus <outdir>
  *       Writes the synthetic corpus of the tests (tests/src/synthetic_corpus.h) as
  *       00.ppm ... 23.ppm, so the site measures the very images the tests do.
@@ -64,6 +69,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 static int fail(const char *what, const char *detail) {
     fprintf(stderr, "site_stages: %s%s%s\n", what, detail ? ": " : "", detail ? detail : "");
@@ -863,6 +869,143 @@ static int pairs(int argc, char **argv) {
 
 /* --8<-- [end:pairs] */
 
+/* --8<-- [start:time] */
+/* Seconds on a clock that only moves forward for the purpose: C11's timespec_get(). */
+static double seconds(void) {
+    struct timespec ts;
+    timespec_get(&ts, TIME_UTC);
+    return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+}
+
+/* One timed case: `run` does the work once on a loaded image and returns nonzero on
+ * failure; `arg` selects a variant of it. */
+typedef struct {
+    const char *name;
+    int (*run)(ph_context_t *ctx, const char *path, int arg);
+    int arg;
+} time_case_t;
+
+static int time_decode(ph_context_t *ctx, const char *path, int arg) {
+    (void)arg;
+    return ph_load_from_file(ctx, path) != PH_SUCCESS;
+}
+
+/* The first hash computed on a loaded image, which is what a caller who loads an image
+ * and hashes it pays: the grayscale conversion and the shared area grid are dropped
+ * before every run, so each run computes them (the dropping is untimed). */
+static int time_hash(ph_context_t *ctx, const char *path, int algo) {
+    (void)path;
+    ph_digest_t d;
+    return ph_compute_digest(ctx, (ph_algorithm_t)algo, &d) != PH_SUCCESS;
+}
+
+static int time_whash_full(ph_context_t *ctx, const char *path, int arg) {
+    (void)path;
+    (void)arg;
+    uint64_t h;
+    int bad = ph_context_set_whash_mode(ctx, PH_WHASH_FULL) != PH_SUCCESS ||
+              ph_compute_whash(ctx, &h) != PH_SUCCESS;
+    return ph_context_set_whash_mode(ctx, PH_WHASH_FAST) != PH_SUCCESS || bad;
+}
+
+static int time_mhash_size(ph_context_t *ctx, const char *path, int size) {
+    (void)path;
+    ph_digest_t d;
+    int bad = ph_context_set_mhash_params(ctx, PH_MH_ALPHA, PH_MH_LEVEL, size) != PH_SUCCESS ||
+              ph_compute_mhash(ctx, &d) != PH_SUCCESS;
+    return ph_context_set_mhash_params(ctx, PH_MH_ALPHA, PH_MH_LEVEL, PH_MH_IMAGE_SIZE) !=
+               PH_SUCCESS ||
+           bad;
+}
+
+static const time_case_t time_cases[] = {
+    {"decode", time_decode, 0},
+    {"ahash", time_hash, PH_ALGO_AHASH},
+    {"dhash", time_hash, PH_ALGO_DHASH},
+    {"phash", time_hash, PH_ALGO_PHASH},
+    {"whash", time_hash, PH_ALGO_WHASH},
+    {"whash_full", time_whash_full, 0},
+    {"bmh", time_hash, PH_ALGO_BMH},
+    {"mhash", time_hash, PH_ALGO_MHASH},
+    {"radial", time_hash, PH_ALGO_RADIAL},
+    {"color_hash", time_hash, PH_ALGO_COLOR_HASH},
+    {"color_moments", time_hash, PH_ALGO_COLOR_MOMENTS},
+    {"mhash_size_62", time_mhash_size, 62},
+    {"mhash_size_128", time_mhash_size, 128},
+    {"mhash_size_256", time_mhash_size, 256},
+    {"mhash_size_512", time_mhash_size, 512},
+    {"mhash_size_1024", time_mhash_size, 1024},
+    {"mhash_size_2048", time_mhash_size, 2048},
+    {"mhash_size_4096", time_mhash_size, 4096},
+};
+
+static int cmp_double(const void *a, const void *b) {
+    double x = *(const double *)a, y = *(const double *)b;
+    return (x > y) - (x < y);
+}
+
+/* site_stages time <image>: every case of time_cases[] on the image, one warm-up run and
+ * then at least TIME_MIN_RUNS runs and TIME_MIN_SECONDS, at most TIME_MAX_RUNS; the
+ * minimum and the median of the runs, in milliseconds, as one JSON object. */
+enum {
+    TIME_MIN_RUNS = 5,
+    TIME_MAX_RUNS = 300,
+};
+
+#define TIME_MIN_SECONDS 0.3
+
+static int time_image(int argc, char **argv) {
+    (void)argc;
+    ph_context_t *ctx = NULL;
+    if (load(&ctx, argv[0])) {
+        return 1;
+    }
+    json_t j = {stdout, 0};
+    json_int(&j, "width", ctx->image.width);
+    json_int(&j, "height", ctx->image.height);
+    json_string(&j, "build_info", ph_get_build_info());
+#ifdef __VERSION__
+    json_string(&j, "compiler", __VERSION__);
+#endif
+    json_key(&j, "cases");
+    json_t cases = {stdout, 0};
+    static double ms[TIME_MAX_RUNS];
+    for (size_t c = 0; c < sizeof(time_cases) / sizeof(time_cases[0]); c++) {
+        const time_case_t *tc = &time_cases[c];
+        int runs = 0;
+        double total = 0.0;
+        for (int k = -1; k < TIME_MAX_RUNS; k++) { /* k = -1: the warm-up */
+            ph_drop_gray_cache(ctx);
+            double t0 = seconds();
+            if (tc->run(ctx, argv[0], tc->arg)) {
+                ph_free(ctx);
+                return fail("timed case failed", tc->name);
+            }
+            double t = seconds() - t0;
+            if (k >= 0) {
+                ms[runs++] = t * 1e3;
+                total += t;
+                if (runs >= TIME_MIN_RUNS && total >= TIME_MIN_SECONDS) {
+                    break;
+                }
+            }
+        }
+        qsort(ms, (size_t)runs, sizeof(ms[0]), cmp_double);
+        json_key(&cases, tc->name);
+        json_t o = {stdout, 0};
+        json_double(&o, "min_ms", ms[0]);
+        json_double(&o, "median_ms", ms[runs / 2]);
+        json_int(&o, "runs", runs);
+        fputs("}", stdout);
+    }
+    fputs("}", stdout);
+    json_end(&j);
+    ph_free(ctx);
+    return 0;
+}
+
+/* --8<-- [end:time] */
+
 /* site_stages corpus <outdir> */
 static int corpus(int argc, char **argv) {
     (void)argc;
@@ -894,6 +1037,7 @@ static const struct {
     {"measure", "<reference> <variant>...", 2, 1, measure},
     {"pairs", "<image> <image>...", 2, 1, pairs},
     {"corpus", "<outdir>", 1, 0, corpus},
+    {"time", "<image>", 1, 0, time_image},
 };
 
 int main(int argc, char **argv) {
