@@ -10,8 +10,8 @@ strict build checks.
 
 Each topic opens with a summary of its declarations. The generator also writes what it can
 compute rather than what a doc comment says: under a function, the examples (examples/*.c)
-that call it and the site pages that link to its anchor; on the overview, an A–Z index of
-every symbol. A path such as `docs/algorithms.md section 8` in a doc comment becomes a link to
+that call it and the site pages that link to its anchor; under ph_error_t, the functions
+whose @return names each code; on the overview, an A–Z index of every symbol. A path such as `docs/algorithms.md section 8` in a doc comment becomes a link to
 that page of the site, and a path to a file that does not exist fails the generation.
 
 Every declaration is written exactly once, under an anchor equal to its name, in header
@@ -19,7 +19,9 @@ order. A member Doxygen lists under two topics (a function in a `@name` block of
 topic with an `@ingroup` of another) goes on the page its `@ingroup` names. The set of
 functions on the pages is checked against the functions the header exports, and an XML
 element this script has no rendering for fails it rather than being dropped: the
-reference never silently loses text.
+reference never silently loses text. So does a function that returns ph_error_t without
+an @return naming its codes as code (`@c PH_ERR_...`), since the table of which function
+returns which code is read from those @return sections and from nothing else.
 
 Usage: scripts/api_pages.py <doxygen xml dir> <output dir>
 """
@@ -43,6 +45,10 @@ DOC_PATH = re.compile(r"\bdocs/([\w/-]+\.md)(?: section (\d+))?")
 
 # Signatures longer than this put one parameter per line.
 SIGNATURE_WIDTH = 88
+
+# The result type of every function that can fail; its page lists who returns each code.
+ERROR_TYPE = "ph_error_t"
+ERROR_CODE = re.compile(r"\bPH_(?:ERR_\w+|SUCCESS)\b")
 
 
 class GenError(Exception):
@@ -74,6 +80,16 @@ def slugify(heading):
     """The anchor of a heading, as the site forms it (pymdownx.slugs, case = "lower")."""
     text = re.sub(r"</?[^>]*>|`", "", unicodedata.normalize("NFC", heading)).strip().lower()
     return re.sub(r"[^\w\- ]", "", text).replace(" ", "-")
+
+
+def outside_code(elem):
+    """The text of an element with every code span (`@c`, backticks) left out."""
+    parts = [elem.text or ""]
+    for child in elem:
+        if child.tag != "computeroutput":
+            parts.append(outside_code(child))
+        parts.append(child.tail or "")
+    return "".join(parts)
 
 
 def strip_c(text):
@@ -186,6 +202,7 @@ class Reference:
         self.home = {}  # memberdef id -> topic
         self.where = ""
         self._place()
+        self.returned_by = self._error_returns()
         self.explained = site.explained()
         self.used = site.examples(header.exported)
 
@@ -220,6 +237,52 @@ class Reference:
             for v in m.findall("enumvalue"):
                 self._link(v.get("id"), topic, v.findtext("name"))
         self.links["indexpage"] = ("index.md", None)
+
+    def _error_returns(self):
+        """Error code -> the functions whose @return names it, in header order.
+
+        Every function that returns ph_error_t has an @return, every code in it is a code
+        span, and every code is named by at least one function: a table read from the
+        @return sections is then the whole truth, not the part someone remembered to write.
+        """
+        codes, functions = None, {}
+        for group in self.groups.values():
+            for m in group.iter("memberdef"):
+                if m.get("kind") == "enum" and m.findtext("name") == ERROR_TYPE:
+                    codes = [v.findtext("name") for v in m.findall("enumvalue")
+                             if not v.findtext("name").endswith("_FORCE_INT32_")]
+                elif m.get("kind") == "function" and plain(m.find("type")) == ERROR_TYPE:
+                    functions[m.findtext("name")] = m
+        if codes is None:
+            raise GenError(f"{ERROR_TYPE}: not found in any topic")
+        out = {code: [] for code in codes}
+        problems = []
+        for name, m in sorted(functions.items(), key=lambda f: self._line(f[1])):
+            sects = [s for s in m.iter("simplesect") if s.get("kind") == "return"]
+            named = []
+            for s in sects:
+                for span in s.iter("computeroutput"):
+                    text = plain(span)
+                    if text in codes:
+                        named.append(text)
+                    elif ERROR_CODE.fullmatch(text):
+                        problems.append(f"{name}: @return names {text}, which is not a "
+                                        f"{ERROR_TYPE} value")
+                for text in ERROR_CODE.findall(outside_code(s)):
+                    problems.append(f"{name}: @return names {text} as plain text; write "
+                                    f"@c {text}")
+            if not any(c != "PH_SUCCESS" for c in named):
+                problems.append(f"{name}: returns {ERROR_TYPE} but no @return names an "
+                                "error code")
+            for code in dict.fromkeys(named):
+                out[code].append(name)
+        for code, names in out.items():
+            if not names and code != "PH_SUCCESS":
+                problems.append(f"{code}: no function's @return names it")
+        if problems:
+            raise GenError("error codes in @return:\n  - " + "\n  - ".join(problems))
+        self.error_functions = len(functions)
+        return out
 
     def _link(self, refid, topic, anchor, name=True):
         self.links[refid] = (f"{topic}.md", anchor)
@@ -562,7 +625,27 @@ class Reference:
             lines.append(f"| <span id=\"{vname}\"></span>{self.name_cell(vname)} | "
                          f"{self.name_cell(value)} | {self.one_line(v, page)} |")
         out.append("\n".join(lines))
+        if name == ERROR_TYPE:
+            out += self.returned_by_table(page)
         return out + self.related(name, page)
+
+    def returned_by_table(self, page):
+        """Which function returns which code, read from their @return sections."""
+        every = (f"All {self.error_functions} functions that return "
+                 f"[`{ERROR_TYPE}`](#{ERROR_TYPE})")
+        lines = ["| Code | Returned by |", "|---|---|"]
+        for code, names in self.returned_by.items():
+            if code == "PH_SUCCESS":
+                continue
+            if len(names) == self.error_functions:
+                cell = every
+            else:
+                cell = " · ".join(f"[`{n}()`]({self.href(self.names[n], page)})"
+                                  for n in names)
+            lines.append(f"| [{self.name_cell(code)}](#{code}) | {cell} |")
+        return [f"**Returned by** — read from each function's *Returns*. Every function that "
+                f"returns [`{ERROR_TYPE}`](#{ERROR_TYPE}) returns [`PH_SUCCESS`](#PH_SUCCESS) "
+                "when it succeeds.", "\n".join(lines)]
 
     @staticmethod
     def name_cell(name):

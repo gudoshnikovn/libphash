@@ -444,7 +444,11 @@ page per topic, every declaration under an anchor equal to its name; a function 
 from those pages, or doc-comment markup the script has no rendering for, fails the build.
 The script also writes what it computes rather than reads: under each declaration, the
 examples that call it and the site pages that link to its anchor (so a new page that
-explains a function appears there by itself), and an A–Z index on the overview. A path
+explains a function appears there by itself), under `ph_error_t` the functions that
+return each code, and an A–Z index on the overview. That table is read from the
+`@return` of every function that returns `ph_error_t`, so such a function without an
+`@return` naming its codes as code (`@c PH_ERR_IO`), or a code no `@return` names, fails
+the build. A path
 such as `docs/batch.md` or `docs/algorithms.md section 8` in a doc comment becomes a link
 to that page or section; a path to a page or a section number that does not exist fails
 the build.
