@@ -63,6 +63,17 @@
  *       evaluated pixel by pixel in double and in float, gives differently from
  *       ph_compute_mhash().
  *
+ *   site_stages bmh <image> <outdir>
+ *       The same for BMH: original.ppm, gray.pgm, and bmh.json (for block sizes 4, 8, 16
+ *       and 32: the grid of block means, its median and mean, the digest and the digest
+ *       the same grid gives thresholded at its mean), every digest checked against
+ *       ph_compute_bmh() with that block size; and the digest of the image loaded with
+ *       ph_context_set_load_grayscale(), checked the same way.
+ *
+ *   site_stages bmh-variants <image>...
+ *       Prints one JSON object per image: its BMH digest at each of those block sizes,
+ *       as ph_compute_bmh() computes it, and the digest thresholded at the mean.
+ *
  *   site_stages time <image>
  *       Times decoding the image and every hash on it (the first hash on a loaded image,
  *       caches dropped before each run), and the variants of time_cases[]; prints the
@@ -1133,6 +1144,168 @@ static int mhash_direct(int argc, char **argv) {
     return 0;
 }
 
+/* --8<-- [start:bmh] */
+/* One BMH computation at a given block size, recomputed from its grid and checked against
+ * ph_compute_bmh() with that size: the grid of block means, the median as the library
+ * takes it (the upper of the two central values), the digest (bit i set where block i >=
+ * the median, LSB first within each byte); and, for comparison, the digest thresholded
+ * at the mean of the blocks instead, packed the same way. */
+typedef struct {
+    int size;
+    uint8_t grid[PH_BLOCK_MAX_SIZE * PH_BLOCK_MAX_SIZE];
+    int median;
+    double mean;
+    uint8_t digest[PH_DIGEST_MAX_BYTES], digest_mean[PH_DIGEST_MAX_BYTES];
+} bmh_stages_t;
+
+static int bmh_run(ph_context_t *ctx, int size, bmh_stages_t *s) {
+    const int n = size * size, bytes = (n + 7) / 8;
+    s->size = size;
+    if (!ph_area_downscale(ctx, size, size, s->grid)) {
+        return fail("ph_area_downscale failed", NULL);
+    }
+    int count[256] = {0}, seen = 0;
+    uint64_t sum = 0;
+    for (int i = 0; i < n; i++) {
+        count[s->grid[i]]++;
+        sum += s->grid[i];
+    }
+    s->median = 255;
+    for (int v = 0; v < 256; v++) {
+        seen += count[v];
+        if (seen > n / 2) {
+            s->median = v;
+            break;
+        }
+    }
+    s->mean = (double)sum / n;
+    memset(s->digest, 0, sizeof(s->digest));
+    memset(s->digest_mean, 0, sizeof(s->digest_mean));
+    for (int i = 0; i < n; i++) {
+        if (s->grid[i] >= s->median) {
+            s->digest[i / 8] |= (uint8_t)(1u << (i % 8));
+        }
+        if ((uint64_t)s->grid[i] * (uint64_t)n >= sum) {
+            s->digest_mean[i / 8] |= (uint8_t)(1u << (i % 8));
+        }
+    }
+
+    ph_digest_t lib;
+    int bad = ph_context_set_block_params(ctx, size) != PH_SUCCESS ||
+              ph_compute_bmh(ctx, &lib) != PH_SUCCESS;
+    if (ph_context_set_block_params(ctx, PH_BLOCK_SIZE) != PH_SUCCESS || bad) {
+        return fail("ph_compute_bmh failed", NULL);
+    }
+    if (lib.size != bytes || memcmp(lib.data, s->digest, (size_t)bytes) != 0) {
+        fprintf(stderr,
+                "site_stages: BMH (block_size %d) recomputed from the grid differs from "
+                "ph_compute_bmh() in %d bits\n",
+                size, bits_apart(lib.data, s->digest, bytes));
+        return 1;
+    }
+    return 0;
+}
+
+/* --8<-- [end:bmh] */
+
+/* The block sizes `site_stages bmh` draws, the default among them. */
+static const int bmh_sizes[] = {4, 8, 16, 32};
+
+/* site_stages bmh <image> <outdir> */
+static int stages_bmh(int argc, char **argv) {
+    (void)argc;
+    const char *outdir = argv[1];
+    ph_context_t *ctx = NULL;
+    if (load(&ctx, argv[0])) {
+        return 1;
+    }
+    int w = ctx->image.width, h = ctx->image.height;
+    int status = 0;
+
+    enum {
+        N_SIZES = sizeof(bmh_sizes) / sizeof(bmh_sizes[0]),
+    };
+
+    bmh_stages_t runs[N_SIZES];
+    int bad = !write_gray_stages(ctx, outdir, &status);
+    for (int k = 0; k < N_SIZES && !bad; k++) {
+        bad = bmh_run(ctx, bmh_sizes[k], &runs[k]);
+    }
+    ph_free(ctx);
+
+    /* The decoder's grayscale, as for the other hashes: the default size. */
+    bmh_stages_t dec;
+    if (!bad) {
+        bad = ph_create(&ctx) != PH_SUCCESS ||
+              ph_context_set_load_grayscale(ctx, 1) != PH_SUCCESS ||
+              ph_load_from_file(ctx, argv[0]) != PH_SUCCESS || bmh_run(ctx, PH_BLOCK_SIZE, &dec);
+        ph_free(ctx);
+    }
+
+    FILE *f = bad ? NULL : open_out(outdir, "bmh.json");
+    if (f) {
+        json_t j = {f, 0};
+        json_int(&j, "width", w);
+        json_int(&j, "height", h);
+        json_int(&j, "default", PH_BLOCK_SIZE);
+        json_key(&j, "sizes");
+        fputc('[', f);
+        for (int k = 0; k < N_SIZES; k++) {
+            const bmh_stages_t *s = &runs[k];
+            const int n = s->size * s->size;
+            json_t o = {f, 0};
+            if (k) {
+                fputs(", ", f);
+            }
+            json_int(&o, "size", s->size);
+            json_u8s(&o, "grid", s->grid, n);
+            json_int(&o, "median", s->median);
+            json_double(&o, "mean", s->mean);
+            json_hexbytes(&o, "digest", s->digest, (n + 7) / 8);
+            json_hexbytes(&o, "digest_mean", s->digest_mean, (n + 7) / 8);
+            fputc('}', f);
+        }
+        fputc(']', f);
+        json_hexbytes(&j, "digest_load_grayscale", dec.digest, PH_BLOCK_SIZE * PH_BLOCK_SIZE / 8);
+        json_end(&j);
+        status |= fclose(f) != 0;
+    }
+    return bad || !f ? 1 : status;
+}
+
+/* --8<-- [start:bmh-variants] */
+/* site_stages bmh-variants <image>...: for every image, the BMH digest at each block
+ * size of bmh_sizes[], as ph_compute_bmh() computes it, and the same grid thresholded
+ * at its mean: one JSON line per image. */
+static int bmh_variants(int argc, char **argv) {
+    for (int i = 0; i < argc; i++) {
+        ph_context_t *ctx = NULL;
+        if (load(&ctx, argv[i])) {
+            return 1;
+        }
+        json_t j = {stdout, 0};
+        json_string(&j, "file", argv[i]);
+        for (size_t k = 0; k < sizeof(bmh_sizes) / sizeof(bmh_sizes[0]); k++) {
+            bmh_stages_t s;
+            if (bmh_run(ctx, bmh_sizes[k], &s)) {
+                ph_free(ctx);
+                return 1;
+            }
+            char key[32];
+            const int bytes = (s.size * s.size + 7) / 8;
+            snprintf(key, sizeof(key), "median_%d", s.size);
+            json_hexbytes(&j, key, s.digest, bytes);
+            snprintf(key, sizeof(key), "mean_%d", s.size);
+            json_hexbytes(&j, key, s.digest_mean, bytes);
+        }
+        json_end(&j);
+        ph_free(ctx);
+    }
+    return 0;
+}
+
+/* --8<-- [end:bmh-variants] */
+
 /* --8<-- [start:compare] */
 /* One algorithm's comparison of two digests by its own metric; 0 when it does not apply. */
 static int compare(const ph_digest_t *a, const ph_digest_t *b, double *out) {
@@ -1408,6 +1581,8 @@ static const struct {
     {"whash-modes", "<image>...", 1, 1, whash_modes},
     {"mhash", "<image> <outdir>", 2, 0, stages_mhash},
     {"mhash-direct", "<image>...", 1, 1, mhash_direct},
+    {"bmh", "<image> <outdir>", 2, 0, stages_bmh},
+    {"bmh-variants", "<image>...", 1, 1, bmh_variants},
     {"measure", "<reference> <variant>...", 2, 1, measure},
     {"pairs", "<image> <image>...", 2, 1, pairs},
     {"corpus", "<outdir>", 1, 0, corpus},

@@ -545,21 +545,15 @@ PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projection
  * @brief Sets the grid resolution for the Block Mean Hash (BMH).
  *
  * @param ctx The context.
- * @param block_size Resolution of the grid, 2..32 (default 16). BMH packs one bit per
- *        block, i.e. `block_size * block_size` bits, into a @c ph_digest_t of at most
- *        PH_DIGEST_MAX_BYTES (128) bytes: 32x32 = 1024 bits = 128 bytes fits exactly,
- *        33x33 = 1089 bits = 137 bytes does not. The upper bound is set by the digest
- *        capacity: a larger grid cannot be represented, so it is refused rather than
- *        truncated. The lower bound is 2, not 1: with a single
- * block its mean equals itself, the median of one value is that same value, the threshold
- * is ">=" and is therefore always true, so the digest is the fixed 0x01 for every
- * image regardless of content. 2 is the smallest grid whose blocks can have different
- * means and therefore a content-dependent bit pattern.
+ * @param block_size Resolution of the grid, 2..32 (default 16): `block_size * block_size`
+ *        blocks, one bit each. 32 is the largest grid whose bits fit a @c ph_digest_t
+ *        (1024 bits, PH_DIGEST_MAX_BYTES); at 1 every image would give the same bit. An
+ *        out-of-range value is refused, not clamped.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for NULL @p ctx or an
  *         out-of-range @p block_size.
  *
  * @note This affects BMH only; mHash has its own parameters, see
- *       ph_context_set_mhash_params().
+ *       ph_context_set_mhash_params(). See docs/theory/bmh.md.
  * @ingroup params
  */
 PH_API ph_error_t ph_context_set_block_params(ph_context_t *ctx, int block_size);
@@ -1400,6 +1394,7 @@ PH_NODISCARD PH_API ph_error_t ph_algorithm_from_name(const char *name, ph_algor
 /**
  * @brief Computes Block Mean Hash (BMH). Returns a `block_size * block_size`-bit digest
  * (256 bits / 32 bytes at the default block_size 16; see ph_context_set_block_params()).
+ * See docs/theory/bmh.md.
  * @return @c PH_SUCCESS, @c PH_ERR_INVALID_ARGUMENT for a NULL argument,
  *         @c PH_ERR_EMPTY_IMAGE if no image is loaded, or @c PH_ERR_ALLOCATION_FAILED.
  * @ingroup digests

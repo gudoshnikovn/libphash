@@ -277,8 +277,11 @@ portability and comparison against a foreign implementation.
 - **Tuning**: `block_size` via `ph_context_set_block_params`, 2..32 (32×32 bits is the
   largest grid that fits a digest; the lower bound is 2, since a single block's mean
   equals itself and can't threshold against a median).
-- **Use case**: when 64 bits are not enough entropy and a lower collision rate is worth
-  the extra bytes.
+- **Use case**: a finer layout of light and dark than the 64-bit hashes describe. The
+  256 bits separate copies from different images by a wider *d′* than aHash's 64, but
+  rotation and cropping move more of them, and at the threshold that accepts 95 % of the
+  copies the 8×8 grid lets fewer different photographs through
+  ([measured](theory/bmh.md#block_size)).
 - **Threshold**: the **median** of the block means, as the paper specifies, which is what
   makes the bit distribution balanced by construction. This puts the library at odds with
   OpenCV's `BlockMeanHash`, which thresholds on the mean (in a variable it calls `median`);

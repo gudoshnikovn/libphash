@@ -24,10 +24,10 @@
  * although Zauner says he contributed one, so there is no reference implementation by the
  * source's own author to check against.
  *
- * Remaining divergence: the source normalises the image to a preset size and then
- * averages blocks of it. Box-resampling straight to the block grid equals that only
- * when the source dimensions are a multiple of the grid; otherwise source pixels are
- * weighted across block boundaries.
+ * The source normalizes the image to a preset size and then averages blocks of it. The
+ * area average here goes straight to the block grid instead, and gives the exact block
+ * means for any source size: a pixel cut by a block boundary counts in each block by the
+ * fraction it covers (ph_area_downscale()). The preset size would add only a rounding.
  *
  * Bit order: `data[i/8] |= 1 << (i%8)`, LSB first within each byte, blocks in raster
  * order. The paper defines a bit sequence (equation 3.9), not a byte layout, so there
@@ -99,8 +99,10 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
      * blocks clear the upper central value, so the hash has as many ones as zeroes.
      * Averaging the two central values would select the same blocks whenever they differ,
      * so this is the cheaper way to say the same thing. Equal block values are the one
-     * thing that can still tip the balance, and nothing can be done about that: they are
-     * bytes, and ties are common on flat images. */
+     * thing that can still tip the balance: they are bytes, ties are common on flat
+     * images, and the >= of equation 3.9 sets the bit of every block that ties. An image
+     * with more than half of its blocks at its darkest value therefore sets every bit.
+     * Breaking ties toward balance instead would depart from the equation. */
     size_t histogram[256] = {0};
     for (size_t i = 0; i < total_pixels; i++) {
         histogram[block_data[i]]++;

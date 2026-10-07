@@ -24,6 +24,7 @@ nav = [
       { "pHash" = "theory/phash.md" },
       { "wHash" = "theory/whash.md" },
       { "mHash" = "theory/mhash.md" },
+      { "BMH" = "theory/bmh.md" },
     ] },
     { "Provenance" = "algorithm-provenance.md" },
     { "References" = "references.md" },
