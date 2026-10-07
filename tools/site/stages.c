@@ -101,6 +101,18 @@
  *       image loaded with ph_context_set_load_grayscale(), which must be
  *       PH_ERR_REQUIRES_COLOR).
  *
+ *   site_stages color_moments <image> <outdir>
+ *       The same for ColorMoments: original.ppm and color_moments.json (the count of
+ *       every level of each channel, the three moments of each channel recomputed from
+ *       those counts, and the digest they encode, checked against
+ *       ph_compute_color_moments_hash(); and the error ph_compute_color_moments_hash()
+ *       returns for the image loaded with ph_context_set_load_grayscale(), which must be
+ *       PH_ERR_REQUIRES_COLOR).
+ *
+ *   site_stages color_moments-digests <image>...
+ *       Prints one JSON object per image: its ColorMoments digest, as
+ *       ph_compute_color_moments_hash() computes it.
+ *
  *   site_stages time <image>
  *       Times decoding the image and every hash on it (the first hash on a loaded image,
  *       caches dropped before each run), and the variants of time_cases[]; prints the
@@ -1819,6 +1831,144 @@ static int stages_color_hash(int argc, char **argv) {
     return bad || !f ? 1 : status;
 }
 
+/* --8<-- [start:color_moments] */
+/* ColorMoments recomputed from each channel's histogram and checked against
+ * ph_compute_color_moments_hash(): the count of every level of R, G and B; from it the
+ * mean, the standard deviation and the cube root of the third central moment; each moment
+ * rounded to 1/128 of a level and written as a signed 16-bit big-endian number. */
+typedef struct {
+    uint64_t hist[PH_COLOR_CHANNELS][256];
+    double moment[PH_COLOR_CHANNELS][PH_COLOR_MOMENTS]; /* mean, std dev, skew */
+    uint8_t digest[PH_COLOR_MOMENTS_DIGEST_BYTES];
+} moments_stages_t;
+
+static int moments_run(ph_context_t *ctx, moments_stages_t *s) {
+    const size_t n = (size_t)ctx->image.width * (size_t)ctx->image.height;
+    const size_t channels = (size_t)ctx->image.channels;
+    memset(s, 0, sizeof(*s));
+    for (size_t i = 0; i < n; i++) {
+        for (int c = 0; c < PH_COLOR_CHANNELS; c++) {
+            s->hist[c][ctx->image.raw_rgb[i * channels + (size_t)c]]++;
+        }
+    }
+    for (int c = 0; c < PH_COLOR_CHANNELS; c++) {
+        uint64_t sum = 0;
+        for (int v = 0; v < 256; v++) {
+            sum += s->hist[c][v] * (uint64_t)v;
+        }
+        const double mean = (double)sum / (double)n;
+        double second = 0.0, third = 0.0;
+        for (int v = 0; v < 256; v++) {
+            const double d = v - mean, k = (double)s->hist[c][v];
+            second += k * d * d;
+            third += k * d * d * d;
+        }
+        const double m[PH_COLOR_MOMENTS] = {mean, sqrt(second / (double)n),
+                                            cbrt(third / (double)n)};
+        for (int k = 0; k < PH_COLOR_MOMENTS; k++) {
+            s->moment[c][k] = m[k];
+            const uint16_t bits = (uint16_t)(int16_t)round(m[k] * PH_COLOR_MOMENT_SCALE);
+            const int at = (c * PH_COLOR_MOMENTS + k) * PH_COLOR_MOMENT_BYTES;
+            s->digest[at] = (uint8_t)(bits >> 8);
+            s->digest[at + 1] = (uint8_t)(bits & 0xFF);
+        }
+    }
+
+    ph_digest_t lib;
+    if (ph_compute_color_moments_hash(ctx, &lib) != PH_SUCCESS) {
+        return fail("ph_compute_color_moments_hash failed", NULL);
+    }
+    if (lib.size != PH_COLOR_MOMENTS_DIGEST_BYTES ||
+        memcmp(lib.data, s->digest, PH_COLOR_MOMENTS_DIGEST_BYTES) != 0) {
+        return fail("ColorMoments recomputed from the channel histograms differs from "
+                    "ph_compute_color_moments_hash()",
+                    NULL);
+    }
+    return 0;
+}
+
+/* --8<-- [end:color_moments] */
+
+/* site_stages color_moments <image> <outdir> */
+static int stages_color_moments(int argc, char **argv) {
+    (void)argc;
+    const char *outdir = argv[1];
+    ph_context_t *ctx = NULL;
+    if (load(&ctx, argv[0])) {
+        return 1;
+    }
+    const int w = ctx->image.width, h = ctx->image.height;
+    if (ctx->image.channels < 3) {
+        ph_free(ctx);
+        return fail("the example image must be in color", argv[0]);
+    }
+    int status = write_pnm(outdir, "original.ppm", ctx->image.raw_rgb, w, h, 3);
+    static moments_stages_t s;
+    int bad = moments_run(ctx, &s);
+    ph_free(ctx);
+
+    /* The same image through the decoder's grayscale: ColorMoments refuses it. */
+    ph_error_t gray_err = PH_SUCCESS;
+    if (!bad) {
+        ph_digest_t d;
+        bad = ph_create(&ctx) != PH_SUCCESS ||
+              ph_context_set_load_grayscale(ctx, 1) != PH_SUCCESS ||
+              ph_load_from_file(ctx, argv[0]) != PH_SUCCESS;
+        gray_err = bad ? PH_SUCCESS : ph_compute_color_moments_hash(ctx, &d);
+        ph_free(ctx);
+        if (!bad && gray_err != PH_ERR_REQUIRES_COLOR) {
+            return fail("ph_compute_color_moments_hash() on a grayscale load did not refuse", NULL);
+        }
+    }
+
+    FILE *f = bad ? NULL : open_out(outdir, "color_moments.json");
+    if (f) {
+        json_t j = {f, 0};
+        json_int(&j, "width", w);
+        json_int(&j, "height", h);
+        json_int(&j, "scale", PH_COLOR_MOMENT_SCALE);
+        json_key(&j, "hist");
+        for (int c = 0; c < PH_COLOR_CHANNELS; c++) {
+            for (int v = 0; v < 256; v++) {
+                fprintf(f, "%s%llu", v ? ", " : c ? ", [" : "[[", (unsigned long long)s.hist[c][v]);
+            }
+            fputc(']', f);
+        }
+        fputc(']', f);
+        json_doubles(&j, "moments", &s.moment[0][0], PH_COLOR_CHANNELS * PH_COLOR_MOMENTS);
+        json_hexbytes(&j, "digest", s.digest, PH_COLOR_MOMENTS_DIGEST_BYTES);
+        json_string(&j, "load_grayscale", ph_get_error_string(gray_err));
+        json_end(&j);
+        status |= fclose(f) != 0;
+    }
+    return bad || !f ? 1 : status;
+}
+
+/* --8<-- [start:color_moments-digests] */
+/* site_stages color_moments-digests <image>...: each image's ColorMoments digest, as
+ * ph_compute_color_moments_hash() computes it, one JSON line per image. */
+static int color_moments_digests(int argc, char **argv) {
+    for (int i = 0; i < argc; i++) {
+        ph_context_t *ctx = NULL;
+        if (load(&ctx, argv[i])) {
+            return 1;
+        }
+        ph_digest_t d;
+        if (ph_compute_color_moments_hash(ctx, &d) != PH_SUCCESS) {
+            ph_free(ctx);
+            return fail("ph_compute_color_moments_hash failed", argv[i]);
+        }
+        json_t j = {stdout, 0};
+        json_string(&j, "file", argv[i]);
+        json_hexbytes(&j, "digest", d.data, d.size);
+        json_end(&j);
+        ph_free(ctx);
+    }
+    return 0;
+}
+
+/* --8<-- [end:color_moments-digests] */
+
 /* --8<-- [start:compare] */
 /* One algorithm's comparison of two digests by its own metric; 0 when it does not apply. */
 static int compare(const ph_digest_t *a, const ph_digest_t *b, double *out) {
@@ -2121,6 +2271,8 @@ static const struct {
     {"radial-profiles", "<reference> <image>...", 1, 1, radial_profiles},
     {"radial-variants", "<image>...", 1, 1, radial_variants},
     {"color_hash", "<image> <outdir>", 2, 0, stages_color_hash},
+    {"color_moments", "<image> <outdir>", 2, 0, stages_color_moments},
+    {"color_moments-digests", "<image>...", 1, 1, color_moments_digests},
     {"measure", "<reference> <variant>...", 2, 1, measure},
     {"pairs", "<image> <image>...", 2, 1, pairs},
     {"corpus", "<outdir>", 1, 0, corpus},

@@ -310,12 +310,15 @@ Both need color: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
 - **ColorMoments** (`ph_compute_color_moments_hash`) — the mean, standard deviation and
   skewness of each channel: nine features in an 18-byte digest, each a signed 16-bit
   big-endian fixed-point number in units of 1/128. Follows the formulas of Stricker &
-  Orengo, including the sign of the skewness, which is the direction of the asymmetry.
-  Compare with `ph_l2_distance()`, which decodes the pairs.
+  Orengo as a restatement gives them, including the sign of the skewness, which is the
+  direction of the asymmetry. Compare with `ph_l2_distance()`, which decodes the pairs.
   **Deliberate divergence**: the moments are taken on RGB where the source uses HSV.
+  Its distance is dominated by tone: a brightness change of 15 % moves it further than
+  turning every hue by 30° ([measured](theory/color-moments.md#tone-against-color)).
 - **Use case**: telling apart images that are structurally identical but colored
-  differently — recoloured product photography, for instance — where the luminance hashes
-  agree by design.
+  differently — recolored product photography, for instance — where the luminance hashes
+  move a few bits at most. ColorHash is the one for that; ColorMoments takes most mild
+  recolorings for copies.
 
 ## 8. Radial Hash
 

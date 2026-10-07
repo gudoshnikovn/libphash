@@ -27,6 +27,7 @@ nav = [
       { "BMH" = "theory/bmh.md" },
       { "Radial" = "theory/radial.md" },
       { "ColorHash" = "theory/color-hash.md" },
+      { "ColorMoments" = "theory/color-moments.md" },
     ] },
     { "Provenance" = "algorithm-provenance.md" },
     { "References" = "references.md" },

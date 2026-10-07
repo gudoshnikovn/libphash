@@ -69,8 +69,8 @@ def metric(mod):
     -> value on the chart, the metric's range, format of one value).
 
     A bit hash sets BITS, and its charts show the bits that differ, lower closer. A
-    module with BITS = None names its own METRIC, LOWER_IS_CLOSER, METRIC_RANGE and
-    FORMAT, and the raw value is the chart's value.
+    module with BITS = None names its own METRIC, LOWER_IS_CLOSER, METRIC_RANGE (whose top
+    is None for a metric without one) and FORMAT, and the raw value is the chart's value.
     """
     if mod.BITS:
         return ("bits that differ", True, lambda v: bits_that_differ(v, mod.BITS),
@@ -85,8 +85,17 @@ def robust_limits(mod, values=()):
     any value outside it."""
     if mod.BITS:
         return 0, max([mod.BITS / 2] + [v * 1.05 for v in values])
-    lo, hi = mod.METRIC_RANGE
+    lo, hi = close_range(mod.METRIC_RANGE, values)
     return min([lo] + list(values)), max([hi] + list(values))
+
+
+def close_range(limits, values):
+    """A metric's range, with an open top (None, ColorMoments' L2 distance) closed just
+    above the largest of `values`."""
+    lo, hi = limits
+    if hi is None:
+        hi = max(values, default=1.0) * 1.05
+    return lo, hi
 
 
 def reference_line(ax, mod, c):

@@ -1373,7 +1373,12 @@ PH_NODISCARD PH_API ph_error_t ph_algorithm_from_name(const char *name, ph_algor
 PH_NODISCARD PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest);
 
 /**
- * @brief Computes Color Moments Hash. Returns a digest representing color distribution.
+ * @brief Computes the color moments hash. Returns an 18-byte digest.
+ *
+ * The mean, the standard deviation and the cube root of the third central moment of each
+ * of the R, G and B channels, after Stricker & Orengo (1995): nine signed 16-bit
+ * big-endian numbers in units of 1/@c PH_VECTOR16_SCALE of a channel level. Compare with
+ * ph_l2_distance(), not with the bit metrics. See docs/theory/color-moments.md.
  *
  * Requires a color image: the loaded image must have at least 3 channels. On a
  * single-channel image — one loaded while ph_context_set_load_grayscale() was

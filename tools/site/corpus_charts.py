@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from common import save, style_axes
-from measure import metric, reference_line, reference_note, robust_limits
+from measure import close_range, metric, reference_line, reference_note, robust_limits
 from transforms import content_edits, transforms
 
 # --8<-- [start:copies]
@@ -127,7 +127,7 @@ def separability_figure(datasets, algo, mod, out_dir):
         figure, axes = plt.subplots(1, len(datasets), figsize=(10, 3.6), sharey=False)
         for ax, (key, data) in zip(np.atleast_1d(axes), datasets):
             style_axes(ax, c)
-            ax.set_xlim(*limits)
+            ax.set_xlim(*close_range(limits, []))
             ax.set_xlabel(label, color=c["muted"], fontsize=9)
             if not data["n"]:
                 ax.set_title(LABEL_MISSING, color=c["muted"], fontsize=9.5)
@@ -135,8 +135,10 @@ def separability_figure(datasets, algo, mod, out_dir):
                 continue
             copies, different = copies_and_different(data, algo, convert)
             dprime, t, fmr = separability(copies, different, lower)
-            bins = (np.arange(limits[0], limits[1] + 2) - 0.5 if mod.BITS
-                    else np.linspace(*limits, 41))
+            lims = close_range(limits, copies + different)
+            ax.set_xlim(*lims)
+            bins = (np.arange(lims[0], lims[1] + 2) - 0.5 if mod.BITS
+                    else np.linspace(*lims, 41))
             for values, color, name in ((different, c["muted"], "different images"),
                                         (copies, c["accent"], "copies")):
                 w = np.full(len(values), 100.0 / len(values))
@@ -269,6 +271,10 @@ def edits_figure(datasets, algo, mod, out_dir):
                   for k, d in available}
     different = [convert(v) for _, d in available for v in d["different"][algo]
                  if v is not None]
+    limits = close_range(limits, [_quartiles(values, convert)[2] for _, d in available
+                                  for points in d["edits"][algo].values()
+                                  for _, values in points]
+                         + list(thresholds.values()) + [np.median(different)] * bool(different))
 
     def fig(c):
         colors = {"photos": c["accent"], "synthetic": c["accent2"]}
