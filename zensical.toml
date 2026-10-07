@@ -13,18 +13,6 @@ copyright = "libphash is released under the MIT License."
 docs_dir = "docs"
 site_dir = "build/site"
 
-# docs/README.md is the repository's map of this directory (GitHub shows it when the
-# directory is opened); the site's front page is docs/index.md. api-index.md is the
-# Doxygen main page, rendered by Doxygen, not by the site.
-exclude_docs = """
-README.md
-api-index.md
-Doxyfile
-coverage/
-html/
-xml/
-"""
-
 nav = [
   { "Home" = "index.md" },
   { "Theory" = [
@@ -48,7 +36,20 @@ nav = [
       { "libpng against spng" = "benchmarks/2026-10-04-png-libpng-vs-spng.md" },
     ] },
   ] },
-  { "API reference" = "api/index.html" },
+  { "API reference" = [
+    { "Overview" = "api/index.md" },
+    { "Errors" = "api/errors.md" },
+    { "Context" = "api/context.md" },
+    { "Loading images" = "api/loading.md" },
+    { "Algorithm parameters" = "api/params.md" },
+    { "64-bit hashes" = "api/hash64.md" },
+    { "Digest hashes" = "api/digests.md" },
+    { "Algorithms as values" = "api/algorithms.md" },
+    { "Comparing hashes" = "api/compare.md" },
+    { "Hashes as text" = "api/text.md" },
+    { "Batch hashing" = "api/batch.md" },
+    { "Version and build" = "api/build.md" },
+  ] },
   { "Project" = [
     { "Changelog" = "project/changelog.md" },
     { "Security" = "project/security.md" },
@@ -132,3 +133,19 @@ pymdownx.superfences.custom_fences = [
 pymdownx.tabbed.alternate_style = true
 pymdownx.tabbed.combine_header_slug = true
 pymdownx.tasklist.custom_checkbox = true
+
+# Files under docs/ that are not pages of the site. docs/README.md is the repository's
+# map of this directory (GitHub shows it when the directory is opened); the site's front
+# page is docs/index.md. api-index.md is the Doxygen main page; the site shows its text as
+# api/index.md, which scripts/api_pages.py writes from Doxygen's XML with the rest of the
+# API reference. Zensical takes the list from its exclude plugin: it has no exclude_docs
+# setting, and would otherwise publish these files and index them for search.
+[project.plugins.exclude]
+glob = [
+  "README.md",
+  "api-index.md",
+  "Doxyfile",
+  "coverage/*",
+  "html/*",
+  "xml/*",
+]

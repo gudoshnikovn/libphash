@@ -62,6 +62,13 @@ cc basic_hash.c -o basic_hash $(pkg-config --cflags --libs libphash)
 
 - [Which algorithm to use](../algorithms.md#comparison-summary), and what each one computes.
 - [Hashing many files](../batch.md) at once, across threads.
+- The functions these programs call, in the [API reference](../api/index.md):
+  [`ph_create()`](../api/context.md#ph_create),
+  [`ph_load_from_file()`](../api/loading.md#ph_load_from_file),
+  [`ph_compute_phash()`](../api/hash64.md#ph_compute_phash),
+  [`ph_hamming_distance()`](../api/compare.md#ph_hamming_distance),
+  [`ph_get_error_string()`](../api/errors.md#ph_get_error_string) and
+  [`ph_free()`](../api/context.md#ph_free).
 - More programs — digests and metrics, error handling, batches — are in
   [`examples/`](https://github.com/gudoshnikovn/libphash/tree/main/examples); CI builds
   and runs every one of them.

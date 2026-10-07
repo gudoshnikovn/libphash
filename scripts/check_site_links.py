@@ -6,10 +6,11 @@ other file: `../include/libphash.h` works when the Markdown is read on GitHub an
 dead link on the site. A page links to a file outside docs/ by its GitHub URL instead.
 
 Pages are the Markdown files under docs/ except the ones zensical.toml excludes from the
-site (exclude_docs) and the generated API reference (docs/api/).
+site (the glob list of its exclude plugin) and the generated API reference (docs/api/).
 
 Usage: scripts/check_site_links.py
 """
+import fnmatch
 import os
 import re
 import sys
@@ -20,16 +21,17 @@ LINK = re.compile(r"\]\(([^)\s]+)\)")
 
 
 def excluded():
-    """The exclude_docs entries of zensical.toml: file names and directory prefixes."""
+    """The glob patterns zensical.toml's exclude plugin keeps off the site."""
     with open(os.path.join(ROOT, "zensical.toml"), encoding="utf-8") as f:
         text = f.read()
-    block = re.search(r'exclude_docs\s*=\s*"""(.*?)"""', text, re.S)
-    entries = block.group(1).split() if block else []
-    return entries + ["api/"]
+    block = re.search(r"\[project\.plugins\.exclude\]\s*glob\s*=\s*\[(.*?)\]", text, re.S)
+    if not block:
+        sys.exit("check_site_links: no glob list under [project.plugins.exclude] in zensical.toml")
+    return re.findall(r'"([^"]+)"', block.group(1)) + ["api/*"]
 
 
 def is_excluded(rel, entries):
-    return any(rel == e or (e.endswith("/") and rel.startswith(e)) for e in entries)
+    return any(fnmatch.fnmatch(rel, e) for e in entries)
 
 
 def main():

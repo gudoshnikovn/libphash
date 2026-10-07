@@ -37,7 +37,7 @@ $$
 d(h_1, h_2) = \operatorname{popcount}(h_1 \oplus h_2), \qquad 0 \le d \le 64 .
 $$
 
-`ph_hamming_distance()` computes it, and `ph_similarity()` turns it into a score in
+[`ph_hamming_distance()`](../api/compare.md#ph_hamming_distance) computes it, and [`ph_similarity()`](../api/compare.md#ph_similarity) turns it into a score in
 $[0, 1]$. The other five algorithms return a **digest** — a longer bit string, or a vector
 of numbers — with a distance function of its own; which function goes with which digest is
 on the [algorithms](../algorithms.md#comparing-digests-which-function-for-which-hash) page.

@@ -6,8 +6,8 @@ the whole idea of perceptual hashing in two lines of arithmetic.
 
 | | |
 |---|---|
-| **Call** | `ph_compute_ahash()`, or `PH_HASH_AHASH` in `ph_compute_multi()` |
-| **Output** | 64-bit hash, compared with `ph_hamming_distance()` |
+| **Call** | [`ph_compute_ahash()`](../api/hash64.md#ph_compute_ahash), or [`PH_HASH_AHASH`](../api/hash64.md#PH_HASH_AHASH) in [`ph_compute_multi()`](../api/hash64.md#ph_compute_multi) |
+| **Output** | 64-bit hash, compared with [`ph_hamming_distance()`](../api/compare.md#ph_hamming_distance) |
 | **Source** | Neal Krawetz, "Looks Like It", 2011 ([provenance](../algorithm-provenance.md#1-ahash--average-hash)) |
 | **Cost** | 0.05 ms on a 400×400 image, 2.6 ms on 20 Mpx, after decoding |
 
@@ -25,7 +25,7 @@ $$
 Y = \left\lfloor \frac{38R + 75G + 15B}{128} \right\rfloor ,
 $$
 
-an integer approximation of the ITU-R BT.601 weights. `ph_context_set_gray_weights()`
+an integer approximation of the ITU-R BT.601 weights. [`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights)
 changes them.
 
 **2. Reduce to 8×8.** The image is divided into an 8×8 grid of equal areas, regardless of
@@ -93,10 +93,10 @@ the pixels it reads.
 
 | Setting | Effect on aHash |
 |---|---|
-| `ph_context_set_gray_weights()` | the grayscale formula of step 1 |
-| `ph_context_set_load_grayscale()` | a native decoder converts to grayscale itself, which can move a value by one level and, rarely, a bit |
-| `ph_context_set_auto_orient()` | on by default: the hash describes the image as displayed, after its EXIF rotation |
-| `ph_context_set_alpha_mode()` | how transparent pixels are composited before grayscale |
+| [`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights) | the grayscale formula of step 1 |
+| [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a native decoder converts to grayscale itself, which can move a value by one level and, rarely, a bit |
+| [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | on by default: the hash describes the image as displayed, after its EXIF rotation |
+| [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | how transparent pixels are composited before grayscale |
 
 ## In code
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds the documentation site from docs/ with Zensical (zensical.toml) into build/site/,
-# with the API reference (scripts/api_docs.sh) under api/ and the algorithm pages' figures
+# with the API reference (scripts/api_pages.py) under api/ and the algorithm pages' figures
 # drawn from the release build (tools/site/). `make site` and `make site-serve` call this
 # script; it needs the vendored submodules, Doxygen 1.18, and the Python packages in
 # scripts/site-requirements.txt.
@@ -38,14 +38,14 @@ fi
 
 cd "$ROOT_DIR"
 
-# The API reference is generated, not tracked: Doxygen writes it to build/api-docs/html/,
-# and it is copied into docs/api/ (ignored by git) so the site serves it as static files
-# and the navigation's link to api/index.html resolves; each page of the copy gets the
-# site's navigation on top, a way back that plain Doxygen output does not have.
+# The API reference is generated, not tracked: Doxygen reads the header's doc comments
+# and fails on any warning (scripts/api_docs.sh), and scripts/api_pages.py turns its XML
+# into Markdown pages in docs/api/ (ignored by git), one per topic. They are pages of the
+# site like any other -- its theme, its search, and anchors the strict build checks when
+# a page links to a function.
 scripts/api_docs.sh
 rm -rf docs/api
-cp -R build/api-docs/html docs/api
-python3 scripts/site_api_nav.py docs/api
+python3 scripts/api_pages.py build/api-docs/xml docs/api
 
 # The figures and measured tables on the algorithm pages are drawn by
 # tools/site/render.py from what tools/site/stages.c measures, against the release build

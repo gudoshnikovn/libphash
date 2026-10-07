@@ -432,7 +432,10 @@ the code follows is held by the gate rather than by habit.
 `docs/` is the source of the documentation site and is read on GitHub as it is, so a page
 works in both places. `make site` builds it with the Zensical version pinned in
 `scripts/site-requirements.txt` into `build/site/`, `make site-serve` serves it with live
-reload, and both copy the Doxygen API reference into `docs/api/` (ignored by git) first.
+reload. Both first run Doxygen over the header and write the API reference from its XML
+as pages of the site into `docs/api/` (ignored by git) with `scripts/api_pages.py`, one
+page per topic, every declaration under an anchor equal to its name; a function missing
+from those pages, or doc-comment markup the script has no rendering for, fails the build.
 The build is strict, and three rules keep it green:
 
 - **Navigation** is `nav` in `zensical.toml`; a new page goes there or the build fails.
@@ -440,7 +443,9 @@ The build is strict, and three rules keep it green:
   files that code and scripts refer to by path keep their path.
 - **Links** to a page or an anchor are checked by the build. A link to any other file
   must stay inside `docs/` — `scripts/check_site_links.py` fails on `../src/...` — so a
-  file elsewhere in the repository is linked by its GitHub URL.
+  file elsewhere in the repository is linked by its GitHub URL, and a function by its
+  anchor in the API reference, `[ph_compute_ahash()](api/hash64.md#ph_compute_ahash)`,
+  so a misspelled name fails the build too.
 - **Code** on a page is included from a file CI compiles (`--8<-- "examples/basic_hash.c"`),
   not pasted, so it cannot drift from the header. `CHANGELOG.md`, `MIGRATION.md` and
   `SECURITY.md` are included the same way, from the repository root.

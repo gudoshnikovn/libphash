@@ -47,7 +47,7 @@ same hash on Linux, macOS and Windows, on x86-64 and arm64.
 
     Every public function, type and error code, generated from `libphash.h`.
 
-    [:octicons-arrow-right-24: API reference](api/index.html)
+    [:octicons-arrow-right-24: API reference](api/index.md)
 
 </div>
 
