@@ -68,8 +68,8 @@ the top row, the last two the bottom row.
 The bits record which side of the mean each cell is on, so an edit that keeps that order
 keeps the hash, and an edit that moves content between cells does not.
 
-![Bits that differ from the original under eight transforms](../assets/generated/ahash/robustness.light.svg#only-light)
-![Bits that differ from the original under eight transforms](../assets/generated/ahash/robustness.dark.svg#only-dark)
+![Bits that differ from the original under nine transforms](../assets/generated/ahash/robustness.light.svg#only-light)
+![Bits that differ from the original under nine transforms](../assets/generated/ahash/robustness.dark.svg#only-dark)
 
 - **Recompression, resizing, noise and blur** leave the 8×8 averages where they were: the
   hash does not move until the image is blurred to a smear.
@@ -85,6 +85,54 @@ corpus is on [choosing an algorithm](../algorithms.md#comparison-summary).
 ??? info "The numbers behind the chart"
 
     --8<-- "docs/assets/generated/ahash/robustness-table.md"
+
+??? info "How this was measured"
+
+    Each transform is applied alone to the photograph above, and the edited copy is
+    saved as a lossless PNG (as a JPEG of the given quality for that panel). The library
+    hashes the original and every copy, and compares each copy with the original by
+    [`ph_similarity_digest()`](../api/compare.md#ph_similarity_digest). The chart shows
+    $64 \times (1 - \text{similarity})$, which is the Hamming distance: how many of the
+    64 bits the edit flipped. Below is the code that ran, not a copy of it.
+
+    The edits, in Python with Pillow:
+
+    ```python title="tools/site/transforms.py"
+    --8<-- "tools/site/transforms.py:transforms"
+    ```
+
+    Writing the copies and handing them to the measuring tool:
+
+    ```python title="tools/site/measure.py"
+    --8<-- "tools/site/measure.py:measure"
+    ```
+
+    The measuring tool, linked against the library: it computes every algorithm's digest
+    of the original, then of each copy, and compares the two by that algorithm's own
+    metric.
+
+    ```c title="tools/site/stages.c"
+    --8<-- "tools/site/stages.c:measure"
+    ```
+
+    ```c title="tools/site/stages.c"
+    --8<-- "tools/site/stages.c:compare"
+    ```
+
+    The number on the chart:
+
+    ```python title="tools/site/measure.py"
+    --8<-- "tools/site/measure.py:bits"
+    ```
+
+    To reproduce, `make site` builds the tool and redraws every figure. The tool can also
+    be run by hand on any pair of images; it prints one JSON line per variant, with each
+    algorithm's comparison:
+
+    ```sh
+    cmake --preset release && cmake --build --preset release --target site_stages
+    build/release/site_stages measure reference.png variant.png …
+    ```
 
 ## Settings that affect it
 

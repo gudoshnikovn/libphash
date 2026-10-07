@@ -63,22 +63,105 @@ static int write_pnm(const char *dir, const char *name, const uint8_t *px, int w
     return ok ? 0 : fail("cannot write", path);
 }
 
-static int stages_ahash(const char *image, const char *outdir) {
-    ph_context_t *ctx = NULL;
-    if (load(&ctx, image)) {
-        return 1;
+/* A JSON object written field by field: `{"a": 1, "b": [2, 3]}`. The site's readers
+ * (render.py) take what these helpers write, so a mode only names its fields. */
+typedef struct {
+    FILE *f;
+    int fields;
+} json_t;
+
+static void json_key(json_t *j, const char *key) {
+    fprintf(j->f, "%s\"%s\": ", j->fields++ ? ", " : "{", key);
+}
+
+static void json_int(json_t *j, const char *key, long long v) {
+    json_key(j, key);
+    fprintf(j->f, "%lld", v);
+}
+
+static void json_double(json_t *j, const char *key, double v) {
+    json_key(j, key);
+    fprintf(j->f, "%.6f", v);
+}
+
+static void json_string(json_t *j, const char *key, const char *v) {
+    json_key(j, key);
+    fprintf(j->f, "\"%s\"", v);
+}
+
+static void json_null(json_t *j, const char *key) {
+    json_key(j, key);
+    fputs("null", j->f);
+}
+
+static void json_u8s(json_t *j, const char *key, const uint8_t *v, int n) {
+    json_key(j, key);
+    for (int i = 0; i < n; i++) {
+        fprintf(j->f, "%s%u", i ? ", " : "[", v[i]);
     }
-    int w = ctx->image.width, h = ctx->image.height, ch = ctx->image.channels;
-    int status = 0;
-    if (ch == 3) {
-        status |= write_pnm(outdir, "original.ppm", ctx->image.raw_rgb, w, h, 3);
+    fputs("]", j->f);
+}
+
+/* The n bits of `bits` from the most significant one down, as 0/1. */
+static void json_bits(json_t *j, const char *key, uint64_t bits, int n) {
+    json_key(j, key);
+    for (int i = 0; i < n; i++) {
+        fprintf(j->f, "%s%d", i ? ", " : "[", (int)((bits >> (n - 1 - i)) & 1));
+    }
+    fputs("]", j->f);
+}
+
+static void json_hex64(json_t *j, const char *key, uint64_t v) {
+    json_key(j, key);
+    fprintf(j->f, "\"%016llx\"", (unsigned long long)v);
+}
+
+static void json_end(json_t *j) { fputs("}\n", j->f); }
+
+/* Opens <dir>/<name> for a mode's JSON file. */
+static FILE *open_out(const char *dir, const char *name) {
+    char path[4096];
+    if (snprintf(path, sizeof(path), "%s/%s", dir, name) >= (int)sizeof(path)) {
+        fail("path too long", name);
+        return NULL;
+    }
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        fail(path, strerror(errno));
+    }
+    return f;
+}
+
+/* Writes original.ppm (when the image is RGB) and gray.pgm into `outdir`: the first two
+ * stages of every grayscale hash. Returns the grayscale buffer, owned by `ctx`. */
+static const uint8_t *write_gray_stages(ph_context_t *ctx, const char *outdir, int *status) {
+    int w = ctx->image.width, h = ctx->image.height;
+    if (ctx->image.channels == 3) {
+        *status |= write_pnm(outdir, "original.ppm", ctx->image.raw_rgb, w, h, 3);
     }
     const uint8_t *gray = ph_get_gray(ctx);
     if (!gray) {
-        ph_free(ctx);
-        return fail("ph_get_gray failed", NULL);
+        fail("ph_get_gray failed", NULL);
+        return NULL;
     }
-    status |= write_pnm(outdir, "gray.pgm", gray, w, h, 1);
+    *status |= write_pnm(outdir, "gray.pgm", gray, w, h, 1);
+    return gray;
+}
+
+/* site_stages ahash <image> <outdir> */
+static int stages_ahash(int argc, char **argv) {
+    (void)argc;
+    const char *outdir = argv[1];
+    ph_context_t *ctx = NULL;
+    if (load(&ctx, argv[0])) {
+        return 1;
+    }
+    int w = ctx->image.width, h = ctx->image.height;
+    int status = 0;
+    if (!write_gray_stages(ctx, outdir, &status)) {
+        ph_free(ctx);
+        return 1;
+    }
 
     enum {
         N = 8,
@@ -113,25 +196,24 @@ static int stages_ahash(const char *image, const char *outdir) {
         return 1;
     }
 
-    char path[4096];
-    snprintf(path, sizeof(path), "%s/ahash.json", outdir);
-    FILE *f = fopen(path, "w");
+    FILE *f = open_out(outdir, "ahash.json");
     if (!f) {
-        return fail(path, strerror(errno));
+        return 1;
     }
-    fprintf(f, "{\"width\": %d, \"height\": %d, \"grid_size\": %d, \"grid\": [", w, h, N);
-    for (int i = 0; i < N * N; i++) {
-        fprintf(f, "%s%u", i ? ", " : "", grid[i]);
-    }
-    fprintf(f, "], \"mean\": %.6f, \"bits\": [", (double)sum / (N * N));
-    for (int i = 0; i < N * N; i++) {
-        fprintf(f, "%s%d", i ? ", " : "", (int)((bits >> (63 - i)) & 1));
-    }
-    fprintf(f, "], \"hash\": \"%016llx\"}\n", (unsigned long long)bits);
+    json_t j = {f, 0};
+    json_int(&j, "width", w);
+    json_int(&j, "height", h);
+    json_int(&j, "grid_size", N);
+    json_u8s(&j, "grid", grid, N * N);
+    json_double(&j, "mean", (double)sum / (N * N));
+    json_bits(&j, "bits", bits, N * N);
+    json_hex64(&j, "hash", bits);
+    json_end(&j);
     status |= fclose(f) != 0;
     return status;
 }
 
+/* --8<-- [start:compare] */
 /* One algorithm's comparison of two digests by its own metric; 0 when it does not apply. */
 static int compare(const ph_digest_t *a, const ph_digest_t *b, double *out) {
     switch (a->kind) {
@@ -150,6 +232,11 @@ static int compare(const ph_digest_t *a, const ph_digest_t *b, double *out) {
     }
 }
 
+/* --8<-- [end:compare] */
+
+/* --8<-- [start:measure] */
+/* site_stages measure <reference> <variant>...: every algorithm's digest of the reference,
+ * then one JSON line per variant with its comparison to the reference, per algorithm. */
 static int measure(int argc, char **argv) {
     ph_context_t *ctx = NULL;
     if (load(&ctx, argv[0])) {
@@ -166,32 +253,51 @@ static int measure(int argc, char **argv) {
         if (load(&ctx, argv[v])) {
             return 1;
         }
-        printf("{\"file\": \"%s\"", argv[v]);
+        json_t j = {stdout, 0};
+        json_string(&j, "file", argv[v]);
         for (int a = 0; a < PH_ALGORITHM_COUNT; a++) {
+            const char *name = ph_algorithm_name((ph_algorithm_t)a);
             ph_digest_t d;
             double value = 0.0;
-            int ok = have[a] && ph_compute_digest(ctx, (ph_algorithm_t)a, &d) == PH_SUCCESS &&
-                     compare(&ref[a], &d, &value);
-            if (ok) {
-                printf(", \"%s\": %.6f", ph_algorithm_name((ph_algorithm_t)a), value);
+            if (have[a] && ph_compute_digest(ctx, (ph_algorithm_t)a, &d) == PH_SUCCESS &&
+                compare(&ref[a], &d, &value)) {
+                json_double(&j, name, value);
             } else {
-                printf(", \"%s\": null", ph_algorithm_name((ph_algorithm_t)a));
+                json_null(&j, name);
             }
         }
-        printf("}\n");
+        json_end(&j);
         ph_free(ctx);
     }
     return 0;
 }
 
+/* --8<-- [end:measure] */
+
+/* The modes: name, arguments, and the least number of them (a mode taking a list
+ * accepts more). */
+static const struct {
+    const char *name;
+    const char *args;
+    int min_args;
+    int variadic;
+    int (*run)(int argc, char **argv);
+} modes[] = {
+    {"ahash", "<image> <outdir>", 2, 0, stages_ahash},
+    {"measure", "<reference> <variant>...", 2, 1, measure},
+};
+
 int main(int argc, char **argv) {
-    if (argc == 4 && strcmp(argv[1], "ahash") == 0) {
-        return stages_ahash(argv[2], argv[3]);
+    for (size_t m = 0; argc >= 2 && m < sizeof(modes) / sizeof(modes[0]); m++) {
+        int n = argc - 2;
+        if (strcmp(argv[1], modes[m].name) == 0 &&
+            (n == modes[m].min_args || (modes[m].variadic && n > modes[m].min_args))) {
+            return modes[m].run(n, argv + 2);
+        }
     }
-    if (argc >= 4 && strcmp(argv[1], "measure") == 0) {
-        return measure(argc - 2, argv + 2);
+    for (size_t m = 0; m < sizeof(modes) / sizeof(modes[0]); m++) {
+        fprintf(stderr, "%s site_stages %s %s\n", m ? "      " : "usage:", modes[m].name,
+                modes[m].args);
     }
-    fprintf(stderr, "usage: site_stages ahash <image> <outdir>\n"
-                    "       site_stages measure <reference> <variant>...\n");
     return 2;
 }
