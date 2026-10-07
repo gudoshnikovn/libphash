@@ -68,6 +68,11 @@ def robustness_figure(data, algo, out_dir, bits_total, caption):
     """Small multiples, one panel per transform: bits that differ from the original."""
     specs = transforms()
 
+    # Half the bits is where unrelated images land; an edit can go a little past it.
+    top = max([bits_total / 2] + [bits_that_differ(v, bits_total) * 1.05
+                                  for name, _, _ in specs for _, v in data[algo][name]
+                                  if v is not None])
+
     def fig(c):
         figure, axes = plt.subplots(3, 3, figsize=(10, 7.2), sharey=True)
         for ax, (name, xlabel, _) in zip(axes.flat, specs):
@@ -77,7 +82,7 @@ def robustness_figure(data, algo, out_dir, bits_total, caption):
             ax.plot(xs, [p[1] for p in pts], color=c["accent"], linewidth=2, marker="o",
                     markersize=4.5, solid_capstyle="round")
             ax.set_xticks(xs, [f"{p[0]:g}" for p in pts])
-            ax.set_ylim(0, bits_total / 2)
+            ax.set_ylim(0, top)
             ax.set_title(name, color=c["ink"], fontsize=10)
             ax.set_xlabel(xlabel, color=c["muted"], fontsize=9)
             style_axes(ax, c)

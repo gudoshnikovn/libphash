@@ -33,6 +33,12 @@ COPY_STRENGTHS = {
 RECALL = 0.95
 
 
+def num(v):
+    """A value as a table shows it: a bit count from a similarity carries float noise
+    (9.49997), so one decimal at most."""
+    return f"{round(float(v), 1):g}"
+
+
 def metric(mod):
     """(axis label, lower is closer, raw value -> value on the chart, axis limits)."""
     if mod.BITS:
@@ -152,7 +158,7 @@ def separability_figure(datasets, algo, mod, out_dir):
                             va="top" if at_edge else "bottom", color=c["ink"], fontsize=9,
                             bbox={"facecolor": c["surface"], "edgecolor": "none", "pad": 1})
             ax.axvline(t, color=c["ink"], linewidth=1, linestyle=(0, (4, 3)))
-            ax.annotate(f"threshold {t:g}: accepts\n{RECALL:.0%} of copies and\n"
+            ax.annotate(f"threshold {num(t)}: accepts\n{RECALL:.0%} of copies and\n"
                         f"{share(fmr, len(different))} of different pairs",
                         (t, 0.97), xycoords=("data", "axes fraction"), xytext=(6, 0),
                         textcoords="offset points", va="top", color=c["ink"], fontsize=8.5)
@@ -188,7 +194,7 @@ def corpus_tables(datasets, algo, mod, out_dir):
         copies, different = copies_and_different(data, algo, convert)
         dprime, t, fmr = separability(copies, different, lower)
         lines.append(f"| {data['label']} | {len(copies)} | {len(different)} | {dprime:.2f} | "
-                     f"{t:g} | {share(fmr, len(different))} |")
+                     f"{num(t)} | {share(fmr, len(different))} |")
     lines += ["", f"Median {label} over each corpus, with the 25th and 75th percentiles:", ""]
     present = [(k, d) for k, d in datasets if d["n"]]
     lines.append("| Transform | Strength | " + " | ".join(d["label"] for _, d in present) + " |")
@@ -199,7 +205,7 @@ def corpus_tables(datasets, algo, mod, out_dir):
             for _, data in present:
                 v = [convert(x) for x in data["robust"][algo][name][i][1] if x is not None]
                 q = np.percentile(v, [25, 50, 75])
-                cells.append(f"{q[1]:g} ({q[0]:g}–{q[2]:g})")
+                cells.append(f"{num(q[1])} ({num(q[0])}–{num(q[2])})")
             lines.append(f"| {name} | {strength:g} | " + " | ".join(cells) + " |")
     path = os.path.join(out_dir, algo, "corpus-table.md")
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -316,7 +322,7 @@ def edits_table(datasets, algo, mod, out_dir):
                 q = np.percentile(values, [25, 50, 75])
                 t = thresholds[key]
                 accepted = np.mean([(v <= t) if lower else (v >= t) for v in values])
-                cells += [f"{q[1]:g} ({q[0]:g}–{q[2]:g})", f"{accepted:.0%}"]
+                cells += [f"{num(q[1])} ({num(q[0])}–{num(q[2])})", f"{accepted:.0%}"]
             lines.append(f"| {_edit(name, strength)} | " + " | ".join(cells) + " |")
     if not present:
         lines = [f"{LABEL_MISSING}."]

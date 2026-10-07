@@ -258,11 +258,15 @@ portability and comparison against a foreign implementation.
   combinations nothing reliably beats them. `alpha` > 1, `level` ≥ 0, with the kernel
   (`2 · 4 · alpha^level + 1` on a side) at most 65; `size` 62–4096, the cost roughly
   quadratic in it.
-- **Strength**: a coarse-structure edge descriptor, indifferent to color — a color shift
-  moves 25 of 576 bits on the test photograph where an unrelated image moves 288.
-- **Weakness**: the second most expensive hash here, after Radial — 13 to 20 times aHash
-  (see "Cost" below) — and it notices a small local edit *less* than it notices a rescale — see
-  [`algorithm-provenance.md`](algorithm-provenance.md) §5.
+- **Strength**: 576 bits, so different images gather tightly around half of them, and
+  edits that keep the order of the gray levels (brightness, contrast, gamma) move few,
+  since the image is equalized first.
+- **Weakness**: it records where fine detail lies to within a few pixels, so a turn of a
+  degree or two or a crop of a few percent moves it nearly as far as an unrelated image,
+  and a small local edit moves it no more than a rescale; it separates copies from
+  different images least well of the bit hashes. It is also among the most expensive —
+  13 to 20 times aHash (see "Cost" below). Measured on
+  [the mHash page](theory/mhash.md#what-changes-the-hash).
 
 ## 6. BMH (Block Mean Hash)
 

@@ -359,7 +359,7 @@ only the 64 coefficients of the block, not all 1024.
     --8<-- "docs/assets/generated/timing/table.md"
 
     Each case runs once to warm up, then until it has run at least five times and for at
-    least 0.3 s; the time is the minimum. The grayscale image and the area grid the
+    least a second; the time is the minimum. The grayscale image and the area grid the
     library caches are dropped before every run, so each run is the first hash on a
     loaded image. The cases, and the timing loop:
 

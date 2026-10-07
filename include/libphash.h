@@ -565,22 +565,14 @@ PH_API ph_error_t ph_context_set_radial_params(ph_context_t *ctx, int projection
 PH_API ph_error_t ph_context_set_block_params(ph_context_t *ctx, int block_size);
 
 /**
- * @brief Sets the Marr-Hildreth hash's scale and normalization size.
+ * @brief Sets the Marr-Hildreth hash's kernel scale and normalization size.
  *
- * @p alpha and @p level are the algorithm's own two parameters and set the scale of the
- * Laplacian-of-Gaussian kernel: its half-width is `4 * alpha^level` samples, so the kernel
- * is `2 * that + 1` on a side (17x17 at the defaults). Raising either widens the kernel
- * and makes the hash describe coarser structure.
- *
- * @p size is the side the image is normalized to before filtering. The block grid stays
- * 31x31 whatever it is, so the digest is always 576 bits; what changes is how many pixels
- * a block covers, and therefore the scale of the kernel *relative to the picture* — which
- * is the ratio that decides what the hash actually sees. It is also the cost: the work is
- * roughly quadratic in @p size.
- *
- * The defaults are alpha 2, level 1 and size 512 — all three the reference
- * implementation's (pHash fixes the size at 512 and does not expose it). A sweep of the
- * alternatives finds no better setting; see `docs/algorithm-provenance.md`.
+ * @p alpha and @p level set the Laplacian-of-Gaussian kernel: it reaches
+ * `floor(4 * alpha^level)` samples from its center (a 17x17 kernel at the defaults), and a
+ * wider kernel describes coarser detail. @p size is the side the image is normalized to;
+ * the grid stays 31x31 blocks of `size / 31` pixels, so the digest is always 576 bits.
+ * The defaults, 2, 1 and 512, are pHash's. Digests are comparable only when computed with
+ * the same values. See docs/theory/mhash.md.
  *
  * @param ctx The context.
  * @param alpha Scale base, > 1 and finite.
@@ -1468,11 +1460,8 @@ PH_NODISCARD PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_diges
  * to pHash's; see docs/algorithm-provenance.md section 5.
  *
  * The digest is a bit vector: compare it with ph_hamming_distance_digest() or
- * ph_similarity_digest().
+ * ph_similarity_digest(). See docs/theory/mhash.md.
  *
- * @note It is by far the most expensive hash here — at the defaults, a 17x17 correlation
- *       over a 512x512 image — which is a property of the algorithm, not of this
- *       implementation.
  * @return @c PH_SUCCESS, @c PH_ERR_INVALID_ARGUMENT for a NULL argument,
  *         @c PH_ERR_EMPTY_IMAGE if no image is loaded, or @c PH_ERR_ALLOCATION_FAILED.
  * @ingroup digests

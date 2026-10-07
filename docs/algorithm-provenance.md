@@ -424,16 +424,19 @@ kernel tap does not depend on the pixel, so it comes out of the inner sum:
 > B(by,bx) = Σ<sub>ky,kx</sub> K[ky][kx] · Σ<sub>(y,x) ∈ block</sub> I(y+ky−half, x+kx−half)
 
 and what is left inside is a 16×16 box over the edge-replicated image, which an integral
-image answers in four lookups. That is 31·31·289 multiply-adds instead of 496·496·289 —
-**1.75 ms instead of 50 ms**, measured on a 400×400 JPEG.
+image answers in four lookups. That is 31·31·289 multiply-adds instead of 496·496·289,
+256 times fewer.
 
 The folded sums are also exact: the inner sums are integers and only 289 terms
 accumulate, in double, where evaluating the near-zero-sum LoG kernel per pixel in single
-precision sums large products that almost entirely cancel. On the property corpus the
-difference does not show in the hash's quality — separability 2.62 folded, 2.67 with the
-definition evaluated directly in float — so the reason for folding is the time, and
-exactness is what makes it safe: `test_mh_block_sums_match_the_direct_definition()`
-checks the folded result against the definition evaluated in double.
+precision sums large products that almost entirely cancel. The reason for folding is the
+time; exactness is what makes it safe, and
+`test_mh_block_sums_match_the_direct_definition()` checks the folded result against the
+definition evaluated in double. Over the site's two corpora the definition in double gives
+the same digest on every image, and in single precision another on two of 224: one bit on
+a photograph, and on a synthetic image of flat areas over a hundred, where the nine sums of
+a window are equal and rounding breaks their tie with the mean
+([the mHash page](theory/mhash.md#folding-the-block-sum-into-the-kernel) has the counts).
 
 One step of the source is dropped, provably without effect: it normalizes the response to
 [0,1] before summing. The block sums are affine in the response, the window mean is affine
@@ -461,11 +464,14 @@ Two properties follow:
   in [`methodology.md`](methodology.md#the-corpus)). On a 300×300 corpus mHash separates at 2.70 (BMH 3.25, wHash 2.88,
   Radial 2.72, aHash 2.31, dHash 2.07, pHash 1.89, ColorHash 1.82); on the 160×160
   property corpus it separates at 2.62.
-- **A small local edit moves this hash less than a rescale does.** A patch covering 4% of
-  the frame measures 0.06–0.09 away at the default scale, where the benign transformations
-  measure 0.12–0.17. For finding an edited copy of a picture, that ordering is the wrong
-  way round; coarser scales partly repair it, inconsistently. The algorithm is a
-  coarse-structure descriptor and should not be relied on to notice small edits.
+- **A small local edit moves this hash no more than a rescale does.** On 200 photographs a
+  patch over 4 % of the frame moves it about as far as halving the image's size, and a
+  2-degree turn or a 5 % crop several times further than a patch over 16 %; on the
+  synthetic corpus recompression and noise move it further than small patches. For
+  finding an edited copy of a picture, that ordering is the wrong way round. The
+  algorithm describes where detail lies, and should not be relied on to notice small
+  edits ([the mHash page](theory/mhash.md#a-small-edit-against-a-rescale) has the
+  measurement).
 
 ---
 

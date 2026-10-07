@@ -22,6 +22,7 @@ import sys
 
 import algo_ahash
 import algo_dhash
+import algo_mhash
 import algo_phash
 import algo_whash
 from corpus import measure_corpus
@@ -30,7 +31,7 @@ from corpus_charts import (corpus_robustness_figure, corpus_tables, edits_exampl
 from measure import measure_robustness, robustness_figure, robustness_table
 from timing import measure_timing, write_timing
 
-ALGORITHMS = {m.ALGO: m for m in (algo_ahash, algo_dhash, algo_phash, algo_whash)}
+ALGORITHMS = {m.ALGO: m for m in (algo_ahash, algo_dhash, algo_phash, algo_whash, algo_mhash)}
 
 
 def main():

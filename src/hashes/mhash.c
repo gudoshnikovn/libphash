@@ -86,15 +86,14 @@ int ph_mh_kernel(float alpha, float level, float *out, int max_side) {
  * -- the kernel tap comes out of the inner sum, because it does not depend on the pixel.
  * What is left inside is a 16x16 box over the edge-replicated image, which an integral
  * image answers in four lookups. That turns 496*496*289 multiply-adds into 31*31*289,
- * some fifty times less work.
+ * 256 times fewer.
  *
- * It is also the more accurate of the two, which matters more than the speed. The LoG
- * kernel sums to nearly zero, so evaluating it per pixel in float is a sum of large
- * products that almost entirely cancel -- catastrophic cancellation, and the error
- * survives into the block sum. Here the inner sums are exact integers and only 289 terms
- * are accumulated, in double. Measured on the property corpus, the difference between the
- * two is not academic: separability 1.81 evaluating the definition directly in float,
- * 2.49 this way.
+ * It is also exact where a direct evaluation is not: the inner sums are integers and
+ * only 289 terms are accumulated, in double, where evaluating the near-zero-sum kernel per
+ * pixel in float adds large products that almost entirely cancel. The definition
+ * evaluated in double gives the same digest on every image of the site's two corpora; in
+ * float it gives another on a flat image, whose windows hold nine equal sums and so tie
+ * with their mean, and rounding breaks the ties (docs/theory/mhash.md has the counts).
  *
  * `scratch` must hold ph_mh_block_sums_scratch(n, half) bytes. Returns nothing; `out` is
  * PH_MH_GRID * PH_MH_GRID floats. */

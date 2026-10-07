@@ -48,8 +48,7 @@ size_t ph_mh_block_sums_scratch(int n, int half);
 /* Sums the correlation of `img` (n x n) with `kernel` (side x side, side odd) over each
  * PH_MH_BLOCK_PIXELS-square block, writing PH_MH_GRID * PH_MH_GRID floats to `out`.
  * Equivalent to correlating and then summing, but computed through an integral image:
- * far cheaper, and far more accurate, since the LoG kernel nearly cancels. Edges
- * replicate. */
+ * 256 times fewer multiply-adds, with exact integer box sums. Edges replicate. */
 void ph_mh_block_sums(const uint8_t *img, int n, int block, const float *kernel, int side,
                       uint8_t *scratch, float *out);
 
@@ -156,10 +155,10 @@ const float *ph_get_dct_matrix_32(void);
 #define PH_MH_GRID            31
 
 /* The size the image is normalised to before filtering, and the resulting block size.
- * pHash fixes this at 512, which makes the blocks 16 pixels; both are tunable here
+ * pHash fixes this at 512, which makes the blocks 16 pixels; the size is tunable here
  * because the ratio between the kernel's scale and the block grid is the one thing in
- * this algorithm that actually decides what it sees, and 512 is not the best value for
- * it. The default is measured, not inherited -- see docs/algorithm-provenance.md. */
+ * this algorithm that decides what it sees. The default is pHash's: a sweep of the
+ * alternatives finds none better -- see docs/algorithm-provenance.md. */
 #define PH_MH_IMAGE_SIZE       512
 #define PH_MH_MIN_IMAGE_SIZE   (PH_MH_GRID * 2)
 #define PH_MH_MAX_IMAGE_SIZE   4096

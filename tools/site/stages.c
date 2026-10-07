@@ -49,6 +49,20 @@
  *       The same comparison for every pair of distinct images: one JSON object per pair
  *       (i < j, in the order given), with the indices "a" and "b".
  *
+ *   site_stages mhash <image> <outdir>
+ *       The same for mHash: original.ppm, gray.pgm, blurred.pgm (the sigma-1 blur),
+ *       resized.pgm (normalized to 512x512), equalized.pgm, response.f32 (the response to
+ *       the kernel at every pixel, raw floats) and mhash.json (the kernel, the 31x31 block
+ *       grid and the digest, for the defaults and for other kernel scales and sizes, each
+ *       checked against ph_compute_mhash() with those parameters; the digest the
+ *       definition gives evaluated pixel by pixel, in double and in float; and the digest
+ *       of the image loaded with ph_context_set_load_grayscale(), checked the same way).
+ *
+ *   site_stages mhash-direct <image>...
+ *       Prints one JSON object per image: how many bits of its mHash the definition,
+ *       evaluated pixel by pixel in double and in float, gives differently from
+ *       ph_compute_mhash().
+ *
  *   site_stages time <image>
  *       Times decoding the image and every hash on it (the first hash on a loaded image,
  *       caches dropped before each run), and the variants of time_cases[]; prints the
@@ -761,6 +775,364 @@ static int whash_modes(int argc, char **argv) {
     return 0;
 }
 
+/* mHash's response to its kernel at every pixel of the n x n image, edges replicated, the
+ * taps summed in raster order: in double, as the definition reads; or in float, as a
+ * direct implementation of it would compute. */
+static void mhash_response(const uint8_t *img, int n, const float *kernel, int side, int in_double,
+                           float *out) {
+    const int half = side / 2;
+    for (int y = 0; y < n; y++) {
+        for (int x = 0; x < n; x++) {
+            double accd = 0.0;
+            float accf = 0.0f;
+            for (int ky = 0; ky < side; ky++) {
+                int sy = y + ky - half < 0 ? 0 : y + ky - half >= n ? n - 1 : y + ky - half;
+                for (int kx = 0; kx < side; kx++) {
+                    int sx = x + kx - half < 0 ? 0 : x + kx - half >= n ? n - 1 : x + kx - half;
+                    float k = kernel[ky * side + kx];
+                    uint8_t v = img[(size_t)sy * (size_t)n + (size_t)sx];
+                    if (in_double) {
+                        accd += (double)k * (double)v;
+                    } else {
+                        accf += k * (float)v;
+                    }
+                }
+            }
+            out[(size_t)y * (size_t)n + (size_t)x] = in_double ? (float)accd : accf;
+        }
+    }
+}
+
+/* The 576 bits of mHash from its 31x31 block grid, packed as ph_compute_mhash() packs
+ * them: nine per 3x3 window at stride 4, each against its window's mean, MSB first. */
+static void mhash_bits(const float *blocks, uint8_t digest[PH_MH_BYTES]) {
+    memset(digest, 0, PH_MH_BYTES);
+    int bit = 0;
+    for (int wy = 0; wy < PH_MH_WINDOWS_PER_AXIS; wy++) {
+        for (int wx = 0; wx < PH_MH_WINDOWS_PER_AXIS; wx++) {
+            const float *w =
+                &blocks[wy * PH_MH_WINDOW_STRIDE * PH_MH_GRID + wx * PH_MH_WINDOW_STRIDE];
+            float sum = 0.0f;
+            for (int y = 0; y < PH_MH_WINDOW; y++) {
+                for (int x = 0; x < PH_MH_WINDOW; x++) {
+                    sum += w[y * PH_MH_GRID + x];
+                }
+            }
+            float mean = sum / (float)(PH_MH_WINDOW * PH_MH_WINDOW);
+            for (int y = 0; y < PH_MH_WINDOW; y++) {
+                for (int x = 0; x < PH_MH_WINDOW; x++, bit++) {
+                    if (w[y * PH_MH_GRID + x] > mean) {
+                        digest[bit / 8] |= (uint8_t)(0x80u >> (bit % 8));
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* The block grid summed from a per-pixel response, in the response's precision. */
+static void mhash_blocks_from(const float *response, int n, int block, int in_double,
+                              float *blocks) {
+    for (int by = 0; by < PH_MH_GRID; by++) {
+        for (int bx = 0; bx < PH_MH_GRID; bx++) {
+            double sd = 0.0;
+            float sf = 0.0f;
+            for (int y = by * block; y < (by + 1) * block; y++) {
+                for (int x = bx * block; x < (bx + 1) * block; x++) {
+                    float v = response[(size_t)y * (size_t)n + (size_t)x];
+                    sd += v;
+                    sf += v;
+                }
+            }
+            blocks[by * PH_MH_GRID + bx] = in_double ? (float)sd : sf;
+        }
+    }
+}
+
+static int bits_apart(const uint8_t *a, const uint8_t *b, int bytes) {
+    int n = 0;
+    for (int i = 0; i < bytes; i++) {
+        n += __builtin_popcount((unsigned)(a[i] ^ b[i]));
+    }
+    return n;
+}
+
+/* One mHash computation with the given parameters, recomputed from its stages and checked
+ * against ph_compute_mhash() with the same parameters: `blurred` is the grayscale image
+ * after the sigma-1 blur, which no parameter changes. `norm` (size x size) receives the
+ * normalized image, equalized. */
+typedef struct {
+    float alpha, level;
+    int size, block, side;
+    float kernel[PH_MH_MAX_KERNEL_SIDE * PH_MH_MAX_KERNEL_SIDE];
+    float blocks[PH_MH_GRID * PH_MH_GRID];
+    uint8_t digest[PH_MH_BYTES];
+    uint8_t *norm, *resized;
+} mhash_stages_t;
+
+static int mhash_run(ph_context_t *ctx, const uint8_t *blurred, float alpha, float level, int size,
+                     mhash_stages_t *s) {
+    s->alpha = alpha;
+    s->level = level;
+    s->size = size;
+    s->block = size / PH_MH_GRID;
+    const size_t npix = (size_t)size * (size_t)size;
+    s->norm = malloc(npix);
+    s->resized = malloc(npix);
+    if (!s->norm || !s->resized) {
+        return fail("out of memory", NULL);
+    }
+    if (!ph_resize_mitchell(blurred, ctx->image.width, ctx->image.height, s->resized, size, size)) {
+        return fail("ph_resize_mitchell failed", NULL);
+    }
+    memcpy(s->norm, s->resized, npix);
+    ph_equalize_histogram(s->norm, npix, PH_MH_EQUALIZE_LEVELS);
+    s->side = ph_mh_kernel(alpha, level, s->kernel, PH_MH_MAX_KERNEL_SIDE);
+    if (s->side <= 0) {
+        return fail("ph_mh_kernel refused the parameters", NULL);
+    }
+    uint8_t *scratch = malloc(ph_mh_block_sums_scratch(size, s->side / 2));
+    if (!scratch) {
+        return fail("out of memory", NULL);
+    }
+    ph_mh_block_sums(s->norm, size, s->block, s->kernel, s->side, scratch, s->blocks);
+    free(scratch);
+    mhash_bits(s->blocks, s->digest);
+
+    ph_digest_t lib;
+    if (ph_context_set_mhash_params(ctx, alpha, level, size) != PH_SUCCESS ||
+        ph_compute_mhash(ctx, &lib) != PH_SUCCESS) {
+        return fail("ph_compute_mhash failed", NULL);
+    }
+    if (lib.size != PH_MH_BYTES || memcmp(lib.data, s->digest, PH_MH_BYTES) != 0) {
+        fprintf(stderr,
+                "site_stages: mHash (alpha %g, level %g, size %d) recomputed from the block "
+                "grid differs from ph_compute_mhash() in %d bits\n",
+                (double)alpha, (double)level, size, bits_apart(lib.data, s->digest, PH_MH_BYTES));
+        return 1;
+    }
+    return 0;
+}
+
+static void json_hexbytes(json_t *j, const char *key, const uint8_t *v, int n) {
+    json_key(j, key);
+    fputc('"', j->f);
+    for (int i = 0; i < n; i++) {
+        fprintf(j->f, "%02x", v[i]);
+    }
+    fputc('"', j->f);
+}
+
+/* One run as a JSON object: the value of `key` in `j`, or, with no key, a bare object. */
+static void mhash_json(json_t *j, const char *key, const mhash_stages_t *s, int with_kernel) {
+    if (key) {
+        json_key(j, key);
+    }
+    json_t o = {j->f, 0};
+    json_double(&o, "alpha", s->alpha);
+    json_double(&o, "level", s->level);
+    json_int(&o, "size", s->size);
+    json_int(&o, "block", s->block);
+    json_int(&o, "side", s->side);
+    if (with_kernel) {
+        json_floats(&o, "kernel", s->kernel, s->side * s->side);
+    }
+    json_floats(&o, "blocks", s->blocks, PH_MH_GRID * PH_MH_GRID);
+    json_hexbytes(&o, "digest", s->digest, PH_MH_BYTES);
+    fputs("}", j->f);
+}
+
+/* Writes n floats to <dir>/<name>, raw, in the machine's byte order. */
+static int write_f32(const char *dir, const char *name, const float *v, size_t n) {
+    char path[4096];
+    if (snprintf(path, sizeof(path), "%s/%s", dir, name) >= (int)sizeof(path)) {
+        return fail("path too long", name);
+    }
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        return fail(path, strerror(errno));
+    }
+    int ok = fwrite(v, sizeof(float), n, f) == n;
+    ok = (fclose(f) == 0) && ok;
+    return ok ? 0 : fail("cannot write", path);
+}
+
+/* The grayscale image of `ctx` blurred at mHash's sigma, as ph_compute_mhash() blurs it;
+ * malloc'd. */
+static uint8_t *mhash_blur(ph_context_t *ctx) {
+    size_t n = (size_t)ctx->image.width * (size_t)ctx->image.height;
+    const uint8_t *gray = ph_get_gray(ctx);
+    uint8_t *out = malloc(n);
+    float *scratch = malloc(n * sizeof(float));
+    if (gray && out && scratch) {
+        ph_gaussian_blur_sigma(gray, ctx->image.width, ctx->image.height, PH_MH_BLUR_SIGMA, scratch,
+                               out);
+    } else {
+        free(out);
+        out = NULL;
+    }
+    free(scratch);
+    return out;
+}
+
+/* site_stages mhash <image> <outdir> */
+static int stages_mhash(int argc, char **argv) {
+    (void)argc;
+    const char *outdir = argv[1];
+    ph_context_t *ctx = NULL;
+    if (load(&ctx, argv[0])) {
+        return 1;
+    }
+    int w = ctx->image.width, h = ctx->image.height;
+    int status = 0;
+
+    /* The default last among the scales, so each list ends at the default. */
+    static const float levels[] = {0.0f, 2.0f, PH_MH_LEVEL};
+    static const int sizes[] = {256, 1024, PH_MH_IMAGE_SIZE};
+
+    enum {
+        NL = sizeof(levels) / sizeof(levels[0]),
+        NS = sizeof(sizes) / sizeof(sizes[0]),
+    };
+
+    mhash_stages_t by_level[NL] = {{0}}, by_size[NS] = {{0}};
+    uint8_t *blurred = NULL;
+    float *response = NULL, *direct = NULL;
+    int bad = !write_gray_stages(ctx, outdir, &status) || !(blurred = mhash_blur(ctx));
+    for (int k = 0; k < NL && !bad; k++) {
+        bad = mhash_run(ctx, blurred, PH_MH_ALPHA, levels[k], PH_MH_IMAGE_SIZE, &by_level[k]);
+    }
+    for (int k = 0; k < NS && !bad; k++) {
+        bad = mhash_run(ctx, blurred, PH_MH_ALPHA, PH_MH_LEVEL, sizes[k], &by_size[k]);
+    }
+    const mhash_stages_t *def = &by_level[NL - 1];
+    const int n = PH_MH_IMAGE_SIZE;
+
+    /* The response at every pixel, as the definition computes it, in double and in float;
+     * and the bits each gives when summed over the blocks directly. */
+    float direct_blocks[PH_MH_GRID * PH_MH_GRID];
+    uint8_t digest_double[PH_MH_BYTES], digest_float[PH_MH_BYTES];
+    if (!bad) {
+        response = malloc((size_t)n * n * sizeof(float));
+        direct = malloc((size_t)n * n * sizeof(float));
+        bad = !response || !direct;
+    }
+    if (!bad) {
+        mhash_response(def->norm, n, def->kernel, def->side, 1, response);
+        mhash_blocks_from(response, n, def->block, 1, direct_blocks);
+        mhash_bits(direct_blocks, digest_double);
+        mhash_response(def->norm, n, def->kernel, def->side, 0, direct);
+        mhash_blocks_from(direct, n, def->block, 0, direct_blocks);
+        mhash_bits(direct_blocks, digest_float);
+        status |= write_pnm(outdir, "blurred.pgm", blurred, w, h, 1);
+        status |= write_pnm(outdir, "resized.pgm", def->resized, n, n, 1);
+        status |= write_pnm(outdir, "equalized.pgm", def->norm, n, n, 1);
+        status |= write_f32(outdir, "response.f32", response, (size_t)n * n);
+    }
+    ph_free(ctx);
+
+    /* The decoder's grayscale, as for dHash: the default parameters on what the decoder
+     * gives. */
+    mhash_stages_t dec = {0};
+    uint8_t *dec_blurred = NULL;
+    if (!bad) {
+        bad = ph_create(&ctx) != PH_SUCCESS ||
+              ph_context_set_load_grayscale(ctx, 1) != PH_SUCCESS ||
+              ph_load_from_file(ctx, argv[0]) != PH_SUCCESS || !(dec_blurred = mhash_blur(ctx)) ||
+              mhash_run(ctx, dec_blurred, PH_MH_ALPHA, PH_MH_LEVEL, PH_MH_IMAGE_SIZE, &dec);
+        ph_free(ctx);
+    }
+
+    FILE *f = bad ? NULL : open_out(outdir, "mhash.json");
+    if (f) {
+        json_t j = {f, 0};
+        json_int(&j, "width", w);
+        json_int(&j, "height", h);
+        json_int(&j, "grid", PH_MH_GRID);
+        json_int(&j, "window", PH_MH_WINDOW);
+        json_int(&j, "stride", PH_MH_WINDOW_STRIDE);
+        mhash_json(&j, "default", def, 1);
+        json_key(&j, "levels");
+        for (int k = 0; k < NL; k++) {
+            fputs(k ? ", " : "[", f);
+            mhash_json(&j, NULL, &by_level[k], 1);
+        }
+        fputs("]", f);
+        json_key(&j, "sizes");
+        for (int k = 0; k < NS; k++) {
+            fputs(k ? ", " : "[", f);
+            mhash_json(&j, NULL, &by_size[k], 0);
+        }
+        fputs("]", f);
+        json_hexbytes(&j, "digest_direct_double", digest_double, PH_MH_BYTES);
+        json_hexbytes(&j, "digest_direct_float", digest_float, PH_MH_BYTES);
+        json_hexbytes(&j, "digest_load_grayscale", dec.digest, PH_MH_BYTES);
+        json_end(&j);
+        status |= fclose(f) != 0;
+    }
+    for (int k = 0; k < NL; k++) {
+        free(by_level[k].norm);
+        free(by_level[k].resized);
+    }
+    for (int k = 0; k < NS; k++) {
+        free(by_size[k].norm);
+        free(by_size[k].resized);
+    }
+    free(dec.norm);
+    free(dec.resized);
+    free(blurred);
+    free(dec_blurred);
+    free(response);
+    free(direct);
+    return bad || !f ? 1 : status;
+}
+
+/* site_stages mhash-direct <image>...: for every image, how many of mHash's bits the
+ * definition evaluated pixel by pixel gives differently from ph_compute_mhash(), with the
+ * response computed in double and in float. One JSON line per image. */
+static int mhash_direct(int argc, char **argv) {
+    const int n = PH_MH_IMAGE_SIZE;
+    float *response = malloc((size_t)n * n * sizeof(float));
+    if (!response) {
+        return fail("out of memory", NULL);
+    }
+    for (int i = 0; i < argc; i++) {
+        ph_context_t *ctx = NULL;
+        mhash_stages_t s = {0};
+        uint8_t *blurred = NULL;
+        if (load(&ctx, argv[i])) {
+            free(response);
+            return 1;
+        }
+        int bad = !(blurred = mhash_blur(ctx)) ||
+                  mhash_run(ctx, blurred, PH_MH_ALPHA, PH_MH_LEVEL, n, &s);
+        ph_free(ctx);
+        free(blurred);
+        if (!bad) {
+            float blocks[PH_MH_GRID * PH_MH_GRID];
+            uint8_t digest[PH_MH_BYTES];
+            json_t j = {stdout, 0};
+            json_string(&j, "file", argv[i]);
+            for (int in_double = 1; in_double >= 0; in_double--) {
+                mhash_response(s.norm, n, s.kernel, s.side, in_double, response);
+                mhash_blocks_from(response, n, s.block, in_double, blocks);
+                mhash_bits(blocks, digest);
+                json_int(&j, in_double ? "double" : "float",
+                         bits_apart(digest, s.digest, PH_MH_BYTES));
+            }
+            json_end(&j);
+        }
+        free(s.norm);
+        free(s.resized);
+        if (bad) {
+            free(response);
+            return 1;
+        }
+    }
+    free(response);
+    return 0;
+}
+
 /* --8<-- [start:compare] */
 /* One algorithm's comparison of two digests by its own metric; 0 when it does not apply. */
 static int compare(const ph_digest_t *a, const ph_digest_t *b, double *out) {
@@ -952,7 +1324,7 @@ enum {
     TIME_MAX_RUNS = 300,
 };
 
-#define TIME_MIN_SECONDS 0.3
+#define TIME_MIN_SECONDS 1.0
 
 static int time_image(int argc, char **argv) {
     (void)argc;
@@ -1034,6 +1406,8 @@ static const struct {
     {"phash", "<image> <outdir>", 2, 0, stages_phash},
     {"whash", "<image> <outdir>", 2, 0, stages_whash},
     {"whash-modes", "<image>...", 1, 1, whash_modes},
+    {"mhash", "<image> <outdir>", 2, 0, stages_mhash},
+    {"mhash-direct", "<image>...", 1, 1, mhash_direct},
     {"measure", "<reference> <variant>...", 2, 1, measure},
     {"pairs", "<image> <image>...", 2, 1, pairs},
     {"corpus", "<outdir>", 1, 0, corpus},
