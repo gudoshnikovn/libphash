@@ -8,7 +8,8 @@ figure so the values are readable without the picture.
 
 One module per algorithm page draws its figures (`algo_<name>.py`); the robustness
 measurement (measure.py) runs once, over the transforms of transforms.py, and serves
-every page.
+every page, on the example image and over both corpora (corpus.py), whose figures
+corpus_charts.py draws.
 
 Usage: tools/site/render.py --tool build/release/site_stages --image tests/data/photo.jpeg
                             --out docs/assets/generated [--algo ahash,...|all]
@@ -17,6 +18,8 @@ import argparse
 import sys
 
 import algo_ahash
+from corpus import measure_corpus
+from corpus_charts import corpus_robustness_figure, corpus_tables, separability_figure
 from measure import measure_robustness, robustness_figure, robustness_table
 
 ALGORITHMS = {m.ALGO: m for m in (algo_ahash,)}
@@ -43,6 +46,11 @@ def main():
     for name in names:
         robustness_figure(data, name, args.out, ALGORITHMS[name].BITS, caption)
         robustness_table(data, name, args.out, ALGORITHMS[name].BITS)
+    datasets = [(c, measure_corpus(args.tool, c)) for c in ("synthetic", "photos")]
+    for name in names:
+        corpus_robustness_figure(datasets, name, ALGORITHMS[name], args.out)
+        separability_figure(datasets, name, ALGORITHMS[name], args.out)
+        corpus_tables(datasets, name, ALGORITHMS[name], args.out)
     print(f"render: figures in {args.out}")
     return 0
 

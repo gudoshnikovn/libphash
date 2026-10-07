@@ -11,13 +11,15 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 
 # One accent for measured data, and ink colors for everything else, per theme. The accent
-# is slot 1 of the site's chart palette (validated against both surfaces); the inks are
-# text colors, not series.
+# is slot 1 of the site's chart palette, and accent2, for a second series beside it, is
+# slot 2; the pair is validated against both of the site's surfaces (#ffffff and the
+# dark theme's #0b0c0f, `surface`, which a label set over a line takes as its
+# background). The inks are text colors, not series.
 THEMES = {
-    "light": {"accent": "#2a78d6", "ink": "#1f1f1e", "muted": "#6b6a66",
-              "grid": "#e4e3df", "off": "#eceae5", "on_text": "#ffffff"},
-    "dark": {"accent": "#3987e5", "ink": "#f2f2f0", "muted": "#a9a89f",
-             "grid": "#3a3a37", "off": "#2c2c2a", "on_text": "#ffffff"},
+    "light": {"accent": "#2a78d6", "accent2": "#eb6834", "ink": "#1f1f1e", "muted": "#6b6a66",
+              "grid": "#e4e3df", "surface": "#ffffff", "off": "#eceae5", "on_text": "#ffffff"},
+    "dark": {"accent": "#3987e5", "accent2": "#d95926", "ink": "#f2f2f0", "muted": "#a9a89f",
+             "grid": "#3a3a37", "surface": "#0b0c0f", "off": "#2c2c2a", "on_text": "#ffffff"},
 }
 
 plt.rcParams.update({

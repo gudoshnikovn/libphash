@@ -79,8 +79,8 @@ keeps the hash, and an edit that moves content between cells does not.
   them: a 5° turn or a 10 % crop already moves a handful of bits. aHash is not the
   algorithm for collections where images are rotated or reframed.
 
-These are measurements on one photograph. How the nine algorithms compare over a whole
-corpus is on [choosing an algorithm](../algorithms.md#comparison-summary).
+These are measurements on one photograph; the same edits over two whole corpora follow
+below.
 
 ??? info "The numbers behind the chart"
 
@@ -89,7 +89,7 @@ corpus is on [choosing an algorithm](../algorithms.md#comparison-summary).
 ??? info "How this was measured"
 
     Each transform is applied alone to the photograph above, and the edited copy is
-    saved as a lossless PNG (as a JPEG of the given quality for that panel). The library
+    saved losslessly, as PPM (as a JPEG of the given quality for that panel). The library
     hashes the original and every copy, and compares each copy with the original by
     [`ph_similarity_digest()`](../api/compare.md#ph_similarity_digest). The chart shows
     $64 \times (1 - \text{similarity})$, which is the Hamming distance: how many of the
@@ -133,6 +133,89 @@ corpus is on [choosing an algorithm](../algorithms.md#comparison-summary).
     cmake --preset release && cmake --build --preset release --target site_stages
     build/release/site_stages measure reference.png variant.png …
     ```
+
+### Over two corpora
+
+The same nine edits, applied to every image of two corpora: 200 public-domain photographs
+from Wikimedia Commons ([the list](../project/corpus.md)), and the 24 generated images the
+library's tests measure ([methodology](../methodology.md#the-corpus)), which are not
+photographs. Each line is the median over the corpus and the band around it holds the
+middle half of its images.
+
+![Bits that differ from the original under nine transforms, median and middle half over each corpus](../assets/generated/ahash/robustness-corpus.light.svg#only-light)
+![Bits that differ from the original under nine transforms, median and middle half over each corpus](../assets/generated/ahash/robustness-corpus.dark.svg#only-dark)
+
+The photographs say what the single example says: rotation and cropping are the edits
+that move aHash, and everything else moves its median by a few bits at most. The
+synthetic images spread wider, as their bands show: they are made of hard edges and fine
+patterns, where a small shift moves a whole stripe from one cell into the next.
+
+### Copies and different images
+
+Robustness alone proves little: a hash that never changes is perfectly robust. What makes
+a hash useful is that copies of an image land closer together than different images do.
+Here a *copy* is an original after one moderate edit (one strength of each of the nine,
+listed under "How this was measured"), and *different images* are every pair of distinct
+originals in the corpus.
+
+![Distribution of bits that differ, for copies and for pairs of different images, in both corpora](../assets/generated/ahash/separability.light.svg#only-light)
+![Distribution of bits that differ, for copies and for pairs of different images, in both corpora](../assets/generated/ahash/separability.dark.svg#only-dark)
+
+Copies pile up at a few bits, different images spread around 32, half of the 64, where two
+unrelated hashes are expected to fall. The dashed line is the distance that accepts 95 % of
+the copies, and its label says how many different pairs it would accept as well: that is
+the price of the threshold. *d′* sums up the gap in one number, the distance between the
+two means in units of their spread: above about 1 the distributions are usefully apart.
+On the photographs the two barely touch; the synthetic images, built to be hard, overlap
+more.
+
+??? info "The numbers behind the charts"
+
+    --8<-- "docs/assets/generated/ahash/corpus-table.md"
+
+??? info "How this was measured"
+
+    For each corpus, every image goes through the nine edits above, and each copy is
+    compared with its original exactly as on the single photograph. Every pair of
+    distinct originals is compared too, by `site_stages pairs`. Below is the code that
+    ran.
+
+    The photographs are downloaded once and checked against the SHA-256 the manifest
+    records for each:
+
+    ```python title="tools/site/fetch_corpus.py"
+    --8<-- "tools/site/fetch_corpus.py:fetch"
+    ```
+
+    Measuring a corpus, or taking the result from the cache when nothing that decides it
+    has changed:
+
+    ```python title="tools/site/corpus.py"
+    --8<-- "tools/site/corpus.py:corpus"
+    ```
+
+    Comparing every pair of originals:
+
+    ```c title="tools/site/stages.c"
+    --8<-- "tools/site/stages.c:pairs"
+    ```
+
+    The edits that make a copy, and the numbers on the second chart:
+
+    ```python title="tools/site/corpus_charts.py"
+    --8<-- "tools/site/corpus_charts.py:copies"
+    ```
+
+    ```python title="tools/site/corpus_charts.py"
+    --8<-- "tools/site/corpus_charts.py:separability"
+    ```
+
+    The synthetic corpus is generated by `make_base()` in
+    `tests/src/synthetic_corpus.h`, the same code the tests use. `make site` measures
+    both corpora and draws every figure.
+
+How the nine algorithms compare is on
+[choosing an algorithm](../algorithms.md#comparison-summary).
 
 ## Settings that affect it
 

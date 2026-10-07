@@ -16,10 +16,20 @@
  *       variant compared with the reference by that algorithm's own metric (similarity
  *       in [0, 1] for bit hashes, peak correlation for Radial, histogram intersection for
  *       ColorHash, L2 distance for ColorMoments), or null where it does not apply.
+ *
+ *   site_stages pairs <image>...
+ *       The same comparison for every pair of distinct images: one JSON object per pair
+ *       (i < j, in the order given), with the indices "a" and "b".
+ *
+ *   site_stages corpus <outdir>
+ *       Writes the synthetic corpus of the tests (tests/src/synthetic_corpus.h) as
+ *       00.ppm ... 23.ppm, so the site measures the very images the tests do.
  */
 #include "context.h"
 #include "image/image.h"
 #include "libphash.h"
+
+#include "synthetic_corpus.h"
 
 #include <errno.h>
 #include <stdio.h>
@@ -274,6 +284,67 @@ static int measure(int argc, char **argv) {
 
 /* --8<-- [end:measure] */
 
+/* --8<-- [start:pairs] */
+/* site_stages pairs <image>...: every image's digests, then one JSON line per pair of
+ * distinct images with their comparison, per algorithm. */
+static int pairs(int argc, char **argv) {
+    ph_digest_t(*dig)[PH_ALGORITHM_COUNT] = calloc((size_t)argc, sizeof(*dig));
+    int (*have)[PH_ALGORITHM_COUNT] = calloc((size_t)argc, sizeof(*have));
+    if (!dig || !have) {
+        free(dig);
+        free(have);
+        return fail("out of memory", NULL);
+    }
+    for (int i = 0; i < argc; i++) {
+        ph_context_t *ctx = NULL;
+        if (load(&ctx, argv[i])) {
+            free(dig);
+            free(have);
+            return 1;
+        }
+        for (int a = 0; a < PH_ALGORITHM_COUNT; a++) {
+            have[i][a] = ph_compute_digest(ctx, (ph_algorithm_t)a, &dig[i][a]) == PH_SUCCESS;
+        }
+        ph_free(ctx);
+    }
+    for (int i = 0; i < argc; i++) {
+        for (int k = i + 1; k < argc; k++) {
+            json_t j = {stdout, 0};
+            json_int(&j, "a", i);
+            json_int(&j, "b", k);
+            for (int a = 0; a < PH_ALGORITHM_COUNT; a++) {
+                const char *name = ph_algorithm_name((ph_algorithm_t)a);
+                double value = 0.0;
+                if (have[i][a] && have[k][a] && compare(&dig[i][a], &dig[k][a], &value)) {
+                    json_double(&j, name, value);
+                } else {
+                    json_null(&j, name);
+                }
+            }
+            json_end(&j);
+        }
+    }
+    free(dig);
+    free(have);
+    return 0;
+}
+
+/* --8<-- [end:pairs] */
+
+/* site_stages corpus <outdir> */
+static int corpus(int argc, char **argv) {
+    (void)argc;
+    int status = 0;
+    for (int i = 0; i < NUM_BASE; i++) {
+        char name[16];
+        snprintf(name, sizeof(name), "%02d.ppm", i);
+        image_t im = make_base(i);
+        status |= write_pnm(argv[0], name, im.px, im.w, im.h, 3);
+        image_free(&im);
+    }
+    return status;
+}
+
 /* The modes: name, arguments, and the least number of them (a mode taking a list
  * accepts more). */
 static const struct {
@@ -285,6 +356,8 @@ static const struct {
 } modes[] = {
     {"ahash", "<image> <outdir>", 2, 0, stages_ahash},
     {"measure", "<reference> <variant>...", 2, 1, measure},
+    {"pairs", "<image> <image>...", 2, 1, pairs},
+    {"corpus", "<outdir>", 1, 0, corpus},
 };
 
 int main(int argc, char **argv) {

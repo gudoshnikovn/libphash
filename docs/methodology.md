@@ -111,10 +111,10 @@ spread, and a threshold is only ever set from a measurement, never chosen by eye
 
 ## The corpus
 
-A **generated synthetic corpus**, produced deterministically by a script in the
-repository from a fixed seed. No external dataset, no manifest of URLs: it works with no
-network, adds nothing to the repository's size, reproduces identically in CI and on a
-developer's machine, and cannot rot.
+A **generated synthetic corpus**: 24 images produced deterministically from a fixed seed
+by `make_base()` in `tests/src/synthetic_corpus.h`. No external dataset, no manifest of
+URLs: it works with no network, adds nothing to the repository's size, reproduces
+identically in CI and on a developer's machine, and cannot rot.
 
 The cost is accepted and stated here: synthetic images do not represent photographs. A
 number measured on this corpus describes the algorithm's behavior on the corpus. It is
@@ -132,5 +132,18 @@ corpus at or above 512 would not,
 but `tests/src/test_hash_properties.c`'s radial-rotation assertions set a practical
 ceiling on how large this corpus can go before an unrelated property (`ph_compute_radial_hash()`'s
 fixed `PH_RADIAL_SAMPLES` sampling a fixed-size disc more coarsely) starts failing; see the
-comment on `IMG_W` there. Numbers measured on this corpus are comparable within one run of
+comment on `IMG_W` in `tests/src/synthetic_corpus.h`. Numbers measured on this corpus are comparable within one run of
 that file at one resolution, and nowhere else.
+
+### The documentation site's photographs
+
+The site's charts are drawn over the synthetic corpus and over a second one: 200
+photographs from Wikimedia Commons, each under CC0 or in the public domain, listed with
+its source, author, license and SHA-256 in `tools/site/corpus_photos.tsv` and on the
+site's [photo corpus](project/corpus.md) page. It exists for the claim the synthetic
+corpus cannot support: how an algorithm behaves on photographs.
+
+It is the site's, not the tests'. No test reads it, and the build of the library never
+downloads it; only the site's build does, once, into a cache outside the repository,
+checking each file against its digest. The tests keep every property of the synthetic
+corpus above, and the site's charts carry the name of the corpus each was drawn from.

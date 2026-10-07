@@ -164,7 +164,9 @@ portability and comparison against a foreign implementation.
   one bit per pixel for above/below the mean.
 - **Output**: 64-bit.
 - **Strength**: among the cheapest here, and very good at finding a known image again.
-- **Weakness**: sensitive to anything that moves the mean — brightness, contrast, gamma.
+- **Weakness**: rotation and cropping, which move content between the 8×8 cells.
+  Brightness, contrast and gamma keep the cells' order and barely move it
+  ([measured](theory/ahash.md#what-changes-the-hash)).
 - **Conformance**: follows its source, including the bit order.
 
 ## 2. dHash (Difference Hash)
@@ -173,8 +175,7 @@ portability and comparison against a foreign implementation.
 - **Concept**: downscale to 9×8 and compare each pixel with its right-hand neighbor,
   giving 8 differences per row over 8 rows.
 - **Output**: 64-bit.
-- **Strength**: as cheap as aHash on small images and markedly better at it — gradients survive brightness
-  and contrast changes that defeat an average.
+- **Strength**: as cheap as aHash on small images.
 - **Conformance**: follows its source exactly, including the direction of the comparison
   (`1` means the left pixel is darker than the right).
 

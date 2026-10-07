@@ -53,6 +53,7 @@ nav = [
   { "Project" = [
     { "Changelog" = "project/changelog.md" },
     { "Security" = "project/security.md" },
+    { "Photo corpus" = "project/corpus.md" },
     { "Development" = "development.md" },
     { "Contributing" = "https://github.com/gudoshnikovn/libphash/blob/main/CONTRIBUTING.md" },
   ] },
