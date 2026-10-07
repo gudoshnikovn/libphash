@@ -651,7 +651,7 @@ PH_API ph_error_t ph_context_set_whash_remove_max_haar_ll(ph_context_t *ctx, int
  *       (pHash, aHash, dHash, mHash, wHash, BMH, Radial).
  * @note While this is enabled, the color algorithms — ph_compute_color_hash() and
  *       ph_compute_color_moments_hash(), and ph_compute_digest() for either — fail
- *       with @c PH_ERR_REQUIRES_COLOR: a
+ *       with `PH_ERR_REQUIRES_COLOR`: a
  *       single-channel image has no color statistics to compute. Load with this
  *       disabled if you need them.
  *
@@ -937,20 +937,26 @@ PH_NODISCARD PH_API ph_error_t ph_load_from_pixels(ph_context_t *ctx, const uint
                                                    int width, int height, int channels, int stride);
 
 // --- uint64_t Hash Algorithms ---
-//
-// The four algorithms below share one contract. Each hashes the image loaded into
-// @p ctx into all 64 bits of @p out_hash, compared with ph_hamming_distance() or
-// ph_similarity(). The value depends on the decoded pixels and on the context's settings
-// -- the grayscale weights, and everything that shapes the pixels at load time
-// (decode scale, auto-orientation, alpha mode) -- so hashes are comparable only between
-// contexts configured alike. The cost grows with the source image's pixel count: the
-// reduction to the hash's working size reads every pixel. Return values:
-//   - PH_SUCCESS, with the hash in @p out_hash;
-//   - PH_ERR_INVALID_ARGUMENT for a NULL @p ctx or @p out_hash;
-//   - PH_ERR_EMPTY_IMAGE if no image is loaded (see ph_is_loaded());
-//   - PH_ERR_ALLOCATION_FAILED if the working buffers cannot be allocated.
-// @p out_hash is written only on success. ph_compute_multi() computes any combination
-// of the four in one call.
+
+/**
+ * @name The four 64-bit hashes
+ *
+ * The four algorithms below share one contract. Each hashes the image loaded into
+ * `ctx` into all 64 bits of `out_hash`, compared with ph_hamming_distance() or
+ * ph_similarity(). The value depends on the decoded pixels and on the context's settings
+ * -- the grayscale weights, and everything that shapes the pixels at load time
+ * (decode scale, auto-orientation, alpha mode) -- so hashes are comparable only between
+ * contexts configured alike. The cost grows with the source image's pixel count: the
+ * reduction to the hash's working size reads every pixel. Return values:
+ *   - @c PH_SUCCESS, with the hash in `out_hash`;
+ *   - @c PH_ERR_INVALID_ARGUMENT for a NULL `ctx` or `out_hash`;
+ *   - @c PH_ERR_EMPTY_IMAGE if no image is loaded (see ph_is_loaded());
+ *   - @c PH_ERR_ALLOCATION_FAILED if the working buffers cannot be allocated.
+ *
+ * `out_hash` is written only on success. ph_compute_multi() computes any combination
+ * of the four in one call.
+ * @{
+ */
 
 /**
  * @brief Average hash: one bit per cell of an 8x8 grayscale reduction, set where the
@@ -994,6 +1000,7 @@ PH_NODISCARD PH_API ph_error_t ph_compute_phash(ph_context_t *ctx, uint64_t *out
  * @ingroup hash64
  */
 PH_NODISCARD PH_API ph_error_t ph_compute_whash(ph_context_t *ctx, uint64_t *out_hash);
+/** @} */
 
 /**
  * @brief Flags selecting which uint64_t hash algorithms to compute in a single
@@ -1264,13 +1271,13 @@ PH_API ph_error_t ph_batch_options_init(ph_batch_options_t *options);
  * applies with that template's `max_pixels` as the bound.
  *
  * @return
- * - @c PH_ERR_INVALID_ARGUMENT: as ph_hash_files(), or @c struct_size smaller than any
+ * - `PH_ERR_INVALID_ARGUMENT`: as ph_hash_files(), or @c struct_size smaller than any
  *   version of the struct, or a negative @c threads; nothing was written.
- * - @c PH_ERR_ALLOCATION_FAILED: as ph_hash_files() -- no item was worked on.
- * - @c PH_ERR_CANCELLED: @c should_continue stopped the batch before every item was
+ * - `PH_ERR_ALLOCATION_FAILED`: as ph_hash_files() -- no item was worked on.
+ * - `PH_ERR_CANCELLED`: @c should_continue stopped the batch before every item was
  *   started. The items that were started have their real status; the rest have
  *   @c PH_ERR_CANCELLED and zeroed hashes.
- * - @c PH_SUCCESS: every item was processed; inspect each `status`.
+ * - `PH_SUCCESS`: every item was processed; inspect each `status`.
  * @ingroup batch
  */
 PH_NODISCARD PH_API ph_error_t ph_hash_files_ex(ph_batch_item_t *items, size_t n, uint32_t flags,
@@ -1477,7 +1484,21 @@ PH_NODISCARD PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_dige
  * @ingroup compare
  */
 PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
-/* Contract shared by every function below that reads a ph_digest_t.
+
+/**
+ * @brief Normalized similarity between two 64-bit hashes, in [0.0, 1.0].
+ *
+ * 1.0 means identical hashes, 0.0 means every bit differs. Unlike
+ * ph_hamming_distance(), this is comparable across algorithms of different
+ * bit widths.
+ * @ingroup compare
+ */
+PH_API double ph_similarity(uint64_t a, uint64_t b);
+
+/**
+ * @name Comparing digests
+ *
+ * The contract shared by every function below that reads a ph_digest_t.
  *
  * ph_digest_t is a flat struct callers (including FFI bindings) may fill in
  * themselves, and `size` can hold values `data` cannot: a digest whose `size`
@@ -1488,7 +1509,7 @@ PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
  * quantized DCT coefficients returns a plausible number that means nothing, and this
  * is how that call fails instead. PH_DIGEST_KIND_UNSPECIFIED -- the zero a hand-filled
  * struct holds -- is accepted everywhere, so a binding that does not set the field gets
- * no protection but no error either.
+ * no protection but no error either. A digest that breaks the contract gets:
  *
  *   - functions returning ph_error_t: PH_ERR_INVALID_ARGUMENT;
  *   - distance/similarity functions: -1 (also for a size of 0, which carries no
@@ -1498,6 +1519,7 @@ PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
  * PH_DIGEST_KIND_BITS; ph_l2_distance() is for PH_DIGEST_KIND_VECTOR and
  * PH_DIGEST_KIND_VECTOR16; ph_radial_similarity() is for PH_DIGEST_KIND_COEFFICIENTS;
  * ph_histogram_intersection() is for PH_DIGEST_KIND_HISTOGRAM.
+ * @{
  */
 /**
  * @brief Number of differing bits between two @c PH_DIGEST_KIND_BITS digests (mHash, BMH,
@@ -1517,16 +1539,6 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
  * @ingroup compare
  */
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b);
-
-/**
- * @brief Normalized similarity between two 64-bit hashes, in [0.0, 1.0].
- *
- * 1.0 means identical hashes, 0.0 means every bit differs. Unlike
- * ph_hamming_distance(), this is comparable across algorithms of different
- * bit widths.
- * @ingroup compare
- */
-PH_API double ph_similarity(uint64_t a, uint64_t b);
 
 /**
  * @brief Normalized similarity between two digests, in [0.0, 1.0].
@@ -1613,6 +1625,7 @@ PH_NODISCARD PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const 
  */
 PH_NODISCARD PH_API ph_error_t ph_histogram_intersection(const ph_digest_t *a, const ph_digest_t *b,
                                                          double *out_similarity);
+/** @} */
 
 /** Buffer size that holds the text form of any digest, terminator included: the longest
  *  kind name plus its colon ("coefficients:", 13 characters), two hex digits per byte of
