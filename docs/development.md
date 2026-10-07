@@ -430,9 +430,15 @@ the code follows is held by the gate rather than by habit.
 ### Documentation site
 
 `docs/` is the source of the documentation site and is read on GitHub as it is, so a page
-works in both places. `make site` builds it with the Zensical version pinned in
-`scripts/site-requirements.txt` into `build/site/`, `make site-serve` serves it with live
-reload. Both first run Doxygen over the header and write the API reference from its XML
+works in both places. `make site` builds it into `build/site/`, `make site-serve` serves it
+with live reload. Both need Python 3.12 or later and install the Python packages
+themselves: `scripts/site-requirements.txt` is a lock, compiled from
+`scripts/site-requirements.in`, that pins every package the site is built with, its
+dependencies included, with hashes, and `scripts/site.sh` installs it into
+`build/site-venv/` — with [uv](https://docs.astral.sh/uv/) when it is installed, with
+`venv` and pip otherwise — on the first run and whenever the lock changes. A version is
+raised in the `.in` file, and the lock compiled again with the command written in it.
+Both first run Doxygen over the header and write the API reference from its XML
 as pages of the site into `docs/api/` (ignored by git) with `scripts/api_pages.py`, one
 page per topic, every declaration under an anchor equal to its name; a function missing
 from those pages, or doc-comment markup the script has no rendering for, fails the build.

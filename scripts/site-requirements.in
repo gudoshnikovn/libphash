@@ -1,0 +1,15 @@
+# The documentation site's Python packages: the generator, which scripts/site.sh refuses
+# in any other version (as scripts/format.sh does for clang-format and scripts/api_docs.sh
+# for Doxygen), and what tools/site/render.py draws the figures with.
+#
+# scripts/site-requirements.txt is compiled from this file and pins every package the
+# site is built with, these and their own dependencies, with hashes: the Markdown
+# extensions decide how a page renders and the drawing stack decides the bytes of a
+# figure, so an unpinned dependency could change the site with no change in the
+# repository. A version is raised here, then the lock is compiled again, in one commit:
+#   uv pip compile --universal --python-version 3.12 --generate-hashes \
+#       scripts/site-requirements.in -o scripts/site-requirements.txt
+zensical==0.0.68
+matplotlib==3.11.2
+numpy==2.5.3
+pillow==12.3.0
