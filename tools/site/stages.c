@@ -93,6 +93,14 @@
  *       Prints one JSON object per image: its Radial digest as ph_compute_radial_hash()
  *       computes it under each setting of radial_variants_list[].
  *
+ *   site_stages color_hash <image> <outdir>
+ *       The same for ColorHash: original.ppm, bins.pgm (each pixel's bin, 0 to 107), and
+ *       color_hash.json (the count of every bin, the largest, and the digest, checked
+ *       against ph_compute_color_hash(); for every bin, how many of the 2^24 8-bit colors
+ *       fall into it and their mean; and the error ph_compute_color_hash() returns for the
+ *       image loaded with ph_context_set_load_grayscale(), which must be
+ *       PH_ERR_REQUIRES_COLOR).
+ *
  *   site_stages time <image>
  *       Times decoding the image and every hash on it (the first hash on a loaded image,
  *       caches dropped before each run), and the variants of time_cases[]; prints the
@@ -1679,6 +1687,138 @@ static int radial_variants(int argc, char **argv) {
 
 /* --8<-- [end:radial-variants] */
 
+/* --8<-- [start:color_hash] */
+/* ColorHash recomputed from its stages and checked against ph_compute_color_hash(): the
+ * bin of every pixel, by ph_color_histogram_bin(); the count of each bin; and the digest,
+ * every count scaled against the largest, rounded to nearest (all zero for no pixels).
+ * `bin_of_pixel`, when given, receives each pixel's bin. */
+typedef struct {
+    uint64_t counts[PH_COLOR_BINS], max_count;
+    uint8_t digest[PH_COLOR_BINS];
+} color_stages_t;
+
+static int color_run(ph_context_t *ctx, uint8_t *bin_of_pixel, color_stages_t *s) {
+    const size_t n = (size_t)ctx->image.width * (size_t)ctx->image.height;
+    const size_t channels = (size_t)ctx->image.channels;
+    memset(s, 0, sizeof(*s));
+    for (size_t i = 0; i < n; i++) {
+        const uint8_t *p = ctx->image.raw_rgb + i * channels;
+        int bin = ph_color_histogram_bin(p[0], p[1], p[2]);
+        s->counts[bin]++;
+        if (bin_of_pixel) {
+            bin_of_pixel[i] = (uint8_t)bin;
+        }
+    }
+    for (int b = 0; b < PH_COLOR_BINS; b++) {
+        s->max_count = s->counts[b] > s->max_count ? s->counts[b] : s->max_count;
+    }
+    for (int b = 0; b < PH_COLOR_BINS && s->max_count; b++) {
+        s->digest[b] = (uint8_t)((s->counts[b] * 255 + s->max_count / 2) / s->max_count);
+    }
+
+    ph_digest_t lib;
+    if (ph_compute_color_hash(ctx, &lib) != PH_SUCCESS) {
+        return fail("ph_compute_color_hash failed", NULL);
+    }
+    if (lib.size != PH_COLOR_BINS || memcmp(lib.data, s->digest, PH_COLOR_BINS) != 0) {
+        return fail("ColorHash recomputed from the bin counts differs from "
+                    "ph_compute_color_hash()",
+                    NULL);
+    }
+    return 0;
+}
+
+/* --8<-- [end:color_hash] */
+
+/* site_stages color_hash <image> <outdir> */
+static int stages_color_hash(int argc, char **argv) {
+    (void)argc;
+    const char *outdir = argv[1];
+    ph_context_t *ctx = NULL;
+    if (load(&ctx, argv[0])) {
+        return 1;
+    }
+    const int w = ctx->image.width, h = ctx->image.height;
+    if (ctx->image.channels < 3) {
+        ph_free(ctx);
+        return fail("the example image must be in color", argv[0]);
+    }
+    int status = write_pnm(outdir, "original.ppm", ctx->image.raw_rgb, w, h, 3);
+    uint8_t *bins = malloc((size_t)w * (size_t)h);
+    color_stages_t s;
+    int bad = !bins || color_run(ctx, bins, &s);
+    if (!bad) {
+        status |= write_pnm(outdir, "bins.pgm", bins, w, h, 1);
+    }
+    free(bins);
+    ph_free(ctx);
+
+    /* The same image through the decoder's grayscale: ColorHash refuses it. */
+    ph_error_t gray_err = PH_SUCCESS;
+    if (!bad) {
+        ph_digest_t d;
+        bad = ph_create(&ctx) != PH_SUCCESS ||
+              ph_context_set_load_grayscale(ctx, 1) != PH_SUCCESS ||
+              ph_load_from_file(ctx, argv[0]) != PH_SUCCESS;
+        gray_err = bad ? PH_SUCCESS : ph_compute_color_hash(ctx, &d);
+        ph_free(ctx);
+        if (!bad && gray_err != PH_ERR_REQUIRES_COLOR) {
+            return fail("ph_compute_color_hash() on a grayscale load did not refuse", NULL);
+        }
+    }
+
+    /* What each bin holds: of the 2^24 8-bit colors, how many fall into it, and their
+     * mean, the color a picture of the bin is painted in. */
+    static uint64_t volume[PH_COLOR_BINS], sum[PH_COLOR_BINS][3];
+    for (int r = 0; r < 256; r++) {
+        for (int g = 0; g < 256; g++) {
+            for (int b = 0; b < 256; b++) {
+                int bin = ph_color_histogram_bin(r, g, b);
+                volume[bin]++;
+                sum[bin][0] += (uint64_t)r;
+                sum[bin][1] += (uint64_t)g;
+                sum[bin][2] += (uint64_t)b;
+            }
+        }
+    }
+
+    FILE *f = bad ? NULL : open_out(outdir, "color_hash.json");
+    if (f) {
+        json_t j = {f, 0};
+        json_int(&j, "width", w);
+        json_int(&j, "height", h);
+        json_int(&j, "bins_rg", PH_COLOR_BINS_RG);
+        json_int(&j, "bins_by", PH_COLOR_BINS_BY);
+        json_int(&j, "bins_wb", PH_COLOR_BINS_WB);
+        json_key(&j, "counts");
+        for (int b = 0; b < PH_COLOR_BINS; b++) {
+            fprintf(f, "%s%llu", b ? ", " : "[", (unsigned long long)s.counts[b]);
+        }
+        fputc(']', f);
+        json_int(&j, "max_count", (long long)s.max_count);
+        json_hexbytes(&j, "digest", s.digest, PH_COLOR_BINS);
+        json_key(&j, "volume");
+        for (int b = 0; b < PH_COLOR_BINS; b++) {
+            fprintf(f, "%s%llu", b ? ", " : "[", (unsigned long long)volume[b]);
+        }
+        fputc(']', f);
+        json_key(&j, "bin_color");
+        for (int b = 0; b < PH_COLOR_BINS; b++) {
+            fputs(b ? ", [" : "[[", f);
+            for (int c = 0; c < 3; c++) {
+                fprintf(f, "%s%.1f", c ? ", " : "",
+                        volume[b] ? (double)sum[b][c] / (double)volume[b] : 0.0);
+            }
+            fputc(']', f);
+        }
+        fputc(']', f);
+        json_string(&j, "load_grayscale", ph_get_error_string(gray_err));
+        json_end(&j);
+        status |= fclose(f) != 0;
+    }
+    return bad || !f ? 1 : status;
+}
+
 /* --8<-- [start:compare] */
 /* One algorithm's comparison of two digests by its own metric; 0 when it does not apply. */
 static int compare(const ph_digest_t *a, const ph_digest_t *b, double *out) {
@@ -1980,6 +2120,7 @@ static const struct {
     {"radial", "<image> <outdir>", 2, 0, stages_radial},
     {"radial-profiles", "<reference> <image>...", 1, 1, radial_profiles},
     {"radial-variants", "<image>...", 1, 1, radial_variants},
+    {"color_hash", "<image> <outdir>", 2, 0, stages_color_hash},
     {"measure", "<reference> <variant>...", 2, 1, measure},
     {"pairs", "<image> <image>...", 2, 1, pairs},
     {"corpus", "<outdir>", 1, 0, corpus},

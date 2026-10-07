@@ -302,7 +302,11 @@ Both need color: they return `PH_ERR_REQUIRES_COLOR` on a grayscale image.
   **Blind spots**, both inherent to a histogram and both asserted in the tests: it ignores
   where the colors are, so a 90° rotation does not move it at all and neither does
   shuffling the pixels; and flat colors that share a chroma bin and an intensity third —
-  black against dark gray, light gray against white — are indistinguishable.
+  black against dark gray, light gray against white — are indistinguishable. The
+  converse: neutral gray is the corner of four chroma bins, so a tint of one level moves
+  near-gray pixels to another bin, and an image with large neutral areas can score
+  against its tinted copy as low as against a different image
+  ([measured](theory/color-hash.md#gray-on-a-corner)).
 - **ColorMoments** (`ph_compute_color_moments_hash`) — the mean, standard deviation and
   skewness of each channel: nine features in an 18-byte digest, each a signed 16-bit
   big-endian fixed-point number in units of 1/128. Follows the formulas of Stricker &

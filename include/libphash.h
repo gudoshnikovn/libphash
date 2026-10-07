@@ -1405,7 +1405,7 @@ PH_NODISCARD PH_API ph_error_t ph_compute_color_moments_hash(ph_context_t *ctx,
  *
  * @note Like every color histogram it discards spatial layout entirely: an image and a
  *       shuffling of its pixels hash identically. Use it alongside a structural hash, not
- *       instead of one.
+ *       instead of one. See docs/theory/color-hash.md.
  * @return @c PH_SUCCESS, @c PH_ERR_INVALID_ARGUMENT for a NULL argument,
  *         @c PH_ERR_EMPTY_IMAGE if no image is loaded, or @c PH_ERR_REQUIRES_COLOR.
  * @ingroup digests
@@ -1592,7 +1592,7 @@ PH_NODISCARD PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const 
  * @note Swain & Ballard normalize by the reference histogram, which makes their score
  *       asymmetric when the two images hold different pixel counts. This normalizes each
  *       side by its own total, which agrees with them whenever the counts match and is
- *       symmetric when they do not.
+ *       symmetric when they do not. See docs/theory/color-hash.md.
  *
  * @param a,b Digests of equal size, both from ph_compute_color_hash() (or untagged).
  * @param out_similarity Receives the score. Untouched on error.

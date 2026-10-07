@@ -741,6 +741,11 @@ gray against white. Three intensity bins is what fits beside 6 × 6 chroma insid
 (5×5×5 has no such collisions and separates at 2.83). The limit is asserted as a limit in
 the tests rather than left to be discovered.
 
+**What 6 × 6 × 3 separates too finely:** with six bins on each chroma axis, neutral gray
+is the corner of four bins, not the middle of one, so a tint of one level, invisible,
+moves a near-gray pixel to another bin. An image with large neutral areas can lose much of
+its histogram to it ([measured](theory/color-hash.md#gray-on-a-corner)).
+
 **Delta:**
 
 | Difference | Class | Note |
@@ -749,7 +754,7 @@ the tests rather than left to be discovered.
 | Bins scaled against the largest bin, not the pixel count | deliberate | With 108 bins the average bin holds under 1% of the image, which as a fraction of the total quantizes to two or three of 255 levels. The comparison renormalises each side by its own sum, so nothing depends on the choice. |
 | Intersection normalized by each side's own total | deliberate | The formula as stated normalizes by the reference histogram, which makes the score asymmetric when the two images hold different pixel counts. A comparison that depends on the order of its arguments is a defect. The two agree whenever the counts match. |
 | Spatial layout discarded entirely | inherent to the method | An image and a shuffling of its pixels hash identically, and a 90° rotation does not move the hash at all — asserted in the tests, since it is the property the algorithm exists for. Use it alongside a structural hash. |
-| A small local edit barely moves it | inherent, measured | A patch covering 4% of the frame moves the distance by 0.03, where the benign transformations move it by 0.09. A global statistic notices a local change in proportion to its area. |
+| A small local edit barely moves it | inherent, measured | A global statistic notices a local change at most in proportion to its area: no patch up to 16 % of the frame takes an image below the score that accepts 95 % of copies ([measured](theory/color-hash.md#edits-that-change-the-picture)). |
 
 ---
 

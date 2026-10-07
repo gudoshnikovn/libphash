@@ -20,13 +20,13 @@
  *     by = 2B - R - G     blue against yellow
  *     wb = R + G + B      light against dark
  *
- * at 6 x 6 x 3 = 108 bins. On the property corpus that separates at 3.95, and the number
+ * at 6 x 6 x 3 = 108 bins. On the property corpus that separates at 4.01, and the number
  * holds on a second corpus at a different resolution (3.87). Fifteen other quantisations were
  * measured -- RGB cubes from 3x3x3 to 5x5x5, HSV at 8x4x4 and 12x3x3, and the opponent axes at nine
  * resolutions; the full table is in docs/algorithm-provenance.md.
  *
  * Two of those scored higher and were rejected on evidence the corpus cannot show. Both
- * 6x6x1 (4.28) and 9x9x1 (3.94) drop the intensity axis, which makes them invariant to
+ * 6x6x1 (4.28) and 9x9x1 (3.92) drop the intensity axis, which makes them invariant to
  * exposure -- and makes a black image and a white image produce the same hash, along with
  * every other pair of flat greys. A corpus of colourful pictures never notices. The
  * flat-colour check in tests/src/test_color_hash.c is there so that no future tuning
@@ -36,7 +36,13 @@
  * matches and whose total intensity falls in the same third -- black against dark grey,
  * light grey against white. Three intensity bins is what fits beside 6x6 chroma inside
  * PH_DIGEST_MAX_BYTES, and chroma resolution is worth more here than intensity resolution
- * (5x5x5 has no such collisions and separates at 2.77).
+ * (5x5x5 has no such collisions and separates at 2.83).
+ *
+ * The converse limit: with an even number of bins on each chroma axis, neutral grey
+ * (r - g = 0, 2b - r - g = 0) is the corner of four bins, not the middle of one -- r - g = 0
+ * is the last value of bin 2 and r - g = 1 the first of bin 3. A tint of one level moves a
+ * near-grey pixel to another bin, and an image with large neutral areas can lose much of
+ * its histogram to it; docs/theory/color-hash.md measures how often.
  */
 #include "context.h"
 #include "digest.h"
