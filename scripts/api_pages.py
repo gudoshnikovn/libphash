@@ -8,6 +8,12 @@ look, its dark theme and its search, and a page elsewhere on the site links stra
 a function: `[ph_compute_ahash()](../api/hash64.md#ph_compute_ahash)`, an anchor the
 strict build checks.
 
+Each topic opens with a summary of its declarations. The generator also writes what it can
+compute rather than what a doc comment says: under a function, the examples (examples/*.c)
+that call it and the site pages that link to its anchor; on the overview, an A–Z index of
+every symbol. A path such as `docs/algorithms.md section 8` in a doc comment becomes a link to
+that page of the site, and a path to a file that does not exist fails the generation.
+
 Every declaration is written exactly once, under an anchor equal to its name, in header
 order. A member Doxygen lists under two topics (a function in a `@name` block of one
 topic with an `@ingroup` of another) goes on the page its `@ingroup` names. The set of
@@ -21,10 +27,19 @@ import os
 import pathlib
 import re
 import sys
+import unicodedata
 import xml.etree.ElementTree as ET
+
+from check_site_links import excluded, is_excluded
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 HEADER = ROOT / "include" / "libphash.h"
+DOCS = ROOT / "docs"
+EXAMPLES = ROOT / "examples"
+CONFIG = ROOT / "zensical.toml"
+
+# A path to a page of docs/ in a doc comment, optionally with the number of its section.
+DOC_PATH = re.compile(r"\bdocs/([\w/-]+\.md)(?: section (\d+))?")
 
 # Signatures longer than this put one parameter per line.
 SIGNATURE_WIDTH = 88
@@ -53,6 +68,77 @@ def plain(elem):
 
 def indent(text, prefix="    "):
     return "\n".join(prefix + line if line else line for line in text.split("\n"))
+
+
+def slugify(heading):
+    """The anchor of a heading, as the site forms it (pymdownx.slugs, case = "lower")."""
+    text = re.sub(r"</?[^>]*>|`", "", unicodedata.normalize("NFC", heading)).strip().lower()
+    return re.sub(r"[^\w\- ]", "", text).replace(" ", "-")
+
+
+def strip_c(text):
+    """C source with its comments and string and character literals blanked out."""
+    return re.sub(r"//[^\n]*|/\*.*?\*/|\"(?:\\.|[^\"\\\n])*\"|'(?:\\.|[^'\\\n])*'",
+                  lambda m: re.sub(r"[^\n]", " ", m.group(0)), text, flags=re.S)
+
+
+class Site:
+    """What the rest of the site says about the API: pages, their titles, their links."""
+
+    def __init__(self):
+        config = CONFIG.read_text(encoding="utf-8")
+        self.repo = re.search(r'^repo_url\s*=\s*"([^"]+)"', config, re.M).group(1)
+        skip = excluded()
+        self.pages = {}  # path under docs/ -> text
+        for path in sorted(DOCS.rglob("*.md")):
+            rel = path.relative_to(DOCS).as_posix()
+            if not is_excluded(rel, skip):
+                self.pages[rel] = path.read_text(encoding="utf-8")
+
+    def title(self, rel):
+        """A page by its first heading: unlike its entry in the navigation ("Overview"
+        names two pages), it says which page it is."""
+        m = re.search(r"^# (.+)$", self.pages[rel], re.M)
+        if not m:
+            raise GenError(f"docs/{rel}: no level-1 heading to name the page by")
+        return re.sub(r"`|\s*\{[^}]*\}$", "", m.group(1))
+
+    def section(self, rel, number):
+        """The anchor of the numbered section `## <number>. ...` of a page."""
+        found = re.findall(rf"^#{{2,3}} {number}\. (.+)$", self.pages[rel], re.M)
+        if len(found) != 1:
+            raise GenError(f"docs/{rel}: {len(found)} headings numbered {number}")
+        return slugify(f"{number}. {found[0]}")
+
+    def explained(self):
+        """Symbol name -> the pages outside the reference that link to its anchor."""
+        out = {}
+        for rel, text in self.pages.items():
+            if rel.startswith("api/"):
+                continue
+            text = re.sub(r"^(```|~~~).*?^\1", "", text, flags=re.M | re.S)
+            text = re.sub(r"(`+).+?\1", "", text, flags=re.S)
+            base = pathlib.PurePosixPath(rel).parent
+            for target, name in re.findall(r"\]\(([^)#\s]*api/\w+\.md)#([\w.]+)\)", text):
+                if os.path.normpath(base / target).startswith("api" + os.sep):
+                    out.setdefault(name, [])
+                    if rel not in out[name]:
+                        out[name].append(rel)
+        return out
+
+    def examples(self, names):
+        """Function name -> the example sources that call it, as paths in the repository."""
+        out = {}
+        for path in sorted(EXAMPLES.rglob("*.c")):
+            code = strip_c(path.read_text(encoding="utf-8"))
+            rel = path.relative_to(ROOT).as_posix()
+            for name in names:
+                if re.search(rf"\b{name}\s*\(", code):
+                    out.setdefault(name, []).append(rel)
+        return out
+
+    def github(self, rel):
+        return f"{self.repo}/blob/main/{rel}"
 
 
 class Header:
@@ -84,9 +170,10 @@ class Header:
 
 
 class Reference:
-    def __init__(self, xml_dir, header):
+    def __init__(self, xml_dir, header, site):
         self.xml_dir = pathlib.Path(xml_dir)
         self.header = header
+        self.site = site
         self.groups = {}  # topic -> compounddef
         for topic in header.topics:
             path = self.xml_dir / f"group__{topic}.xml"
@@ -99,6 +186,8 @@ class Reference:
         self.home = {}  # memberdef id -> topic
         self.where = ""
         self._place()
+        self.explained = site.explained()
+        self.used = site.examples(header.exported)
 
     # -- where everything goes ---------------------------------------------------
 
@@ -163,7 +252,23 @@ class Reference:
         if not text:
             return ""
         text = collapse(text)
-        return f"\x00{text}\x01" if code else escape(text)
+        if code:
+            return f"\x00{text}\x01"
+        out, pos = [], 0
+        for m in DOC_PATH.finditer(text):
+            out += [escape(text[pos:m.start()]), self._doc_link(m)]
+            pos = m.end()
+        return "".join(out) + escape(text[pos:])
+
+    def _doc_link(self, m):
+        """A link to the page of the site a `docs/<page>.md [section N]` path names."""
+        rel, number = m.group(1), m.group(2)
+        if rel not in self.site.pages or rel.startswith("api/"):
+            raise GenError(f"{self.where}: docs/{rel} is not a page of the site")
+        label = escape(self.site.title(rel))
+        if number:
+            return f"[{label}, section {number}](../{rel}#{self.site.section(rel, number)})"
+        return f"[{label}](../{rel})"
 
     def _inline_child(self, child, page, code):
         tag = child.tag
@@ -206,7 +311,8 @@ class Reference:
             elif text.strip():
                 out.append(f"`{text}`")
         if len(parts) == 1 and not parts[0][1]:
-            return self._autolink(parts[0][0])
+            m = DOC_PATH.fullmatch(parts[0][0].strip())
+            return self._doc_link(m) if m else self._autolink(parts[0][0])
         return "".join(out)
 
     def _autolink(self, text):
@@ -385,8 +491,8 @@ class Reference:
     def function(self, m, name, page):
         extra = {}
         body = self.description(m, page, extra)
-        out = [f"### `{name}()` {{ #{name} }}",
-               "```c\n" + self.signature(m, name) + "\n```"]
+        out = [self.heading(name, "()"), "```c\n" + self.signature(m, name) + "\n```",
+               self.meta(m, name, page)]
         out += body
         if "params" in extra:
             rows = extra["params"]
@@ -410,24 +516,58 @@ class Reference:
             else:
                 out.append("**Returns** " + first)
             out += rest
+        return out + self.related(name, page)
+
+    @staticmethod
+    def heading(name, suffix=""):
+        """A declaration's heading. The page's table of contents is a narrow column, so its
+        entry breaks a long name only after an underscore, never inside a word."""
+        label = name.replace("_", "_<wbr>") + suffix
+        return f"### `{name}{suffix}` {{ #{name} data-toc-label=\"{label}\" }}"
+
+    def meta(self, m, name, page):
+        """What the declaration itself says about the call: nodiscard, and what it returns."""
+        facts = []
         if name in self.header.nodiscard:
-            out.append("Declared `PH_NODISCARD`: the compiler warns when the returned "
-                       "value is ignored.")
-        return out
+            facts.append("nodiscard")
+        ret = plain(m.find("type"))
+        if ret != "void":
+            base = re.sub(r"\b(const|struct)\b|\*", "", ret).strip()
+            link = self.href(self.names[base], page) if base in self.names else None
+            facts.append(f"returns [`{ret}`]({link})" if link else f"returns `{ret}`")
+        return " · ".join(facts) + "\n{ .ph-meta }" if facts else ""
+
+    def related(self, name, page):
+        """The examples that call a declaration and the pages that explain it."""
+        out = []
+        files = self.used.get(name, [])
+        if files:
+            out.append("**Used in** " + " · ".join(
+                f"[`{f.removeprefix('examples/')}`]({self.site.github(f)})" for f in files))
+        pages = self.explained.get(name, [])
+        if pages:
+            out.append("**Explained in** " + " · ".join(
+                f"[{escape(self.site.title(p))}](../{p})" for p in pages))
+        return [line + "\n{ .ph-related }" for line in out]
 
     def enum(self, m, name, page):
         extra = {}
-        out = [f"### `{name}` {{ #{name} }}"] + self.description(m, page, extra)
+        out = [self.heading(name)] + self.description(m, page, extra)
         self._no_extra(extra)
         lines = ["| Name | Value | Description |", "|---|---|---|"]
         for v in m.findall("enumvalue"):
             vname = v.findtext("name")
             value = plain(v.find("initializer")).lstrip("=").strip()
             self.where = f"{page}: {name}::{vname}"
-            lines.append(f"| <span id=\"{vname}\"></span>`{vname}` | `{value}` | "
-                         f"{self.one_line(v, page)} |")
+            lines.append(f"| <span id=\"{vname}\"></span>{self.name_cell(vname)} | "
+                         f"{self.name_cell(value)} | {self.one_line(v, page)} |")
         out.append("\n".join(lines))
-        return out
+        return out + self.related(name, page)
+
+    @staticmethod
+    def name_cell(name):
+        """A name in a narrow table column: it breaks after an underscore, not mid-word."""
+        return f"<code class=\"ph-name\">{name.replace('_', '_<wbr>')}</code>"
 
     def typedef(self, m, name, page):
         definition = collapse(m.findtext("definition"))
@@ -435,18 +575,18 @@ class Reference:
         if ptr:
             definition = f"typedef {ptr.group(1).strip()} (*{ptr.group(2)}){ptr.group(3)}"
         extra = {}
-        out = [f"### `{name}` {{ #{name} }}", f"```c\n{definition};\n```"]
+        out = [self.heading(name), f"```c\n{definition};\n```"]
         out += self.description(m, page, extra)
         self._no_extra(extra)
-        return out
+        return out + self.related(name, page)
 
     def define(self, m, name, page):
         extra = {}
         value = plain(m.find("initializer"))
-        out = [f"### `{name}` {{ #{name} }}", f"```c\n#define {name} {value}\n```"]
+        out = [self.heading(name), f"```c\n#define {name} {value}\n```"]
         out += self.description(m, page, extra)
         self._no_extra(extra)
-        return out
+        return out + self.related(name, page)
 
     def struct(self, refid, page):
         _, s = self.structs[refid]
@@ -457,7 +597,7 @@ class Reference:
                                  "detaileddescription", "location", "listofallmembers"):
                 self.fail(child)
         extra = {}
-        out = [f"### `{name}` {{ #{name} }}"] + self.description(s, page, extra)
+        out = [self.heading(name)] + self.description(s, page, extra)
         self._no_extra(extra)
         lines = ["| Type | Field | Description |", "|---|---|---|"]
         for f in s.iter("memberdef"):
@@ -468,7 +608,7 @@ class Reference:
                          f"`{fname}{f.findtext('argsstring') or ''}` | "
                          f"{self.one_line(f, page)} |")
         out.append("\n".join(lines))
-        return out
+        return out + self.related(name, page)
 
     def _no_extra(self, extra):
         if extra:
@@ -492,6 +632,7 @@ class Reference:
         extra = {}
         out = [f"# {group.findtext('title')}"] + self.description(group, page, extra)
         self._no_extra(extra)
+        body = []
 
         # Members by kind, each in header order; a @name block is a section of its own.
         by_kind = {}
@@ -521,14 +662,46 @@ class Reference:
                   for sect, members in named]
         if functions:
             chunks.append((functions[1][0][0], "plain", functions))
+        summary = []
         for title, items in sections:
-            out += self.section(title, items, page)
+            body += self.section(title, items, page)
+            summary.append((title, [(what, obj) for _, what, obj in items]))
         for _, what, obj in sorted(chunks, key=lambda c: c[0]):
-            out += self.named_section(*obj, page) if what == "named" else \
-                self.section(*obj, page)
+            if what == "named":
+                body += self.named_section(*obj, page)
+                summary.append((obj[0].findtext("header"),
+                                [("member", m) for m in sorted(obj[1], key=self._line)]))
+            else:
+                body += self.section(*obj, page)
+                summary.append((obj[0], [(w, o) for _, w, o in obj[1]]))
         if by_kind:
             raise GenError(f"{page}: no section for {', '.join(by_kind)}")
+        out += self.summary(summary, page) + body
+        if any(b.startswith("nodiscard") for b in body):
+            # The word under the signature explains itself on hover.
+            out.append("*[nodiscard]: Declared PH_NODISCARD: the compiler warns when the "
+                       "returned value is ignored.")
         return out
+
+    def summary(self, groups, page):
+        """A table per section of the page: each declaration, linked, with its brief."""
+        out, widest = [], 0
+        for title, items in groups:
+            lines = [f"| {escape(title)} | |", "|---|---|"]
+            for what, obj in items:
+                elem = self.structs[obj][1] if what == "struct" else obj
+                name = elem.findtext("compoundname" if what == "struct" else "name")
+                call = "()" if what == "member" and obj.get("kind") == "function" else ""
+                self.where = f"{page}: {name}"
+                brief = " ".join(self.blocks(elem.find("briefdescription"), page, {}))
+                brief = brief.replace("|", "\\|")
+                lines.append(f"| [{self.name_cell(name + call)}](#{name}) | {brief} |")
+                widest = max(widest, len(name + call))
+            out.append("\n".join(lines))
+        # Every table of the summary gives its names the same width, so the briefs of
+        # all of them start in one column.
+        return [f'<div class="ph-summary" style="--ph-name: {widest}ch" markdown>', *out,
+                "</div>"]
 
     def section(self, title, items, page):
         out = [f"## {title}"]
@@ -573,12 +746,35 @@ class Reference:
             brief = " ".join(self.blocks(group.find("briefdescription"), "index.md", extra))
             lines.append(f"- [{group.findtext('title')}]({topic}.md) — {brief}")
         out.append("\n".join(lines))
+        return out + self.a_to_z()
+
+    def a_to_z(self):
+        """Every symbol with an anchor, by name without its ph_/PH_ prefix, under its letter."""
+        titles = {f"{t}.md": g.findtext("title") for t, g in self.groups.items()}
+        functions = set(self.header.exported)
+        letters = {}
+        for name, refid in self.names.items():
+            key = re.sub(r"^ph_", "", name, flags=re.I)
+            letters.setdefault(key[0].upper(), []).append((key.lower(), name, refid))
+        out = ["## Index A–Z { #a-z }",
+               "Every function, type, constant and enumerator, by its name without the "
+               "`ph_` or `PH_` prefix.",
+               " · ".join(f"[{c}](#a-z-{c.lower()})" for c in sorted(letters))]
+        for c in sorted(letters):
+            lines = []
+            for _, name, refid in sorted(letters[c]):
+                page, anchor = self.links[refid]
+                call = "()" if name in functions else ""
+                lines.append(f"- [{self.name_cell(name + call)}]({page}#{anchor}) "
+                             f"<small>{titles[page]}</small>")
+            out += [f"### {c} {{ #a-z-{c.lower()} }}",
+                    '<div class="ph-az" markdown>\n\n' + "\n".join(lines) + "\n\n</div>"]
         return out
 
     def check(self, pages):
         """Every exported function exactly once, and nothing on a page it is not."""
         text = "\n".join("\n\n".join(p) for p in pages.values())
-        shown = re.findall(r"^### `(\w+)\(\)` \{ #\1 \}$", text, re.M)
+        shown = re.findall(r"^### `(\w+)\(\)` \{ #\1 ", text, re.M)
         problems = []
         for name in sorted(set(shown) | set(self.header.exported)):
             n = shown.count(name)
@@ -604,7 +800,7 @@ def main():
         return 2
     xml_dir, out_dir = sys.argv[1], pathlib.Path(sys.argv[2])
     try:
-        ref = Reference(xml_dir, Header(HEADER))
+        ref = Reference(xml_dir, Header(HEADER), Site())
         pages = {f"{t}.md": ref.topic_page(t) for t in ref.groups}
         pages["index.md"] = ref.index_page()
         functions = ref.check(pages)

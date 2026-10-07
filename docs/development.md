@@ -442,6 +442,12 @@ Both first run Doxygen over the header and write the API reference from its XML
 as pages of the site into `docs/api/` (ignored by git) with `scripts/api_pages.py`, one
 page per topic, every declaration under an anchor equal to its name; a function missing
 from those pages, or doc-comment markup the script has no rendering for, fails the build.
+The script also writes what it computes rather than reads: under each declaration, the
+examples that call it and the site pages that link to its anchor (so a new page that
+explains a function appears there by itself), and an A–Z index on the overview. A path
+such as `docs/batch.md` or `docs/algorithms.md section 8` in a doc comment becomes a link
+to that page or section; a path to a page or a section number that does not exist fails
+the build.
 The build is strict, and three rules keep it green:
 
 - **Navigation** is `nav` in `zensical.toml`; a new page goes there or the build fails.

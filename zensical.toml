@@ -58,6 +58,10 @@ nav = [
   ] },
 ]
 
+# The API reference's own layout: its summary tables, names that break only after an
+# underscore, and the A-Z index (scripts/api_pages.py writes the markup it styles).
+extra_css = ["stylesheets/api.css"]
+
 extra_javascript = [
   "javascripts/mathjax.js",
   "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js",

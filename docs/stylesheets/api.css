@@ -1,0 +1,59 @@
+/* The API reference pages, written by scripts/api_pages.py. */
+
+/* A name in a table breaks only where the generator put a <wbr>, after an underscore,
+   never inside a word; on a wide screen it does not break at all. */
+.md-typeset code.ph-name {
+  word-break: normal;
+  overflow-wrap: normal;
+}
+@media screen and (min-width: 45em) {
+  /* Chrome breaks at a <wbr> even under white-space: nowrap; a hidden one is no break. */
+  .md-typeset code.ph-name wbr {
+    display: none;
+  }
+  /* The summary's tables share one width for the names (--ph-name, the longest name on
+     the page, in characters of the code font), so their briefs line up. */
+  .md-typeset .ph-summary .md-typeset__table,
+  .md-typeset .ph-summary table:not([class]) {
+    display: table;
+    width: 100%;
+  }
+  .md-typeset .ph-summary td:first-child {
+    width: 1%;
+  }
+  .md-typeset .ph-summary td:first-child a {
+    display: inline-block;
+    min-width: calc(var(--ph-name) + 0.6em);
+    font-family: var(--md-code-font-family);
+    font-size: 0.85em;
+  }
+  .md-typeset .ph-summary td:first-child a code {
+    font-size: 1em;
+  }
+}
+
+/* The line under a signature: facts the declaration states. */
+.md-typeset .ph-meta {
+  margin-top: -0.6em;
+  color: var(--md-default-fg-color--light);
+  font-size: 0.7rem;
+}
+
+/* The examples that call a declaration and the pages that explain it. */
+.md-typeset .ph-related {
+  font-size: 0.7rem;
+}
+
+/* The A-Z index: short entries, in as many columns as the width holds. */
+.md-typeset .ph-az ul {
+  columns: 16rem;
+  margin-left: 0;
+  list-style: none;
+}
+.md-typeset .ph-az li {
+  margin-left: 0;
+  break-inside: avoid;
+}
+.md-typeset .ph-az small {
+  color: var(--md-default-fg-color--light);
+}
