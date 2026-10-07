@@ -319,7 +319,7 @@ grayscale image, as costly as the first.
 
 ??? info "How this was measured"
 
-    --8<-- "docs/assets/generated/timing/table.md"
+    --8<-- "docs/assets/generated/bmh/timing-table.md"
 
     Each case runs once to warm up, then until it has run at least five times and for at
     least a second; the time is the minimum. The grayscale image and the area grid the

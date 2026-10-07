@@ -101,9 +101,22 @@ def describe(data):
             f"{decoders['jpeg']} decoding the JPEGs")
 
 
+# The nine hashes at their default settings, by ph_algorithm_name(): the rows every page's
+# table shows, beside decoding, so a page compares its hash with the others.
+DEFAULTS = ("ahash", "dhash", "phash", "whash", "bmh", "mhash", "radial", "color_hash",
+            "color_moments")
+
+
+def own_cases(algo, cases):
+    """A page's own rows: its hash and the variants of it that time_cases[] names after
+    it (whash_full, mhash_size_*, radial_*)."""
+    return [c for c in cases if c == algo or c.startswith(algo + "_")]
+
+
 def write_timing(data, algorithms, out_dir):
-    """The files the pages include: per algorithm the passport's Cost row, and the
-    footnote and the full table every Cost row and section refers to."""
+    """The files the pages include: per algorithm the passport's Cost row and the table of
+    its Cost section (decoding, every hash at its defaults, and the page's own variants,
+    in bold), and the footnote; and the full table of every case."""
     small, large = data["small"], data["large"]
     size = f"{small['width']}×{small['height']}"
     mpx = f"{megapixels(large)} Mpx"
@@ -124,10 +137,21 @@ def write_timing(data, algorithms, out_dir):
         f.write(f"[^cost]: Measured when this site was built, on {describe(data)}: the "
                 "minimum of at least five runs after a warm-up, each the first hash on a "
                 "freshly loaded image. The section Cost has the code.\n")
-    rows = ["| Case | " + f"{size} | {mpx} |", "|---|---|---|"]
-    for case in small["cases"]:
-        rows.append(f"| `{case}` | {ms(small['cases'][case]['min_ms'])} ms | "
-                    f"{ms(large['cases'][case]['min_ms'])} ms |")
+    def table(cases, bold=()):
+        rows = ["| Case | " + f"{size} | {mpx} |", "|---|---|---|"]
+        for case in cases:
+            b = "**" if case in bold else ""
+            rows.append(f"| {b}`{case}`{b} | {b}{ms(small['cases'][case]['min_ms'])} ms{b} | "
+                        f"{b}{ms(large['cases'][case]['min_ms'])} ms{b} |")
+        return "\n".join(rows) + "\n"
+
+    head = f"Measured on {describe(data)}; the minimum of the runs."
     with open(os.path.join(timing_dir, "table.md"), "w") as f:
-        f.write(f"Measured on {describe(data)}; the minimum of the runs.\n\n"
-                + "\n".join(rows) + "\n")
+        f.write(f"{head}\n\n" + table(small["cases"]))
+    for algo in algorithms:
+        own = own_cases(algo, small["cases"])
+        shown = ["decode"] + [c for c in DEFAULTS if c in small["cases"]]
+        shown += [c for c in own if c not in shown]
+        with open(os.path.join(out_dir, algo, "timing-table.md"), "w") as f:
+            f.write(f"{head} Decoding, every hash at its default settings, and in bold "
+                    "this page's.\n\n" + table(shown, own))
