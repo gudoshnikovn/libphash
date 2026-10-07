@@ -1,0 +1,11 @@
+/* Every page of the site. */
+
+/* Inline code is a name, a value or a hash: split mid-word, it reads as two. On a wide
+   screen it breaks only at a space, and a table cell grows to hold it; on a narrow one
+   the theme's rule stands, which breaks anywhere rather than push the page sideways. */
+@media screen and (min-width: 45em) {
+  .md-typeset :not(pre) > code {
+    word-break: normal;
+    overflow-wrap: normal;
+  }
+}
