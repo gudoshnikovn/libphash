@@ -33,12 +33,25 @@ plt.rcParams.update({
 
 
 def save(fig, out_dir, name):
-    """Writes name.light.svg and name.dark.svg; `fig` is a function of the theme."""
+    """Writes name.light.svg and name.dark.svg; `fig` is a function of the theme.
+
+    With SITE_PREVIEW set to a directory, every figure is also written there as
+    <algo>/<name>.<theme>.png on its theme's page background, to look at before the
+    page: an SVG is transparent, and an image viewer would show it on the wrong one.
+    """
     os.makedirs(out_dir, exist_ok=True)
+    preview = os.environ.get("SITE_PREVIEW")
     for theme, colors in THEMES.items():
         figure = fig(colors)
         figure.savefig(os.path.join(out_dir, f"{name}.{theme}.svg"), transparent=True,
                        bbox_inches="tight", metadata={"Date": None})
+        if preview:
+            d = os.path.join(preview, os.path.basename(os.path.normpath(out_dir)))
+            os.makedirs(d, exist_ok=True)
+            for ax in figure.axes:  # transparent in the SVG; matplotlib's white otherwise
+                ax.set_facecolor(colors["surface"])
+            figure.savefig(os.path.join(d, f"{name}.{theme}.png"), dpi=110,
+                           bbox_inches="tight", facecolor=colors["surface"])
         plt.close(figure)
 
 

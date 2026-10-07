@@ -13,6 +13,9 @@ corpus_charts.py draws.
 
 Usage: tools/site/render.py --tool build/release/site_stages --image tests/data/photo.jpeg
                             --out docs/assets/generated [--algo ahash,...|all]
+
+With SITE_PREVIEW=<dir> in the environment, every figure is also written to <dir> as a
+PNG on its theme's background (common.save), to look at before the page is built.
 """
 import argparse
 import sys
