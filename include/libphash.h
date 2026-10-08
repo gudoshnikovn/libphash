@@ -585,20 +585,19 @@ PH_API ph_error_t ph_context_set_whash_mode(ph_context_t *ctx, ph_whash_mode_t m
 PH_API ph_error_t ph_context_set_whash_remove_max_haar_ll(ph_context_t *ctx, int enable);
 
 /**
- * @brief Controls whether images are loaded as grayscale by default.
+ * @brief Controls whether ph_load_from_file() and ph_load_from_memory() ask the decoder
+ *        for one grayscale channel instead of color. Off by default.
  *
- * If enabled (non-zero), `ph_load_from_file` and `ph_load_from_memory` will
- * request single-channel data from the decoder. This is significantly faster for
- * algorithms that don't need color (pHash, aHash, dHash, mHash, wHash, BMH, Radial).
+ * A grayscale load skips the library's color-to-gray conversion, and for JPEG the
+ * decoder's color conversion as well; a JPEG's grayscale is then the luma the file stores,
+ * which can differ from the library's conversion by a level. WebP has no grayscale decode
+ * and is loaded in color whatever the setting. The setting applies from the next load.
  *
- * @note Disabled by default for compatibility with ColorHash and custom weights.
- *       Enable it (set to 1) for significant speedup if you only need grayscale hashes
- *       (pHash, aHash, dHash, mHash, wHash, BMH, Radial).
- * @note While this is enabled, the color algorithms — ph_compute_color_hash() and
- *       ph_compute_color_moments_hash(), and ph_compute_digest() for either — fail
- *       with `PH_ERR_REQUIRES_COLOR`: a
- *       single-channel image has no color statistics to compute. Load with this
- *       disabled if you need them.
+ * @note A single-channel image has no color statistics: on one, ph_compute_color_hash()
+ *       and ph_compute_color_moments_hash(), and ph_compute_digest() for either, fail with
+ *       @c PH_ERR_REQUIRES_COLOR. Load in color if you need them.
+ *
+ * When it pays, and what it changes in a hash: docs/guide/loading.md.
  *
  * @param ctx The context.
  * @param enable 1 to enable grayscale loading, 0 to disable (load native channels).
@@ -636,25 +635,19 @@ PH_API ph_error_t ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
 PH_API ph_error_t ph_context_set_alpha_mode(ph_context_t *ctx, ph_alpha_mode_t mode);
 
 /**
- * @brief Controls whether EXIF/metadata orientation is applied automatically
- * right after decoding. On by default.
+ * @brief Controls whether the EXIF orientation is applied right after decoding. On by
+ * default.
  *
- * JPEG files from cameras/phones are often stored in sensor orientation with an
- * EXIF `Orientation` tag (values 1-8) telling viewers how to rotate/mirror them
- * for display; WebP carries the same tag in an `EXIF` chunk, and PNG in an
- * `eXIf` chunk. When enabled (the default), a recognized orientation tag is
- * applied (rotate/mirror, before any hash is computed) so that
- * visually-identical images stored with different orientation tags hash the
- * same — hashing the raw sensor-orientation buffer instead of what a viewer
- * actually displays is a correctness bug, not a neutral default. When
- * disabled, libphash hashes the raw decoded buffer as-is and ignores the tag.
+ * When enabled, the `Orientation` tag (values 1-8) of a JPEG's Exif segment, a WebP's
+ * `EXIF` chunk or a PNG's `eXIf` chunk is applied, turning or mirroring the image before
+ * any hash, so that a hash describes the picture as a viewer shows it. When disabled, the
+ * pixels are hashed as stored. ph_load_from_pixels() carries no orientation. The setting
+ * applies from the next load. See docs/theory/preparation.md.
  *
- * @note Missing or malformed orientation metadata is treated as "no transform
- * needed" rather than an error — this never causes a load to fail.
- * @note Applying a real orientation (2-8) takes a second buffer the size of the
- * decoded image. If that allocation fails, the load returns
- * @c PH_ERR_ALLOCATION_FAILED and no image is loaded, even though the decode itself
- * succeeded: the library never hashes the image in an orientation you did not ask for.
+ * @note A missing or malformed tag reads as 1, no transform; it never fails a load.
+ * @note Applying an orientation of 2-8 takes a second buffer the size of the decoded
+ * image. If it cannot be allocated, the load returns @c PH_ERR_ALLOCATION_FAILED and no
+ * image is loaded, rather than an image in an orientation you did not ask for.
  * @param ctx The context.
  * @param enable 1 to auto-orient using EXIF metadata (default), 0 to hash the
  * raw decoded buffer as-is. Any non-zero value enables it.
@@ -665,34 +658,19 @@ PH_API ph_error_t ph_context_set_alpha_mode(ph_context_t *ctx, ph_alpha_mode_t m
 PH_API ph_error_t ph_context_set_auto_orient(ph_context_t *ctx, int enable);
 
 /**
- * @brief Sets the maximum number of pixels (width * height) an image is allowed to
- *        decode to, before any pixel buffer is allocated. Protects against
- *        decompression-bomb inputs (a small file that declares an enormous image size).
+ * @brief Sets the most pixels, width * height, an image may have. Checked against the
+ *        dimensions a file declares, before any pixel buffer is allocated, so that a small
+ *        file declaring an enormous image is refused cheaply.
+ *
+ * An image over the limit fails to load with @c PH_ERR_IMAGE_TOO_LARGE. Two fixed limits
+ * apply whatever is set here: INT_MAX (2147483647) pixels, as the library indexes pixels
+ * in `int`; and, for ph_load_from_file() and ph_load_from_memory() only, 1000000 pixels on
+ * either side, so that an image of one enormous row cannot pass the area limit.
+ * ph_load_from_pixels() is held to the pixel count only. See docs/guide/loading.md.
  *
  * @param ctx The context.
- * @param max_pixels Maximum width*height allowed. Defaults to 256 * 1024 * 1024
- *                    (256 megapixels). 0 means "no limit of my own" -- see the note
- *                    below on the implementation ceiling; it is not truly unlimited.
- *
- * @note Loading an image that exceeds the limit fails with PH_ERR_IMAGE_TOO_LARGE
- *       instead of attempting the allocation.
- *
- * @note An implementation ceiling of INT_MAX (2147483647) pixels always applies,
- *       whichever value is set here: a larger `max_pixels`, and `0`, are both capped by
- *       it, and an image above it is rejected with PH_ERR_IMAGE_TOO_LARGE, because pixel
- *       indexing inside the library is done in `int`. The default limit is eight times below the
- * ceiling, so this only affects callers that deliberately raise or disable the limit.
- *
- * @note A per-dimension cap of 1000000 pixels also always applies, on top
- *       of the area limit and independently of it: an image wider or taller than that
- *       is rejected with PH_ERR_IMAGE_TOO_LARGE whatever @p max_pixels is set to,
- *       including 0. The area limit alone permits an absurd aspect ratio -- a
- *       268435456 x 1 image sits exactly on the default limit, yet makes a decoder size
- *       a single row of ~800 MB -- and the cap closes that. It applies to every format
- *       and to both decoding entry points (@c ph_load_from_file and
- *       @c ph_load_from_memory), so every build answers the same input the same way.
- *       @c ph_load_from_pixels() is not subject to it -- there is no decoder there to
- *       protect, and the area limit already bounds what the library will process.
+ * @param max_pixels The limit; 256 * 1024 * 1024 by default. 0 removes it, leaving the
+ *        fixed limits.
  *
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT only for a NULL @p ctx. Every
  *         @c uint64_t is accepted, including values above the implementation ceiling:
@@ -757,16 +735,12 @@ PH_API int ph_is_loaded(const ph_context_t *ctx);
 /**
  * @brief Loads an image from a file path.
  *
- * The file is opened exactly once and its whole content is made available to the
- * decoder in one piece — memory-mapped where the platform supports it, read into
- * a heap buffer otherwise. Decoding, the @c max_pixels check and the EXIF
- * orientation scan then all work on that one snapshot, so this call behaves
- * exactly like reading the file yourself and calling @c ph_load_from_memory().
- *
- * @note Peak memory therefore includes the encoded file in addition to the
- *       decoded image. For ordinary photographs the encoded bytes are a small
- *       fraction of the decoded ones, but a caller that streams very large files
- *       on a tight memory budget should be aware of it.
+ * The file is opened once and its whole content handed to the decoder, memory-mapped
+ * where the platform supports it and read into a buffer otherwise; from there the call
+ * behaves exactly like ph_load_from_memory() on the same bytes. Peak memory includes the
+ * encoded file as well as the decoded image. Any image already loaded is dropped before
+ * the file is opened, so a load that fails on the file or its contents leaves the context
+ * empty. See docs/guide/loading.md.
  *
  * @param ctx The context.
  * @param filepath Path to the image file.
@@ -782,26 +756,20 @@ PH_API int ph_is_loaded(const ph_context_t *ctx);
 PH_NODISCARD PH_API ph_error_t ph_load_from_file(ph_context_t *ctx, const char *filepath);
 
 /**
- * @brief Loads an image from a memory buffer.
+ * @brief Loads an image from an encoded file held in memory.
  *
- * @note Animated GIF is a single-image format as far as this function is concerned:
- *       only the first frame is decoded and hashed, via the always-available
- *       @c stb_image fallback. There is no way to request a different frame or the
- *       frame count through this API.
- * @note Animated WebP is NOT decoded to its first frame -- it fails with
- *       @c PH_ERR_CORRUPT_DATA. The native WebP backend (@c PH_USE_WEBP) decodes
- *       through libwebp's simple API, which has no bitstream to read at the
- *       container's top level for a multi-frame file; reaching an individual frame
- *       needs libwebp's demux API, which this backend does not use. A static WebP
- *       (no @c ANIM chunk) is unaffected.
- * @note The encoded data may be at most @c INT_MAX bytes (2 GiB - 1); a longer
- *       @p length fails with @c PH_ERR_IMAGE_TOO_LARGE before any byte is read, in every
- *       build. @c ph_load_from_file() applies the same limit to the file size.
- * @note A truncated JPEG, PNG or WebP fails with @c PH_ERR_CORRUPT_DATA in every
- *       build: the file must reach its own end (the JPEG end-of-image marker, the PNG
+ * The first bytes choose the decoder. Any image already loaded is dropped before the
+ * bytes are decoded, so a load that fails on them leaves the context empty. The formats
+ * each build reads are listed in docs/guide/loading.md.
+ *
+ * @note An animated GIF loads as its first frame. An animated WebP fails with
+ *       @c PH_ERR_CORRUPT_DATA: libwebp's simple decode API, which the library uses,
+ *       cannot read a frame out of an animation.
+ * @note A truncated JPEG, PNG or WebP fails with @c PH_ERR_CORRUPT_DATA in every build:
+ *       the data must reach the file's own end (the JPEG end-of-image marker, the PNG
  *       @c IEND chunk, the size its WebP RIFF header states). Bytes after that end are
- *       ignored. Without this check the @c stb_image decoder of a minimal build would
- *       hash the part of a half-downloaded file it managed to read.
+ *       ignored.
+ * @note The encoded data may be at most @c INT_MAX bytes (2 GiB - 1).
  *
  * @param ctx The context.
  * @param buffer Pointer to the raw file data (e.g., JPEG bytes).
@@ -825,9 +793,11 @@ PH_NODISCARD PH_API ph_error_t ph_load_from_memory(ph_context_t *ctx, const uint
 /**
  * @brief Loads an image from an already-decoded pixel buffer.
  *
- * Use this to hash frames that already live in memory as raw pixels (e.g. from
- * OpenCV, PIL, numpy, or a video frame), skipping the encode/decode round-trip
- * that `ph_load_from_file`/`ph_load_from_memory` would otherwise require.
+ * Copies pixels that already live in memory, a frame another library decoded, without an
+ * encode and decode in between. The channels are read in the order R, G, B (and A); a
+ * buffer in BGR order hashes as a different image. An alpha channel is resolved as
+ * ph_context_set_alpha_mode() says, and no orientation is applied. See
+ * docs/guide/loading.md.
  *
  * @param ctx The context.
  * @param pixels Pointer to the raw pixel data, `height` rows of `channels`-interleaved bytes.
@@ -1667,9 +1637,8 @@ PH_API int ph_can_use_webp(void);
  * `version=2.0.0 jpeg=libjpeg-turbo png=libpng webp=libwebp zlib=zlib-ng threads=on simd=neon
  * mock=off`
  *
- * - `jpeg`: `libjpeg-turbo` or `stb`. The two round their inverse DCT differently, so a JPEG
- *   hashes to slightly different values under each; every other build difference, OS,
- *   architecture, compiler and SIMD level included, leaves hash values unchanged;
+ * - `jpeg`: `libjpeg-turbo` or `stb`. A JPEG can hash a few bits apart under the two
+ *   (docs/theory/comparing.md); no other build difference changes a hash;
  * - `png`: `libpng` or `stb`; `webp`: `libwebp` or
  *   `none`; `zlib`: `zlib-ng`, `zlib` or `none` (stb_image inflates PNG itself);
  * - `threads`: `on` if the batch functions can use worker threads, `off` if they always

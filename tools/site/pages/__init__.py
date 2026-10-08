@@ -10,8 +10,9 @@ TITLES = {"ahash": "aHash", "dhash": "dHash", "phash": "pHash", "whash": "wHash"
           "mhash": "mHash", "bmh": "BMH", "radial": "Radial", "color_hash": "ColorHash",
           "color_moments": "ColorMoments"}
 
-# Pages that explain something every algorithm shares and have no hash of their own: their
-# module draws its figures from figures(tool, image, out_dir, timing) and nothing else.
-from pages import choosing, comparing, preparation  # noqa: E402
+# Pages that explain something every algorithm shares, or guide a reader through a task, and
+# have no hash of their own: their module draws its figures from figures(tool, image,
+# out_dir, timing) and nothing else.
+from pages import choosing, comparing, loading, preparation  # noqa: E402
 
-TOPICS = (preparation, comparing, choosing)
+TOPICS = (preparation, comparing, choosing, loading)

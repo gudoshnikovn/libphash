@@ -60,6 +60,10 @@ for src in "$ROOT_DIR"/examples/*.c; do
             "$WORK_DIR/$name" "$D/photo.jpeg" "$D/photo_copy.jpeg" "$D/photo_complex.png" \
                 "$D/no-such-file.jpg"
             ;;
+        load_sources)
+            # Writes the file it then loads.
+            "$WORK_DIR/$name" "$WORK_DIR/frame.ppm"
+            ;;
         error_handling)
             # One path per outcome it explains; the build has no WebP decoder.
             "$WORK_DIR/$name" "$D/photo.png" "$D/no-such-file.jpg" "$ROOT_DIR/README.md" \

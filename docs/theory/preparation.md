@@ -269,7 +269,8 @@ the decoder returns depends on the format:
   default weights, 38/75/15; weights set with
   [`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights) do not
   reach it.
-- **WebP**: libwebp has no grayscale output, so the library converts as usual.
+- **WebP**: libwebp has no grayscale output, so the image is loaded in color and the
+  library converts as usual.
 
 So the setting changes the pixels a hash reads only for JPEG. Over the photographs:
 
@@ -279,7 +280,7 @@ The stored luma is rounded where the library's formula truncates, so about half 
 pixels come out one level brighter; a few differ by more. A level here and there tips only
 the values that lie next to a threshold. The 64-bit hashes stay the same or move by a bit
 or two; mHash and BMH, with many more bits, move on most photographs, by a few. With the setting on, ColorHash and
-ColorMoments refuse the image.
+ColorMoments refuse every image but a WebP.
 
 ??? info "How this was measured"
 

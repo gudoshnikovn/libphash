@@ -73,23 +73,41 @@ static int time_radial(ph_context_t *ctx, const char *path, int variant) {
     return !radial_settings(ctx, &radial_variants[RADIAL_DEFAULT]) || bad;
 }
 
-/* Loading the image with ph_context_set_decode_scale() at `arg / 16`, then, unless `arg % 16`
- * is 0, computing algorithm `arg % 16 - 1`: what a caller pays for a load and a hash at
- * that scale. A context of its own, so the cases after it hash the image at full size. */
-static int time_scaled(ph_context_t *ctx, const char *path, int arg) {
+/* Loading the image, then, unless `algo` is LOAD_ONLY, computing that algorithm: what a
+ * caller pays for a load and a hash. `arg` packs the load -- a ph_decode_scale_t, plus
+ * LOAD_GRAY for ph_context_set_load_grayscale() and LOAD_FRESH for a context created and
+ * freed around the load, as a caller who creates one per image does -- and the algorithm
+ * above it. Without LOAD_FRESH, a context of its own per kind of load, kept across runs,
+ * so the cases after it hash the image as it was first loaded. */
+enum {
+    LOAD_GRAY = 4,
+    LOAD_FRESH = 8,
+    LOAD_ALGO = 16,
+    LOAD_ONLY = -1,
+};
+
+static int time_load(ph_context_t *ctx, const char *path, int arg) {
     (void)ctx;
-    static ph_context_t *scaled;
-    if (!scaled && ph_create(&scaled) != PH_SUCCESS) {
+    static ph_context_t *kept[LOAD_FRESH];
+    int kind = arg % LOAD_FRESH, fresh = arg & LOAD_FRESH, algo = arg / LOAD_ALGO - 1;
+    ph_context_t *c = fresh ? NULL : kept[kind];
+    if (!c && ph_create(&c) != PH_SUCCESS) {
         return 1;
     }
     ph_digest_t d;
-    return ph_context_set_decode_scale(scaled, (ph_decode_scale_t)(arg / 16)) != PH_SUCCESS ||
-           ph_load_from_file(scaled, path) != PH_SUCCESS ||
-           (arg % 16 &&
-            ph_compute_digest(scaled, (ph_algorithm_t)(arg % 16 - 1), &d) != PH_SUCCESS);
+    int bad = ph_context_set_decode_scale(c, (ph_decode_scale_t)(kind & 3)) != PH_SUCCESS ||
+              ph_context_set_load_grayscale(c, (kind & LOAD_GRAY) != 0) != PH_SUCCESS ||
+              ph_load_from_file(c, path) != PH_SUCCESS ||
+              (algo != LOAD_ONLY && ph_compute_digest(c, (ph_algorithm_t)algo, &d) != PH_SUCCESS);
+    if (fresh) {
+        ph_free(c);
+    } else {
+        kept[kind] = c;
+    }
+    return bad;
 }
 
-#define SCALED(name, scale, algo) {name, time_scaled, (scale) * 16 + (algo) + 1}
+#define LOADED(name, flags, algo) {name, time_load, (flags) + ((algo) + 1) * LOAD_ALGO}
 
 static const time_case_t time_cases[] = {
     {"decode", time_decode, 0},
@@ -121,21 +139,25 @@ static const time_case_t time_cases[] = {
     {"radial_grid_360x256", time_radial, RADIAL_GRID_360X256},
     {"radial_grid_1440x1024", time_radial, RADIAL_GRID_1440X1024},
     {"radial_grid_4096x4096", time_radial, RADIAL_GRID_4096X4096},
-    {"scale_half_decode", time_scaled, PH_DECODE_SCALE_HALF * 16},
-    {"scale_quarter_decode", time_scaled, PH_DECODE_SCALE_QUARTER * 16},
-    {"scale_eighth_decode", time_scaled, PH_DECODE_SCALE_EIGHTH * 16},
-    SCALED("scale_full_phash", PH_DECODE_SCALE_FULL, PH_ALGO_PHASH),
-    SCALED("scale_half_phash", PH_DECODE_SCALE_HALF, PH_ALGO_PHASH),
-    SCALED("scale_quarter_phash", PH_DECODE_SCALE_QUARTER, PH_ALGO_PHASH),
-    SCALED("scale_eighth_phash", PH_DECODE_SCALE_EIGHTH, PH_ALGO_PHASH),
-    SCALED("scale_full_mhash", PH_DECODE_SCALE_FULL, PH_ALGO_MHASH),
-    SCALED("scale_half_mhash", PH_DECODE_SCALE_HALF, PH_ALGO_MHASH),
-    SCALED("scale_quarter_mhash", PH_DECODE_SCALE_QUARTER, PH_ALGO_MHASH),
-    SCALED("scale_eighth_mhash", PH_DECODE_SCALE_EIGHTH, PH_ALGO_MHASH),
-    SCALED("scale_full_radial", PH_DECODE_SCALE_FULL, PH_ALGO_RADIAL),
-    SCALED("scale_half_radial", PH_DECODE_SCALE_HALF, PH_ALGO_RADIAL),
-    SCALED("scale_quarter_radial", PH_DECODE_SCALE_QUARTER, PH_ALGO_RADIAL),
-    SCALED("scale_eighth_radial", PH_DECODE_SCALE_EIGHTH, PH_ALGO_RADIAL),
+    LOADED("scale_half_decode", PH_DECODE_SCALE_HALF, LOAD_ONLY),
+    LOADED("scale_quarter_decode", PH_DECODE_SCALE_QUARTER, LOAD_ONLY),
+    LOADED("scale_eighth_decode", PH_DECODE_SCALE_EIGHTH, LOAD_ONLY),
+    LOADED("scale_full_phash", PH_DECODE_SCALE_FULL, PH_ALGO_PHASH),
+    LOADED("scale_half_phash", PH_DECODE_SCALE_HALF, PH_ALGO_PHASH),
+    LOADED("scale_quarter_phash", PH_DECODE_SCALE_QUARTER, PH_ALGO_PHASH),
+    LOADED("scale_eighth_phash", PH_DECODE_SCALE_EIGHTH, PH_ALGO_PHASH),
+    LOADED("scale_full_mhash", PH_DECODE_SCALE_FULL, PH_ALGO_MHASH),
+    LOADED("scale_half_mhash", PH_DECODE_SCALE_HALF, PH_ALGO_MHASH),
+    LOADED("scale_quarter_mhash", PH_DECODE_SCALE_QUARTER, PH_ALGO_MHASH),
+    LOADED("scale_eighth_mhash", PH_DECODE_SCALE_EIGHTH, PH_ALGO_MHASH),
+    LOADED("scale_full_radial", PH_DECODE_SCALE_FULL, PH_ALGO_RADIAL),
+    LOADED("scale_half_radial", PH_DECODE_SCALE_HALF, PH_ALGO_RADIAL),
+    LOADED("scale_quarter_radial", PH_DECODE_SCALE_QUARTER, PH_ALGO_RADIAL),
+    LOADED("scale_eighth_radial", PH_DECODE_SCALE_EIGHTH, PH_ALGO_RADIAL),
+    LOADED("gray_decode", LOAD_GRAY, LOAD_ONLY),
+    LOADED("gray_phash", LOAD_GRAY, PH_ALGO_PHASH),
+    LOADED("fresh_decode", LOAD_FRESH, LOAD_ONLY),
+    LOADED("fresh_phash", LOAD_FRESH, PH_ALGO_PHASH),
 };
 
 static int cmp_double(const void *a, const void *b) {

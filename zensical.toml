@@ -38,6 +38,7 @@ nav = [
   { "Guide" = [
     { "Installing" = "guide/install.md" },
     { "Quick start" = "guide/quickstart.md" },
+    { "Loading images" = "guide/loading.md" },
     { "Hashing many files" = "batch.md" },
     { "Architecture" = "architecture.md" },
     { "Migrating from 1.x" = "guide/migration.md" },
