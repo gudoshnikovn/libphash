@@ -10,6 +10,7 @@ header.
 | [`basic_hash.c`](basic_hash.c) | Load one image, compute a 64-bit pHash, print it as hex. |
 | [`compare_two_images.c`](compare_two_images.c) | Hash two images and compare them: Hamming distance and similarity. |
 | [`load_sources.c`](load_sources.c) | One picture loaded from pixels in memory (with a row stride), from an encoded buffer and from a file, and the same hash from each. |
+| [`configure.c`](configure.c) | One function that configures every context alike, a refused value that changes nothing, the grayscale weights read back, and when a setting takes effect: at the next hash or at the next load. |
 | [`hash_distance.c`](hash_distance.c) | aHash, dHash, pHash and wHash of two images from one `ph_compute_multi()` call each, and the bits each pair differs in. |
 | [`digest_and_metrics.c`](digest_and_metrics.c) | The digest algorithms (mHash, BMH, Radial, ColorHash, ColorMoments), the comparison each digest's kind calls for, what a mismatched comparison returns, and a digest stored as text and read back. |
 | [`batch_hash.c`](batch_hash.c) | Many files at once on a worker pool: a configuration template, a progress callback, several hashes per file, and a status per file. |

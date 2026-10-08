@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Fails (non-zero exit) if any public ph_* function in include/libphash.h is not
 # mentioned anywhere in docs/*.md, docs/theory/*.md, docs/guide/*.md, README.md, or
-# MIGRATION.md, or if a PHASH_* option() in CMakeLists.txt has no row in the build-flow
-# table of docs/development.md. Keeps the docs from quietly falling behind the API and the
-# build -- see README.md/docs/README.md for what those files cover.
+# MIGRATION.md, if a PHASH_* option() in CMakeLists.txt has no row in the build-flow
+# table of docs/development.md, or if a ph_context_set_* function has no row in the
+# settings tables of docs/guide/configuring.md. Keeps the docs from quietly falling
+# behind the API and the build -- see README.md/docs/README.md for what those files
+# cover.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -65,10 +67,41 @@ done <<EOF
 $options
 EOF
 
+# The settings tables of docs/guide/configuring.md -- those whose header row starts
+# `| Setter |` -- have one row per ph_context_set_* function between them, and no row
+# for a function the header does not declare.
+CONFIG_DOC="$ROOT/docs/guide/configuring.md"
+settings_table=$(awk '/^\| Setter \|/{t=1} t&&!/^\|/{t=0} t' "$CONFIG_DOC")
+table_setters=$(printf '%s\n' "$settings_table" | sed -nE 's/^\| \[`(ph_context_set_[a-z0-9_]+)\(\)`\].*/\1/p' | sort)
+setters=$(printf '%s\n' "$symbols" | grep '^ph_context_set_' || true)
+setter_count=$(printf '%s\n' "$setters" | grep -c . || true)
+while IFS= read -r sym; do
+    [ -z "$sym" ] && continue
+    if ! printf '%s\n' "$table_setters" | grep -qx "$sym"; then
+        missing="${missing}  - ${sym} (no row in the settings tables of docs/guide/configuring.md)\n"
+        missing_count=$((missing_count + 1))
+    fi
+done <<EOF
+$setters
+EOF
+while IFS= read -r sym; do
+    [ -z "$sym" ] && continue
+    if ! printf '%s\n' "$setters" | grep -qx "$sym"; then
+        missing="${missing}  - ${sym} (a row in the settings tables of docs/guide/configuring.md, but no such setter in include/libphash.h)\n"
+        missing_count=$((missing_count + 1))
+    fi
+done <<EOF
+$table_setters
+EOF
+for sym in $(printf '%s\n' "$table_setters" | uniq -d); do
+    missing="${missing}  - ${sym} (two rows in the settings tables of docs/guide/configuring.md)\n"
+    missing_count=$((missing_count + 1))
+done
+
 if [ "$missing_count" -gt 0 ]; then
     echo "check_docs_coverage: $missing_count item(s) missing from the docs (functions are looked up in docs/*.md, docs/theory/*.md, docs/guide/*.md, README.md and MIGRATION.md):" >&2
     printf '%b' "$missing" >&2
     exit 1
 fi
 
-echo "check_docs_coverage: all $symbol_count public functions are documented; all $option_count PHASH_* options have a build-flow row."
+echo "check_docs_coverage: all $symbol_count public functions are documented; all $option_count PHASH_* options have a build-flow row; all $setter_count setters have a row in the settings tables."

@@ -408,6 +408,9 @@ PH_API void ph_free(ph_context_t *ctx);
  *       called with compile-time-constant arguments where the result carries no
  *       information. Check the return value whenever the argument comes from outside
  *       your code.
+ *
+ * Which setting each algorithm reads, when it is read, and which ones change a hash's
+ * value: docs/guide/configuring.md.
  * @{
  */
 
