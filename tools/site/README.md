@@ -50,7 +50,8 @@ arguments lists every mode.
 - `site_stages <algo>-<what> <image>...` prints one JSON line per image: a measurement
   over a corpus that one page makes (block sizes, settings, modes). These are built on
   `for_each_image()`.
-- `measure`, `pairs`, `time` and `corpus` serve every page.
+- `measure`, `pairs`, `time` and `corpus` serve every page; `sizes` prints each
+  algorithm's digest size and kind, for the page that compares them.
 - `loaded <outdir> <image>...` writes each image as the library loaded it and its
   grayscale; `area <w> <h> <image>` prints the library's area average onto a grid
   (`prepare.c`, for the page on image preparation).
@@ -102,7 +103,7 @@ A page module declares how its algorithm's comparison reads and draws its own fi
 The robustness, corpus, separability, edits and time figures of every page are drawn by
 `render.py` from these declarations; a page module draws only what is its own.
 
-A **topic page** (`pages/preparation.py`, `pages/comparing.py`, in `TOPICS`) has no hash
+A **topic page** (`pages/preparation.py`, `pages/comparing.py`, `pages/choosing.py`, in `TOPICS`) has no hash
 of its own: it declares `NAME`, the directory under `docs/assets/generated/`, and
 `figures(tool, image, out_dir, timing)`, which draws everything it shows, `timing` being
 what `measure/timing.py` measured. `render.py --algo preparation` draws it alone. A topic

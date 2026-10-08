@@ -4,6 +4,7 @@
 #include "synthetic_corpus.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 /* --8<-- [start:compare] */
 /* One algorithm's comparison of two digests by its own metric; 0 when it does not apply. */
@@ -118,6 +119,38 @@ int mode_pairs(int argc, char **argv) {
 }
 
 /* --8<-- [end:pairs] */
+
+/* --8<-- [start:sizes] */
+/* site_stages sizes <image>: one JSON line per algorithm, its digest's size in bytes and
+ * its kind as the text form names it, from that algorithm's digest of the image. */
+int mode_sizes(int argc, char **argv) {
+    (void)argc;
+    ph_context_t *ctx = NULL;
+    if (load_image(&ctx, argv[0])) {
+        return 1;
+    }
+    ph_digest_t d[PH_ALGORITHM_COUNT];
+    int have[PH_ALGORITHM_COUNT];
+    digest_all(ctx, d, have);
+    ph_free(ctx);
+    int status = 0;
+    for (int k = 0; k < PH_ALGORITHM_COUNT; k++) {
+        char hex[PH_DIGEST_HEX_BUFFER_SIZE];
+        if (!have[k] || ph_digest_to_hex(&d[k], hex, sizeof(hex)) != PH_SUCCESS) {
+            status = fail("no digest of", ph_algorithm_name((ph_algorithm_t)k));
+            continue;
+        }
+        *strchr(hex, ':') = '\0';
+        json_t j = json_begin(stdout);
+        json_string(&j, "algorithm", ph_algorithm_name((ph_algorithm_t)k));
+        json_int(&j, "size", d[k].size);
+        json_string(&j, "kind", hex);
+        json_end(&j);
+    }
+    return status;
+}
+
+/* --8<-- [end:sizes] */
 
 /* site_stages corpus <outdir>
  *     Writes the synthetic corpus of the tests (tests/src/synthetic_corpus.h) as

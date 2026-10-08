@@ -385,7 +385,7 @@ closer still, and *d′* falls without it.
     ```
 
 How the nine algorithms compare is on
-[choosing an algorithm](../algorithms.md#comparison-summary).
+[choosing an algorithm](choosing.md).
 
 ## Cost
 

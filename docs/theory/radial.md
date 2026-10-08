@@ -426,7 +426,7 @@ vertical axis has odd coefficients near zero, and its mirror image keeps the dig
     ```
 
 How the nine algorithms compare is on
-[choosing an algorithm](../algorithms.md#comparison-summary).
+[choosing an algorithm](choosing.md).
 
 ## Cost
 

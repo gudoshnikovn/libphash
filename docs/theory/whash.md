@@ -369,7 +369,7 @@ balance seldom changes the outcome.
     aHash bits is [`ph_compute_ahash()`](../api/hash64.md#ph_compute_ahash) on each photograph, by `site_stages whash-modes`.
 
 How the nine algorithms compare is on
-[choosing an algorithm](../algorithms.md#comparison-summary).
+[choosing an algorithm](choosing.md).
 
 ## Cost
 

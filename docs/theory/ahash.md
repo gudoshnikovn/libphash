@@ -372,7 +372,7 @@ copies, in each corpus's color: an edited image below it would be taken for a co
 Two hashes are built like aHash and measure themselves against it on their pages: wHash
 thresholds the same 8×8 grid at its median ([wHash and aHash](whash.md#whash-and-ahash)),
 BMH a 16×16 grid at its median ([block_size](bmh.md#block_size)). How the nine algorithms
-compare is on [choosing an algorithm](../algorithms.md#comparison-summary).
+compare is on [choosing an algorithm](choosing.md).
 
 ## Cost
 

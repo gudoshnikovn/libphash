@@ -88,8 +88,8 @@ flowchart LR
 ```
 
 The four 64-bit hashes are compared by Hamming distance; the others return a digest with
-its own distance function. Which one to use for which job is on the
-[algorithms](algorithms.md#comparison-summary) page.
+its own distance function. Which one to use for which job is measured on
+[choosing an algorithm](theory/choosing.md).
 
 ## Performance
 

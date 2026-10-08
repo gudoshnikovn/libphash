@@ -416,7 +416,7 @@ images the order is reversed.
     instead of the median, since the median of a small edit is 0 for both.
 
 How the nine algorithms compare is on
-[choosing an algorithm](../algorithms.md#comparison-summary).
+[choosing an algorithm](choosing.md).
 
 ## Cost
 

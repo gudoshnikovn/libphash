@@ -12,6 +12,6 @@ TITLES = {"ahash": "aHash", "dhash": "dHash", "phash": "pHash", "whash": "wHash"
 
 # Pages that explain something every algorithm shares and have no hash of their own: their
 # module draws its figures from figures(tool, image, out_dir, timing) and nothing else.
-from pages import comparing, preparation  # noqa: E402
+from pages import choosing, comparing, preparation  # noqa: E402
 
-TOPICS = (preparation, comparing)
+TOPICS = (preparation, comparing, choosing)

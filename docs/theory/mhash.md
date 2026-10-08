@@ -396,7 +396,7 @@ change of it. For aHash, dHash, pHash and wHash the order is the right one: halv
 size moves none of their bits, a patch moves some.
 
 How the nine algorithms compare is on
-[choosing an algorithm](../algorithms.md#comparison-summary).
+[choosing an algorithm](choosing.md).
 
 ## Cost
 

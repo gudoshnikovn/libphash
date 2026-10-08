@@ -166,6 +166,7 @@ int mode_color_moments(int argc, char **argv);
 int mode_color_moments_digests(int argc, char **argv);
 int mode_measure(int argc, char **argv);
 int mode_pairs(int argc, char **argv);
+int mode_sizes(int argc, char **argv);
 int mode_corpus(int argc, char **argv);
 int mode_time(int argc, char **argv);
 int mode_loaded(int argc, char **argv);

@@ -410,26 +410,11 @@ color hashes on a large image the hash is comparable to it or larger.
 
 ## Comparison summary
 
-Ratings are relative and qualitative — they come from experience with the library, not
-from a measured benchmark. Where a rating depends on a divergence noted above, it is
-marked. For measured robustness numbers, see the property tests described in the
-[verification methodology](methodology.md); for time, "Cost" above.
-
-| Algorithm | Rotation | Noise | Scaling | Output |
-|---|---|---|---|---|
-| aHash | ✗ | ★ | ★★★ | 64-bit |
-| dHash | ✗ | ★★ | ★★★★ | 64-bit |
-| pHash | ★★★ | ★★★★ | ★★★★★ | 64-bit |
-| mHash | ★ | ★★★ | ★★★★ | digest, 576-bit |
-| wHash | ★ | ★★★ | ★★★★ | 64-bit |
-| Radial | ★★ — small angles, see §8 | ★★ | ★★★ | digest, 40 bytes |
-| BMH | ★ | ★★★ | ★★★★ | digest, 256-bit default |
-| ColorHash | ★★★★★ | ★★★ | ★★★★★ | digest, 108 bytes |
-| ColorMoments | ★★★★ | ★★★ | ★★★★★ | digest, 18 bytes |
-
-The two color hashes are insensitive to rotation and scaling for a reason that is worth
-stating: they discard spatial layout entirely. That makes them robust and, on their own,
-weak discriminators — use them alongside a structural hash, not instead of one.
+[Choosing an algorithm](theory/choosing.md) compares the nine on two corpora: what each
+edit does to each hash, how far apart copies and different images land, what each costs
+and how long its digest is. The two color hashes ignore the spatial layout, which makes
+them unchanged by a turn or a mirror and weak at telling different images apart on their
+own; they go beside a layout hash, not instead of one.
 
 ## Comparing digests: which function for which hash
 
