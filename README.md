@@ -43,7 +43,7 @@ and [`docs/algorithm-provenance.md`](docs/algorithm-provenance.md).
 
 ## Language Bindings
 
-* **Python**: [python-libphash](https://github.com/gudoshnikovn/python-libphash) (`pip install python-libphash`)
+* **Python**: [python-libphash](https://github.com/gudoshnikovn/python-libphash) (`pip install python-libphash`), the official binding, released on its own schedule
 * *More bindings (Node.js, Rust, Go) are in development.*
 
 ---
@@ -111,6 +111,10 @@ are; the other examples are listed in [`examples/README.md`](examples/README.md)
 
 ## Building & Installation
 
+Every route — archives, CMake, the Makefile, `add_subdirectory()`, Python — with the
+difference between the Full and Minimal builds and how to check the result:
+[`docs/guide/install.md`](docs/guide/install.md).
+
 ### Prebuilt binaries
 
 Each tagged release (`vX.Y.Z`) publishes prebuilt archives on the
@@ -139,11 +143,11 @@ detect wider instruction sets at run time and use them where the CPU has them.
 Best for managing bundled high-performance decoders and system integration.
 
 ```bash
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
-sudo make install
-
+git clone --recursive https://github.com/gudoshnikovn/libphash.git
+cd libphash
+cmake --preset release
+cmake --build --preset release
+cmake --install build/release --prefix "$HOME/.local"
 ```
 
 ### Portable (Makefile)

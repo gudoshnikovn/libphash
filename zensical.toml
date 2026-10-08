@@ -36,6 +36,7 @@ nav = [
     { "Verification methodology" = "methodology.md" },
   ] },
   { "Guide" = [
+    { "Installing" = "guide/install.md" },
     { "Quick start" = "guide/quickstart.md" },
     { "Hashing many files" = "batch.md" },
     { "Architecture" = "architecture.md" },

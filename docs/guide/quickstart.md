@@ -4,6 +4,9 @@ From nothing to the hash of your first image, and then to comparing two images.
 
 ## Install
 
+The shortest route for each kind of build; [Installing](install.md) has every route, the
+difference between the Full and Minimal builds, and how to check a download.
+
 === "Prebuilt archive"
 
     Each release publishes static and shared archives for linux-x86_64, linux-arm64,
