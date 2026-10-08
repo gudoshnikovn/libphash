@@ -135,6 +135,7 @@ Bit $i$ is coefficient $i$ of the block, row by row, from the least significant 
 In hexadecimal the hash therefore reads the block backwards: the last hex digit holds DC
 and the next three coefficients of the top row, the first hex digit the last four of the
 bottom row. Since the DC bit is set, the last hex digit is odd for any ordinary image.
+--8<-- "docs/assets/generated/phash/dc.md"
 
 ![Which bit each coefficient of the block sets](../assets/generated/phash/bit-order.light.svg#only-light){ width="420" }
 ![Which bit each coefficient of the block sets](../assets/generated/phash/bit-order.dark.svg#only-dark){ width="420" }
@@ -343,6 +344,46 @@ copies, in each corpus's color: an edited image below it would be taken for a co
     --8<-- "tools/site/measure/transforms.py:content_edits"
     ```
 
+### What the DCT buys
+
+pHash reads the same area grid as aHash, four times finer, and differs in what it
+thresholds: aHash the 64 cells, pHash the 64 coarsest of the grid's 1024 cosine patterns.
+Here are both, edit by edit, over both corpora, as the mean number of bits that differ
+from the original:
+
+![Mean bits that differ from the original for aHash and pHash under rotation, crop, gamma, noise and JPEG quality, over the photographs and the synthetic images](../assets/generated/phash/vs-ahash.light.svg#only-light)
+![Mean bits that differ from the original for aHash and pHash under rotation, crop, gamma, noise and JPEG quality, over the photographs and the synthetic images](../assets/generated/phash/vs-ahash.dark.svg#only-dark)
+
+- **Rotation and cropping move pHash further.** A shift moves the shapes against every
+  cosine pattern at once, where it carries only the cells near an edge across aHash's
+  mean.
+- **Gamma moves pHash a little more** at the strongest settings: a tone curve changes the
+  shape of the brightness, not only its scale, and the patterns follow.
+- **Recompression and noise leave both alone on photographs.** On the synthetic images
+  they move pHash far more: their low frequencies hold little (see the
+  [margin](#why-a-margin-above-the-median)), and noise reaches the coefficients that
+  crowd the threshold.
+
+So the DCT does not make copies closer: on every corpus they sit further from the
+original than aHash's, and the threshold that keeps 95 % of them is higher. What it buys
+is in the different images. On the photographs the gap between copies and different
+images is much wider than aHash's, and the threshold lets no pair of different
+photographs through; on the synthetic images the order is reversed:
+
+--8<-- "docs/assets/generated/phash/vs-ahash-separability.md"
+
+??? info "The numbers behind the chart"
+
+    Mean bits that differ from the original, over each corpus:
+
+    --8<-- "docs/assets/generated/phash/vs-ahash-table.md"
+
+??? info "How this was measured"
+
+    The values are those of the corpus charts above, from the same cached measurement,
+    for both algorithms; the figure and the table take their mean over the corpus
+    instead of the median, since the median of a small edit is 0 for both.
+
 How the nine algorithms compare is on
 [choosing an algorithm](../algorithms.md#comparison-summary).
 
@@ -383,21 +424,89 @@ sizes:
 | `dct_size` | `reduction_size` … 32 | 32 | the side of the grid of step 2 and of the transform |
 | `reduction_size` | 4 … 8 | 8 | the side of the block of step 4; the hash has `reduction_size`² bits |
 
-A smaller `dct_size` reduces the image to a coarser grid before the transform: it costs
-less and sees less detail. A smaller `reduction_size` keeps fewer patterns: the threshold
-is the median of that block's AC coefficients, and the bits go into the low
-`reduction_size`² bits of the hash, row by row, the rest staying 0. Here is the example
-at both ends of the range:
+Hashes are comparable only when computed with the same parameters.
+
+### reduction_size
+
+A smaller `reduction_size` keeps fewer patterns: the threshold is the median of that
+block's AC coefficients, and the bits go into the low `reduction_size`² bits of the
+hash, row by row, the rest staying 0. Here is the example at both ends of the range:
 
 ![The 4×4 and the 8×8 block of the example's coefficients, with the bits each sets and the resulting hash](../assets/generated/phash/reduction.light.svg#only-light)
 ![The 4×4 and the 8×8 block of the example's coefficients, with the bits each sets and the resulting hash](../assets/generated/phash/reduction.dark.svg#only-dark)
 
 The 4×4 block is the top-left corner of the 8×8 one, but its median is its own and its
-bits are packed four to a row, so the two hashes do not share a bit layout: hashes are
-comparable only when computed with the same parameters. Below 4 the hash is degenerate:
-over 400 photographs, a 3×3 block gives 70 distinct hashes and a 2×2 block 4, against 304
-at 4 and 350 at 8, which is why 4 is the lower bound. Between 4 and 8, a smaller block
-trades precision for a shorter hash.
+bits are packed four to a row, so the two hashes do not share a bit layout. Over both
+corpora, with the sizes 2 and 3 computed the same way, although the library refuses them:
+
+![d′ and the share of different pairs within the threshold against reduction_size from 2 to 8, for both corpora](../assets/generated/phash/reduction-corpus.light.svg#only-light)
+![d′ and the share of different pairs within the threshold against reduction_size from 2 to 8, for both corpora](../assets/generated/phash/reduction-corpus.dark.svg#only-dark)
+
+- **On the photographs every smaller block separates worse.** Fewer patterns leave
+  fewer ways for two photographs to differ: *d′* falls at each step down, and at 4 the
+  threshold that keeps 95 % of the copies lets through a share of different pairs that
+  8 does not.
+- **Below 4 the hash is degenerate.** A 2×2 block leaves three AC bits, and most
+  photographs share one of a handful of hashes; a 3×3 block still lets many different
+  photographs collide. That is why 4 is the lower bound.
+- **On the synthetic images the size hardly matters.** *d′* stays level from 4 to 8;
+  the 4×4 block lets the fewest different pairs through there, and the most on the
+  photographs.
+
+??? info "The numbers behind the chart"
+
+    --8<-- "docs/assets/generated/phash/reduction-corpus-table.md"
+
+??? info "How this was measured"
+
+    Every original of both corpora and its nine copies (those of the separability chart
+    above) is hashed by `site_stages phash-variants` at every block size from 2 to 8 and
+    at every `dct_size` of the next section. Each hash is computed from the block as in
+    the steps above and, where the library accepts the parameters, checked against
+    [`ph_compute_phash()`](../api/hash64.md#ph_compute_phash) with them. *d′* and the
+    threshold are computed as for the corpus charts, over `reduction_size`² bits.
+
+    ```c title="tools/site/stages/phash.c"
+    --8<-- "tools/site/stages/phash.c:phash"
+    ```
+
+    ```c title="tools/site/stages/phash.c"
+    --8<-- "tools/site/stages/phash.c:phash-variants"
+    ```
+
+    ```python title="tools/site/measure/corpus.py"
+    --8<-- "tools/site/measure/corpus.py:variants"
+    ```
+
+    ```python title="tools/site/measure/separability.py"
+    --8<-- "tools/site/measure/separability.py:variants"
+    ```
+
+### dct_size
+
+`dct_size` is the side of the grid of step 2, and so of the transform; the block of step
+4 is taken from whatever transform that is. At 32 the 8×8 block holds the lowest eighth
+of the frequencies the grid can hold, and the detail finer than them lies in the
+coefficients outside it. At 8 the block is the whole transform of an 8×8 grid, the grid
+aHash reads, and whatever an edit changes in that grid reaches the hash. Here is the
+example at four sizes:
+
+![The example photograph's grid at dct_size 8, 16, 24 and 32, with the bits of the default block at each, the bits that differ from dct_size 32 outlined](../assets/generated/phash/dct-sizes.light.svg#only-light)
+![The example photograph's grid at dct_size 8, 16, 24 and 32, with the bits of the default block at each, the bits that differ from dct_size 32 outlined](../assets/generated/phash/dct-sizes.dark.svg#only-dark)
+
+On the example only the coarsest grid changes the hash. Over both corpora, with the mean
+bits that the copies of three edits of fine detail move:
+
+--8<-- "docs/assets/generated/phash/dct-corpus-table.md"
+
+- **A smaller grid separates a little worse**, most on the synthetic images, and at 8
+  the copies made by recompression, blur and noise move further: the block then takes
+  the fine detail in.
+- **It costs the same.** The time goes into the area pass over the image, which reads
+  every pixel whatever the grid; the transform of at most 32×32 values is a small part
+  of it. The times are in the table under [Cost](#cost).
+
+The default, 32, is therefore also the best of the range.
 
 ## Settings that affect it
 

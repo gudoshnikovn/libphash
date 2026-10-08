@@ -11,9 +11,10 @@
  * the bits set "from left to right, top to bottom using big-endian". This code follows
  * that exactly, including the direction of the comparison. The resampling filter is not
  * specified by the source. It is stb's Mitchell filter (ph_resize_mitchell()) from the full
- * image, not the area average the other three uint64_t hashes share: the differences of
- * neighbouring cells of an area average are noisier, and measured worse (see
- * docs/algorithm-provenance.md section 2).
+ * image, not the area average the other three uint64_t hashes share: an area average
+ * flattens a pattern finer than a cell into equal neighbours, whose bits are all clear,
+ * and different images of such patterns collide (docs/algorithm-provenance.md section 2,
+ * docs/theory/dhash.md).
  *
  * See docs/algorithm-provenance.md and docs/references.md.
  */

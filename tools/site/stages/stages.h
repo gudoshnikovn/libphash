@@ -141,7 +141,9 @@ int color_refuses_gray(const char *path, ph_error_t (*compute)(ph_context_t *, p
 int mode_ahash(int argc, char **argv);
 int mode_ahash_variants(int argc, char **argv);
 int mode_dhash(int argc, char **argv);
+int mode_dhash_variants(int argc, char **argv);
 int mode_phash(int argc, char **argv);
+int mode_phash_variants(int argc, char **argv);
 int mode_whash(int argc, char **argv);
 int mode_whash_modes(int argc, char **argv);
 int mode_mhash(int argc, char **argv);

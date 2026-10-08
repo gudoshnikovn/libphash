@@ -1,15 +1,28 @@
-"""The figures of docs/theory/dhash.md, from `site_stages dhash`."""
+"""The figures of docs/theory/dhash.md, from `site_stages dhash` and
+`site_stages dhash-variants`."""
 import os
 
 import matplotlib.pyplot as plt
 import numpy as np
+from PIL import Image
 
+from draw.corpus_charts import share, two_hashes_by_edit, two_hashes_separability
+from draw.markdown import write_text
 from draw.style import (draw_bits, gray_panel, hash_footer, hide_axes, image_panel, save,
                         stage_strip)
-from measure.tool import run_stages
+from measure import corpus
+from measure.corpus import SHORT
+from measure.digests import digest_bits
+from measure.separability import COPY_STRENGTHS, separability, variant_distances
+from measure.tool import run_on_images, run_stages
 
 ALGO = "dhash"
 BITS = 64  # the robustness chart's scale: bits of the hash
+
+# The grids `site_stages dhash-variants` compares, the library's first.
+REDUCTIONS = (("mitchell", "Mitchell filter"), ("area", "exact area average"))
+# The edits the comparison with aHash draws; every edit is in the table under it.
+VS_AHASH = ("Rotation", "Crop", "Brightness", "Gamma", "Noise")
 
 
 def _cell(ax, x, y, value, c, edge=None):
@@ -144,6 +157,134 @@ def figures(tool, image, out_dir):
     save(bit_order, out, "bit-order")
     save(one_row, out, "nine-to-eight")
     save(load_grayscale, out, "load-grayscale")
+
+    def reductions(c):
+        # The 9×8 grid both ways, each comparison drawn between its two cells; a
+        # comparison whose bit differs from the library's is outlined.
+        area = np.array(st["grid_area"]).reshape(h, w)
+        f, axes = plt.subplots(1, 2, figsize=(10.4, 4.2))
+        for ax, (g, name) in zip(axes, ((grid, "Mitchell filter, the library"),
+                                        (area, "exact area average"))):
+            b = _bits(g)
+            for (i, j), v in np.ndenumerate(g):
+                _cell(ax, j * 1.4, i, v, c)
+            for (i, j), x in np.ndenumerate(b):
+                ax.text(j * 1.4 + 0.7, i, "<" if x else "≥", ha="center", va="center",
+                        fontsize=10, fontweight="bold" if x else "normal",
+                        color=c["accent"] if x else c["muted"],
+                        bbox=dict(boxstyle="square,pad=0.15", facecolor="none",
+                                  edgecolor=c["accent2"] if x != bits[i, j] else "none",
+                                  linewidth=1.6))
+            ax.set_xlim(-0.5, (w - 1) * 1.4 + 0.5)
+            ax.set_ylim(h - 0.5, -0.5)
+            ax.set_aspect("equal")
+            hide_axes(ax)
+            k = int((b != bits).sum())
+            ax.set_title(name if g is grid else f"{name}: {k} bit{'' if k == 1 else 's'} "
+                         "differ", color=c["ink"], fontsize=10)
+        f.tight_layout(rect=(0, 0.05, 1, 1))
+        f.text(0.5, 0.0, "blue “<”: the left cell is darker, bit set · orange outline: a bit "
+               "that differs from the library's", ha="center", color=c["muted"], fontsize=9)
+        return f
+
+    save(reductions, out, "reductions")
+
+    measured = corpus.measure_settings(tool, "dhash-variants")
+    _write_reductions_tables(measured, out)
+    _blind_spot(tool, measured, out)
+    two_hashes_by_edit(tool, out, "vs-ahash", (("ahash", "aHash"), ("dhash", "dHash")),
+                       VS_AHASH, SHORT)
+    two_hashes_separability(tool, out, "vs-ahash-separability",
+                            (("ahash", "aHash"), ("dhash", "dHash")), SHORT)
+
+
+def _hash_bits(hexhash):
+    return digest_bits(hexhash)
+
+
+def _write_reductions_tables(measured, out):
+    """Each grid over both corpora: d′, the threshold that accepts 95 % of the copies, the
+    different pairs it lets through, the pairs with the same hash and the hashes with no
+    bit set; and, folded away, the mean bits each edit moves."""
+    lines = ["| Corpus | Grid | d′ | Threshold | Different pairs within it "
+             "| Different pairs with the same hash | Hashes with no bit set |",
+             "|---|---|---|---|---|---|---|"]
+    means = {}
+    present = [k for k in ("photos", "synthetic") if measured[k]["n"]]
+    for key in ("photos", "synthetic"):
+        data = measured[key]
+        if not data["n"]:
+            lines.append(f"| {data['label']}: not available to this build | | | | | | |")
+            continue
+        for variant, name in REDUCTIONS:
+            c, d = variant_distances(data["images"], variant, _hash_bits)
+            dprime, t, fmr = separability(c, d, True)
+            b = np.array([[_hash_bits(row[variant]) for row in img]
+                          for img in data["images"]], np.uint8)
+            means[key, variant] = (b[:, 1:] != b[:, :1]).sum(axis=2).mean(axis=0)
+            empty = int((b[:, 0].sum(axis=1) == 0).sum())
+            name = f"**{name}**" if variant == "mitchell" else name
+            lines.append(f"| {SHORT[key]} | {name} | {dprime:.2f} | {t:g} of 64 | "
+                         f"{share(fmr, len(d))} | {int((d == 0).sum())} | {empty} |")
+    write_text(out, "reductions.md", "\n".join(lines))
+
+    lines = ["| Edit | " + " | ".join(f"{SHORT[k]}, {name}" for k in present
+                                      for _, name in REDUCTIONS) + " |",
+             "|---|" + "---|" * (len(present) * len(REDUCTIONS))]
+    for e, (edit, strength) in enumerate(COPY_STRENGTHS.items()):
+        lines.append(f"| {edit} {strength:g} | " + " | ".join(
+            f"{means[k, v][e]:.1f}" for k in present for v, _ in REDUCTIONS) + " |")
+    write_text(out, "reductions-edits.md", "\n".join(lines))
+
+
+# --8<-- [start:blind-spot]
+def _blind_spot_images(size=256):
+    """Four images whose brightness changes in one direction only: stripes and a gradient
+    running across the rows, and the same turned a quarter."""
+    y = np.repeat(np.arange(size)[:, None], size, axis=1)
+    stripes = np.where((y // 32) % 2 == 0, 60, 200).astype(np.uint8)
+    sky = (220 - y * 140 // (size - 1)).astype(np.uint8)
+    gray = [("horizontal stripes", stripes), ("darker from top to bottom", sky),
+            ("vertical stripes", stripes.T.copy()),
+            ("brighter from left to right", sky.T[:, ::-1].copy())]
+    return [(name, Image.fromarray(g).convert("RGB")) for name, g in gray]
+# --8<-- [end:blind-spot]
+
+
+def _blind_spot(tool, measured, out):
+    """The four images above with their hashes; and the bits set over both corpora."""
+    made = _blind_spot_images()
+    rows = run_on_images(tool, "dhash-variants", [im for _, im in made])
+    panels = [(name, np.asarray(im), row["mitchell"]) for (name, im), row in zip(made, rows)]
+
+    def fig(c):
+        f, axes = plt.subplots(2, len(panels), figsize=(2.4 * len(panels), 5.8))
+        for col, (name, px, hexhash) in enumerate(panels):
+            axes[0, col].imshow(px, cmap="gray", vmin=0, vmax=255, interpolation="nearest")
+            hide_axes(axes[0, col])
+            axes[0, col].set_title(name.replace(" from", "\nfrom"), color=c["ink"],
+                                   fontsize=9)
+            b = _hash_bits(hexhash).reshape(8, 8)
+            draw_bits(axes[1, col], b, c, numbers=False)
+            axes[1, col].set_title(f"{hexhash}\n{int(b.sum())} of 64 bits set",
+                                   color=c["muted"], family="monospace", fontsize=8.5)
+        f.tight_layout(h_pad=2.5)
+        return f
+
+    save(fig, out, "blind-spot")
+
+    lines = ["| Corpus | Bits set: fewest–most; middle 80 % | Hashes with no bit set |",
+             "|---|---|---|"]
+    for key in ("photos", "synthetic"):
+        data = measured[key]
+        if not data["n"]:
+            lines.append(f"| {data['label']}: not available to this build | | |")
+            continue
+        ones = np.array([int(_hash_bits(img[0]["mitchell"]).sum()) for img in data["images"]])
+        lo, hi = np.percentile(ones, [10, 90])
+        lines.append(f"| {SHORT[key]} ({data['n']}) | {ones.min()}–{ones.max()}; "
+                     f"{lo:.0f}–{hi:.0f} | {int((ones == 0).sum())} |")
+    write_text(out, "bits-set.md", "\n".join(lines))
 
 
 def _bits(grid):

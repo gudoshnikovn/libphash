@@ -72,7 +72,7 @@ arguments lists every mode.
 |---|---|
 | `style.py` | The two themes (`THEMES`, one accent and its second, validated on both backgrounds), `save()` (both themes, deterministic SVG), axes, and panels: `stage_strip()`, `value_cells()`, `draw_bits()` |
 | `robustness_charts.py` | The chart of the nine edits on the example photograph, and its table |
-| `corpus_charts.py` | The same over both corpora, separability, the edits that change the picture |
+| `corpus_charts.py` | The same over both corpora, separability, the edits that change the picture; two hashes side by side, edit by edit and by separability (`two_hashes_by_edit()`, `two_hashes_separability()`), for a page that compares its algorithm with its nearest relative |
 | `timing_tables.py` | The Cost row of each page, its table of times, the footnote naming the machine |
 | `markdown.py` | `write_text()`, `table()`: what a page includes beside a figure |
 

@@ -1,19 +1,33 @@
-"""The figures of docs/theory/phash.md, from `site_stages phash`."""
+"""The figures of docs/theory/phash.md, from `site_stages phash` and
+`site_stages phash-variants`."""
 import os
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.colors import LogNorm
 
+from draw.corpus_charts import share, two_hashes_by_edit, two_hashes_separability
 from draw.markdown import load_grayscale_hash, write_text
 from draw.style import (draw_bits, gray_panel, hash_footer, hide_axes, image_panel, save,
-                        stage_strip, value_cells)
+                        stage_strip, style_axes, value_cells)
 from measure import corpus
+from measure.corpus import SHORT
 from measure.digests import bits_apart
+from measure.separability import COPY_STRENGTHS, separability, variant_distances
 from measure.tool import run_stages
 
 ALGO = "phash"
 BITS = 64  # the robustness chart's scale: bits of the hash
+
+# What `site_stages phash-variants` hashes with: block sizes 2 to 8 at dct_size 32 (the
+# library accepts 4 to 8), and dct_sizes at the default block.
+REDUCTIONS = range(2, 9)
+DCT_SIZES = (8, 16, 24, 32)
+# The edits the comparison with aHash draws; every edit is in the table under it.
+VS_AHASH = ("Rotation", "Crop", "Gamma", "Noise", "JPEG quality")
+# The copies whose movement the dct_size table shows: the edits of fine detail, with
+# their short column names.
+FINE = (("JPEG quality", "JPEG"), ("Gaussian blur", "blur"), ("Noise", "noise"))
 
 
 def _crowded_synthetic(tool):
@@ -221,6 +235,40 @@ def figures(tool, image, out_dir):
     save(bit_grid, out, "bits")
     save(bit_order, out, "bit-order")
     save(reduction, out, "reduction")
+
+    def dct_sizes(c):
+        sizes = st["dct_sizes"]
+        default = sizes[-1]["bits"]
+        f, axes = plt.subplots(2, len(sizes), figsize=(2.6 * len(sizes), 6.2))
+        for col, d in enumerate(sizes):
+            n = d["size"]
+            axes[0, col].imshow(np.array(d["grid"]).reshape(n, n), cmap="gray", vmin=0,
+                                vmax=255, interpolation="nearest")
+            hide_axes(axes[0, col])
+            axes[0, col].set_title(f"dct_size {n}", color=c["ink"], fontsize=10,
+                                   fontweight="bold" if col == len(sizes) - 1 else "normal")
+            b = np.array(d["bits"])
+            k = int((b != np.array(default)).sum())
+            value_cells(axes[1, col], b, b, c, 8, fontsize=0, changed=b != np.array(default))
+            note = ("the default" if col == len(sizes) - 1 else
+                    "the same hash" if k == 0 else f"{k} bits differ")
+            axes[1, col].set_title(f"{d['hash']}\n{note}",
+                                   color=c["muted"], family="monospace", fontsize=8.5)
+        f.tight_layout(rect=(0, 0.04, 1, 1), h_pad=2.5)
+        f.text(0.5, 0.0, "orange outline: a bit that differs from dct_size 32", ha="center",
+               color=c["muted"], fontsize=9)
+        return f
+
+    save(dct_sizes, out, "dct-sizes")
+
+    measured = corpus.measure_settings(tool, "phash-variants")
+    _reduction_corpus(measured, out)
+    _write_dct_table(measured, out)
+    _write_dc(measured, out)
+    two_hashes_by_edit(tool, out, "vs-ahash", (("ahash", "aHash"), ("phash", "pHash")),
+                       VS_AHASH, SHORT)
+    two_hashes_separability(tool, out, "vs-ahash-separability",
+                            (("ahash", "aHash"), ("phash", "pHash")), SHORT)
     _write_margin_facts(st, syn_index, syn, out)
     _write_load_grayscale(st, out)
 
@@ -244,3 +292,112 @@ def _write_load_grayscale(st, out):
     """One sentence on the example photograph hashed from the decoder's grayscale."""
     a, b = st["hash"], st["hash_load_grayscale"]
     write_text(out, "load-grayscale.md", load_grayscale_hash(a, b, bits_apart(a, b)))
+
+
+def _hash_bits(n):
+    """A hash's first n bits in coefficient order: bit i is coefficient i (LSB first)."""
+    return lambda h: np.array([(int(h, 16) >> i) & 1 for i in range(n)], np.uint8)
+
+
+def _variant_rows(data, variants):
+    """[(variant, bits, d′, threshold, accepted share, pairs, distinct originals)]."""
+    rows = []
+    for v, n in variants:
+        c, d = variant_distances(data["images"], v, _hash_bits(n))
+        dprime, t, fmr = separability(c, d, True)
+        rows.append((v, n, dprime, t, fmr, len(d), len({img[0][v] for img in data["images"]})))
+    return rows
+
+
+def _reduction_corpus(measured, out):
+    """d′ and the share of different pairs within the threshold against reduction_size,
+    both corpora; and their table, with the distinct hashes over the originals."""
+    variants = [(f"r{r}", r * r) for r in REDUCTIONS]
+    present = [(k, measured[k]) for k in ("photos", "synthetic") if measured[k]["n"]]
+    rows = {k: _variant_rows(d, variants) for k, d in present}
+
+    def fig(c):
+        colors = {"photos": c["accent"], "synthetic": c["accent2"]}
+        f, axes = plt.subplots(1, 2, figsize=(10, 3.9))
+        for key, data in present:
+            for ax, col, scale in ((axes[0], 2, 1), (axes[1], 4, 100)):
+                ax.plot(list(REDUCTIONS), [r[col] * scale for r in rows[key]],
+                        color=colors[key], linewidth=2, marker="o", markersize=4.5,
+                        label=data["label"])
+        for ax, ylabel in ((axes[0], "d′ (higher separates better)"),
+                           (axes[1], "% of different pairs within the threshold")):
+            ax.axvspan(1.6, 3.5, color=c["grid"], alpha=0.5, linewidth=0)
+            ax.set_xticks(list(REDUCTIONS))
+            ax.set_xlabel("reduction_size", color=c["muted"], fontsize=9)
+            ax.set_ylabel(ylabel, color=c["muted"], fontsize=9)
+            style_axes(ax, c)
+        axes[1].set_yscale("symlog", linthresh=0.1)
+        ticks = [0, 0.1, 0.3, 1, 3, 10, 30, 100]
+        top = axes[1].get_ylim()[1]
+        axes[1].set_yticks([t for t in ticks if t <= top * 1.1],
+                           [f"{t:g}" for t in ticks if t <= top * 1.1])
+        axes[1].set_ylim(0, None)
+        f.tight_layout(rect=(0, 0.06, 1, 0.9))
+        handles = [plt.Line2D([], [], color=colors[k], linewidth=2, marker="o", markersize=4)
+                   for k, _ in present]
+        f.legend(handles, [d["label"] for _, d in present], loc="upper center",
+                 ncol=len(present), frameon=False, labelcolor=c["ink"], fontsize=9.5,
+                 bbox_to_anchor=(0.5, 1.0))
+        f.text(0.5, 0.0, "Shaded: sizes below the range the library accepts, computed the same "
+               "way. The threshold accepts 95 % of the copies.", ha="center",
+               color=c["muted"], fontsize=9)
+        return f
+
+    if present:
+        save(fig, out, "reduction-corpus")
+    lines = ["| Corpus | reduction_size | Bits | d′ | Threshold | Different pairs within it "
+             "| Distinct hashes of the originals |", "|---|---|---|---|---|---|---|"]
+    for key in ("photos", "synthetic"):
+        data = measured[key]
+        if not data["n"]:
+            lines.append(f"| {data['label']}: not available to this build | | | | | | |")
+            continue
+        for v, n, dprime, t, fmr, npairs, distinct in rows[key]:
+            r = int(v[1:])
+            size = f"**{r}**" if r == 8 else (f"{r} (below the range)" if r < 4 else str(r))
+            lines.append(f"| {SHORT[key]} | {size} | {n} | {dprime:.2f} | {t:g} of {n} | "
+                         f"{share(fmr, npairs)} | {distinct} of {data['n']} |")
+    write_text(out, "reduction-corpus-table.md", "\n".join(lines))
+
+
+def _write_dct_table(measured, out):
+    """Each dct_size over both corpora: d′, the threshold, the different pairs within it,
+    and how far the copies of fine-detail edits move."""
+    edits = list(COPY_STRENGTHS)
+    lines = ["| Corpus | dct_size | d′ | Threshold | Different pairs within it | " +
+             " | ".join(f"Copies, {name} {COPY_STRENGTHS[e]:g}" for e, name in FINE) + " |",
+             "|---|---|---|---|---|" + "---|" * len(FINE)]
+    for key in ("photos", "synthetic"):
+        data = measured[key]
+        if not data["n"]:
+            lines.append(f"| {data['label']}: not available to this build | | | | |" +
+                         " |" * len(FINE))
+            continue
+        for v, n, dprime, t, fmr, npairs, _ in _variant_rows(
+                data, [(f"d{s}", 64) for s in DCT_SIZES]):
+            b = np.array([[_hash_bits(64)(r[v]) for r in img] for img in data["images"]])
+            moved = (b[:, 1:] != b[:, :1]).sum(axis=2).mean(axis=0)
+            size = f"**{v[1:]}**" if v == "d32" else v[1:]
+            lines.append(f"| {SHORT[key]} | {size} | {dprime:.2f} | {t:g} of 64 | "
+                         f"{share(fmr, npairs)} | " +
+                         " | ".join(f"{moved[edits.index(e)]:.1f}" for e, _ in FINE) + " |")
+    write_text(out, "dct-corpus-table.md", "\n".join(lines))
+
+
+def _write_dc(measured, out):
+    """How many hashed files, originals and copies of both corpora, have the DC bit clear."""
+    files = [row for k in ("photos", "synthetic") for img in measured[k]["images"]
+             for row in img]
+    if not files:
+        write_text(out, "dc.md", "The corpora were not available to this build.")
+        return
+    clear = sum(1 for row in files if not int(row["r8"], 16) & 1)
+    text = (f"Over the {len(files):,} images hashed for the charts of this page, both "
+            f"corpora's originals and their copies, the DC bit is set in "
+            f"{'every one' if clear == 0 else f'all but {clear}'}.")
+    write_text(out, "dc.md", text)

@@ -143,7 +143,7 @@ description by the people responsible for the algorithm.
 
 | Difference | Class | Note |
 |---|---|---|
-| Resampling filter | undefined | Source says only "shrink". Mitchell, not the area average aHash uses: dHash compares neighboring pixels, and the sharp cell edges of an area average make those differences noisier. Measured with an area average, straight to 9×8 or through any intermediate grid from 72×64 to 288×256: separability down (3.49 → 3.23 synthetic) and more pairs of different photographs sharing a hash (721 → 900–1100 of 800 photographs). |
+| Resampling filter | undefined | Source says only "shrink". Mitchell, not the area average aHash uses: an area average flattens a pattern finer than a cell into equal neighbors, which compare as 0, so different images made of such patterns collide. Measured with an area average, straight to 9×8 or through any intermediate grid from 72×64 to 288×256: separability down (3.49 → 3.23 synthetic) and more pairs of different photographs sharing a hash (721 → 900–1100 of 800 photographs). On the site's 200 photographs the two are close, the area average slightly ahead ([dHash](theory/dhash.md#why-mitchell-not-an-area-average)). |
 | Grayscale coefficients | pinned | As for aHash. |
 
 **Verdict: conforms**, down to the direction of the comparison and the bit order, both

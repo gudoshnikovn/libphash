@@ -44,8 +44,8 @@ The kernel is stretched to the reduction, so each output cell is a weighted mean
 source pixels within two cells' width of its center, rows first, then columns. Pixels
 beyond the border repeat the edge, and the result is rounded and clamped to 0–255. Unlike
 an area average, neighboring cells share source pixels, and the weights fall off smoothly
-from the center: why that matters for dHash is in
-[where it comes from](#where-it-comes-from).
+from the center: what that changes for dHash is in
+[Why Mitchell, not an area average](#why-mitchell-not-an-area-average).
 
 ![The 9×8 grid with its values, and the comparison between each pair of neighbors](../assets/generated/dhash/grid.light.svg#only-light){ width="480" }
 ![The 9×8 grid with its values, and the comparison between each pair of neighbors](../assets/generated/dhash/grid.dark.svg#only-dark){ width="480" }
@@ -77,6 +77,65 @@ neighbor of the eighth. Here is the top row of the grid above, and the eight bit
 
 ![Nine cells of the top row and the eight bits their eight pairs of neighbors give](../assets/generated/dhash/nine-to-eight.light.svg#only-light)
 ![Nine cells of the top row and the eight bits their eight pairs of neighbors give](../assets/generated/dhash/nine-to-eight.dark.svg#only-dark)
+
+### Why Mitchell, not an area average
+
+The post says only "shrink", and dHash is the one 64-bit hash here that does not reduce
+with the exact area average aHash, pHash, wHash and BMH share. Here is the example's 9×8
+grid both ways:
+
+![The example photograph's 9×8 grid by the Mitchell filter and by an exact area average, each comparison between neighbors drawn, the comparisons whose bit differs outlined](../assets/generated/dhash/reductions.light.svg#only-light)
+![The example photograph's 9×8 grid by the Mitchell filter and by an exact area average, each comparison between neighbors drawn, the comparisons whose bit differs outlined](../assets/generated/dhash/reductions.dark.svg#only-dark)
+
+The values differ by a few levels, and the bits that part are those of nearly equal
+neighbors. Over the two corpora, with the copies and the different pairs of the
+separability chart below:
+
+--8<-- "docs/assets/generated/dhash/reductions.md"
+
+- **On the synthetic images the Mitchell filter separates better.** An area average
+  cancels a pattern finer than a cell: a fine checkerboard or fine stripes become one
+  flat gray, every pair of neighbors is equal, and every bit is clear. Such images
+  collide at `0000000000000000`, and the threshold takes in many more different pairs.
+  The Mitchell filter's weights reach past the cell and fall off smoothly, so a ripple of
+  the pattern survives, and the comparisons have something to compare.
+- **On the photographs the two are close**, with the area average a little ahead on this
+  corpus: patterns that cancel within a cell are rare in photographs, and the copies of
+  both grids move about as far (the table under this list has each edit).
+- **The Mitchell filter costs more**: on a large image the resampling pass is most of
+  dHash's time, and it is not shared with the other hashes ([Cost](#cost)).
+
+??? info "The numbers behind the table"
+
+    Mean bits that differ between an original and its copy, for each edit and grid:
+
+    --8<-- "docs/assets/generated/dhash/reductions-edits.md"
+
+??? info "How this was measured"
+
+    Every original of both corpora and its nine copies (those of the separability chart
+    below) is hashed by `site_stages dhash-variants`, which computes the hash from the
+    Mitchell grid as in the steps above, checks it against
+    [`ph_compute_dhash()`](../api/hash64.md#ph_compute_dhash), and makes the same
+    comparisons on the library's exact area average reduced to 9×8. *d′* and the
+    threshold are computed as for the corpus charts. The figure is `site_stages dhash` on
+    the example photograph.
+
+    ```c title="tools/site/stages/dhash.c"
+    --8<-- "tools/site/stages/dhash.c:dhash"
+    ```
+
+    ```c title="tools/site/stages/dhash.c"
+    --8<-- "tools/site/stages/dhash.c:dhash-variants"
+    ```
+
+    ```python title="tools/site/measure/corpus.py"
+    --8<-- "tools/site/measure/corpus.py:variants"
+    ```
+
+    ```python title="tools/site/measure/separability.py"
+    --8<-- "tools/site/measure/separability.py:variants"
+    ```
 
 ## Bit layout
 
@@ -289,6 +348,73 @@ copies, in each corpus's color: an edited image below it would be taken for a co
     --8<-- "tools/site/measure/transforms.py:content_edits"
     ```
 
+### What a row comparison cannot see
+
+Every bit compares two neighbors in a row, so dHash sees how the brightness changes from
+left to right and nothing else. An image whose brightness changes only from top to bottom
+has equal neighbors in every row: horizontal stripes and a sky that darkens toward the
+horizon both hash to `0000000000000000`, the hash of a flat image, and to each other.
+Turned a quarter, the same stripes give a pattern of bits, and the gradient sets all 64.
+
+![Horizontal stripes and a top-to-bottom gradient, both with no bit set, beside vertical stripes and a left-to-right gradient, with half and all of the bits set](../assets/generated/dhash/blind-spot.light.svg#only-light)
+![Horizontal stripes and a top-to-bottom gradient, both with no bit set, beside vertical stripes and a left-to-right gradient, with half and all of the bits set](../assets/generated/dhash/blind-spot.dark.svg#only-dark)
+
+aHash, which compares each cell with the mean of the whole grid, sees both directions:
+the horizontal stripes give it alternating rows of bits. Real images are seldom without
+any change along their rows, and over the two corpora no dHash comes out empty:
+
+--8<-- "docs/assets/generated/dhash/bits-set.md"
+
+??? info "How this was measured"
+
+    The four images are drawn in Python and hashed by `site_stages dhash-variants`, which
+    checks each hash against [`ph_compute_dhash()`](../api/hash64.md#ph_compute_dhash).
+    The table counts the bits of each original's hash in the measurement of the
+    section [Why Mitchell, not an area average](#why-mitchell-not-an-area-average).
+
+    ```python title="tools/site/pages/dhash.py"
+    --8<-- "tools/site/pages/dhash.py:blind-spot"
+    ```
+
+### dHash and aHash
+
+The two hashes read the same grayscale image at nearly the same size and differ in what a
+bit compares: a cell with the mean of the grid, or with the cell beside it. Here are
+both, edit by edit, over both corpora, as the mean number of bits that differ from the
+original:
+
+![Mean bits that differ from the original for aHash and dHash under rotation, crop, brightness, gamma and noise, over the photographs and the synthetic images](../assets/generated/dhash/vs-ahash.light.svg#only-light)
+![Mean bits that differ from the original for aHash and dHash under rotation, crop, brightness, gamma and noise, over the photographs and the synthetic images](../assets/generated/dhash/vs-ahash.dark.svg#only-dark)
+
+- **Rotation and cropping move dHash further.** A small shift changes the difference
+  between two neighbors sooner than it carries a cell across the mean of the whole grid.
+- **Brightness and contrast move dHash a little more.** They keep the order of
+  neighbors, but tip the pairs that were nearly equal, which aHash's comparison with the
+  mean does not have.
+- **Gamma moves both about alike**, dHash a little less at the strongest settings: a tone
+  curve keeps the order of neighbors, where it moves aHash's mean against the cells.
+- **Noise on the synthetic images moves dHash far more.** Their flat areas give equal
+  neighbors, whose bits are clear, and noise tips them one way or the other.
+
+The price is in the copies, and the gain in the different images: dHash's copies sit
+further from the original, but on the photographs its different pairs spread less
+widely around 32, so the gap between the two is wider than aHash's. On the synthetic
+images the order is reversed.
+
+--8<-- "docs/assets/generated/dhash/vs-ahash-separability.md"
+
+??? info "The numbers behind the chart"
+
+    Mean bits that differ from the original, over each corpus:
+
+    --8<-- "docs/assets/generated/dhash/vs-ahash-table.md"
+
+??? info "How this was measured"
+
+    The values are those of the corpus charts above, from the same cached measurement,
+    for both algorithms; the figure and the table take their mean over the corpus
+    instead of the median, since the median of a small edit is 0 for both.
+
 How the nine algorithms compare is on
 [choosing an algorithm](../algorithms.md#comparison-summary).
 
@@ -363,10 +489,9 @@ indicate that P[x] < P[x+1]") and the bit order (left to right, top to bottom,
 big-endian), and this implementation follows all four exactly.
 
 The post leaves the resampling filter open. This implementation uses Mitchell rather than
-the area average aHash uses: dHash compares neighboring cells, and the hard cell
-boundaries of an area average make those differences noisier. With an area average
-instead, separability drops on the synthetic corpus and more pairs of different
-photographs share a hash; the numbers are in
-[provenance § 2](../algorithm-provenance.md#2-dhash--difference-hash).
+the area average aHash uses, because an area average flattens patterns finer than a cell
+into equal neighbors, whose bits are all clear; on photographs the two grids are close
+([Why Mitchell, not an area average](#why-mitchell-not-an-area-average); the tests'
+numbers are in [provenance § 2](../algorithm-provenance.md#2-dhash--difference-hash)).
 
 --8<-- "docs/assets/generated/timing/footnote.md"

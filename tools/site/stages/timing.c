@@ -54,6 +54,16 @@ static int time_mhash_size(ph_context_t *ctx, const char *path, int size) {
            bad;
 }
 
+/* pHash with a dct_size other than the default, and the default block. */
+static int time_phash_dct(ph_context_t *ctx, const char *path, int size) {
+    (void)path;
+    uint64_t h;
+    int bad = ph_context_set_phash_params(ctx, size, PH_DCT_REDUCTION_SIZE) != PH_SUCCESS ||
+              ph_compute_phash(ctx, &h) != PH_SUCCESS;
+    return ph_context_set_phash_params(ctx, PH_DCT_SIZE, PH_DCT_REDUCTION_SIZE) != PH_SUCCESS ||
+           bad;
+}
+
 /* Radial with the settings of radial_variants[variant]. */
 static int time_radial(ph_context_t *ctx, const char *path, int variant) {
     (void)path;
@@ -82,6 +92,9 @@ static const time_case_t time_cases[] = {
     {"mhash_size_1024", time_mhash_size, 1024},
     {"mhash_size_2048", time_mhash_size, 2048},
     {"mhash_size_4096", time_mhash_size, 4096},
+    {"phash_dct_8", time_phash_dct, 8},
+    {"phash_dct_16", time_phash_dct, 16},
+    {"phash_dct_24", time_phash_dct, 24},
     {"radial_sigma_1", time_radial, RADIAL_SIGMA_1},
     {"radial_sigma_8", time_radial, RADIAL_SIGMA_8},
     {"radial_gamma_2", time_radial, RADIAL_GAMMA_2},

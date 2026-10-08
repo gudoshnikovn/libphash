@@ -16,7 +16,8 @@ from PIL import Image
 from draw.markdown import write_text
 from draw.robustness_charts import close_range, reference_line, reference_note, robust_limits
 from draw.style import hide_axes, save, style_axes
-from measure.metric import metric
+from measure import corpus
+from measure.metric import bits_that_differ, metric
 from measure.separability import RECALL, copies_and_different, separability
 from measure.transforms import content_edits, transforms
 
@@ -332,3 +333,76 @@ def edits_examples(image, out_dir):
         return figure
 
     save(fig, os.path.join(out_dir, "edits"), "examples")
+
+
+def _mean_bits(values):
+    v = [bits_that_differ(x, 64) for x in values if x is not None]
+    return float(np.mean(v)) if v else float("nan")
+
+
+def two_hashes_by_edit(tool, out_dir, name, series, edits, short):
+    """Two 64-bit hashes over both corpora, edit by edit, from the cached corpus
+    measurement: the mean bits that differ from the original, as a figure of `edits` (one
+    panel each, a row per corpus) and a table of every edit. `series` is ((algo, label),
+    (algo, label)), drawn in the second accent and the accent; `short` names the corpora
+    in the labels. Writes <name>.svg and <name>-table.md."""
+    datasets = [(k, d) for k, d in ((k, corpus.measure_corpus(tool, k))
+                                    for k in ("photos", "synthetic")) if d["n"]]
+    steps = {n: s for n, _, s in transforms()}
+    xlabels = {n: x for n, x, _ in transforms()}
+
+    def fig(c):
+        lines = [(algo, label, color)
+                 for (algo, label), color in zip(series, (c["accent2"], c["accent"]))]
+        figure, axes = plt.subplots(len(datasets), len(edits), sharey=True,
+                                    figsize=(12, 2.9 * len(datasets) + 0.6), squeeze=False)
+        for row, (key, data) in zip(axes, datasets):
+            for ax, edit in zip(row, edits):
+                xs = list(range(len(steps[edit])))
+                for algo, _, color in lines:
+                    ys = [_mean_bits(v) for _, v in data["robust"][algo][edit]]
+                    ax.plot(xs, ys, color=color, linewidth=2, marker="o", markersize=4)
+                ax.set_xticks(xs, [f"{v:g}" for v, _ in steps[edit]], fontsize=8)
+                ax.set_title(edit, color=c["ink"], fontsize=10)
+                ax.set_xlabel(xlabels[edit], color=c["muted"], fontsize=8.5)
+                style_axes(ax, c)
+            row[0].set_ylabel(f"{short[key]} ({data['n']})\nmean bits that differ",
+                              color=c["muted"], fontsize=8.5)
+        figure.tight_layout(rect=(0, 0, 1, 0.93))
+        handles = [plt.Line2D([], [], color=col, linewidth=2, marker="o", markersize=4)
+                   for _, _, col in lines]
+        figure.legend(handles, [n for _, n, _ in lines], loc="upper center", ncol=2,
+                      frameon=False, labelcolor=c["ink"], fontsize=9.5,
+                      bbox_to_anchor=(0.5, 1.0))
+        return figure
+
+    save(fig, out_dir, name)
+
+    head = "| Transform | Strength | " + " | ".join(
+        f"{short[k]}, {label}" for k, _ in datasets for _, label in series) + " |"
+    lines = [head, "|---|---|" + "---|" * (2 * len(datasets))]
+    for edit, _, s in transforms():
+        for k, (strength, _) in enumerate(s):
+            cells = [f"{_mean_bits(d['robust'][a][edit][k][1]):.1f}"
+                     for _, d in datasets for a, _ in series]
+            lines.append(f"| {edit} | {strength:g} | " + " | ".join(cells) + " |")
+    write_text(out_dir, f"{name}-table.md", "\n".join(lines))
+
+
+def two_hashes_separability(tool, out_dir, name, series, short):
+    """Two 64-bit hashes separating copies from different images over both corpora, from
+    the cached corpus measurement: d′, the threshold that accepts 95 % of the copies and
+    the different pairs it lets through. Writes <name>.md."""
+    lines = ["| Corpus | Hash | d′ | Threshold | Different pairs within it |",
+             "|---|---|---|---|---|"]
+    for key in ("photos", "synthetic"):
+        data = corpus.measure_corpus(tool, key)
+        if not data["n"]:
+            lines.append(f"| {data['label']}: not available to this build | | | | |")
+            continue
+        for algo, label in series:
+            c, d = copies_and_different(data, algo, lambda v: round(bits_that_differ(v, 64)))
+            dprime, t, fmr = separability(c, d, True)
+            lines.append(f"| {short[key]} | {label} | {dprime:.2f} | {t:g} of 64 | "
+                         f"{share(fmr, len(d))} |")
+    write_text(out_dir, f"{name}.md", "\n".join(lines))
