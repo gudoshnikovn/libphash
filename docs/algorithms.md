@@ -165,7 +165,8 @@ portability and comparison against a foreign implementation.
 - **Output**: 64-bit.
 - **Strength**: among the cheapest here, and very good at finding a known image again.
 - **Weakness**: rotation and cropping, which move content between the 8×8 cells.
-  Brightness, contrast and gamma keep the cells' order and barely move it
+  Brightness and contrast keep the cells' order and barely move it; gamma moves the mean
+  against the cells, by a few bits at its strongest, more than wHash's median
   ([measured](theory/ahash.md#what-changes-the-hash)).
 - **Conformance**: follows its source, including the bit order.
 

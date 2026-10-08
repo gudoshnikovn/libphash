@@ -139,6 +139,7 @@ int color_refuses_gray(const char *path, ph_error_t (*compute)(ph_context_t *, p
 /* ---- The modes (main.c dispatches; each is documented where it is defined) --------- */
 
 int mode_ahash(int argc, char **argv);
+int mode_ahash_variants(int argc, char **argv);
 int mode_dhash(int argc, char **argv);
 int mode_phash(int argc, char **argv);
 int mode_whash(int argc, char **argv);

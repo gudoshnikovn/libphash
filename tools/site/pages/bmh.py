@@ -14,7 +14,7 @@ from measure import corpus
 from measure.corpus import SHORT
 from measure.digests import digest_bits
 from measure.metric import bits_that_differ
-from measure.separability import copies_and_different, separability
+from measure.separability import copies_and_different, separability, variant_distances
 from measure.tool import run_stages
 
 ALGO = "bmh"
@@ -117,20 +117,8 @@ def _write_load_grayscale(st, out):
     write_text(out, "load-grayscale.md", text)
 
 
-# --8<-- [start:variants]
 def _variant_distances(images, variant, size):
-    """(copies, different): bits that differ between each original and its copies, and
-    between every pair of distinct originals, for one variant ("median_16", …)."""
-    b = np.array([[_bits(row[variant], size) for row in img] for img in images], np.uint8)
-    copies = (b[:, 1:] != b[:, :1]).sum(axis=2).ravel()
-    orig = b[:, 0].astype(np.int32)
-    ones = orig.sum(axis=1)
-    # Hamming distance of every pair i < j, from dot products of 0/1 vectors.
-    same_ones = orig @ orig.T
-    dist = ones[:, None] + ones[None, :] - 2 * same_ones
-    iu = np.triu_indices(len(images), 1)
-    return copies, dist[iu]
-# --8<-- [end:variants]
+    return variant_distances(images, variant, lambda h: _bits(h, size))
 
 
 def _sizes(measured):

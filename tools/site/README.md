@@ -60,7 +60,7 @@ arguments lists every mode.
 | `transforms.py` | The one registry of edits: `transforms()`, the edits a copy goes through; `content_edits()`, the edits that change the picture |
 | `robustness.py` | Every edit of one image measured against the original |
 | `corpus.py` | The two corpora (`images()`), every edit of every image and every pair (`measure_corpus()`), and any mode over every original and its copies (`measure_settings()`) |
-| `separability.py` | What a copy is (`COPY_STRENGTHS`), d′ and the threshold that accepts 95 % of the copies |
+| `separability.py` | What a copy is (`COPY_STRENGTHS`), d′ and the threshold that accepts 95 % of the copies; `variant_distances()`, the same distances for one setting of a `<algo>-variants` mode |
 | `metric.py` | How a page's metric reads: bits that differ, or the algorithm's own score |
 | `timing.py` | The times, on the machine that builds the site |
 | `digests.py` | Hexadecimal digests read back as bytes and bits |

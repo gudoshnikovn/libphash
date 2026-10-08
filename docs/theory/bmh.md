@@ -397,8 +397,8 @@ of the copies lets through.
     --8<-- "tools/site/measure/corpus.py:variants"
     ```
 
-    ```python title="tools/site/pages/bmh.py"
-    --8<-- "tools/site/pages/bmh.py:variants"
+    ```python title="tools/site/measure/separability.py"
+    --8<-- "tools/site/measure/separability.py:variants"
     ```
 
     ```c title="tools/site/stages/bmh.c"

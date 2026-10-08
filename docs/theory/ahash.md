@@ -43,7 +43,7 @@ $$
 b_i = \begin{cases} 1 & p_i \ge \bar p \\ 0 & p_i < \bar p \end{cases}
 $$
 
-The comparison is exact — $64\,p_i \ge \sum_j p_j$ in integers — so a pixel only ties with
+The comparison is exact — $64\,p_i \ge \sum_j p_j$ in integers — so a cell only ties with
 the mean when it is equal to it, and a tie sets the bit.
 
 ![The 64 bits](../assets/generated/ahash/bits.light.svg#only-light){ width="420" }
@@ -54,6 +54,110 @@ the mean when it is equal to it, and a tie sets the bit.
 $$
 h = \sum_{i=0}^{63} b_i \cdot 2^{\,63-i} .
 $$
+
+### The mean and ties
+
+The mean of 64 integers is seldom an integer itself, and comparing with it rounded would
+not be the same hash: every cell equal to the rounded-down mean lies below the true one,
+and would set its bit. On an image with little contrast, the cells take only a value or
+two and that is most of the grid. Here is the image of the two corpora whose hash a
+rounded-down mean would change the most:
+
+![A synthetic image of green and magenta stripes, its 8×8 grid of 117s and 118s with the bits the exact mean sets, and the same grid with every bit set by the mean rounded down](../assets/generated/ahash/ties.light.svg#only-light)
+![A synthetic image of green and magenta stripes, its 8×8 grid of 117s and 118s with the bits the exact mean sets, and the same grid with every bit set by the mean rounded down](../assets/generated/ahash/ties.dark.svg#only-dark)
+
+The green and the magenta have almost the same luminance, and each cell averages several
+stripes into one gray, 117 or 118. The exact mean lies between the two values and splits
+them; rounded down, it would equal the lower one and set every bit.
+
+The same happens without any rounding when an image is flat. Every cell then equals the
+mean, every comparison is a tie, and the hash is `ffffffffffffffff`, whatever the image's
+color. A detail finer than a cell averages out the same way, so a fine pattern hashes
+like a flat gray: the synthetic corpus has two fine checkerboards that do, and they get the
+same hash.
+
+A mean does not split the bits in half either, as a median does: a dark image with a
+bright corner sets few of them. Over the two corpora:
+
+--8<-- "docs/assets/generated/ahash/ties.md"
+
+On the photographs a rounded-down mean would change a few bits of many hashes and
+separate copies from different images about as well; on the synthetic images, where
+nearly flat grids are common, it would let many more different pairs through.
+[wHash](whash.md#whash-and-ahash) thresholds the same grid at its median instead, which
+sets exactly half of the bits unless values tie.
+
+??? info "How this was measured"
+
+    Every original of both corpora and its nine copies (those of the separability chart
+    below) is hashed by `site_stages ahash-variants`, which computes the hash from the grid
+    as in the steps above, checks it against
+    [`ph_compute_ahash()`](../api/hash64.md#ph_compute_ahash), and thresholds the same grid
+    at its mean rounded down. *d′* and the threshold are computed as for the corpus charts.
+    The image in the figure is the one whose two hashes differ in the most bits.
+
+    ```c title="tools/site/stages/ahash.c"
+    --8<-- "tools/site/stages/ahash.c:ahash"
+    ```
+
+    ```c title="tools/site/stages/ahash.c"
+    --8<-- "tools/site/stages/ahash.c:ahash-variants"
+    ```
+
+    ```python title="tools/site/measure/corpus.py"
+    --8<-- "tools/site/measure/corpus.py:variants"
+    ```
+
+    ```python title="tools/site/measure/separability.py"
+    --8<-- "tools/site/measure/separability.py:variants"
+    ```
+
+### Why an exact area average
+
+The post says only "reduce size", and how the image is reduced decides what a cell is.
+The library averages every pixel a cell covers, each weighted by how much of it the cell
+covers. Here it is beside two other ways to reach 8×8 from the same grayscale image: the
+Mitchell filter, which dHash reduces with and which weighs pixels by a smooth curve that
+reaches past the cell's edges, and the nearest pixel, which keeps the one pixel at each
+cell's center and drops the rest.
+
+![The example photograph's 8×8 grid by an exact area average, by the Mitchell filter and by the nearest pixel, with the bits each sets and the bits that differ from the area average outlined](../assets/generated/ahash/reductions.light.svg#only-light)
+![The example photograph's 8×8 grid by an exact area average, by the Mitchell filter and by the nearest pixel, with the bits each sets and the bits that differ from the area average outlined](../assets/generated/ahash/reductions.dark.svg#only-dark)
+
+The three grids agree in their broad layout and part on the cells that lie near the
+mean. Over the two corpora, with the copies and the different pairs of the separability
+chart below:
+
+--8<-- "docs/assets/generated/ahash/reductions.md"
+
+- **The nearest pixel** lets 64 pixels decide the hash. A rotation, a crop, a downscale or
+  a blur changes which pixels those are, and its copies spread so far that the threshold
+  that keeps 95 % of them takes in many different pairs.
+- **The Mitchell filter** moves copies of a photograph about as little as the area
+  average, and separates different photographs a little less well. On the synthetic
+  images it keeps part of the fine patterns that the area average cancels within a cell,
+  and noise, blur and JPEG move what it keeps.
+- **The exact area average** separates best on both corpora. It is also shared: pHash,
+  wHash and BMH reduce from the same cached pass over the image.
+
+??? info "The numbers behind the table"
+
+    Mean bits that differ between an original and its copy, for each edit and reduction:
+
+    --8<-- "docs/assets/generated/ahash/reductions-edits.md"
+
+??? info "How this was measured"
+
+    The same measurement as for the ties above, by `site_stages ahash-variants`: each
+    original and its copies reduced the three ways, each grid thresholded at its own
+    mean. The area grid is the library's (its hash is checked against
+    [`ph_compute_ahash()`](../api/hash64.md#ph_compute_ahash)); the Mitchell grid is the
+    library's own Mitchell resampling, the one dHash uses, and the nearest pixel is taken
+    by the tool. The figure is `site_stages ahash` on the example photograph.
+
+    ```c title="tools/site/stages/ahash.c"
+    --8<-- "tools/site/stages/ahash.c:grids"
+    ```
 
 ## Bit layout
 
@@ -75,6 +179,11 @@ keeps the hash, and an edit that moves content between cells does not.
   hash does not move until the image is blurred to a smear.
 - **Brightness and contrast** scale every cell and the mean together. The order is kept,
   and the hash with it, until values start to clip at white.
+- **Gamma** bends the values unevenly. The order of the cells is kept almost intact, but
+  the mean moves against them, and cells that lie near it cross. Over the photographs
+  below, the strongest gamma moves aHash about as much as a rotation of a few degrees,
+  and more than it moves [wHash](whash.md#whash-and-ahash), whose median depends only on
+  the order.
 - **Rotation and cropping** move content from one cell to another, and the hash follows
   them: a 5° turn or a 10 % crop already moves a handful of bits. aHash is not the
   algorithm for collections where images are rotated or reframed.
@@ -260,8 +369,10 @@ copies, in each corpus's color: an edited image below it would be taken for a co
     --8<-- "tools/site/measure/transforms.py:content_edits"
     ```
 
-How the nine algorithms compare is on
-[choosing an algorithm](../algorithms.md#comparison-summary).
+Two hashes are built like aHash and measure themselves against it on their pages: wHash
+thresholds the same 8×8 grid at its median ([wHash and aHash](whash.md#whash-and-ahash)),
+BMH a 16×16 grid at its median ([block_size](bmh.md#block_size)). How the nine algorithms
+compare is on [choosing an algorithm](../algorithms.md#comparison-summary).
 
 ## Cost
 
@@ -297,9 +408,14 @@ the pixels it reads.
 | Setting | Effect on aHash |
 |---|---|
 | [`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights) | the grayscale formula of step 1 |
-| [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a native decoder converts to grayscale itself, which can move a value by one level and, rarely, a bit |
+| [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a native decoder converts to grayscale itself, which can move a value by one level |
 | [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | on by default: the hash describes the image as displayed, after its EXIF rotation |
 | [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | how transparent pixels are composited before grayscale |
+
+A level here and there moves a cell by a fraction of a level, and can tip only a cell that
+lies next to the mean.
+
+--8<-- "docs/assets/generated/ahash/load-grayscale.md"
 
 ## In code
 
@@ -314,9 +430,9 @@ three 64-bit algorithms at once:
 
 aHash was described by Neal Krawetz in a blog post in 2011; there is no paper. The post
 fixes the 8×8 reduction, the grayscale step, the mean and the bit order, and leaves three
-things open, which this implementation pins: the resampling filter (an exact area
-average), the grayscale weights (BT.601) and the rule for a pixel equal to the mean (the
-bit is set). With those, the implementation follows the post exactly, bit order included.
+things open, which this implementation pins: the resampling filter (an
+[exact area average](#why-an-exact-area-average)), the grayscale weights (BT.601) and the
+rule for a cell equal to the mean (the bit is set, [compared exactly](#the-mean-and-ties)). With those, the implementation follows the post exactly, bit order included.
 The comparison, with the numbers behind each choice, is in
 [provenance § 1](../algorithm-provenance.md#1-ahash--average-hash).
 

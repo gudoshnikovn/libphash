@@ -27,7 +27,9 @@ static const struct {
     int (*run)(int argc, char **argv);
     const char *what;
 } modes[] = {
-    {"ahash", "<image> <outdir>", 2, 0, mode_ahash, "aHash's stages"},
+    {"ahash", "<image> <outdir>", 2, 0, mode_ahash, "aHash's stages, three reductions"},
+    {"ahash-variants", "<image>...", 1, 1, mode_ahash_variants,
+     "aHash with other reductions and a rounded mean"},
     {"dhash", "<image> <outdir>", 2, 0, mode_dhash, "dHash's stages"},
     {"phash", "<image> <outdir>", 2, 0, mode_phash, "pHash's stages, every block size"},
     {"whash", "<image> <outdir>", 2, 0, mode_whash, "wHash's stages, both modes"},

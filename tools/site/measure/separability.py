@@ -52,3 +52,21 @@ def copies_and_different(data, algo, convert):
                 copies += [convert(v) for v in values if v is not None]
     different = [convert(v) for v in data["different"][algo] if v is not None]
     return copies, different
+
+
+# --8<-- [start:variants]
+def variant_distances(images, variant, to_bits):
+    """(copies, different) for one setting a `site_stages <algo>-variants` mode hashes
+    with: bits that differ between each original and its copies, and between every pair
+    of distinct originals. `images` are the rows measure_settings() returns, `to_bits`
+    turns one hexadecimal digest into its 0/1 bits."""
+    b = np.array([[to_bits(row[variant]) for row in img] for img in images], np.uint8)
+    copies = (b[:, 1:] != b[:, :1]).sum(axis=2).ravel()
+    orig = b[:, 0].astype(np.int32)
+    ones = orig.sum(axis=1)
+    # Hamming distance of every pair i < j, from dot products of 0/1 vectors.
+    same_ones = orig @ orig.T
+    dist = ones[:, None] + ones[None, :] - 2 * same_ones
+    iu = np.triu_indices(len(images), 1)
+    return copies, dist[iu]
+# --8<-- [end:variants]
