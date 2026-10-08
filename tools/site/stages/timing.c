@@ -2,6 +2,7 @@
 #include "stages.h"
 
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 /* --8<-- [start:time] */
@@ -225,3 +226,179 @@ int mode_time(int argc, char **argv) {
 }
 
 /* --8<-- [end:time] */
+
+/* --8<-- [start:scan] */
+/* site_stages scan: what one comparison costs in a search that compares a query with every
+ * stored hash, a linear scan. Each case compares one query with a stored set of one
+ * algorithm's shape: SCAN_HASHES 64-bit hashes, or SCAN_DIGESTS digests in an array of
+ * ph_digest_t. The values are pseudo-random from a fixed seed, as these comparisons cost
+ * the same whatever the values (Radial's apart, which refuses a digest without variance
+ * before comparing, and random bytes always have some). Each case counts the stored values
+ * within a fixed distance and adds it to scan_sink, so that the compiler cannot leave a
+ * comparison out. */
+enum {
+    SCAN_HASHES = 1 << 20,
+    SCAN_DIGESTS = 1 << 16,
+    SCAN_WITHIN_BITS = 10,
+};
+
+static volatile size_t scan_sink;
+
+typedef struct {
+    uint64_t query;
+    const uint64_t *hashes;
+    ph_digest_t query_digest;
+    const ph_digest_t *digests;
+} scan_t;
+
+/* The library's comparison of two 64-bit hashes, called once per stored hash. */
+static size_t scan_hamming(const scan_t *s) {
+    size_t within = 0;
+    for (size_t i = 0; i < SCAN_HASHES; i++) {
+        within += ph_hamming_distance(s->query, s->hashes[i]) <= SCAN_WITHIN_BITS;
+    }
+    return within;
+}
+
+#if defined(__GNUC__) || defined(__clang__)
+/* The same distance computed in the caller's loop, where the compiler can inline the
+ * popcount and vectorize the loop: what a search loop of its own costs. */
+static size_t scan_popcount(const scan_t *s) {
+    size_t within = 0;
+    for (size_t i = 0; i < SCAN_HASHES; i++) {
+        within += __builtin_popcountll(s->query ^ s->hashes[i]) <= SCAN_WITHIN_BITS;
+    }
+    return within;
+}
+#endif
+
+/* The function a digest's kind calls for, once per stored digest. */
+static size_t scan_digests(const scan_t *s) {
+    size_t within = 0;
+    const ph_digest_t *q = &s->query_digest;
+    for (size_t i = 0; i < SCAN_DIGESTS; i++) {
+        const ph_digest_t *d = &s->digests[i];
+        double v = 0.0;
+        switch (q->kind) {
+            case PH_DIGEST_KIND_BITS:
+                within += ph_hamming_distance_digest(q, d) <= SCAN_WITHIN_BITS;
+                break;
+            case PH_DIGEST_KIND_COEFFICIENTS:
+                within += ph_radial_similarity(q, d, &v) == PH_SUCCESS && v >= 0.9;
+                break;
+            case PH_DIGEST_KIND_HISTOGRAM:
+                within += ph_histogram_intersection(q, d, &v) == PH_SUCCESS && v >= 0.9;
+                break;
+            default:
+                within += ph_l2_distance(q, d) <= 10.0;
+                break;
+        }
+    }
+    return within;
+}
+
+/* The cases: a name, the scan, how many values it compares, and for a digest the
+ * algorithm whose shape (ph_digest_info()) the stored digests take. */
+static const struct {
+    const char *name;
+    size_t (*scan)(const scan_t *s);
+    size_t count;
+    ph_algorithm_t algo;
+} scan_cases[] = {
+    {"hamming", scan_hamming, SCAN_HASHES, PH_ALGO_PHASH},
+#if defined(__GNUC__) || defined(__clang__)
+    {"popcount", scan_popcount, SCAN_HASHES, PH_ALGO_PHASH},
+#endif
+    {"phash", scan_digests, SCAN_DIGESTS, PH_ALGO_PHASH},
+    {"bmh", scan_digests, SCAN_DIGESTS, PH_ALGO_BMH},
+    {"mhash", scan_digests, SCAN_DIGESTS, PH_ALGO_MHASH},
+    {"radial", scan_digests, SCAN_DIGESTS, PH_ALGO_RADIAL},
+    {"color_hash", scan_digests, SCAN_DIGESTS, PH_ALGO_COLOR_HASH},
+    {"color_moments", scan_digests, SCAN_DIGESTS, PH_ALGO_COLOR_MOMENTS},
+};
+
+/* xorshift64: a fixed sequence of pseudo-random values. */
+static uint64_t scan_random(void) {
+    static uint64_t x = 0x9E3779B97F4A7C15u;
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    return x;
+}
+
+/* A digest of the shape `algo` gives with the default settings, its bytes random. */
+static int random_digest(ph_algorithm_t algo, ph_digest_t *d) {
+    size_t size;
+    ph_digest_kind_t kind;
+    if (ph_digest_info(NULL, algo, &size, &kind) != PH_SUCCESS) {
+        return 1;
+    }
+    memset(d, 0, sizeof(*d));
+    d->size = (uint8_t)size;
+    d->kind = (uint8_t)kind;
+    for (size_t i = 0; i < size; i++) {
+        d->data[i] = (uint8_t)scan_random();
+    }
+    return 0;
+}
+
+/* site_stages scan: every case of scan_cases[], timed as the cases of `time` are; the
+ * minimum and the median of its runs, in nanoseconds per comparison, as one JSON object. */
+int mode_scan(int argc, char **argv) {
+    (void)argc;
+    (void)argv;
+    uint64_t *hashes = malloc(SCAN_HASHES * sizeof(*hashes));
+    ph_digest_t *digests = malloc(SCAN_DIGESTS * sizeof(*digests));
+    if (!hashes || !digests) {
+        free(hashes);
+        free(digests);
+        return fail("out of memory", NULL);
+    }
+    scan_t s = {scan_random(), hashes, {{0}, 0, 0, {0}}, digests};
+    for (size_t i = 0; i < SCAN_HASHES; i++) {
+        hashes[i] = scan_random();
+    }
+    json_t j = json_begin(stdout);
+    json_int(&j, "hashes", SCAN_HASHES);
+    json_int(&j, "digests", SCAN_DIGESTS);
+    json_t cases = json_object(&j, "cases");
+    static double ns[TIME_MAX_RUNS];
+    int status = 0;
+    for (size_t c = 0; c < COUNT(scan_cases) && !status; c++) {
+        for (size_t i = 0; i < SCAN_DIGESTS && !status; i++) {
+            status = random_digest(scan_cases[c].algo, &digests[i]);
+        }
+        if (status || random_digest(scan_cases[c].algo, &s.query_digest)) {
+            status = fail("no digest shape for", scan_cases[c].name);
+            break;
+        }
+        int runs = 0;
+        double total = 0.0;
+        for (int k = -1; k < TIME_MAX_RUNS; k++) { /* k = -1: the warm-up */
+            double t0 = seconds();
+            scan_sink += scan_cases[c].scan(&s);
+            double t = seconds() - t0;
+            if (k >= 0) {
+                ns[runs++] = t * 1e9 / (double)scan_cases[c].count;
+                total += t;
+                if (runs >= TIME_MIN_RUNS && total >= TIME_MIN_SECONDS) {
+                    break;
+                }
+            }
+        }
+        qsort(ns, (size_t)runs, sizeof(ns[0]), cmp_double);
+        json_t o = json_object(&cases, scan_cases[c].name);
+        json_double(&o, "min_ns", ns[0]);
+        json_double(&o, "median_ns", ns[runs / 2]);
+        json_int(&o, "runs", runs);
+        json_int(&o, "size", scan_cases[c].scan == scan_digests ? s.query_digest.size : 8);
+        json_close_object(&o);
+    }
+    json_close_object(&cases);
+    json_end(&j);
+    free(hashes);
+    free(digests);
+    return status;
+}
+
+/* --8<-- [end:scan] */

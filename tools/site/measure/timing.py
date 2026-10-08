@@ -41,10 +41,11 @@ def machine():
 
 # --8<-- [start:timing]
 def measure_timing(tool):
-    """{"machine": {...}, "small": {...}, "large": {...}}, each image's entry as
-    `site_stages time` prints it (width, height, build_info, compiler, and per case the
-    minimum and median in milliseconds), from the cache when nothing that decides it has
-    changed, the machine included."""
+    """{"machine": {...}, "small": {...}, "large": {...}, "scan": {...}}, each image's
+    entry as `site_stages time` prints it (width, height, build_info, compiler, and per
+    case the minimum and median in milliseconds) and the comparisons of a linear search as
+    `site_stages scan` prints them (per case, nanoseconds per comparison), from the cache
+    when nothing that decides them has changed, the machine included."""
     host = machine()
     paths = [os.path.join(ROOT, p) for p in IMAGES.values()]
     key = fingerprint(KEY_FILES, [tool] + paths, json.dumps(host, sort_keys=True))
@@ -55,6 +56,8 @@ def measure_timing(tool):
             out = subprocess.run([tool, "time", path], check=True, capture_output=True,
                                  text=True).stdout
             data[name] = json.loads(out)
+        data["scan"] = json.loads(subprocess.run([tool, "scan"], check=True,
+                                                 capture_output=True, text=True).stdout)
         return data
 
     return cached("timing", key, measure, "timing")

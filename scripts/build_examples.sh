@@ -60,6 +60,11 @@ for src in "$ROOT_DIR"/examples/*.c; do
             "$WORK_DIR/$name" "$D/photo.jpeg" "$D/photo_copy.jpeg" "$D/photo_complex.png" \
                 "$D/no-such-file.jpg"
             ;;
+        find_duplicates)
+            # Two files of one picture among others, and a path that fails on its own.
+            "$WORK_DIR/$name" 7 "$D/photo.jpeg" "$D/photo_copy.jpeg" "$D/photo_rotated_90.jpeg" \
+                "$D/photo_complex.png" "$D/no-such-file.jpg"
+            ;;
         load_sources)
             # Writes the file it then loads.
             "$WORK_DIR/$name" "$WORK_DIR/frame.ppm"

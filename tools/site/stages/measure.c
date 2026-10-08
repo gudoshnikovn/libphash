@@ -121,8 +121,9 @@ int mode_pairs(int argc, char **argv) {
 /* --8<-- [end:pairs] */
 
 /* --8<-- [start:sizes] */
-/* site_stages sizes <image>: one JSON line per algorithm, its digest's size in bytes and
- * its kind as the text form names it, from that algorithm's digest of the image. */
+/* site_stages sizes <image>: one JSON line per algorithm, its digest's size in bytes, its
+ * kind as the text form names it, and the length of that text, from that algorithm's
+ * digest of the image. */
 int mode_sizes(int argc, char **argv) {
     (void)argc;
     ph_context_t *ctx = NULL;
@@ -140,11 +141,13 @@ int mode_sizes(int argc, char **argv) {
             status = fail("no digest of", ph_algorithm_name((ph_algorithm_t)k));
             continue;
         }
+        size_t text = strlen(hex);
         *strchr(hex, ':') = '\0';
         json_t j = json_begin(stdout);
         json_string(&j, "algorithm", ph_algorithm_name((ph_algorithm_t)k));
         json_int(&j, "size", d[k].size);
         json_string(&j, "kind", hex);
+        json_int(&j, "text", (long long)text);
         json_end(&j);
     }
     return status;

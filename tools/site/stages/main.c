@@ -11,7 +11,7 @@
  *     against the library: a mismatch exits 1.
  *   - `<algo>-<what> <image>...` prints one JSON line per image, for the measurements
  *     over a corpus that one page makes (block sizes, settings, modes).
- *   - `measure`, `pairs`, `time` and `corpus` serve every page.
+ *   - `measure`, `pairs`, `time`, `scan` and `corpus` serve every page.
  */
 #include "stages.h"
 
@@ -54,6 +54,7 @@ static const struct {
     {"sizes", "<image>", 1, 0, mode_sizes, "every algorithm's digest size and kind"},
     {"corpus", "<outdir>", 1, 0, mode_corpus, "the tests' synthetic corpus as PPM"},
     {"time", "<image>", 1, 0, mode_time, "decoding and every hash, timed"},
+    {"scan", "", 0, 0, mode_scan, "one comparison in a linear search, timed"},
     {"loaded", "<outdir> <image>...", 2, 1, mode_loaded, "each image as loaded, and its gray"},
     {"area", "<width> <height> <image>", 3, 0, mode_area, "the area average onto a grid"},
 };
