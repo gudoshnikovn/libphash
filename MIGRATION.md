@@ -282,7 +282,7 @@ Regular files are unaffected.
 
 1.x dropped the alpha channel and hashed the color stored under it, which is invisible
 and differs between encoders: two copies of the same icon, one with black and one with
-white under its transparent pixels, hashed about 30–40 bits apart. 2.0 composites every
+white under its transparent pixels, hashed as far apart as two unrelated images. 2.0 composites every
 image with alpha (an alpha channel or a PNG `tRNS` chunk, or RGBA passed to
 `ph_load_from_pixels()`) onto mid-gray at load time, so such copies hash identically.
 Every stored hash of an image with transparency changes; opaque images are unaffected.

@@ -53,29 +53,31 @@ static void digest_all(ph_context_t *ctx, ph_digest_t d[PH_ALGORITHM_COUNT],
 /* site_stages measure <reference> <variant>...: every algorithm's digest of the reference,
  * then one JSON line per variant with its comparison to the reference, per algorithm (the
  * similarity in [0, 1] for a bit hash, the peak correlation for Radial, the histogram
- * intersection for ColorHash, the L2 distance for ColorMoments). */
+ * intersection for ColorHash, the L2 distance for ColorMoments). A `--load=<settings>`
+ * between the images loads the ones after it so (take_load_settings()). */
 int mode_measure(int argc, char **argv) {
-    ph_context_t *ctx = NULL;
-    if (load_image(&ctx, argv[0])) {
-        return 1;
-    }
     ph_digest_t ref[PH_ALGORITHM_COUNT], d[PH_ALGORITHM_COUNT];
     int have_ref[PH_ALGORITHM_COUNT], have[PH_ALGORITHM_COUNT];
-    digest_all(ctx, ref, have_ref);
-    ph_free(ctx);
-
-    for (int v = 1; v < argc; v++) {
+    int status = 0, images = 0;
+    for (int v = 0; v < argc && !status; v++) {
+        if (take_load_settings(argv[v], &status)) {
+            continue;
+        }
+        ph_context_t *ctx = NULL;
         if (load_image(&ctx, argv[v])) {
             return 1;
         }
-        digest_all(ctx, d, have);
+        digest_all(ctx, images ? d : ref, images ? have : have_ref);
         ph_free(ctx);
+        if (images++ == 0) {
+            continue;
+        }
         json_t j = json_begin(stdout);
         json_string(&j, "file", argv[v]);
         compare_all(&j, ref, have_ref, d, have);
         json_end(&j);
     }
-    return 0;
+    return status;
 }
 
 /* --8<-- [end:measure] */
@@ -83,21 +85,26 @@ int mode_measure(int argc, char **argv) {
 /* --8<-- [start:pairs] */
 /* site_stages pairs <image>...: every image's digests, then one JSON line per pair of
  * distinct images (i < j, in the order given, as "a" and "b") with their comparison,
- * per algorithm. */
+ * per algorithm. A `--load=<settings>` before the images loads them so. */
 int mode_pairs(int argc, char **argv) {
     ph_digest_t(*dig)[PH_ALGORITHM_COUNT] = calloc((size_t)argc, sizeof(*dig));
     int (*have)[PH_ALGORITHM_COUNT] = calloc((size_t)argc, sizeof(*have));
     int bad = (!dig || !have) && fail("out of memory", NULL);
+    int n = 0;
     for (int i = 0; i < argc && !bad; i++) {
+        if (take_load_settings(argv[i], &bad)) {
+            continue;
+        }
         ph_context_t *ctx = NULL;
         bad = load_image(&ctx, argv[i]);
         if (!bad) {
-            digest_all(ctx, dig[i], have[i]);
+            digest_all(ctx, dig[n], have[n]);
+            n++;
             ph_free(ctx);
         }
     }
-    for (int i = 0; i < argc && !bad; i++) {
-        for (int k = i + 1; k < argc; k++) {
+    for (int i = 0; i < n && !bad; i++) {
+        for (int k = i + 1; k < n; k++) {
             json_t j = json_begin(stdout);
             json_int(&j, "a", i);
             json_int(&j, "b", k);

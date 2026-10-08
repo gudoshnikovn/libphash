@@ -109,9 +109,10 @@ the delta table of the algorithm(s) it touches in `docs/algorithm-provenance.md`
 **Grayscale coefficients.** `PH_GRAY_R/G/B` = 38/75/15 over 128 (`src/image/image.h`), an
 integer approximation of the **ITU-R BT.601** luma coefficients (0.299/0.587/0.114) —
 cited as an external standard, not because any source here asks for it. The closer
-77/150/29-over-256 approximation measures worse (it regresses BMH and wHash separability
-on this library's test corpus with no gain elsewhere), so 38/75/15 is used. Used by every algorithm that reduces to grayscale: aHash, dHash, pHash,
-wHash, mHash, BMH, Radial. ColorHash and ColorMoments work in color and never call
+77/150/29-over-256 approximation separates no better: the same on photographs, a little
+worse for aHash, wHash, BMH and mHash on synthetic images
+([measured](theory/preparation.md#why-38-75-and-15)), so 38/75/15 is used. Used by every
+algorithm that reduces to grayscale: aHash, dHash, pHash, wHash, mHash, BMH, Radial. ColorHash and ColorMoments work in color and never call
 this path.
 
 **Alpha.** None of the sources hash transparent images; they describe what a picture
@@ -120,11 +121,11 @@ under alpha 0 is invisible and arbitrary — one encoder writes black, another w
 by default an image with alpha (an alpha channel or a PNG `tRNS` chunk, from any decoder,
 or RGBA given to `ph_load_from_pixels()`) is composited onto mid-gray at load time,
 `(c·a + 128·(255 − a) + 127) / 255` per channel, and every algorithm sees the visible
-image only. Over 141 PNGs with at least 5 % transparency, two copies differing only in
-the color under alpha 0 hash 28–42 bits apart (of 64) when alpha is dropped, and 0 when
-it is composited. Gray rather than white or black because it keeps those images the most
-distinct: white erases light artwork and black dark artwork (pHash pairs within 6 bits:
-1.7 % on gray, 3.3 % on white, 4.3 % on black). `ph_context_set_alpha_mode()` chooses
+image only: two copies differing only in the color under alpha 0 hash identically, where
+with alpha dropped they land as far apart as unrelated images. Each background costs a
+different algorithm: on white wHash, on black BMH, on gray aHash and ColorMoments; gray is
+the one on which neither median hash collapses
+([measured](theory/preparation.md#which-background)). `ph_context_set_alpha_mode()` chooses
 white, black, or `PH_ALPHA_IGNORE` — hash the stored color whatever its alpha, which is
 what ImageHash and PIL's `convert("L")` do.
 
@@ -404,8 +405,8 @@ decoder, Apple M3 Pro, minimum of 300 and 30 runs, default parameters):
 
 For the cheap hashes the decode is most of a load-and-hash; for mHash, Radial and the
 color hashes on a large image the hash is comparable to it or larger.
-`ph_context_set_decode_scale()` shrinks both for JPEG — the header has the end-to-end
-numbers.
+`ph_context_set_decode_scale()` shrinks both for JPEG
+([measured](theory/preparation.md#decoding-at-a-reduced-scale)).
 
 ## Comparison summary
 

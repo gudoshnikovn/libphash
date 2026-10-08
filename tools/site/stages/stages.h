@@ -33,6 +33,14 @@ int load_image(ph_context_t **ctx, const char *path);
  * which every stage mode shows beside the library's own conversion. */
 int load_decoder_gray(ph_context_t **ctx, const char *path);
 
+/* When `arg` is `--load=<settings>`, makes every later load_image() load with them and
+ * returns 1 (setting *status on a setting it does not know); otherwise returns 0. The
+ * settings, comma-separated: alpha=grey|white|black|ignore,
+ * scale=full|half|quarter|eighth, orient=off, gray=decoder, weights=R/G/B/SHIFT (a
+ * grayscale the tool computes), or default. A mode that takes a list of images accepts
+ * them between its images, and each replaces the last. */
+int take_load_settings(const char *arg, int *status);
+
 /* Writes <dir>/<name> as binary PGM (channels 1) or PPM (channels 3). Returns 0 or 1. */
 int write_pnm(const char *dir, const char *name, const uint8_t *px, int w, int h, int channels);
 
@@ -160,5 +168,7 @@ int mode_measure(int argc, char **argv);
 int mode_pairs(int argc, char **argv);
 int mode_corpus(int argc, char **argv);
 int mode_time(int argc, char **argv);
+int mode_loaded(int argc, char **argv);
+int mode_area(int argc, char **argv);
 
 #endif /* SITE_STAGES_H */

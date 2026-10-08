@@ -17,6 +17,7 @@ nav = [
   { "Home" = "index.md" },
   { "Theory" = [
     { "Perceptual hashing" = "theory/perceptual-hashing.md" },
+    { "Image preparation" = "theory/preparation.md" },
     { "Algorithms" = [
       { "Overview" = "algorithms.md" },
       { "aHash" = "theory/ahash.md" },

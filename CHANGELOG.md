@@ -89,8 +89,8 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
 
 - **Images with transparency are hashed as they look.** 1.x dropped the alpha channel and
   hashed the color stored under it — invisible, and different from encoder to encoder:
-  over 141 PNGs with at least 5 % transparency, two copies differing only in the color
-  under alpha 0 hashed 28–42 bits apart of 64. Every image with alpha (an alpha channel or
+  two copies differing only in the color under alpha 0 hashed as far apart as unrelated
+  images. Every image with alpha (an alpha channel or
   a PNG `tRNS` chunk, from any decoder, or RGBA passed to `ph_load_from_pixels()`) is
   composited onto mid-gray at load time, and such copies hash identically. The new
   **`ph_context_set_alpha_mode()`** chooses a white or black background instead, or

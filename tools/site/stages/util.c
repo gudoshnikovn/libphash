@@ -10,13 +10,108 @@ int fail(const char *what, const char *detail) {
     return 1;
 }
 
+/* --8<-- [start:load-settings] */
+/* How load_image() loads: the library's defaults, unless a mode that takes a list of
+ * images met `--load=<settings>` before an image (take_load_settings()). */
+typedef struct {
+    int alpha;      /* a ph_alpha_mode_t, or -1 for the default */
+    int scale;      /* a ph_decode_scale_t */
+    int orient;     /* ph_context_set_auto_orient() */
+    int gray;       /* ph_context_set_load_grayscale(): the decoder converts to grayscale */
+    int weights[4]; /* r, g, b and a shift: grayscale computed here, (r R + g G + b B) >> shift,
+                     * and loaded as a one-channel image; a shift of 0 leaves it to the library */
+} load_settings_t;
+
+static const load_settings_t defaults = {-1, PH_DECODE_SCALE_FULL, 1, 0, {0, 0, 0, 0}};
+static load_settings_t settings = {-1, PH_DECODE_SCALE_FULL, 1, 0, {0, 0, 0, 0}};
+
+/* One `name=value` of a --load option; 0 when it is not one this tool knows. */
+static int set_one(load_settings_t *s, const char *item) {
+    static const char *const alphas[] = {"grey", "white", "black", "ignore"};
+    static const char *const scales[] = {"full", "half", "quarter", "eighth"};
+    for (int k = 0; k < 4; k++) {
+        char want[32];
+        snprintf(want, sizeof(want), "alpha=%s", alphas[k]);
+        if (strcmp(item, want) == 0) {
+            s->alpha = k; /* PH_ALPHA_BLEND_GREY … PH_ALPHA_IGNORE, in that order */
+            return 1;
+        }
+        snprintf(want, sizeof(want), "scale=%s", scales[k]);
+        if (strcmp(item, want) == 0) {
+            s->scale = k; /* PH_DECODE_SCALE_FULL … PH_DECODE_SCALE_EIGHTH */
+            return 1;
+        }
+    }
+    if (strcmp(item, "orient=off") == 0) {
+        s->orient = 0;
+        return 1;
+    }
+    if (strcmp(item, "gray=decoder") == 0) {
+        s->gray = 1;
+        return 1;
+    }
+    int *w = s->weights;
+    return sscanf(item, "weights=%d/%d/%d/%d", &w[0], &w[1], &w[2], &w[3]) == 4 && w[0] >= 0 &&
+           w[1] >= 0 && w[2] >= 0 && w[3] > 0 && w[3] < 16 && w[0] + w[1] + w[2] <= 1 << w[3];
+}
+
+int take_load_settings(const char *arg, int *status) {
+    static const char prefix[] = "--load=";
+    if (strncmp(arg, prefix, sizeof(prefix) - 1) != 0) {
+        return 0;
+    }
+    load_settings_t s = defaults;
+    char list[256];
+    snprintf(list, sizeof(list), "%s", arg + sizeof(prefix) - 1);
+    for (char *item = strtok(list, ","); item; item = strtok(NULL, ",")) {
+        if (strcmp(item, "default") != 0 && !set_one(&s, item)) {
+            *status = fail("unknown load setting", item);
+            return 1;
+        }
+    }
+    settings = s;
+    return 1;
+}
+
+/* The settings' own grayscale, (r R + g G + b B) >> shift per pixel, replaces the loaded
+ * color image. */
+static ph_error_t own_grayscale(ph_context_t *ctx) {
+    const int *wt = settings.weights;
+    size_t n = (size_t)ctx->image.width * (size_t)ctx->image.height;
+    uint8_t *gray = malloc(n ? n : 1);
+    if (!gray) {
+        return PH_ERR_ALLOCATION_FAILED;
+    }
+    const uint8_t *p = ctx->image.raw_rgb;
+    for (size_t i = 0; i < n; i++, p += 3) {
+        gray[i] = (uint8_t)((wt[0] * p[0] + wt[1] * p[1] + wt[2] * p[2]) >> wt[3]);
+    }
+    ph_error_t err =
+        ph_load_from_pixels(ctx, gray, ctx->image.width, ctx->image.height, 1, ctx->image.width);
+    free(gray);
+    return err;
+}
+
 static int load_with(ph_context_t **ctx, const char *path, int decoder_gray) {
     if (ph_create(ctx) != PH_SUCCESS) {
         return fail("ph_create failed", NULL);
     }
+    decoder_gray |= settings.gray;
     ph_error_t err = ph_context_set_load_grayscale(*ctx, decoder_gray);
+    if (err == PH_SUCCESS && settings.alpha >= 0) {
+        err = ph_context_set_alpha_mode(*ctx, (ph_alpha_mode_t)settings.alpha);
+    }
+    if (err == PH_SUCCESS) {
+        err = ph_context_set_decode_scale(*ctx, (ph_decode_scale_t)settings.scale);
+    }
+    if (err == PH_SUCCESS) {
+        err = ph_context_set_auto_orient(*ctx, settings.orient);
+    }
     if (err == PH_SUCCESS) {
         err = ph_load_from_file(*ctx, path);
+    }
+    if (err == PH_SUCCESS && settings.weights[3] && (*ctx)->image.channels == 3) {
+        err = own_grayscale(*ctx);
     }
     if (err != PH_SUCCESS) {
         fprintf(stderr, "site_stages: cannot load %s%s: %s (%s)\n", path,
@@ -28,6 +123,8 @@ static int load_with(ph_context_t **ctx, const char *path, int decoder_gray) {
     }
     return 0;
 }
+
+/* --8<-- [end:load-settings] */
 
 int load_image(ph_context_t **ctx, const char *path) { return load_with(ctx, path, 0); }
 

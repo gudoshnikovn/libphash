@@ -73,6 +73,24 @@ static int time_radial(ph_context_t *ctx, const char *path, int variant) {
     return !radial_settings(ctx, &radial_variants[RADIAL_DEFAULT]) || bad;
 }
 
+/* Loading the image with ph_context_set_decode_scale() at `arg / 16`, then, unless `arg % 16`
+ * is 0, computing algorithm `arg % 16 - 1`: what a caller pays for a load and a hash at
+ * that scale. A context of its own, so the cases after it hash the image at full size. */
+static int time_scaled(ph_context_t *ctx, const char *path, int arg) {
+    (void)ctx;
+    static ph_context_t *scaled;
+    if (!scaled && ph_create(&scaled) != PH_SUCCESS) {
+        return 1;
+    }
+    ph_digest_t d;
+    return ph_context_set_decode_scale(scaled, (ph_decode_scale_t)(arg / 16)) != PH_SUCCESS ||
+           ph_load_from_file(scaled, path) != PH_SUCCESS ||
+           (arg % 16 &&
+            ph_compute_digest(scaled, (ph_algorithm_t)(arg % 16 - 1), &d) != PH_SUCCESS);
+}
+
+#define SCALED(name, scale, algo) {name, time_scaled, (scale) * 16 + (algo) + 1}
+
 static const time_case_t time_cases[] = {
     {"decode", time_decode, 0},
     {"ahash", time_hash, PH_ALGO_AHASH},
@@ -103,6 +121,21 @@ static const time_case_t time_cases[] = {
     {"radial_grid_360x256", time_radial, RADIAL_GRID_360X256},
     {"radial_grid_1440x1024", time_radial, RADIAL_GRID_1440X1024},
     {"radial_grid_4096x4096", time_radial, RADIAL_GRID_4096X4096},
+    {"scale_half_decode", time_scaled, PH_DECODE_SCALE_HALF * 16},
+    {"scale_quarter_decode", time_scaled, PH_DECODE_SCALE_QUARTER * 16},
+    {"scale_eighth_decode", time_scaled, PH_DECODE_SCALE_EIGHTH * 16},
+    SCALED("scale_full_phash", PH_DECODE_SCALE_FULL, PH_ALGO_PHASH),
+    SCALED("scale_half_phash", PH_DECODE_SCALE_HALF, PH_ALGO_PHASH),
+    SCALED("scale_quarter_phash", PH_DECODE_SCALE_QUARTER, PH_ALGO_PHASH),
+    SCALED("scale_eighth_phash", PH_DECODE_SCALE_EIGHTH, PH_ALGO_PHASH),
+    SCALED("scale_full_mhash", PH_DECODE_SCALE_FULL, PH_ALGO_MHASH),
+    SCALED("scale_half_mhash", PH_DECODE_SCALE_HALF, PH_ALGO_MHASH),
+    SCALED("scale_quarter_mhash", PH_DECODE_SCALE_QUARTER, PH_ALGO_MHASH),
+    SCALED("scale_eighth_mhash", PH_DECODE_SCALE_EIGHTH, PH_ALGO_MHASH),
+    SCALED("scale_full_radial", PH_DECODE_SCALE_FULL, PH_ALGO_RADIAL),
+    SCALED("scale_half_radial", PH_DECODE_SCALE_HALF, PH_ALGO_RADIAL),
+    SCALED("scale_quarter_radial", PH_DECODE_SCALE_QUARTER, PH_ALGO_RADIAL),
+    SCALED("scale_eighth_radial", PH_DECODE_SCALE_EIGHTH, PH_ALGO_RADIAL),
 };
 
 static int cmp_double(const void *a, const void *b) {

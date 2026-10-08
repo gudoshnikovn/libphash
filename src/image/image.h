@@ -92,14 +92,11 @@ ph_error_t ph_apply_exif_orientation(uint8_t **data, int *width, int *height, in
  * grayscale formula at all; BT.601 is cited as an external standard
  * because it is one, not because anything here points to it.
  *
- * Measurement checked switching to the canonical 8-bit triple 77/150/29 over 256, which is
- * closer to the real-valued BT.601 coefficients on every channel
- * (+0.0018/-0.0011/-0.0007 vs. this triple's -0.0021/-0.0011/+0.0032) and whose
- * denominator is an exact power of two with no rounding in the sum. On this library's
- * measured separability corpus (test_hash_properties.c) it is not an improvement: BMH
- * drops from 5.24 to 4.97 and wHash from 4.34 to 4.27, while aHash, dHash, pHash and
- * mHash move by less than the run-to-run noise floor. A closer decimal approximation
- * does not track discrimination on real content, so the existing triple is kept. */
+ * The canonical 8-bit triple 77/150/29 over 256 is closer to the real-valued BT.601
+ * coefficients on every channel and needs no rounding in the sum, but it separates copies
+ * from different images no better: the same on photographs, a little worse for aHash,
+ * wHash, BMH and mHash on synthetic images (measured in docs/theory/preparation.md). A
+ * closer decimal approximation does not track discrimination, so this triple is kept. */
 #define PH_GRAY_R 38
 #define PH_GRAY_G 75
 #define PH_GRAY_B 15

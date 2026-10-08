@@ -32,7 +32,7 @@ scripts/site.sh
 | `stages/` | `site_stages`, the measuring tool in C, linked against the library like the tests |
 | `measure/` | Running `site_stages`, the edits, the corpora, separability, the times, and the cache |
 | `draw/` | The two themes, the panels several pages draw, the robustness, corpus and edit charts, the Markdown tables |
-| `pages/` | One module per algorithm page, registered in `pages/__init__.py` |
+| `pages/` | One module per page with figures, registered in `pages/__init__.py`: the algorithm pages (`PAGES`) and the topic pages (`TOPICS`) |
 
 ### `stages/` — site_stages
 
@@ -51,6 +51,15 @@ arguments lists every mode.
   over a corpus that one page makes (block sizes, settings, modes). These are built on
   `for_each_image()`.
 - `measure`, `pairs`, `time` and `corpus` serve every page.
+- `loaded <outdir> <image>...` writes each image as the library loaded it and its
+  grayscale; `area <w> <h> <image>` prints the library's area average onto a grid
+  (`prepare.c`, for the page on image preparation).
+- **Load settings.** `measure`, `pairs` and `loaded` take `--load=<settings>` between
+  their images, and every image after it is loaded so: `alpha=grey|white|black|ignore`,
+  `scale=full|half|quarter|eighth`, `orient=off`, `gray=decoder`, `weights=R/G/B/SHIFT`
+  (a grayscale the tool computes, loaded as one channel), comma-separated, or `default`
+  (`take_load_settings()` in `util.c`). A file compared with itself under another
+  setting is `measure a.jpg --load=scale=eighth a.jpg`.
 
 ### `measure/` — the numbers
 
@@ -92,6 +101,11 @@ A page module declares how its algorithm's comparison reads and draws its own fi
 
 The robustness, corpus, separability, edits and time figures of every page are drawn by
 `render.py` from these declarations; a page module draws only what is its own.
+
+A **topic page** (`pages/preparation.py`, in `TOPICS`) has no hash of its own: it declares
+`NAME`, the directory under `docs/assets/generated/`, and `figures(tool, image, out_dir,
+timing)`, which draws everything it shows, `timing` being what `measure/timing.py`
+measured. `render.py --algo preparation` draws it alone.
 
 ## Measurements, caches and determinism
 

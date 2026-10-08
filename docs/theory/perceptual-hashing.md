@@ -27,6 +27,8 @@ Reducing the image first is what makes the result *perceptual*. Resolution, comp
 artifacts and fine texture are exactly what a "same picture" comparison should ignore, and
 an 8×8 or 32×32 grid has no room left for them. What survives is the coarse layout of light
 and dark, which is what a person recognizes.
+[Image preparation](preparation.md) describes the steps every algorithm shares, up to and
+including the reduction.
 
 ## Comparing two hashes
 

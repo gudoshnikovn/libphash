@@ -27,7 +27,7 @@ Y = \left\lfloor \frac{38R + 75G + 15B}{128} \right\rfloor ,
 $$
 
 the same integer approximation of the ITU-R BT.601 weights as for every grayscale hash.
-[`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights) changes them.
+[`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights) changes them; [image preparation](preparation.md#grayscale) has why these weights.
 
 **2. Reduce to 9×8.** The image is resampled to 9 columns and 8 rows, regardless of its
 aspect ratio, with the Mitchell–Netravali cubic filter ($B = C = \tfrac13$):
@@ -454,9 +454,9 @@ the pixels it reads.
 | Setting | Effect on dHash |
 |---|---|
 | [`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights) | the grayscale formula of step 1 |
-| [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a native decoder converts to grayscale itself, which can tip a pair of nearly equal neighbors |
+| [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a JPEG decoder converts to grayscale itself ([measured](preparation.md#the-decoders-grayscale)), which can tip a pair of nearly equal neighbors |
 | [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | on by default: the hash describes the image as displayed, after its EXIF rotation |
-| [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | how transparent pixels are composited before grayscale |
+| [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | how transparent pixels are composited before grayscale ([which background](preparation.md#which-background)) |
 
 With [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale)
 on, a JPEG is decoded straight to the luminance channel the file stores, which the

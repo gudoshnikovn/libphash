@@ -33,7 +33,7 @@ Y = \left\lfloor \frac{38R + 75G + 15B}{128} \right\rfloor ,
 $$
 
 the same integer approximation of the ITU-R BT.601 weights as for every grayscale hash.
-[`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights) changes them.
+[`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights) changes them; [image preparation](preparation.md#grayscale) has why these weights.
 
 **2. Reduce to 16×16.** The image is divided into a 16×16 grid of equal areas, regardless
 of its aspect ratio, and each cell becomes the exact mean of the pixels it covers, rounded
@@ -480,9 +480,9 @@ Four context settings change the pixels wHash reads.
 | Setting | Effect on wHash |
 |---|---|
 | [`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights) | the grayscale formula of step 1 |
-| [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a native decoder converts to grayscale itself, which can move a value by one level |
+| [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a JPEG decoder converts to grayscale itself ([measured](preparation.md#the-decoders-grayscale)), which can move a value by one level |
 | [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | on by default: the hash describes the image as displayed, after its EXIF rotation |
-| [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | how transparent pixels are composited before grayscale |
+| [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | how transparent pixels are composited before grayscale ([which background](preparation.md#which-background)) |
 
 A level here and there in the grid moves a block mean by a fraction of a level, and can
 tip only a value that lies next to the median.

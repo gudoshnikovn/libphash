@@ -53,6 +53,8 @@ static const struct {
     {"pairs", "<image> <image>...", 2, 1, mode_pairs, "every algorithm, every pair of images"},
     {"corpus", "<outdir>", 1, 0, mode_corpus, "the tests' synthetic corpus as PPM"},
     {"time", "<image>", 1, 0, mode_time, "decoding and every hash, timed"},
+    {"loaded", "<outdir> <image>...", 2, 1, mode_loaded, "each image as loaded, and its gray"},
+    {"area", "<width> <height> <image>", 3, 0, mode_area, "the area average onto a grid"},
 };
 
 int main(int argc, char **argv) {

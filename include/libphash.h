@@ -612,20 +612,13 @@ PH_API ph_error_t ph_context_set_load_grayscale(ph_context_t *ctx, int enable);
 /**
  * @brief Chooses what an image's alpha channel does to the hash.
  *
- * A perceptual hash describes what an image looks like, and a transparent pixel looks
- * like whatever is behind it. The color stored under alpha 0 is invisible and arbitrary:
- * one encoder writes black there, another white, an optimizer whatever compresses best.
- * By default every image with alpha — a PNG or WebP with an alpha channel or a tRNS
- * chunk, or a 4-channel buffer given to ph_load_from_pixels() — is composited onto a fixed
- * background before anything else happens, so the hash follows the visible image only.
- *
- * Measured over 141 PNGs with at least 5% transparency: two copies differing only in the
- * color under fully transparent pixels (black against white) hash on average 42 (aHash),
- * 28 (dHash), 34 (pHash) and 35 (wHash) bits apart of 64 when alpha is dropped, and 0 bits
- * apart when it is composited. Mid-gray is the default because it tells those images
- * apart best: white makes light artwork vanish and black dark artwork, and on the same
- * set gray leaves the fewest pairs of different images within 6 bits of each other
- * (pHash: 1.7% of pairs, against 3.3% on white and 4.3% on black).
+ * A transparent pixel looks like whatever is behind it, and the color stored under alpha 0
+ * is invisible and differs from encoder to encoder. By default every image with alpha — a
+ * PNG or WebP with an alpha channel or a tRNS chunk, or a 4-channel buffer given to
+ * ph_load_from_pixels() — is composited onto mid-gray before anything else happens, per
+ * channel `(c * a + bg * (255 - a) + 127) / 255`, so the hash follows the visible image
+ * only. What ignoring alpha costs, and which background suits which algorithm, is measured
+ * in docs/theory/preparation.md.
  *
  * The mode applies at load time: set it before ph_load_from_file(),
  * ph_load_from_memory() or ph_load_from_pixels(). A loaded image never has an alpha
@@ -712,63 +705,18 @@ PH_API ph_error_t ph_context_set_max_pixels(ph_context_t *ctx, uint64_t max_pixe
  * @brief Requests that JPEG be decoded at a reduced resolution instead of natively,
  *        trading accuracy for decode speed. Full resolution by default.
  *
- * Every hash algorithm here resizes the decoded image down to a small working buffer
- * (8x8 to 32x32) before hashing it, so decoding a 20-megapixel photo in full only to
- * discard almost all of it is wasted work. libjpeg-turbo can decode directly at 1/2,
- * 1/4 or 1/8 linear resolution using its DCT-domain scaling, which is cheaper than
- * decoding in full and downsampling afterward.
+ * libjpeg-turbo decodes at 1/2, 1/4 or 1/8 of the width and height by scaling in the DCT
+ * domain, rounding a side that does not divide evenly up. The decode itself gets somewhat
+ * cheaper, and everything after it -- the grayscale conversion, and each hash's reduction,
+ * blur or histogram -- reads four times fewer pixels at each step. Every hash then
+ * describes the smaller image, so its value changes; by how much depends on the algorithm
+ * and on the decoded size. Both the saving and the change are measured in
+ * docs/theory/preparation.md.
  *
- * @note **What it saves.** The decode itself gets only somewhat cheaper: DCT scaling
- *       shrinks the IDCT/upsample/color-convert stage, while Huffman-decoding every coded
- *       coefficient still happens at full cost, because JPEG stores coefficients
- *       sequentially per 8x8 block and there is no way to skip that pass. Everything
- *       after the decode -- grayscale conversion, and the reduction, blur or histogram of
- *       each hash -- reads every decoded pixel, so it shrinks with the pixel count, 4x per
- *       step. The saving on a whole load-and-hash is therefore largest for the hashes that
- *       cost the most at full size. Measured on a 20-megapixel photo (5472x3648 4:2:0,
- *       `tests/data/photo_large.jpeg`; CMake Release with the bundled libjpeg-turbo, Apple
- *       M3 Pro; minimum of 40 decodes, of 20 load-and-hash runs on a fresh context):
- *
- *       | scale   | decode  | load + pHash | load + mHash | load + Radial |
- *       |---------|---------|--------------|--------------|---------------|
- *       | FULL    | 53.9 ms | 58.2 ms      | 90.0 ms      | 106.2 ms      |
- *       | HALF    | 46.2 ms | 48.4 ms      | 57.5 ms      | 61.2 ms       |
- *       | QUARTER | 43.3 ms | 45.2 ms      | 47.6 ms      | 48.6 ms       |
- *       | EIGHTH  | 40.8 ms | 40.7 ms      | 42.4 ms      | 42.7 ms       |
- *
- *       From full to eighth: the decode 1.3x faster, load + pHash 1.4x, load + mHash
- *       2.1x, load + Radial 2.5x.
- *
- * @note **This changes the hash, and by how much depends on the algorithm and on the
- *       image's content, not on the scale alone.** Measured as the Hamming distance
- *       between the hash of the same file decoded in full versus decoded at each scale
- *       (aHash/dHash/pHash/wHash out of 64 bits, BMH out of 256, mHash out of 576),
- *       against the distance this library allows a same-scene transform
- *       (`tests/src/test_robustness.c`: aHash 17.2%, dHash 23.4%, pHash 25.0%,
- *       wHash 18.8% of the bits; mHash has no such limit):
- *       - On photographic content (smooth gradients, mixed low/mid/high frequency
- *         detail), the shift stays within those limits at every scale, with one
- *         exception: mHash grows with coarser scale even on ordinary photos --
- *         measured 6.6% / 16.0% / 26.7% at half/quarter/eighth on a real-photo fixture.
- *       - On fine periodic/textured content (fabric, brickwork, screens, grilles --
- *         not a rare case in real photos), pHash can exceed its limit outright:
- *         measured 43.75% at every scale from half downward on a fine checkerboard;
- *         mHash reaches 50.9% at @c PH_DECODE_SCALE_EIGHTH -- statistically
- *         indistinguishable from comparing against an unrelated image. wHash was also
- *         seen to exceed its limit (39.1% vs. 18.8%) on pure high-frequency noise,
- *         which is not representative of real photos but establishes an upper bound.
- *
- * @note **Radial, ColorMoments and ColorHash are not resize-based** — they compute
- *       directly over the decoded buffer, so at any setting other than
- *       @c PH_DECODE_SCALE_FULL they operate on the reduced buffer as their actual
- *       input, not as a downstream approximation of the full-resolution one. Their
- *       accuracy contract at reduced scale has not been measured; treat it as unknown
- *       rather than assuming it behaves like the resize-based algorithms above.
- *
- * @note Only the JPEG backend honors this. PNG has no format-level scaled decode, and
- *       libwebp's scaling is applied after a full decode (no decode-time saving), so
- *       both silently decode at full resolution regardless of this setting.
- *       @c ph_load_from_pixels() has no decoder at all and is unaffected.
+ * @note Only the JPEG backend honors this. A PNG, a WebP, or a JPEG in a build whose JPEG
+ *       decoder is stb_image is decoded at full resolution whatever the setting, and
+ *       ph_load_from_pixels() has no decoder at all. The @c max_pixels limit is judged by
+ *       a JPEG's full dimensions.
  *
  * @param ctx The context.
  * @param scale The requested decode resolution. @c PH_DECODE_SCALE_FULL is the default.

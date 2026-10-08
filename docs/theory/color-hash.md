@@ -419,7 +419,7 @@ Three context settings change the pixels it counts.
 | Setting | Effect on ColorHash |
 |---|---|
 | [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a decoded single-channel image has no color, and ColorHash refuses it with [`PH_ERR_REQUIRES_COLOR`](../api/errors.md#PH_ERR_REQUIRES_COLOR) rather than count every pixel as gray |
-| [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | the color transparent pixels are composited onto, which becomes part of the histogram |
+| [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | the color transparent pixels are composited onto, which becomes part of the histogram ([which background](preparation.md#which-background)) |
 | [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | none: turning or mirroring an image keeps every pixel |
 
 [`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights) has no
