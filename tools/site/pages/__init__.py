@@ -5,8 +5,13 @@ from pages import ahash, bmh, color_hash, color_moments, dhash, mhash, phash, ra
 
 PAGES = (ahash, dhash, phash, whash, mhash, bmh, radial, color_hash, color_moments)
 
+# Each algorithm by the name its page and the API reference give it.
+TITLES = {"ahash": "aHash", "dhash": "dHash", "phash": "pHash", "whash": "wHash",
+          "mhash": "mHash", "bmh": "BMH", "radial": "Radial", "color_hash": "ColorHash",
+          "color_moments": "ColorMoments"}
+
 # Pages that explain something every algorithm shares and have no hash of their own: their
 # module draws its figures from figures(tool, image, out_dir, timing) and nothing else.
-from pages import preparation  # noqa: E402
+from pages import comparing, preparation  # noqa: E402
 
-TOPICS = (preparation,)
+TOPICS = (preparation, comparing)

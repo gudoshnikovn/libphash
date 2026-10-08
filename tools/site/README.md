@@ -102,10 +102,13 @@ A page module declares how its algorithm's comparison reads and draws its own fi
 The robustness, corpus, separability, edits and time figures of every page are drawn by
 `render.py` from these declarations; a page module draws only what is its own.
 
-A **topic page** (`pages/preparation.py`, in `TOPICS`) has no hash of its own: it declares
-`NAME`, the directory under `docs/assets/generated/`, and `figures(tool, image, out_dir,
-timing)`, which draws everything it shows, `timing` being what `measure/timing.py`
-measured. `render.py --algo preparation` draws it alone.
+A **topic page** (`pages/preparation.py`, `pages/comparing.py`, in `TOPICS`) has no hash
+of its own: it declares `NAME`, the directory under `docs/assets/generated/`, and
+`figures(tool, image, out_dir, timing)`, which draws everything it shows, `timing` being
+what `measure/timing.py` measured. `render.py --algo preparation` draws it alone. A topic
+page that compares the algorithms reads the measurements of their pages
+(`measure_corpus()`, from the cache) through the page modules in `PAGES`, and names them
+by `TITLES` (`pages/__init__.py`).
 
 ## Measurements, caches and determinism
 

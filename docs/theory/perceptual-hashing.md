@@ -42,7 +42,7 @@ $$
 [`ph_hamming_distance()`](../api/compare.md#ph_hamming_distance) computes it, and [`ph_similarity()`](../api/compare.md#ph_similarity) turns it into a score in
 $[0, 1]$. The other five algorithms return a **digest** — a longer bit string, or a vector
 of numbers — with a distance function of its own; which function goes with which digest is
-on the [algorithms](../algorithms.md#comparing-digests-which-function-for-which-hash) page.
+on the [comparing hashes](comparing.md#which-function-for-which-hash) page.
 
 ## Choosing a threshold
 
@@ -58,6 +58,7 @@ There is no universal value. It depends on the algorithm, on how much the copies
 collection are expected to differ, and on which error costs more. The way to pick it is to
 measure: hash pairs known to be copies and pairs known to be different from the collection
 at hand, and place $t$ between the two distributions.
+[Comparing hashes](comparing.md#choosing-a-threshold) does it for all nine algorithms.
 
 ## An example of the middle steps: aHash
 

@@ -18,6 +18,7 @@ nav = [
   { "Theory" = [
     { "Perceptual hashing" = "theory/perceptual-hashing.md" },
     { "Image preparation" = "theory/preparation.md" },
+    { "Comparing hashes" = "theory/comparing.md" },
     { "Algorithms" = [
       { "Overview" = "algorithms.md" },
       { "aHash" = "theory/ahash.md" },

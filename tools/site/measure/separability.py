@@ -23,9 +23,9 @@ RECALL = 0.95
 
 
 # --8<-- [start:separability]
-def separability(copies, different, lower_is_closer):
-    """d', the threshold that keeps RECALL of the copies, and the share of different
-    pairs that threshold also accepts.
+def separability(copies, different, lower_is_closer, recall=RECALL):
+    """d', the threshold that keeps `recall` of the copies (RECALL unless a page asks for
+    another share), and the share of different pairs that threshold also accepts.
 
     d' is the gap between the two means in units of their pooled spread, as
     tests/src/test_hash_properties.c defines it (separability()), signed so that a
@@ -35,8 +35,8 @@ def separability(copies, different, lower_is_closer):
     sign = 1.0 if lower_is_closer else -1.0
     pooled = np.sqrt((c.std() ** 2 + d.std() ** 2) / 2.0)
     dprime = sign * (d.mean() - c.mean()) / pooled if pooled > 0 else float("inf")
-    # The threshold: the closest value that still accepts RECALL of the copies.
-    t = sign * np.quantile(sign * c, RECALL, method="inverted_cdf")
+    # The threshold: the closest value that still accepts `recall` of the copies.
+    t = sign * np.quantile(sign * c, recall, method="inverted_cdf")
     accepted = (d <= t) if lower_is_closer else (d >= t)
     return dprime, t, accepted.mean()
 # --8<-- [end:separability]

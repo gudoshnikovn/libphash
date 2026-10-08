@@ -25,8 +25,8 @@ from measure.metric import metric
 from measure.separability import COPY_STRENGTHS, RECALL, copies_and_different, separability
 from measure.tool import read_pnm, run_lines
 from measure.transforms import transforms
-from pages import (ahash, bmh, color_hash, color_moments, dhash, mhash, phash, radial,
-                   whash)
+from pages import (TITLES, ahash, bmh, color_hash, color_moments, dhash, mhash, phash,
+                   radial, whash)
 
 NAME = "preparation"
 ALGORITHMS = (ahash, dhash, phash, whash, mhash, bmh, radial, color_hash, color_moments)
@@ -60,9 +60,7 @@ def _unit(mod):
 
 
 def _name(mod):
-    return {"ahash": "aHash", "dhash": "dHash", "phash": "pHash", "whash": "wHash",
-            "mhash": "mHash", "bmh": "BMH", "radial": "Radial", "color_hash": "ColorHash",
-            "color_moments": "ColorMoments"}[mod.ALGO]
+    return TITLES[mod.ALGO]
 
 
 # ---- The orientation --------------------------------------------------------------------

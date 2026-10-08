@@ -1426,9 +1426,10 @@ PH_API int ph_hamming_distance(uint64_t hash1, uint64_t hash2);
 /**
  * @brief Normalized similarity between two 64-bit hashes, in [0.0, 1.0].
  *
- * 1.0 means identical hashes, 0.0 means every bit differs. Unlike
- * ph_hamming_distance(), this is comparable across algorithms of different
- * bit widths.
+ * 1.0 means identical hashes, 0.0 means every bit differs, and two unrelated images land
+ * near 0.5. The scale is shared with ph_similarity_digest() for digests of any length; a
+ * threshold is not, since how close a copy comes depends on the algorithm. See
+ * docs/theory/comparing.md.
  * @ingroup compare
  */
 PH_API double ph_similarity(uint64_t a, uint64_t b);

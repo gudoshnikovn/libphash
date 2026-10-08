@@ -19,6 +19,7 @@ static int load(ph_context_t *ctx, const char *path) {
     return 1;
 }
 
+/* --8<-- [start:compare] */
 /* Compares two digests of one algorithm with the function its kind calls for. */
 static void compare(const char *name, const ph_digest_t *a, const ph_digest_t *b) {
     double score = 0.0;
@@ -49,6 +50,8 @@ static void compare(const char *name, const ph_digest_t *a, const ph_digest_t *b
             break;
     }
 }
+
+/* --8<-- [end:compare] */
 
 int main(int argc, char **argv) {
     if (argc != 3) {
@@ -92,11 +95,14 @@ int main(int argc, char **argv) {
         compare(ph_algorithm_name(algos[i]), &da[i], &db[i]);
     }
 
+    /* --8<-- [start:refused] */
     /* The wrong metric is refused, not answered with a meaningless number: a radial
      * digest is quantized coefficients, not a bit vector. */
     printf("hamming distance of two radial digests: %d (refused)\n",
            ph_hamming_distance_digest(&da[2], &db[2]));
+    /* --8<-- [end:refused] */
 
+    /* --8<-- [start:text] */
     /* Store a digest as text and read it back; the text carries the kind. */
     char hex[PH_DIGEST_HEX_BUFFER_SIZE];
     ph_digest_t back;
@@ -111,6 +117,7 @@ int main(int argc, char **argv) {
                                memcmp(back.data, da[1].data, back.size) == 0)
                                   ? "identical"
                                   : "DIFFERENT");
+    /* --8<-- [end:text] */
 
     ph_free(ctx);
     return 0;
