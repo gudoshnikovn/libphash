@@ -6,6 +6,7 @@
 #include <libphash.h>
 #include <stdio.h>
 
+/* --8<-- [start:what_to_do] */
 /* What a caller does with each outcome of a load or a hash. */
 static const char *what_to_do(ph_error_t err) {
     switch (err) {
@@ -34,6 +35,8 @@ static const char *what_to_do(ph_error_t err) {
     }
 }
 
+/* --8<-- [end:what_to_do] */
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: %s <path>...\n", argv[0]);
@@ -51,6 +54,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    /* --8<-- [start:load] */
     for (int i = 1; i < argc; i++) {
         ph_error_t err = ph_load_from_file(ctx, argv[i]);
         uint64_t hash = 0;
@@ -70,7 +74,9 @@ int main(int argc, char **argv) {
                    (unsigned long long)hash);
         }
     }
+    /* --8<-- [end:load] */
 
+    /* --8<-- [start:empty] */
     /* A hash on a context whose last load failed is refused, not computed from a
      * previous image. */
     if (!ph_is_loaded(ctx)) {
@@ -78,6 +84,7 @@ int main(int argc, char **argv) {
         ph_error_t err = ph_compute_phash(ctx, &hash);
         printf("hash with no image loaded\n  %s: %s\n", ph_get_error_string(err), what_to_do(err));
     }
+    /* --8<-- [end:empty] */
 
     ph_free(ctx);
     return 0;

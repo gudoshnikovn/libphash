@@ -240,19 +240,9 @@ each its own context, or hands the files to
 
 ## When a load fails
 
-| Code | What it means for a load |
-|---|---|
-| [`PH_ERR_IO`](../api/errors.md#PH_ERR_IO) | the path is missing, unreadable, not a regular file, or empty |
-| [`PH_ERR_UNSUPPORTED_FORMAT`](../api/errors.md#PH_ERR_UNSUPPORTED_FORMAT) | the bytes are in no format the library reads |
-| [`PH_ERR_DECODER_UNAVAILABLE`](../api/errors.md#PH_ERR_DECODER_UNAVAILABLE) | WebP, in a build without libwebp |
-| [`PH_ERR_CORRUPT_DATA`](../api/errors.md#PH_ERR_CORRUPT_DATA) | a damaged or truncated file, or an animated WebP |
-| [`PH_ERR_IMAGE_TOO_LARGE`](../api/errors.md#PH_ERR_IMAGE_TOO_LARGE) | over `max_pixels` or a fixed limit |
-| [`PH_ERR_ALLOCATION_FAILED`](../api/errors.md#PH_ERR_ALLOCATION_FAILED) | the image, or its turned copy, does not fit in memory |
-| [`PH_ERR_INVALID_ARGUMENT`](../api/errors.md#PH_ERR_INVALID_ARGUMENT) | a NULL pointer, an empty buffer, or pixel dimensions, channels or stride out of range |
-
-[`ph_get_last_error_message()`](../api/errors.md#ph_get_last_error_message) adds the
-detail the code leaves out, such as the path and the operating system's reason.
-[`examples/error_handling.c`](https://github.com/gudoshnikovn/libphash/blob/main/examples/error_handling.c)
-meets each of these on a real input.
+A failed load returns one of seven codes, and a failed file or buffer load leaves no image in the context.
+[Handling errors](errors.md) lists what each code means and what to do about it,
+[which step of a load](errors.md#where-a-load-fails) returns it, and the
+[detail message](errors.md#the-detail-of-a-failed-load) that names the file and the reason.
 
 --8<-- "docs/assets/generated/timing/footnote.md"

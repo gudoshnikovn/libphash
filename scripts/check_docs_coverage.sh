@@ -2,8 +2,9 @@
 # Fails (non-zero exit) if any public ph_* function in include/libphash.h is not
 # mentioned anywhere in docs/*.md, docs/theory/*.md, docs/guide/*.md, README.md, or
 # MIGRATION.md, if a PHASH_* option() in CMakeLists.txt has no row in the build-flow
-# table of docs/development.md, or if a ph_context_set_* function has no row in the
-# settings tables of docs/guide/configuring.md. Keeps the docs from quietly falling
+# table of docs/development.md, if a ph_context_set_* function has no row in the
+# settings tables of docs/guide/configuring.md, or if a ph_error_t failure code has no
+# row in the codes table of docs/guide/errors.md. Keeps the docs from quietly falling
 # behind the API and the build -- see README.md/docs/README.md for what those files
 # cover.
 set -euo pipefail
@@ -98,10 +99,45 @@ for sym in $(printf '%s\n' "$table_setters" | uniq -d); do
     missing_count=$((missing_count + 1))
 done
 
+# The codes table of docs/guide/errors.md -- the one whose header row starts `| Code |
+# Value |` -- has one row per failure code of ph_error_t, each with the value the header
+# assigns it.
+ERRORS_DOC="$ROOT/docs/guide/errors.md"
+codes_table=$(awk '/^\| Code \| Value \|/{t=1} t&&!/^\|/{t=0} t' "$ERRORS_DOC")
+table_codes=$(printf '%s\n' "$codes_table" | sed -nE 's/^\| \[`(PH_ERR_[A-Z_]+)`\][^|]*\| (-[0-9]+) \|.*/\1 \2/p' | sort)
+codes=$(sed -nE 's/^[[:space:]]*(PH_ERR_[A-Z_]+)[[:space:]]*=[[:space:]]*(-[0-9]+),.*/\1 \2/p' "$HEADER" | sort)
+code_count=$(printf '%s\n' "$codes" | grep -c . || true)
+if [ "$code_count" -eq 0 ]; then
+    echo "check_docs_coverage: no PH_ERR_* = -N values parsed from include/libphash.h" >&2
+    exit 1
+fi
+while IFS= read -r code; do
+    [ -z "$code" ] && continue
+    if ! printf '%s\n' "$table_codes" | grep -qx "$code"; then
+        missing="${missing}  - ${code% *} = ${code#* } (no row with this value in the codes table of docs/guide/errors.md)\n"
+        missing_count=$((missing_count + 1))
+    fi
+done <<EOF
+$codes
+EOF
+while IFS= read -r code; do
+    [ -z "$code" ] && continue
+    if ! printf '%s\n' "$codes" | grep -qx "$code"; then
+        missing="${missing}  - ${code% *} = ${code#* } (a row in the codes table of docs/guide/errors.md, but no such code in include/libphash.h)\n"
+        missing_count=$((missing_count + 1))
+    fi
+done <<EOF
+$table_codes
+EOF
+for code in $(printf '%s\n' "$table_codes" | cut -d' ' -f1 | uniq -d); do
+    missing="${missing}  - ${code} (two rows in the codes table of docs/guide/errors.md)\n"
+    missing_count=$((missing_count + 1))
+done
+
 if [ "$missing_count" -gt 0 ]; then
     echo "check_docs_coverage: $missing_count item(s) missing from the docs (functions are looked up in docs/*.md, docs/theory/*.md, docs/guide/*.md, README.md and MIGRATION.md):" >&2
     printf '%b' "$missing" >&2
     exit 1
 fi
 
-echo "check_docs_coverage: all $symbol_count public functions are documented; all $option_count PHASH_* options have a build-flow row; all $setter_count setters have a row in the settings tables."
+echo "check_docs_coverage: all $symbol_count public functions are documented; all $option_count PHASH_* options have a build-flow row; all $setter_count setters have a row in the settings tables; all $code_count error codes have a row in the codes table."

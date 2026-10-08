@@ -53,6 +53,7 @@ int main(int argc, char **argv) {
 
     /* hashes[] holds one value per flag, in ascending bit order: dHash, then pHash. */
     uint32_t flags = PH_HASH_DHASH | PH_HASH_PHASH;
+    /* --8<-- [start:statuses] */
     ph_error_t err = ph_hash_files_ex(items, n, flags, &options);
     if (err != PH_SUCCESS) {
         /* The batch as a whole failed (bad arguments, no memory for the pool). */
@@ -77,6 +78,7 @@ int main(int argc, char **argv) {
         }
     }
     printf("%zu hashed, %d failed\n", n - (size_t)failed, failed);
+    /* --8<-- [end:statuses] */
 
     ph_free(config);
     free(items);

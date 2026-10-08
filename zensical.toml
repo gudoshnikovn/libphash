@@ -41,6 +41,7 @@ nav = [
     { "Loading images" = "guide/loading.md" },
     { "Configuring a context" = "guide/configuring.md" },
     { "Storing and searching" = "guide/storing.md" },
+    { "Handling errors" = "guide/errors.md" },
     { "Hashing many files" = "batch.md" },
     { "Architecture" = "architecture.md" },
     { "Migrating from 1.x" = "guide/migration.md" },

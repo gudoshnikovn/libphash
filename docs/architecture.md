@@ -34,8 +34,8 @@ from that point on is a recognized-but-broken bitstream: `PH_ERR_CORRUPT_DATA`. 
 recognizing the data at all is `PH_ERR_UNSUPPORTED_FORMAT`. A recognized format with no
 compiled-in decoder is `PH_ERR_DECODER_UNAVAILABLE`. Everything about whether the path
 itself could be read — missing, unreadable, not a regular file, empty — is decided
-before any decoder sees a byte, and is `PH_ERR_IO`. See `include/libphash.h`'s
-`ph_error_t` for the full list (and `MIGRATION.md` when upgrading from 1.x).
+before any decoder sees a byte, and is `PH_ERR_IO`
+([Where a load fails](guide/errors.md#where-a-load-fails)).
 
 **EXIF/WebP auto-orientation** (`src/image/orient.c`) runs after a successful decode,
 before the pixels reach any hash algorithm, when `ph_context_set_auto_orient()` is
@@ -176,10 +176,9 @@ contract.
   threads at all.
 - `ph_is_loaded()`/`ph_context_get_dimensions()` — whether an image is currently loaded
   on a context, and its width/height/channel count.
-- `ph_get_last_error_message(ctx)` — a short diagnostic string for the most recent
-  failure on that context (e.g. the decoder-reported reason a load failed), beyond what
-  the `ph_error_t` code alone says. Not thread-safe to read concurrently with a load
-  call on the same context.
+- `ph_get_last_error_message(ctx)` — the detail of the last load on that context when it
+  failed (the path and the system's reason, the decoder's complaint), beyond what the
+  `ph_error_t` code alone says ([Handling errors](guide/errors.md#the-detail-of-a-failed-load)).
 - `ph_context_set_gray_weights(r, g, b)` — override the default BT.601-derived
   grayscale weights (see `docs/algorithm-provenance.md`) for callers whose images
   aren't sRGB photographs. The weights are normalized to sum to 128;
@@ -197,29 +196,8 @@ contract.
 
 ## Error codes
 
-Every function that can fail returns a `ph_error_t`: `PH_SUCCESS` (0) or a negative
-code. `ph_get_error_string()` turns a code into a fixed English sentence;
-`ph_get_last_error_message()` adds what only the failing call knew — the path, the
-dimension, the decoder's own complaint — for the last load on that context. The values
-are part of the ABI: a code keeps its number for the whole 2.x series, and -2 and -4 are
-never assigned.
-
-| Code | Value | Returned by | Meaning, and what to do |
-|---|---|---|---|
-| `PH_ERR_ALLOCATION_FAILED` | -1 | anything that allocates: `ph_create()`, loads, hashes, batches | Out of memory. Transient — the input was fine; retry, or lower `max_pixels` and the batch thread count. |
-| `PH_ERR_INVALID_ARGUMENT` | -3 | every function | A NULL pointer or a value outside the documented range: a mistake in the call itself. |
-| `PH_ERR_EMPTY_IMAGE` | -5 | `ph_compute_*()`, `ph_compute_multi()` | The context holds no image: nothing loaded yet, or the last file/memory load failed. |
-| `PH_ERR_IMAGE_TOO_LARGE` | -6 | loads | The image is over the context's `max_pixels`, or over the limits no setting lifts. Raise `max_pixels` only for inputs you trust. |
-| `PH_ERR_UNSUPPORTED_FORMAT` | -7 | loads | Not an image format the library recognizes. |
-| `PH_ERR_CORRUPT_DATA` | -8 | loads | A recognized format whose data is malformed or truncated: a verdict on the input, not worth retrying. |
-| `PH_ERR_DECODER_UNAVAILABLE` | -9 | loads | A recognized format with no decoder in this build (WebP without libwebp). `ph_can_use_webp()` tells in advance. |
-| `PH_ERR_IO` | -10 | `ph_load_from_file()`, `ph_hash_files()` items | The path is missing, unreadable, not a regular file, or empty — decided before any decoder sees a byte. |
-| `PH_ERR_REQUIRES_COLOR` | -11 | `ph_compute_color_hash()`, `ph_compute_color_moments_hash()` | A color hash on a single-channel image, such as one loaded with `ph_context_set_load_grayscale()` on. |
-| `PH_ERR_CANCELLED` | -12 | `ph_hash_files_ex()`, `ph_hash_buffers_ex()` | The batch's `should_continue` callback stopped it; every item not started carries this code. |
-| `PH_ERR_NO_STRUCTURE` | -13 | `ph_radial_similarity()` | One of the digests is the all-zero Radial digest of an image with no angular structure. |
-
-A batch returns its own status for the call as a whole, and each item's `status` holds
-the code its load or hash returned, so one unreadable file never fails the others.
+Every function that can fail returns a `ph_error_t`. What each code means, which step of a
+load returns it and what a caller does about it: [Handling errors](guide/errors.md).
 
 ## Batch hashing
 

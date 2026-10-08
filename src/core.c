@@ -88,11 +88,11 @@ static int ph_scan_orientation(const uint8_t *data, size_t len) {
     return 1;
 }
 
-/* The diagnostic message is documented as describing "the most recent failure on this
- * context". That obliges every failable entry point to clear it on the way in, including
- * the ones that fail before they get as far as touching the image -- otherwise a rejected
- * argument leaves the previous call's text standing and the caller reads a message about
- * something else entirely. Kept separate from ph_reset_loaded_image() because clearing the
+/* The diagnostic message describes the last load on this context. That obliges every
+ * load entry point to clear it on the way in, including on the paths that fail before
+ * they get as far as touching the image -- otherwise a rejected argument leaves the
+ * previous load's text standing and the caller reads a message about something else
+ * entirely. Kept separate from ph_reset_loaded_image() because clearing the
  * message must NOT imply discarding the loaded image: ph_load_from_pixels() deliberately
  * keeps the previous image when it fails. */
 static void ph_clear_last_error(ph_context_t *ctx) { ctx->last_error[0] = '\0'; }

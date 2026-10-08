@@ -492,10 +492,10 @@ static void row_requires_color(ph_context_t *ctx) {
     printf("  %-28s -> %s\n", "color hash on RGB", "PH_SUCCESS");
 }
 
-/* The diagnostic message is documented as describing "the most recent failure on this
- * context". Every load entry point must clear it on the way in, including when it
- * rejects its arguments and in ph_load_from_pixels(), or a caller that logs the message
- * after a failure gets a sentence about an earlier call. */
+/* The diagnostic message describes the last load on this context. Every load entry
+ * point clears it on the way in, including when it
+ * rejects its arguments and in ph_load_from_pixels(), so a caller that logs the message
+ * after a failure never gets a sentence about an earlier call. */
 static void row_message_is_about_this_call(ph_context_t *ctx) {
     /* Produce a real, detailed message first: a load that fails inside the decoder. */
     const uint8_t junk[16] = {'n', 'o', 't', ' ', 'a', 'n', ' ', 'i',
@@ -532,7 +532,7 @@ static void row_message_is_about_this_call(ph_context_t *ctx) {
     uint64_t still_there = 0;
     ASSERT_OK(ph_compute_ahash(ctx, &still_there));
 
-    printf("  message freshness            -> cleared by every failing entry point\n");
+    printf("  message freshness            -> cleared by every load\n");
 }
 
 /* --- PH_ERR_ALLOCATION_FAILED: the decoder itself could not get memory ---

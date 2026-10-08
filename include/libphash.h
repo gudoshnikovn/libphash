@@ -273,9 +273,14 @@ typedef enum {
 typedef struct ph_context ph_context_t;
 
 /**
- * @brief Returns a short diagnostic message about the most recent failure on this
- * context (e.g. the decoder-reported reason a load failed), or an empty string if
- * nothing has failed yet or no extra detail was captured.
+ * @brief Returns the detail of the last load on this context when it failed (the path and
+ * the operating system's reason, the decoder's complaint, the limit it hit), or an empty
+ * string if that load succeeded, no load has run, or the failure has no detail beyond its
+ * code.
+ *
+ * Every ph_load_from_*() call clears it on the way in; hashes, setters and comparisons
+ * neither set nor clear it. The text is English, for a log or a person: a program
+ * branches on the ph_error_t code. See docs/guide/errors.md.
  *
  * @note Not thread-safe to read concurrently with a load call on the same context;
  * follows the same "one context per thread at a time" rule as the rest of the API.
