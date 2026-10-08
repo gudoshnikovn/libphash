@@ -35,7 +35,7 @@ flowchart TD
     M -->|PNG signature| P[libpng]
     M -->|RIFF … WEBP| W[libwebp]
     M -->|anything else| S[stb_image]
-    W -.->|not compiled in| U[PH_ERR_DECODER_UNAVAILABLE]
+    W -.->|not compiled in| U[Refused: no decoder]
 ```
 
 stb_image is always compiled in. It reads BMP, GIF (the first frame of an animation),
