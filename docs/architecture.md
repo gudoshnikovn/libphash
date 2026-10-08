@@ -63,7 +63,7 @@ Optimized low-level primitives for image manipulation, split into dedicated modu
   transformation using configurable weights (`PH_GRAY_R/G/B`, BT.601-derived — see
   `docs/algorithm-provenance.md`).
 - **`filters.c`**: Gaussian blur (σ-parameterized; mHash and Radial, see
-  `docs/algorithms.md`) and histogram equalization (mHash).
+  `docs/theory/mhash.md` and `docs/theory/radial.md`) and histogram equalization (mHash).
 - **`orient.c`**: the EXIF/WebP auto-orientation layer described above.
 - **Gamma Correction** (in `color.c`): `(v/max)^γ · max` per image, default γ = 1.0
   (identity), Radial only; see `docs/algorithm-provenance.md` §7.
@@ -97,7 +97,7 @@ Comparison and serialization of finished digests (`ph_hamming_distance*`,
 Every algorithm is traced to its source (or, for wHash, to the absence of one), and
 every known divergence from
 that source is written down, in `docs/algorithm-provenance.md` — this page describes
-where the code lives, not what it computes or why; see `docs/algorithms.md` for that.
+where the code lives, not what it computes or why; the algorithm pages under `docs/theory/` cover that.
 
 ### 4. Context, files and the shared core (`src/*.c`)
 

@@ -82,4 +82,4 @@ on a few thousand values. A 20-megapixel photo costs more than a hundred times w
 a 400×400 one does. Two settings cut the cost of large JPEGs at the source:
 `ph_context_set_decode_scale()` on the template decodes at 1/2, 1/4 or 1/8 of the size,
 and `ph_context_set_load_grayscale()` skips the color pass when only grayscale
-algorithms are requested. `docs/algorithms.md` has measured per-algorithm costs.
+algorithms are requested. `docs/theory/choosing.md` has measured per-algorithm costs.

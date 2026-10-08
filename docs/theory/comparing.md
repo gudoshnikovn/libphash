@@ -4,7 +4,8 @@ A hash on its own says nothing; two of them compared say how alike two images ar
 threshold on that comparison says whether they are the same picture. This page describes
 the four ways the library compares, which one goes with which algorithm, and what a
 threshold costs, measured for all nine algorithms on the two corpora the algorithm pages
-use. It ends with the text form in which hashes are stored and read back.
+use. It ends with the text form in which hashes are stored and read back, and with what makes
+a stored hash comparable with one computed on another machine.
 
 ## Which function for which hash
 
@@ -275,6 +276,38 @@ followed by the 16 digits of `ph_hash_to_hex()`.
 ```c title="examples/digest_and_metrics.c"
 --8<-- "examples/digest_and_metrics.c:text"
 ```
+
+## Same hash on every machine
+
+A stored hash is worth comparing only if a hash computed elsewhere would have come out the
+same. A hash is a function of the decoded pixels and the context's settings, and the
+library computes it the same way on every machine: no fused multiply-add contraction, one
+plain loop for pHash's DCT, integer area averaging and grayscale conversion, exact
+histogram intersection. A build for arm64 or x86-64, with GCC, Clang or MSVC, with or
+without SIMD, gives the same bits; `tests/src/test_golden_hashes.c` holds every algorithm
+to that exactly, with no tolerance.
+
+The one thing that changes the pixels is **the JPEG decoder**. libjpeg-turbo (the bundled
+decoder of the CMake build) and stb_image (the zero-dependency fallback) round their
+inverse DCT differently, so the same JPEG reaches the hash functions as slightly
+different pixels. [`ph_get_build_info()`](../api/build.md#ph_get_build_info) names the
+decoder (`jpeg=libjpeg-turbo` or `jpeg=stb`). PNG and WebP decode to the same pixels in
+every build.
+
+For a collection of stored hashes this means:
+
+- Hashes from builds with the same JPEG decoder can be compared by equality.
+- Across the two JPEG decoders, compare by distance with a threshold, never by equality.
+  On the test fixtures the 64-bit hashes and BMH come out the same; mHash differs by 3
+  or 4 of its 576 bits, and Radial, ColorHash and ColorMoments by small amounts in a few
+  of their features.
+- Settings that change the pixels a hash sees, such as
+  [`ph_context_set_decode_scale()`](../api/loading.md#ph_context_set_decode_scale),
+  [`ph_context_set_gamma()`](../api/params.md#ph_context_set_gamma),
+  [`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights) and
+  [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient), are part
+  of a hash's identity just like the algorithm's own parameters. Store them with the
+  hashes.
 
 ## In code
 

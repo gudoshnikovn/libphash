@@ -62,7 +62,7 @@ Out of scope:
   authentication or moderation primitive. An attacker who can choose two images can
   always force a hash collision between them, or break a match between an image and
   a modified copy of itself; this is expected and is not a vulnerability to report.
-  See `docs/algorithms.md`'s scope section and `docs/references.md` (Dolhansky &
+  See "What a perceptual hash is not" in `docs/theory/perceptual-hashing.md` and `docs/references.md` (Dolhansky &
   Canton Ferrer 2020) for why no perceptual hash, keyed or not, fits an adversarial
   use case, and why this library does not claim to.
 - Anything requiring the caller to already pass attacker-controlled data to a
@@ -95,8 +95,8 @@ suite).
 - **The same hash value from builds with different JPEG decoders.** Every algorithm gives
   the same bits on every OS, architecture and compiler the CI matrix covers, but
   libjpeg-turbo and stb_image decode a JPEG to slightly different pixels, so the hash of a
-  JPEG depends on which one the build uses — see `docs/algorithms.md`, "Same hash on every
-  machine". This is a reproducibility property, not a security one.
+  JPEG depends on which one the build uses — see `docs/theory/comparing.md`, "Same hash on
+  every machine". This is a reproducibility property, not a security one.
 - **Resistance to a deliberate adversary trying to produce a hash collision or a
   hash mismatch for two images.** See "What counts as a vulnerability here" above —
   this is out of scope by design, not an oversight.

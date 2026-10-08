@@ -8,7 +8,7 @@ JPEG/PNG/WebP decoders, and a hash of a 400×400 photo in 0.05 ms after a 0.23 m
   [Try it](#try-it).
 - **Build it into a program** — [Building & Installation](#building--installation), then
   [Usage](#usage-example) and the [examples](examples/README.md).
-- **Choose an algorithm, or understand one** — [`docs/algorithms.md`](docs/algorithms.md);
+- **Choose an algorithm, or understand one** — [`docs/theory/choosing.md`](docs/theory/choosing.md);
   everything else is indexed in [`docs/`](docs/README.md).
 
 **Upgrading from 1.x?** See [`CHANGELOG.md`](CHANGELOG.md) for what changed and
@@ -25,7 +25,7 @@ inside a trusted pipeline. Every design decision in this library is made for tha
 **It is not built to withstand someone trying to fool it.** Every hash here is
 deterministic and unkeyed — the same file and settings give the same value on any
 machine (for JPEG, with the same decoder; see
-[`docs/algorithms.md`](docs/algorithms.md#same-hash-on-every-machine)), with no shared
+[`docs/theory/comparing.md`](docs/theory/comparing.md#same-hash-on-every-machine)), with no shared
 secret — and that property, which is what makes deduplication work at all, is also
 what makes the hashes straightforward to attack on purpose. Anyone who benefits from a
 wrong answer can construct a visually different image with a matching hash, or perturb an
@@ -38,7 +38,7 @@ none is implemented here. Reaching for a neural embedding instead does not close
 published collision attacks cover learned hashes too.
 
 The reasoning, the citations, and what follows from this choice for how the algorithms are
-verified are in [`docs/algorithms.md`](docs/algorithms.md#threat-model-what-these-hashes-are-not)
+verified are in [`docs/theory/perceptual-hashing.md`](docs/theory/perceptual-hashing.md#what-a-perceptual-hash-is-not)
 and [`docs/algorithm-provenance.md`](docs/algorithm-provenance.md).
 
 ## Language Bindings
@@ -81,7 +81,7 @@ Release build with the bundled decoders, one thread, minimum of 30–300 runs):
 A hash's cost grows with the image's pixel count, since the reduction to its working size
 reads every pixel; for large JPEGs `ph_context_set_decode_scale()` cuts both. The batch API
 spreads files over every CPU. The full table and the method are in
-[`docs/algorithms.md`](docs/algorithms.md#cost).
+[`docs/theory/choosing.md`](docs/theory/choosing.md#cost).
 
 ## Build configurations
 

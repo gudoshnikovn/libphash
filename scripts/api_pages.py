@@ -11,7 +11,7 @@ strict build checks.
 Each topic opens with a summary of its declarations. The generator also writes what it can
 compute rather than what a doc comment says: under a function, the examples (examples/*.c)
 that call it and the site pages that link to its anchor; under ph_error_t, the functions
-whose @return names each code; on the overview, an A–Z index of every symbol. A path such as `docs/algorithms.md section 8` in a doc comment becomes a link to
+whose @return names each code; on the overview, an A–Z index of every symbol. A path such as `docs/algorithm-provenance.md section 3` in a doc comment becomes a link to
 that page of the site, and a path to a file that does not exist fails the generation.
 
 Every declaration is written exactly once, under an anchor equal to its name, in header

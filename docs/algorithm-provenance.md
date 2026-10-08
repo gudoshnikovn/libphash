@@ -74,6 +74,63 @@ attributed to them here comes from the named restatement, not from the paper:
 The Stricker & Orengo formulas therefore rest on the weakest evidence in this
 document. They are marked as such in that section.
 
+## Attribution at a glance
+
+| Algorithm | Author | Source | Known to diverge |
+|---|---|---|---|
+| aHash | Neal Krawetz | blog post, 2011 | no |
+| dHash | David Oftedal, described by Neal Krawetz | blog post, 2013 | no |
+| pHash | pHash project; documented by Zauner; coefficient rule from Coskun & Sankur | thesis, 2010 | no — follows the reference implementation |
+| wHash | this library, after ImageHash | **none** (§4) | n/a — judged by measurement |
+| mHash | pHash (construction); Marr & Hildreth 1980 (operator) | implementation + paper | no |
+| BMH | Yang, Gu & Niu | paper, 2006 | no |
+| Radial | De Roover, De Vleeschouwer, Lefèbvre & Macq | paper, 2005 | no |
+| ColorHash | Swain & Ballard (method); this library (quantization) | paper, 1991 — **not read** | n/a — no conformance claimed |
+| ColorMoments | Stricker & Orengo | paper, 1995 | **yes** — color space (RGB, not HSV) |
+
+wHash has no primary source, so for it "correct" can only mean measured robustness,
+discrimination and separability, never conformance to a specification.
+
+## Constants no source defines
+
+None of the nine primary sources specify a grayscale formula or a resampling filter, and
+most leave the tie at the threshold and the bit layout unstated too. Each choice the
+library makes in their place is a row of the delta table of the algorithm it touches; this
+section gathers the ones that cut across algorithms.
+
+**Grayscale.** `PH_GRAY_R/G/B` = 38/75/15 over 128 (`src/image/image.h`), an integer
+approximation of the ITU-R BT.601 luma coefficients (0.299/0.587/0.114), cited as an
+external standard rather than because any source asks for it. Every algorithm that
+reduces to grayscale uses it: aHash, dHash, pHash, wHash, mHash, BMH, Radial. ColorHash
+and ColorMoments work in color. Why these and not a closer approximation:
+[Image preparation](theory/preparation.md#why-38-75-and-15).
+
+**Alpha.** None of the sources hash transparent images. The color stored under alpha 0 is
+invisible and arbitrary, so an image with alpha is composited onto mid-gray at load time
+and every algorithm sees the visible image only; why gray, and what each background costs:
+[Image preparation](theory/preparation.md#transparency).
+
+**Resampling.** aHash, pHash, wHash and BMH reduce by an exact area average, dHash through
+stb_image_resize2's Mitchell filter; neither is the filter ImageHash uses, and nothing in
+the sources is violated (§1, §2).
+
+**Threshold and bit order.** Bit order never affects a distance, but it decides what a
+hash looks like in hex, which matters when comparing against another implementation. Two
+tie rules are in force, and unifying them would mean overriding either a source or a
+reference implementation for the sake of a convention:
+
+| Algorithm | Bit set when | Bit order | Why |
+|---|---|---|---|
+| aHash | `>=` the mean | MSB first, `1ULL << (63 - i)`, row-major | The tie is unpinned by the source, and no reference implementation is cited to defer to: `>=`, to agree with BMH. The order is the source's own ("left to right, top to bottom using big-endian"), the only layout any of the nine sources states. |
+| dHash | left `<` right | MSB first, `1ULL << (63 - i)`, row-major | Same source, same statement of the order. |
+| pHash | `>` the median plus a margin | LSB first, `1ULL << i`, DCT block row-major | `>` as pHash's `ph_dct_imagehash()`; the order is undefined by Zauner or Krawetz, a choice not verified against pHash's own code. |
+| wHash | `>` the median | LSB first, `1ULL << i`, low band row-major | `>` as ImageHash's `whash()`; the order is undefined, and not verified against ImageHash's layout. |
+| mHash | `>` the window mean | MSB first within each byte, windows in raster order | pHash's `ph_mh_imagehash()` construction; neither source states the direction. The packing matches how pHash's own page describes it. |
+| BMH | `>=` the median | LSB first within each byte, blocks in raster order | `>=` is Zauner's equation 3.9, the one place among the nine sources that states a direction; the paper defines a bit sequence, not a byte layout. |
+
+ColorHash (108 one-byte bins), ColorMoments (nine signed 16-bit numbers) and Radial
+(40 quantized coefficients) are not bit-packed.
+
 ---
 
 ## 1. aHash — Average Hash
@@ -227,7 +284,7 @@ will ever be. §6 follows the BMH paper against OpenCV for exactly that reason.
 equation 3.3, coefficients (0,0) through (7,7), **median over the 63 AC coefficients**,
 bit set when `value > median + 0.001 × (AC range)` — pHash's construction with a margin
 (see the delta table and "Where the weakness is" below). The bit order is this library's
-own: LSB first (see the bit-order table in [`algorithms.md`](algorithms.md)).
+own: LSB first (see [Constants no source defines](#constants-no-source-defines)).
 
 **Delta:**
 
@@ -520,7 +577,7 @@ differ from OpenCV's.
 | No preset normalization size; the image is resampled straight to the block grid | deliberate, and measured better | See below. |
 | Key-permuted block order omitted | deliberate | Also omitted by pHash. It is a security feature (unpredictability under a key), not a perceptual one, and the paper leaves the cipher unspecified. |
 | `≥` at the threshold | conforms | Matches equation 3.9. This is also the library-wide rule for aHash's own unpinned tie (§1). |
-| Bit packing LSB-first within a byte | documented | The paper defines a bit sequence, not a byte layout, so there is nothing to conform to or diverge from — only a choice to record. See `docs/algorithms.md`'s bit-order table for all nine algorithms; `bmh.c`'s own file header states it too. |
+| Bit packing LSB-first within a byte | documented | The paper defines a bit sequence, not a byte layout, so there is nothing to conform to or diverge from — only a choice to record. See [Constants no source defines](#constants-no-source-defines) for all nine algorithms; `bmh.c`'s own file header states it too. |
 | Grayscale coefficients | pinned | As for aHash — see §1. |
 
 **The missing normalization step, and why it is not needed.** Step (a) normalizes the

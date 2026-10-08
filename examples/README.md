@@ -16,5 +16,5 @@ header.
 | [`cmake_consumer/`](cmake_consumer/) | A CMake project using an installed libphash through `find_package(phash 2)` and `phash::phash`. `scripts/smoke_install.sh` builds it in CI. |
 
 [`../docs/batch.md`](../docs/batch.md) covers the batch API in depth,
-[`../docs/algorithms.md`](../docs/algorithms.md) which algorithm to pick, and the API
+[`../docs/theory/choosing.md`](../docs/theory/choosing.md) which algorithm to pick, and the API
 reference (`make docs`) every function.

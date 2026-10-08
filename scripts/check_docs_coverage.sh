@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Fails (non-zero exit) if any public ph_* function in include/libphash.h is not
-# mentioned anywhere in docs/*.md, README.md, or MIGRATION.md, or if a PHASH_* option()
-# in CMakeLists.txt has no row in the build-flow table of docs/development.md. Keeps the
-# docs from quietly falling behind the API and the build -- see README.md/docs/README.md
-# for what those files cover.
+# mentioned anywhere in docs/*.md, docs/theory/*.md, docs/guide/*.md, README.md, or
+# MIGRATION.md, or if a PHASH_* option() in CMakeLists.txt has no row in the build-flow
+# table of docs/development.md. Keeps the docs from quietly falling behind the API and the
+# build -- see README.md/docs/README.md for what those files cover.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -28,7 +28,10 @@ if [ "$parsed_count" -ne "$decl_count" ]; then
     exit 1
 fi
 
-DOC_FILES=("$ROOT"/docs/*.md "$ROOT/README.md" "$ROOT/MIGRATION.md")
+# The pages written by hand. Not docs/api/: it is generated from the header itself, so a
+# function found there would say nothing about whether anything explains it.
+DOC_FILES=("$ROOT"/docs/*.md "$ROOT"/docs/theory/*.md "$ROOT"/docs/guide/*.md "$ROOT/README.md"
+    "$ROOT/MIGRATION.md")
 
 missing=""
 missing_count=0
@@ -63,7 +66,7 @@ $options
 EOF
 
 if [ "$missing_count" -gt 0 ]; then
-    echo "check_docs_coverage: $missing_count item(s) missing from the docs (functions are looked up in docs/*.md, README.md and MIGRATION.md):" >&2
+    echo "check_docs_coverage: $missing_count item(s) missing from the docs (functions are looked up in docs/*.md, docs/theory/*.md, docs/guide/*.md, README.md and MIGRATION.md):" >&2
     printf '%b' "$missing" >&2
     exit 1
 fi

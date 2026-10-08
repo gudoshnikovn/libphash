@@ -73,7 +73,7 @@ deterministic and unkeyed, which is what makes deduplication work and also what 
 hashes straightforward to defeat on purpose. Content moderation, copyright blocklists and
 integrity checks on untrusted input need keyed algorithms, and none is implemented here.
 The reasoning and the citations are in the
-[threat model](algorithms.md#threat-model-what-these-hashes-are-not).
+[threat model](theory/perceptual-hashing.md#what-a-perceptual-hash-is-not).
 
 ## Nine algorithms, one pipeline
 

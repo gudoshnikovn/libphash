@@ -21,7 +21,6 @@ nav = [
     { "Comparing hashes" = "theory/comparing.md" },
     { "Choosing an algorithm" = "theory/choosing.md" },
     { "Algorithms" = [
-      { "Overview" = "algorithms.md" },
       { "aHash" = "theory/ahash.md" },
       { "dHash" = "theory/dhash.md" },
       { "pHash" = "theory/phash.md" },

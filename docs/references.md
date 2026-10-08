@@ -196,7 +196,7 @@ functions"**, arXiv:2011.09473, 2020.
 - <https://arxiv.org/abs/2011.09473>
 - Rank 2 · Abstract read
 
-Cited for the threat-model note in [`algorithms.md`](algorithms.md). It produces exact
+Cited for the threat model in [Perceptual hashing](theory/perceptual-hashing.md#what-a-perceptual-hash-is-not). It produces exact
 hash collisions between unrelated images through minimal, gradient-guided perturbations,
 and does so "across numerous image pairs and hash types, encompassing both deep learning
 and traditional hashing methods" — the authors point out that an attacker can thereby

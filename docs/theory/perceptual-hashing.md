@@ -83,16 +83,46 @@ side of the mean each one is on. What moves bits is moving content — rotating,
 shifting an object to the other side of the frame flips the bits of every cell it left and
 every cell it entered. The [aHash](ahash.md) page measures both kinds.
 
-The other eight algorithms replace the mean with something more robust: differences
-between neighbors (dHash), low-frequency DCT coefficients (pHash), a wavelet approximation
-(wHash), edges (mHash), block means (BMH), the variance along lines through the center
-(Radial), or the distribution of colors (ColorHash, ColorMoments). Each is described, with
-its source, on the [algorithms](../algorithms.md) page.
+The other eight algorithms describe the image by something other than cells against
+their mean: differences between neighbors ([dHash](dhash.md)), low-frequency DCT
+coefficients ([pHash](phash.md)), a wavelet approximation ([wHash](whash.md)), edges
+([mHash](mhash.md)), block means on a finer grid ([BMH](bmh.md)), the variance along lines
+through the center ([Radial](radial.md)), or the distribution of colors
+([ColorHash](color-hash.md), [ColorMoments](color-moments.md)). Each description survives
+some edits and not others; [Choosing an algorithm](choosing.md) measures the nine side by
+side.
 
 ## What a perceptual hash is not
 
-It is not a security mechanism. The hashes are deterministic and public, so anyone can
-compute them and construct an image that collides with another, or perturb an image until
-it stops matching its own copy. They are for finding duplicates in a collection you
-control; the [threat model](../algorithms.md#threat-model-what-these-hashes-are-not)
-explains why, with the published attacks.
+It is not a security mechanism. Every hash here is **deterministic and unkeyed**: the same
+file, hashed with the same settings, gives the same value on every machine
+([Comparing hashes](comparing.md#same-hash-on-every-machine)), with no shared secret.
+That is exactly what deduplication needs, and exactly what makes the hashes trivial to
+defeat on purpose.
+
+Someone who wants two visually different images to collide, or one image to stop matching
+its own copy, can arrange it. This is not a weakness of any one algorithm: it follows from
+being deterministic and public, and it has been demonstrated against traditional and
+learned hashes alike. Dolhansky and Canton Ferrer ([DC20] in the
+[references](../references.md)) produce exact collisions between unrelated images under
+minimal perturbation, and note that an attacker can thereby poison the lookup table of a
+duplicate-detection service. A neural embedding in place of a perceptual hash would not
+close the gap: such embeddings are not trained for adversarial robustness, and adversarial
+examples are that family's oldest known failure mode.
+
+**Use these hashes for** finding duplicates and near-duplicates in a collection you
+control, clustering, cache keys, "have I seen this before" in a trusted pipeline.
+
+**Do not use them for** anything where someone benefits from a wrong answer: copyright
+enforcement, content moderation, blocklists, checking the integrity of an image. The
+literature has algorithms for that problem, and they are **keyed**, so that an attacker
+who cannot guess the key cannot aim at the hash. Venkatesan et al. 2000 ([VKJM00]) is the
+canonical example, and its key is not an optional extra: the paper calls its randomized
+rounding "the crucial source of randomness in the hash function's output". No such
+algorithm is implemented here, because a keyed hash solves a different problem from the
+one this library is for.
+
+In an adversarial setting, the usual shape is two stages: a fast deterministic hash like
+these reduces a collection to a set of candidates, and a heavier comparison that is
+harder to steer decides among them. The first stage is what this library is for; the
+second is out of its scope.

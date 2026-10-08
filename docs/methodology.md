@@ -39,7 +39,7 @@ that it is a good descriptor, and that is a measurement — which is what
 here, not a fallback from a missing one.
 
 **What this premise forbids.** No claim, anywhere in this repository, that any hash here
-resists deliberate manipulation. `docs/algorithms.md` states the exclusion for users;
+resists deliberate manipulation. `docs/theory/perceptual-hashing.md` states the exclusion for users;
 Dolhansky and Canton Ferrer (2020) is cited there for the attack, and it covers learned
 hashes too, so the exclusion is not an argument for replacing these algorithms with neural
 embeddings. If the threat model ever changes, this section is what has to be reopened

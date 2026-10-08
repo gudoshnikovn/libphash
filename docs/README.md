@@ -22,8 +22,9 @@ Welcome to the internal technical documentation for `libphash`. This directory c
   Hashing many images at once: the worker pool, thread safety, memory and cost per item.
 - [**Development Guide**](development.md)
   Build instructions, testing strategies, coding standards, and naming conventions.
-- [**Algorithms Depth**](algorithms.md)
-  What each of the nine hashes computes, how to tune it, and what it is good for.
+- [**Choosing an Algorithm**](theory/choosing.md)
+  The nine hashes measured side by side; each has its own page under `theory/`, with what
+  it computes, how to tune it, and what it is good for.
 - [**Algorithm Provenance**](algorithm-provenance.md)
   Where each algorithm comes from, what its source specifies against what this code
   does, and every known divergence.
