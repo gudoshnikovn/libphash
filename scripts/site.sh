@@ -19,7 +19,8 @@
 # moves. A version is raised deliberately, in its own commit, in the .in file and the lock.
 #
 # Usage: scripts/site.sh          # build into build/site/
-#        scripts/site.sh serve    # build, then serve with live reload on 127.0.0.1:8000
+#        scripts/site.sh serve    # generate, then serve with live reload on 127.0.0.1:8000
+#                                 # (from build/site-serve/; a build can run beside it)
 #        ZENSICAL=/path/to/zensical PYTHON=/path/to/python3 scripts/site.sh
 #                                 # use an environment set up elsewhere instead
 set -euo pipefail
@@ -106,7 +107,23 @@ python3 scripts/check_site_links.py
 
 case "$MODE" in
     build)
-        "$ZS" build --clean --strict
+        # The build runs in a directory of its own, build/site-src/: Zensical keeps its
+        # cache beside the configuration file and reads the pages only from below it, so
+        # the build gets a copy of zensical.toml there and docs/ synced next to it. Its
+        # cache and output are then its own, and a build never deletes the files a running
+        # `zensical serve` is reading (zensical.toml says why the two settings differ).
+        mkdir -p build/site-src
+        sed -e 's|^site_dir = .*|site_dir = "site"|' \
+            -e 's|^pymdownx\.snippets\.check_paths = .*|pymdownx.snippets.check_paths = true|' \
+            zensical.toml >build/site-src/zensical.toml
+        if ! grep -qx 'site_dir = "site"' build/site-src/zensical.toml ||
+            ! grep -qx 'pymdownx.snippets.check_paths = true' build/site-src/zensical.toml; then
+            echo "!!! zensical.toml has no site_dir or snippets check_paths line to set" >&2
+            exit 1
+        fi
+        sync_into docs build/site-src/docs
+        "$ZS" build --config-file build/site-src/zensical.toml --clean --strict
+        rsync -a --delete build/site-src/site/ build/site/
         echo "==> site: build/site/index.html"
         ;;
     serve)

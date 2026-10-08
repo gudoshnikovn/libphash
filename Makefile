@@ -168,8 +168,8 @@ docs:
 
 # The documentation site (docs/ through Zensical, zensical.toml) into build/site/, with
 # the API reference under api/; site-serve rebuilds on every change and serves it on
-# 127.0.0.1:8000. The script pins the Zensical version and builds strictly: a broken
-# link fails it.
+# 127.0.0.1:8000, and `make site` can run while it does. The script pins the Zensical
+# version and builds strictly: a broken link fails it.
 site:
 	./scripts/site.sh
 

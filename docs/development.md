@@ -431,7 +431,7 @@ the code follows is held by the gate rather than by habit.
 
 `docs/` is the source of the documentation site and is read on GitHub as it is, so a page
 works in both places. `make site` builds it into `build/site/`, `make site-serve` serves it
-with live reload. Both need Python 3.12 or later and install the Python packages
+with live reload, and a build can run while the server does. Both need Python 3.12 or later and install the Python packages
 themselves: `scripts/site-requirements.txt` is a lock, compiled from
 `scripts/site-requirements.in`, that pins every package the site is built with, its
 dependencies included, with hashes, and `scripts/site.sh` installs it into

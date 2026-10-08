@@ -2,6 +2,13 @@
 # docs/ is the site's only source: the same Markdown files read as plain documents on
 # GitHub. Pages that already have a path the code and scripts refer to keep it; pages
 # written for the site live under docs/theory/ and docs/guide/.
+#
+# This file is what `zensical serve` (`make site-serve`) reads. scripts/site.sh builds the
+# published site from a copy of it in build/site-src/, which differs in two settings:
+# site_dir, and check_paths below. Zensical keeps its cache in .cache/ beside the
+# configuration file and writes the output into site_dir; a build that shared either with
+# a running server would delete the files the server is reading, and one of the two
+# crashes.
 
 [project]
 site_name = "libphash"
@@ -11,7 +18,7 @@ repo_url = "https://github.com/gudoshnikovn/libphash"
 repo_name = "gudoshnikovn/libphash"
 copyright = "libphash is released under the MIT License."
 docs_dir = "docs"
-site_dir = "build/site"
+site_dir = "build/site-serve"
 
 nav = [
   { "Home" = "index.md" },
@@ -145,8 +152,11 @@ pymdownx.mark = {}
 pymdownx.smartsymbols = {}
 # Code on the site is included from files CI compiles (examples/*.c) rather than
 # copied, so it cannot drift from the header. Paths are relative to the repository root.
+# The build turns check_paths on, so an included file that does not exist fails it; the
+# server leaves it off, because it stops for good on the first missing file, and a page is
+# often written before scripts/site.sh has generated the tables it includes.
 pymdownx.snippets.base_path = ["."]
-pymdownx.snippets.check_paths = true
+pymdownx.snippets.check_paths = false
 pymdownx.superfences.custom_fences = [
   { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
 ]

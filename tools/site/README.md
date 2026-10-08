@@ -152,7 +152,8 @@ comments that explain it.
 
 ```sh
 make site                    # everything, strict, into build/site/
-make site-serve              # the same, served at http://127.0.0.1:8000/libphash/
+make site-serve              # the same, served at http://127.0.0.1:8000/libphash/ with
+                             # live reload; `make site` can run beside it
 
 # One page's figures, into a scratch directory, with a PNG preview of each on its theme's
 # background (an SVG is transparent, and an image viewer shows it on the wrong one):
