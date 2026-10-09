@@ -468,12 +468,89 @@ void test_radial_structure_is_relative_to_contrast() {
     PASS("test_radial_structure_is_relative_to_contrast");
 }
 
+/* The definition, term by term in long double: the Pearson correlation of a with b
+ * cyclically shifted by d, the largest over every d. */
+static long double radial_by_definition(const ph_digest_t *a, const ph_digest_t *b) {
+    const int n = a->size;
+    long double mean_a = 0, mean_b = 0;
+    for (int i = 0; i < n; i++) {
+        mean_a += a->data[i];
+        mean_b += b->data[i];
+    }
+    mean_a /= n;
+    mean_b /= n;
+    long double var_a = 0, var_b = 0;
+    for (int i = 0; i < n; i++) {
+        var_a += (a->data[i] - mean_a) * (a->data[i] - mean_a);
+        var_b += (b->data[i] - mean_b) * (b->data[i] - mean_b);
+    }
+    long double peak = -2;
+    for (int d = 0; d < n; d++) {
+        long double num = 0;
+        for (int i = 0; i < n; i++) {
+            num += (a->data[i] - mean_a) * (b->data[(i - d + n) % n] - mean_b);
+        }
+        long double r = num / sqrtl(var_a * var_b);
+        if (r > peak) {
+            peak = r;
+        }
+    }
+    return peak;
+}
+
+/* On random digests of every length a coefficient digest can have, the score is the
+ * definition's to 1e-12, and the same both ways round, bit for bit: the shifts of b
+ * against a are those of a against b. */
+static void test_radial_similarity_matches_definition(void) {
+    ph_test_rng_t rng = ph_test_rng(0x5AD1A1u);
+    long double worst = 0;
+    for (int n = 2; n <= PH_DIGEST_MAX_BYTES; n++) {
+        for (int trial = 0; trial < 40; trial++) {
+            ph_digest_t a, b;
+            memset(&a, 0, sizeof(a));
+            memset(&b, 0, sizeof(b));
+            a.size = b.size = (uint8_t)n;
+            a.kind = b.kind = PH_DIGEST_KIND_COEFFICIENTS;
+            /* Half the trials over a narrow range, as a real digest's neighbouring
+             * coefficients often are, so near-equal bytes are covered too. */
+            const int span = trial % 2 ? 256 : 4;
+            for (int i = 0; i < n; i++) {
+                a.data[i] = (uint8_t)(ph_test_rng_byte(&rng) % span);
+                b.data[i] = (uint8_t)(ph_test_rng_byte(&rng) % span);
+            }
+            a.data[0] = 0; /* never constant: a structureless digest is refused */
+            a.data[1] = 3;
+            b.data[0] = 3;
+            b.data[1] = 0;
+            double ab = 0, ba = 0;
+            ASSERT_OK(ph_radial_similarity(&a, &b, &ab));
+            ASSERT_OK(ph_radial_similarity(&b, &a, &ba));
+            if (ab != ba) {
+                fprintf(stderr, "[FAIL] n=%d trial %d: sim(a,b)=%.17g but sim(b,a)=%.17g\n", n,
+                        trial, ab, ba);
+                exit(1);
+            }
+            long double diff = fabsl((long double)ab - radial_by_definition(&a, &b));
+            if (diff > worst) {
+                worst = diff;
+            }
+            if (diff > 1e-12L) {
+                fprintf(stderr, "[FAIL] n=%d trial %d: %.17g against the definition's %.17Lg\n", n,
+                        trial, ab, radial_by_definition(&a, &b));
+                exit(1);
+            }
+        }
+    }
+    printf("test_radial_similarity_matches_definition: PASSED (largest difference %.3Lg)\n", worst);
+}
+
 int main() {
     test_bilinear_unit();
     test_radial_ignores_everything_outside_the_central_disc();
     test_radial_projection_count_bounds();
     test_projection_variance_unit();
     test_radial_similarity_contract();
+    test_radial_similarity_matches_definition();
     test_radial_structure_is_relative_to_contrast();
     test_radial_with_real_rotation();
     test_radial_rotation_on_a_photograph();

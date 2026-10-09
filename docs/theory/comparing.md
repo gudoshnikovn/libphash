@@ -283,7 +283,8 @@ A stored hash is worth comparing only if a hash computed elsewhere would have co
 same. A hash is a function of the decoded pixels and the context's settings, and the
 library computes it the same way on every machine: no fused multiply-add contraction, one
 plain loop for pHash's DCT, integer area averaging and grayscale conversion, exact
-histogram intersection. A build for arm64 or x86-64, with GCC, Clang or MSVC, with or
+histogram intersection, and Radial's correlations summed in integers and rounded once,
+at the end. A build for arm64 or x86-64, with GCC, Clang or MSVC, with or
 without SIMD, gives the same bits; `tests/src/test_golden_hashes.c` holds every algorithm
 to that exactly, with no tolerance.
 

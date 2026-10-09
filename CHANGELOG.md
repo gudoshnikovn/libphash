@@ -49,6 +49,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   weights set with `ph_context_set_gray_weights()` no longer reach it, as they reach no
   other grayscale load. A WebP without alpha, at the default weights, hashes as before.
 
+### Changed
+
+- **`ph_radial_similarity()` is about ten times faster and exact up to its last
+  rounding.** It summed the correlation at each shift in `double`, 1600 dependent
+  additions for two 40-byte digests (946 ns a comparison on an Apple M3 Pro). The bytes
+  are integers, so every sum is now an exact integer, the peak is taken over the exact
+  numerators, and one division and one square root come last (86.5 ns). The score can
+  differ from the old one in its last bits (at most about 1e-15); it is closer to the
+  exact correlation and no longer depends on the order of a sum, and the documented
+  symmetry holds bit for bit, where the old sums could differ between `(a, b)` and
+  `(b, a)` in the last place. Radial digests are unchanged.
+
 ## [2.0.0] - 2026-10-07
 
 First major release. It is a major because some changes are invisible at upgrade time:

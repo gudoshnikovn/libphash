@@ -92,13 +92,13 @@ hashes and for every pair of a hundred thousand.
   `ph_digest_t` in an array takes its 136 bytes. An 8-byte digest is several times slower
   to scan than the same hash as a `uint64_t`, and BMH's and mHash's digests, at 32 and 72
   bytes, cost about the same as each other.
-- **Radial is the exception.** Its peak correlation is a correlation at every cyclic
-  shift of one digest against the other, a product for every pair of their coefficients,
-  where a Hamming distance is a few word operations
-  ([Radial: peak correlation](../theory/comparing.md#radial-peak-correlation)). One Radial
-  comparison costs as much as several hundred Hamming distances, and a search by Radial
-  takes as many times longer. ColorHash's intersection, which passes over its bins twice
-  and divides, lies between the two.
+- **Radial and ColorHash are the exceptions.** Radial's peak correlation is a
+  correlation at every cyclic shift of one digest against the other, a product for every
+  pair of their coefficients, 1600 of them for 40 bytes, where a Hamming distance is a few
+  word operations ([Radial: peak correlation](../theory/comparing.md#radial-peak-correlation));
+  ColorHash's intersection passes over its 108 bins twice and divides. Either comparison
+  costs as much as a few dozen Hamming distances, and a search by it takes as many times
+  longer.
 - **Every pair grows with the square of the collection.** A query against a million stored
   hashes is a million comparisons; every pair of a hundred thousand is five billion, and
   the last column is longer than the one before it by the same factor of five thousand.

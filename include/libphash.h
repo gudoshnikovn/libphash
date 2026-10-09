@@ -1459,8 +1459,9 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
  * The Pearson correlation of the two digests' bytes, computed with @p b shifted
  * cyclically by each of 0 to size - 1 places; the largest of them. It runs from -1.0 to
  * 1.0, and 1.0 means the same profile up to a shift. Compare it against
- * @c PH_RADIAL_PCC_THRESHOLD, or against your own measured cut. The score is symmetric in
- * @p a and @p b. See docs/theory/radial.md.
+ * @c PH_RADIAL_PCC_THRESHOLD, or against your own measured cut. The sums are exact
+ * integers and the score is rounded once, at the end, so it is the same on every machine
+ * and symmetric in @p a and @p b to the last bit. See docs/theory/radial.md.
  *
  * A digest with all bytes equal -- the all-zero digest ph_compute_radial_hash() gives an
  * image with no angular structure -- has no correlation with anything: any number would

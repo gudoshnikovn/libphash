@@ -170,44 +170,59 @@ PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *
         return PH_ERR_INVALID_ARGUMENT;
     }
 
+    /* Exactly, in integers. The bytes are whole numbers, so with sums over i of a_i, b_i,
+     * a_i^2, b_i^2 and, at shift d, a_i * b_(i-d):
+     *
+     *   sum (a_i - mean_a)(b_(i-d) - mean_b) = (n * sum a_i b_(i-d) - sum a * sum b) / n
+     *   sum (a_i - mean_a)^2                 = (n * sum a^2 - (sum a)^2) / n
+     *
+     * and the n cancels between numerator and denominator. Each of these is an exact
+     * integer -- at most 128 bytes of at most 255, so every one stays below 2^31 and their
+     * products in int64_t -- and the variances do not depend on the shift: a cyclic shift
+     * permutes the terms of a sum of squares without changing it. The peak is taken over
+     * the exact numerators, and the one division and one square root come last. Rounding
+     * therefore happens twice, not at every one of the n^2 additions a floating-point sum
+     * would make, and the result does not depend on the order of any sum: no compiler, SIMD
+     * width or FMA contraction can move it. */
     const int n = a->size;
-    double sum_a = 0.0, sum_b = 0.0;
+    int64_t sum_a = 0, sum_b = 0, sum_aa = 0, sum_bb = 0;
     for (int i = 0; i < n; i++) {
         sum_a += a->data[i];
         sum_b += b->data[i];
+        sum_aa += a->data[i] * a->data[i];
+        sum_bb += b->data[i] * b->data[i];
     }
-    const double mean_a = sum_a / n;
-    const double mean_b = sum_b / n;
-
-    /* The denominators do not depend on the shift: a cyclic shift permutes the terms of
-     * each sum of squares without changing it. pHash recomputes them inside the shift
-     * loop; the result is identical and this way the loop is O(n^2) multiplications
-     * rather than three times that. */
-    double var_a = 0.0, var_b = 0.0;
-    for (int i = 0; i < n; i++) {
-        double da = a->data[i] - mean_a;
-        double db = b->data[i] - mean_b;
-        var_a += da * da;
-        var_b += db * db;
-    }
-
-    if (var_a <= 0.0 || var_b <= 0.0) {
+    const int64_t var_a = n * sum_aa - sum_a * sum_a;
+    const int64_t var_b = n * sum_bb - sum_b * sum_b;
+    if (var_a <= 0 || var_b <= 0) {
         return PH_ERR_NO_STRUCTURE;
     }
 
-    const double denom = sqrt(var_a * var_b);
-    double peak = -1.0;
+    /* b twice over, so b_((i - d) mod n) is b2[i + n - d] and the inner loop has no
+     * modulo in it. */
+    uint8_t b2[2 * PH_DIGEST_MAX_BYTES];
+    for (int i = 0; i < n; i++) {
+        b2[i] = b2[i + n] = b->data[i];
+    }
+    int64_t peak_num = INT64_MIN;
     for (int d = 0; d < n; d++) {
-        double num = 0.0;
+        const uint8_t *bd = b2 + n - d;
+        /* Each product fits 16 bits (255^2 = 65025) and the sum, at most 128 of them, 24:
+         * byte by byte into a 16-bit product is what the compiler widens in one SIMD
+         * multiply-accumulate. */
+        uint32_t dot = 0;
         for (int i = 0; i < n; i++) {
-            int j = (n + i - d) % n;
-            num += (a->data[i] - mean_a) * (b->data[j] - mean_b);
+            dot += (uint16_t)(a->data[i] * bd[i]);
         }
-        double r = num / denom;
-        if (r > peak) {
-            peak = r;
+        const int64_t num = n * (int64_t)dot - sum_a * sum_b;
+        if (num > peak_num) {
+            peak_num = num;
         }
     }
+
+    /* Each variance is below 2^31, so it converts to double exactly; their product is
+     * rounded once. */
+    double peak = (double)peak_num / sqrt((double)var_a * (double)var_b);
 
     /* Rounding can carry a perfect correlation a hair past 1.0; the contract says [-1, 1]
      * and callers compare it against a threshold, so keep it there. */
