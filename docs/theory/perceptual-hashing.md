@@ -11,8 +11,10 @@ enough to run over millions of images.
 
 ## The common shape
 
-Every algorithm in libphash follows the same pipeline. They differ in the third and fourth
-steps: what the image is reduced to, and which features of it become bits.
+The seven grayscale algorithms of libphash follow the same pipeline, and differ in the
+third and fourth steps: what the image is reduced to, and which features of it become
+bits. The two color hashes, ColorHash and ColorMoments, read the decoded colors directly
+and summarize them.
 
 ```mermaid
 flowchart LR
@@ -63,23 +65,23 @@ at hand, and place $t$ between the two distributions.
 ## An example of the middle steps: aHash
 
 aHash is the simplest of the nine and shows the whole idea in two lines. The image is
-reduced to $8 \times 8$ pixels $p_0 \dots p_{63}$, read left to right and top to bottom,
-and their mean is computed:
+reduced to an $8 \times 8$ grid of cells $p_0 \dots p_{63}$, read left to right and top
+to bottom, and their mean is computed:
 
 $$
 \bar p = \frac{1}{64} \sum_{i=0}^{63} p_i .
 $$
 
-Each pixel then contributes one bit, set when the pixel is at least as bright as the mean.
-The first pixel goes into the most significant bit:
+Each cell then contributes one bit, set when the cell is at least as bright as the mean.
+The first cell goes into the most significant bit:
 
 $$
 h = \sum_{i=0}^{63} [\,p_i \ge \bar p\,] \cdot 2^{\,63 - i} .
 $$
 
-An edit that keeps the order of pixels relative to the mean keeps every bit: scaling the
-brightness, or stretching the contrast around mid-gray, changes the values but not which
-side of the mean each one is on. What moves bits is moving content — rotating, cropping,
+An edit that keeps the order of cells relative to the mean keeps every bit: scaling the
+brightness, or stretching the contrast, changes the values but, short of clipping at black
+or white, not which side of the mean each one is on. What moves bits is moving content — rotating, cropping,
 shifting an object to the other side of the frame flips the bits of every cell it left and
 every cell it entered. The [aHash](ahash.md) page measures both kinds.
 
@@ -122,7 +124,7 @@ rounding "the crucial source of randomness in the hash function's output". No su
 algorithm is implemented here, because a keyed hash solves a different problem from the
 one this library is for.
 
-In an adversarial setting, the usual shape is two stages: a fast deterministic hash like
-these reduces a collection to a set of candidates, and a heavier comparison that is
-harder to steer decides among them. The first stage is what this library is for; the
-second is out of its scope.
+In an adversarial setting, a fast deterministic hash like these can still reduce a
+collection to a set of candidates, for a heavier comparison that is harder to steer to
+decide among them. The first stage is what this library is for; the second is out of its
+scope.

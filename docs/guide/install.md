@@ -30,7 +30,7 @@ What the Full build adds:
 - **Speed.** libjpeg-turbo decodes JPEG to gray 1.4 to 6.4 times faster than stb_image,
   and libpng with zlib-ng decodes photographic PNG 1.25 to 1.7 times faster on Linux
   ([measured](../benchmarks/2026-10-04-decoders-vs-stb.md)). Decoding takes most of the
-  time of a cheap hash on a large image ([Cost](../theory/choosing.md#cost)).
+  time of a cheap hash on a large image ([Performance](performance.md)).
 - **WebP.** stb_image has no WebP decoder: a Minimal build answers a WebP file with
   [`PH_ERR_DECODER_UNAVAILABLE`](../api/errors.md#PH_ERR_DECODER_UNAVAILABLE). The
   Makefile can link a system libwebp instead (below).
@@ -212,8 +212,8 @@ add_subdirectory(third_party/libphash)
 target_link_libraries(my_app PRIVATE phash)
 ```
 
-The `phash` target brings its include directory and decoders with it. Set `PHASH_BUILD_TESTS`
-to `OFF` if you don't run its tests; the other options above apply
+The `phash` target brings its include directory and decoders with it. Set
+`PHASH_BUILD_TESTS` to `OFF` if you don't run its tests; the other options above apply
 here too. Your project's own `BUILD_SHARED_LIBS` and `BUILD_TESTING` stay as you set them.
 The decoder submodules have to be checked out inside the copy; without them libphash
 builds with stb_image and says so in one configure warning.

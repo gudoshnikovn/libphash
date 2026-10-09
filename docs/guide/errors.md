@@ -37,8 +37,8 @@ signals a refused comparison with -1 rather than a code, and only
 The codes fall into four groups by what the caller does about them. A **mistake in the
 call** is fixed in the code and is never retried. A **verdict on the input** is final for
 that input in that build and configuration: the same bytes fail the same way every time,
-so the input is skipped and reported. **Out of memory** is the one transient code. The last two codes report how a
-batch or a comparison ended, not a fault.
+so the input is skipped and reported. **Out of memory** is the one transient code. The
+last two codes report how a batch or a comparison ended, not a fault.
 
 | Code | Value | When | What the caller does |
 |---|---|---|---|
@@ -61,8 +61,8 @@ every code, each function that can return it.
 ## Where a load fails
 
 A load runs its steps in order, and each step can fail with its own codes, on the dashed
-branches. A failure at any step ends the load with no image in the context, so the codes of a later step are
-never seen for an input an earlier step refused.
+branches. A failure at any step ends the load with no image in the context, so the codes
+of a later step are never seen for an input an earlier step refused.
 
 ```mermaid
 flowchart TD
@@ -95,8 +95,8 @@ flowchart TD
 
 [`ph_load_from_pixels()`](../api/loading.md#ph_load_from_pixels) has none of these steps.
 It fails only on its arguments, the size limit and memory, and a failure keeps the image
-loaded before it. [Loading images](loading.md#formats-and-builds) says which
-formats each build decodes.
+loaded before it. [Loading images](loading.md#formats-and-builds) says which formats each
+build decodes.
 
 A hash fails before it computes anything, in this order: `PH_ERR_INVALID_ARGUMENT` for an
 invalid argument, `PH_ERR_EMPTY_IMAGE` when no image is loaded, and `PH_ERR_REQUIRES_COLOR`
@@ -118,8 +118,9 @@ the last load on a context:
 
 The message belongs to loads. Every load clears it on the way in, so after a successful
 load it is an empty string; a failed load leaves its detail, or an empty string when the
-failure has nothing to add to its code, as with every failed `ph_load_from_pixels()`. Hashes, setters and comparisons neither write nor
-clear it: after a failed hash, the message still describes the load before it.
+failure has nothing to add to its code, as with every failed `ph_load_from_pixels()`.
+Hashes, setters and comparisons neither write nor clear it: after a failed hash, the
+message still describes the load before it.
 
 The context owns the string. Its text is replaced by the next load on that context and
 is gone after [`ph_free()`](../api/context.md#ph_free), so a program that keeps it copies
@@ -130,8 +131,9 @@ thread that uses the context, not alongside a load on another.
 ## What a failure leaves behind
 
 An output is read only after a `PH_SUCCESS`. Most calls leave their outputs as they were
-when they fail, and the ones that state it in the API reference, such as the color hashes and the
-functions that read a hash back from text, promise it. Three write before they can tell they will fail:
+when they fail, and the ones that state it in the API reference, such as the color hashes
+and the functions that read a hash back from text, promise it. Three write before they can
+tell they will fail:
 
 - [`ph_compute_multi()`](../api/hash64.md#ph_compute_multi) stops at the first algorithm
   that fails, and the slots of those before it already hold their hashes. Nothing in the

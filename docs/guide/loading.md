@@ -131,9 +131,8 @@ with [`PH_ERR_IMAGE_TOO_LARGE`](../api/errors.md#PH_ERR_IMAGE_TOO_LARGE):
 
 What a load holds in memory, at its peak, is the encoded file (mapped or read), the
 decoded image at 3 bytes a pixel (1 when [loaded as grayscale](#loading-as-grayscale),
-except a WebP),
-and a second image of the same size while an orientation is applied. The first grayscale
-hash adds 1 byte a pixel, kept until the next load.
+except a WebP), and a second image of the same size while an orientation is applied. The
+first grayscale hash adds 1 byte a pixel, kept until the next load.
 
 A large JPEG can also be decoded at ½, ¼ or ⅛ of its size with
 [`ph_context_set_decode_scale()`](../api/loading.md#ph_context_set_decode_scale). That
@@ -216,8 +215,7 @@ context:
 - **A load replaces the image.** It frees the previous image and the grayscale cached
   from it before it decodes the next one. The settings stay as they were set.
 - **A load that fails on a file or a buffer's contents leaves the context empty**, as
-  the previous image is dropped before decoding begins, so the next hash
-  fails with [`PH_ERR_EMPTY_IMAGE`](../api/errors.md#PH_ERR_EMPTY_IMAGE) rather than
+  the previous image is dropped before decoding begins, so the next hash fails with [`PH_ERR_EMPTY_IMAGE`](../api/errors.md#PH_ERR_EMPTY_IMAGE) rather than
   describing the image before it.
   [`ph_load_from_pixels()`](../api/loading.md#ph_load_from_pixels) is checked before it
   replaces anything, and a call it refuses leaves the previous image loaded.
@@ -241,9 +239,9 @@ each its own context, or hands the files to
 
 ## When a load fails
 
-A failed load returns one of seven codes, and a failed file or buffer load leaves no image in the context.
-[Handling errors](errors.md) lists what each code means and what to do about it,
-[which step of a load](errors.md#where-a-load-fails) returns it, and the
-[detail message](errors.md#the-detail-of-a-failed-load) that names the file and the reason.
+A failed load returns one of seven codes, and a failed file or buffer load leaves no image
+in the context. [Handling errors](errors.md) lists what each code means and what to do
+about it, [which step of a load](errors.md#where-a-load-fails) returns it, and the [detail
+message](errors.md#the-detail-of-a-failed-load) that names the file and the reason.
 
 --8<-- "docs/assets/generated/timing/footnote.md"

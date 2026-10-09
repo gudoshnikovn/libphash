@@ -88,9 +88,10 @@ hashes and for every pair of a hundred thousand.
   counts the bits in its own loop.
 - **A digest costs more than its bytes.**
   [`ph_hamming_distance_digest()`](../api/compare.md#ph_hamming_distance_digest) and the
-  other digest functions check both digests' kind and size before comparing, and every `ph_digest_t` in an array takes its 136 bytes. An
-  8-byte digest is several times slower to scan than the same hash as a `uint64_t`, and
-  BMH's and mHash's digests, at 32 and 72 bytes, cost about the same as each other.
+  other digest functions check both digests' kind and size before comparing, and every
+  `ph_digest_t` in an array takes its 136 bytes. An 8-byte digest is several times slower
+  to scan than the same hash as a `uint64_t`, and BMH's and mHash's digests, at 32 and 72
+  bytes, cost about the same as each other.
 - **Radial is the exception.** Its peak correlation is a correlation at every cyclic
   shift of one digest against the other, a product for every pair of their coefficients,
   where a Hamming distance is a few word operations
@@ -159,11 +160,11 @@ and what each lookup has to read:
 
 --8<-- "docs/assets/generated/storing/index.md"
 
-At the strict thresholds of the photographs, a lookup reads a few values in each of
-the four tables. At the looser thresholds of the synthetic images, it reads thousands
-in each, and an index of four blocks saves less. More, shorter blocks lower the radius, down to exact lookups once there are
-more blocks than the threshold has bits; but a shorter block is shared by more stored
-hashes, and each of them is a candidate to verify.
+At the strict thresholds of the photographs, a lookup reads a few values in each of the
+four tables. At the looser thresholds of the synthetic images, it reads thousands in each,
+and an index of four blocks saves less. More, shorter blocks lower the radius, down to
+exact lookups once there are more blocks than the threshold has bits; but a shorter block
+is shared by more stored hashes, and each of them is a candidate to verify.
 
 **A BK-tree** uses the triangle inequality of the Hamming distance. Every node holds a
 hash, and its children are filed under their distance from it. A query at distance $d$

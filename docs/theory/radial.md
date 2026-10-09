@@ -164,8 +164,8 @@ The digest describes how contrast is spread over the directions through the cent
 Anything that keeps that spread keeps the digest; anything that turns the image or
 changes what lies near the center moves it.
 
-![Peak correlation with the original under nine transforms, with PH_RADIAL_PCC_THRESHOLD dashed](../assets/generated/radial/robustness.light.svg#only-light)
-![Peak correlation with the original under nine transforms, with PH_RADIAL_PCC_THRESHOLD dashed](../assets/generated/radial/robustness.dark.svg#only-dark)
+![Peak correlation with the original under nine transforms, on the example photograph, with PH_RADIAL_PCC_THRESHOLD dashed](../assets/generated/radial/robustness.light.svg#only-light)
+![Peak correlation with the original under nine transforms, on the example photograph, with PH_RADIAL_PCC_THRESHOLD dashed](../assets/generated/radial/robustness.dark.svg#only-dark)
 
 - **Brightness, contrast and gamma** mostly scale the variances, and step 6 takes the
   scale out. What is left is a change in the profile's shape: where a brightening clips

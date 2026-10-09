@@ -29,8 +29,8 @@ destroy. Taking such an algorithm and pinning its key to a public constant does 
 it; it removes the thing the paper proves and leaves an unvalidated feature extractor
 wearing a citation. This repository does not do that.
 
-**What follows for the algorithms with no primary source.** wHash and
-ColorHash are judged by measured properties rather than by conformance, and under this
+**What follows for the algorithms with no primary source.** wHash and ColorHash are
+judged by measured properties rather than by conformance, and under this
 premise that is not a compromise. There is no paper describing an unkeyed deterministic
 wavelet hash because, in the security literature's terms, there is nothing to prove about
 one: no unforgeability claim to make, no adversary to bound. What remains to establish is
@@ -39,11 +39,12 @@ that it is a good descriptor, and that is a measurement — which is what
 here, not a fallback from a missing one.
 
 **What this premise forbids.** No claim, anywhere in this repository, that any hash here
-resists deliberate manipulation. `docs/theory/perceptual-hashing.md` states the exclusion for users;
-Dolhansky and Canton Ferrer (2020) is cited there for the attack, and it covers learned
-hashes too, so the exclusion is not an argument for replacing these algorithms with neural
-embeddings. If the threat model ever changes, this section is what has to be reopened
-first — before any algorithm is chosen — because every choice below depends on it.
+resists deliberate manipulation. `docs/theory/perceptual-hashing.md` states the exclusion
+for users; Dolhansky and Canton Ferrer (2020) is cited there for the attack, and it covers
+learned hashes too, so the exclusion is not an argument for replacing these algorithms
+with neural embeddings. If the threat model ever changes, this section is what has to be
+reopened first — before any algorithm is chosen — because every choice below depends on
+it.
 
 ## The criterion for a defect
 
@@ -53,8 +54,8 @@ source**, or when it **measurably worsens one of the properties below**.
 A difference from a third-party implementation is not, on its own, a defect. ImageHash,
 OpenCV and pHash are implementations; none of them is a specification, and none has been
 verified against the papers it implements. BMH is the worked example of why this
-matters: OpenCV's widely used implementation thresholds on the mean
-while the paper specifies the median, and a comparison against OpenCV could only have
+matters: OpenCV's widely used implementation thresholds on the mean while the paper
+specifies the median, and a comparison against OpenCV could only have
 confirmed the departure.
 
 Conforming to a source can put this library at odds with ImageHash; that is accepted.
@@ -63,8 +64,8 @@ whether it should have; this repository's build gates only on source conformance
 checks and property measurements.
 
 For the algorithm with no primary source — wHash — only the second half of the criterion
-can ever apply. They are judged by measurable properties
-alone, and the attribution headers say so rather than implying a specification exists.
+can ever apply. It is judged by measurable properties alone, and its attribution header
+says so rather than implying a specification exists.
 
 ## Checking formulas, not outputs
 
@@ -98,7 +99,8 @@ behavior.
 
 ## Measurable properties
 
-For everything a source does not specify, and for wHash, which has no source, correctness is replaced by three measurable properties:
+For everything a source does not specify, and for wHash, which has no source, correctness
+is replaced by three measurable properties:
 
 - **Robustness** — the same image after a benign transformation must hash close by.
 - **Discrimination** — different images must hash far apart.
@@ -128,12 +130,12 @@ ring periods, disc radii — is a fraction of the corpus resolution (`IMG_W`/`IM
 160×160, deliberately not equal to any algorithm's normalization preset (8 for
 aHash/dHash, 16 for BMH's default `block_size`, 32 for pHash's default `dct_size`, 512 for
 mHash). mHash still upsamples it 3.2× to reach 512, which understates it somewhat — a
-corpus at or above 512 would not,
-but `tests/src/test_hash_properties.c`'s radial-rotation assertions set a practical
-ceiling on how large this corpus can go before an unrelated property (`ph_compute_radial_hash()`'s
-fixed `PH_RADIAL_SAMPLES` sampling a fixed-size disc more coarsely) starts failing; see the
-comment on `IMG_W` in `tests/src/synthetic_corpus.h`. Numbers measured on this corpus are comparable within one run of
-that file at one resolution, and nowhere else.
+corpus at or above 512 would not, but `tests/src/test_hash_properties.c`'s
+radial-rotation assertions set a practical ceiling on how large this corpus can go before
+an unrelated property (`ph_compute_radial_hash()`'s default `PH_RADIAL_SAMPLES` sampling a
+larger disc more coarsely) starts failing; see the comment on `IMG_W` in
+`tests/src/synthetic_corpus.h`. Numbers measured on this corpus are comparable within one
+run of that file at one resolution, and nowhere else.
 
 ### The documentation site's photographs
 

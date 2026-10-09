@@ -43,15 +43,15 @@ nav = [
     { "Verification methodology" = "methodology.md" },
   ] },
   { "Guide" = [
-    { "Installing" = "guide/install.md" },
     { "Quick start" = "guide/quickstart.md" },
+    { "Installing" = "guide/install.md" },
     { "How libphash works" = "guide/how-it-works.md" },
     { "Loading images" = "guide/loading.md" },
     { "Configuring a context" = "guide/configuring.md" },
-    { "Storing and searching" = "guide/storing.md" },
     { "Handling errors" = "guide/errors.md" },
-    { "Performance" = "guide/performance.md" },
     { "Hashing many files" = "guide/batch.md" },
+    { "Storing and searching" = "guide/storing.md" },
+    { "Performance" = "guide/performance.md" },
     { "Migrating from 1.x" = "guide/migration.md" },
     { "Benchmarks" = [
       { "Overview" = "benchmarks/README.md" },
@@ -93,6 +93,10 @@ extra_javascript = [
 
 [project.theme]
 language = "en"
+# Sixteen bits of a hash, drawn in the accent of the site's figures; the palette below
+# takes the same accent, defined in stylesheets/site.css.
+logo = "assets/logo.svg"
+favicon = "assets/logo.svg"
 features = [
   "content.code.annotate",
   "content.code.copy",
@@ -112,18 +116,24 @@ features = [
 
 [[project.theme.palette]]
 media = "(prefers-color-scheme)"
+primary = "custom"
+accent = "custom"
 toggle.icon = "lucide/sun-moon"
 toggle.name = "Switch to light mode"
 
 [[project.theme.palette]]
 media = "(prefers-color-scheme: light)"
 scheme = "default"
+primary = "custom"
+accent = "custom"
 toggle.icon = "lucide/sun"
 toggle.name = "Switch to dark mode"
 
 [[project.theme.palette]]
 media = "(prefers-color-scheme: dark)"
 scheme = "slate"
+primary = "custom"
+accent = "custom"
 toggle.icon = "lucide/moon"
 toggle.name = "Switch to system preference"
 
@@ -170,7 +180,8 @@ pymdownx.tasklist.custom_checkbox = true
 
 # Files under docs/ that are not pages of the site. docs/README.md is the repository's
 # map of this directory (GitHub shows it when the directory is opened); the site's front
-# page is docs/index.md. api-index.md is the Doxygen main page; the site shows its text as
+# page is docs/index.md. The Markdown under assets/generated/ is the tables tools/site/
+# measures, which pages include where they are needed; on their own they are fragments. api-index.md is the Doxygen main page; the site shows its text as
 # api/index.md, which scripts/api_pages.py writes from Doxygen's XML with the rest of the
 # API reference. Zensical takes the list from its exclude plugin: it has no exclude_docs
 # setting, and would otherwise publish these files and index them for search.
@@ -179,6 +190,7 @@ glob = [
   "README.md",
   "api-index.md",
   "Doxyfile",
+  "assets/generated/*/*.md",
   "coverage/*",
   "html/*",
   "xml/*",

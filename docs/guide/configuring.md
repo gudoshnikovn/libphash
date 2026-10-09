@@ -63,14 +63,13 @@ is never clamped into range, a pair is never half applied, and a refusal never i
 the defaults. Three weights that sum to zero are an error, not a request for the standard
 ones.
 
-Each upper bound is a limit of the implementation: the 64 bits of a hash, the 1024 bits
-of a digest, the largest kernel the buffer holds. A lower bound keeps the hash meaningful:
+Each upper bound is a limit of the implementation: the 64 bits of a hash, the 1024 bits of
+a digest, the largest kernel the buffer holds. A lower bound keeps the hash meaningful:
 below a 4×4 block most unrelated images share a pHash, and a Radial line of one sample has
-no variance to measure. An unknown enum value is
-refused too, as a C caller or a binding can pass any integer through an enum parameter.
-A setter called with a constant needs no check; one called with a value read from a file,
-a command line or another program does, since the hashes computed after an ignored refusal
-use the setting that was there before.
+no variance to measure. An unknown enum value is refused too, as a C caller or a binding
+can pass any integer through an enum parameter. A setter called with a constant needs no
+check; one called with a value read from a file, a command line or another program does,
+since the hashes computed after an ignored refusal use the setting that was there before.
 
 ## Settings that change the hash
 
@@ -90,8 +89,8 @@ Every setting except the size limit can change a value:
   sees no change from the last three, until the first image that has what they act on.
 - **By a level here and there**: grayscale loading, on a JPEG, whose decoder rounds the
   luma where the library's conversion truncates
-  ([measured](../theory/preparation.md#the-decoders-grayscale)). Grayscale weights
-  do nothing to an image loaded as grayscale, which has no color to weigh.
+  ([measured](../theory/preparation.md#the-decoders-grayscale)). Grayscale weights do
+  nothing to an image loaded as grayscale, which has no color to weigh.
 - **Never**: [`ph_context_set_max_pixels()`](../api/loading.md#ph_context_set_max_pixels)
   decides whether a load succeeds, not what it loads.
 

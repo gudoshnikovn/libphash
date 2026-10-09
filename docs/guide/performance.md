@@ -118,8 +118,9 @@ it. On a 20-megapixel JPEG, loaded and hashed:
   and applies to JPEG only.
 - **Load as grayscale**, with
   [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale), when
-  every hash you compute is a grayscale one: on a JPEG, a part of the load is saved. ColorHash and ColorMoments refuse such an image, and on a PNG it
-  costs more than it saves (above).
+  every hash you compute is a grayscale one: on a JPEG, a part of the load is saved.
+  ColorHash and ColorMoments refuse such an image, and on a PNG it costs more than it
+  saves (above).
 - **Compute several hashes from one load.** The grayscale image and the area grid that
   aHash, pHash, wHash and BMH reduce from are computed by the first hash that needs them
   and kept until the next load

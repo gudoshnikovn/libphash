@@ -13,6 +13,6 @@ TITLES = {"ahash": "aHash", "dhash": "dHash", "phash": "pHash", "whash": "wHash"
 # Pages that explain something every algorithm shares, or guide a reader through a task, and
 # have no hash of their own: their module draws its figures from figures(tool, image,
 # out_dir, timing) and nothing else.
-from pages import batch, choosing, comparing, loading, performance, preparation, storing  # noqa: E402,E501
+from pages import batch, choosing, comparing, home, loading, performance, preparation, storing  # noqa: E402,E501
 
-TOPICS = (preparation, comparing, choosing, loading, storing, performance, batch)
+TOPICS = (home, preparation, comparing, choosing, loading, storing, performance, batch)

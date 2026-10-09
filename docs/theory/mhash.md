@@ -11,14 +11,18 @@ more sensitive to where exactly it lies.
 | | |
 |---|---|
 | **Call** | [`ph_compute_mhash()`](../api/digests.md#ph_compute_mhash), or [`PH_ALGO_MHASH`](../api/algorithms.md#PH_ALGO_MHASH) in [`ph_compute_digest()`](../api/algorithms.md#ph_compute_digest) |
-| **Output** | 72-byte digest, 576 bits, compared with [`ph_hamming_distance_digest()`](../api/compare.md#ph_hamming_distance_digest) |
+| **Output** | digest of 72 bytes, 576 bits, compared with [`ph_hamming_distance_digest()`](../api/compare.md#ph_hamming_distance_digest) |
 | **Source** | the operator: Marr and Hildreth, 1980; the hash built on it: pHash's `ph_mh_imagehash()`, which has no paper ([provenance](../algorithm-provenance.md#5-mhash--marrhildreth-hash)) |
 --8<-- "docs/assets/generated/mhash/cost-row.md"
 
 ## The steps
 
-Every picture on this page is computed by the library from the same photograph, and the
-digest at the end is what `ph_compute_mhash()` returns for it.
+The steps below are those of the default parameters, a 512×512 image and a kernel reaching
+8 pixels from its center;
+[`ph_context_set_mhash_params()`](../api/params.md#ph_context_set_mhash_params) sets
+others, [below](#parameters). Every picture on this page is computed by the library from
+the same photograph, and the digest at the end is what `ph_compute_mhash()` returns for
+it.
 
 ![The stages of mHash on the example photograph: the decoded image, the blurred and resized grayscale image, the equalized image, its response to the kernel, the block sums and the 576 bits](../assets/generated/mhash/pipeline.light.svg#only-light)
 ![The stages of mHash on the example photograph: the decoded image, the blurred and resized grayscale image, the equalized image, its response to the kernel, the block sums and the 576 bits](../assets/generated/mhash/pipeline.dark.svg#only-dark)
@@ -185,8 +189,8 @@ The hash records where fine detail lies, block by block, to within a few pixels.
 that moves the detail across the grid changes it; anything that keeps the detail in
 place changes it little.
 
-![Bits that differ from the original under nine transforms](../assets/generated/mhash/robustness.light.svg#only-light)
-![Bits that differ from the original under nine transforms](../assets/generated/mhash/robustness.dark.svg#only-dark)
+![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/mhash/robustness.light.svg#only-light)
+![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/mhash/robustness.dark.svg#only-dark)
 
 - **Rotation and cropping** move the hash furthest: a turn of a degree or two, or a crop
   of a few percent, moves the detail by a few pixels at the image's edges, as much as
@@ -478,10 +482,10 @@ the default.
     --8<-- "docs/assets/generated/mhash/cost-size.md"
 
 The defaults are pHash's, which fixes the size at 512 and does not expose it. Across 24
-settings of `level` and `size` the property tests'
-separability moves within a narrow range with no trend in either, and no setting beats
-the source's ([provenance](../algorithm-provenance.md#parameters-and-why-the-defaults-are-phashs)
-has the sweep).
+settings of `level` and `size` the property tests' separability moves within a narrow
+range with no trend in either, and no setting beats the source's
+([provenance](../algorithm-provenance.md#parameters-and-why-the-defaults-are-phashs) has
+the sweep).
 
 ## Settings that affect it
 

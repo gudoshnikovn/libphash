@@ -14,8 +14,8 @@ which way the brightness goes, not where it is high.
 
 ## The steps
 
-Every picture on this page is computed by the library from the same photograph, and the
-hash at the end is what `ph_compute_dhash()` returns for it.
+dHash has no parameters. Every picture on this page is computed by the library from the
+same photograph, and the hash at the end is what `ph_compute_dhash()` returns for it.
 
 ![The four stages of dHash on the example photograph](../assets/generated/dhash/pipeline.light.svg#only-light)
 ![The four stages of dHash on the example photograph](../assets/generated/dhash/pipeline.dark.svg#only-dark)
@@ -61,8 +61,8 @@ $$
 A set bit means the brightness rises to the right. Two equal neighbors give 0, so in a
 flat area every bit is clear.
 
-![The 64 bits](../assets/generated/dhash/bits.light.svg#only-light){ width="420" }
-![The 64 bits](../assets/generated/dhash/bits.dark.svg#only-dark){ width="420" }
+![The 64 bits of dHash on the example photograph as an 8×8 grid, a cell filled where its bit is set: where the brightness rises to the right](../assets/generated/dhash/bits.light.svg#only-light){ width="420" }
+![The 64 bits of dHash on the example photograph as an 8×8 grid, a cell filled where its bit is set: where the brightness rises to the right](../assets/generated/dhash/bits.dark.svg#only-dark){ width="420" }
 
 **4. Pack the bits.** The first pair of the top row goes into the most significant bit:
 
@@ -152,8 +152,8 @@ A bit records which of two neighbors is darker. An edit that keeps that order ke
 bit; where two neighbors are almost equal, as across a flat wall or sky, almost any edit
 can tip it.
 
-![Bits that differ from the original under nine transforms](../assets/generated/dhash/robustness.light.svg#only-light)
-![Bits that differ from the original under nine transforms](../assets/generated/dhash/robustness.dark.svg#only-dark)
+![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/dhash/robustness.light.svg#only-light)
+![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/dhash/robustness.dark.svg#only-dark)
 
 - **Resizing and blur** leave the order of neighboring cells as it was, and the hash with
   it.
@@ -457,7 +457,7 @@ the pixels it reads.
 | [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a JPEG decoder converts to grayscale itself ([measured](preparation.md#the-decoders-grayscale)), which can tip a pair of nearly equal neighbors |
 | [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | on by default: the hash describes the image as displayed, after its EXIF rotation |
 | [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | how transparent pixels are composited before grayscale ([which background](preparation.md#which-background)) |
-| [`ph_context_set_decode_scale()`](../api/loading.md#ph_context_set_decode_scale) | a JPEG read by libjpeg-turbo is decoded at ½, ¼ or ⅛ of its size ([measured](preparation.md#decoding-at-a-reduced-scale)); the 9×8 grid averages the smaller image into the same cells, and nearly every hash stays within the threshold for copies, down to images a few times the grid |
+| [`ph_context_set_decode_scale()`](../api/loading.md#ph_context_set_decode_scale) | a JPEG read by libjpeg-turbo is decoded at ½, ¼ or ⅛ of its size ([measured](preparation.md#decoding-at-a-reduced-scale)); the 9×8 grid is resampled from the smaller image into the same cells, and nearly every hash stays within the threshold for copies, down to images a few times the grid |
 
 With [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale)
 on, a JPEG is decoded straight to the luminance channel the file stores, which the

@@ -27,8 +27,8 @@ flowchart TD
 The load steps run once, inside a `ph_load_from_*()` call, and leave the image in the
 context. The hash steps run inside each `ph_compute_*()` call, on that image. Seven of the
 nine algorithms go through grayscale and reduction; ColorHash and ColorMoments read the
-color image directly, the arrow from the context straight to the hash.
-Comparing two hashes takes no context at all.
+color image directly, the arrow from the context straight to the hash. Comparing two
+hashes takes no context at all.
 
 | Step | Runs in | Settings that reach it | Codes it can return |
 |---|---|---|---|
@@ -75,11 +75,11 @@ A [`ph_context_t`](../api/context.md#ph_context_t) is created by
 Because of the first three, a context is the unit of reuse: loading the next image into
 the same context keeps its settings and its memory. Because of all four, it is also the
 unit of threading. One context is used by one thread at a time, and two threads with a
-context each need no lock between them. [`ph_hash_files()`](../api/batch.md#ph_hash_files) follows the same
-rule inside: each of its workers creates a context of its own, configured as a copy of a
-template ([Hashing many files](batch.md#threads-what-is-safe)). One image is always
-loaded and hashed on one thread
-([One image, one thread](performance.md#one-image-one-thread)).
+context each need no lock between them. [`ph_hash_files()`](../api/batch.md#ph_hash_files)
+follows the same rule inside: each of its workers creates a context of its own, configured
+as a copy of a template ([Hashing many files](batch.md#threads-what-is-safe)). One image
+is always loaded and hashed on one thread ([One image, one
+thread](performance.md#one-image-one-thread)).
 
 ## Which decoder reads a file
 
@@ -108,9 +108,9 @@ on with [`ph_can_use_jpeg()`](../api/build.md#ph_can_use_jpeg),
 |---|---|
 | load images, untrusted ones included | [Loading images](loading.md) |
 | give contexts the same settings | [Configuring a context](configuring.md) |
-| keep hashes and find near duplicates | [Storing and searching hashes](storing.md) |
 | act on a failure | [Handling errors](errors.md) |
-| make hashing cheaper | [Performance](performance.md) |
 | hash many files on several threads | [Hashing many files](batch.md) |
+| keep hashes and find near duplicates | [Storing and searching hashes](storing.md) |
+| make hashing cheaper | [Performance](performance.md) |
 | know what a step does to a hash | [Image preparation](../theory/preparation.md) |
 | see where each part lives in the source | [Development: source map](../development.md#source-map) |

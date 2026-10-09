@@ -430,29 +430,42 @@ the code follows is held by the gate rather than by habit.
 ### Documentation site
 
 `docs/` is the source of the documentation site and is read on GitHub as it is, so a page
-works in both places. `make site` builds it into `build/site/`, `make site-serve` serves it
-with live reload, and a build can run while the server does. Both need Python 3.12 or later and install the Python packages
-themselves: `scripts/site-requirements.txt` is a lock, compiled from
-`scripts/site-requirements.in`, that pins every package the site is built with, its
-dependencies included, with hashes, and `scripts/site.sh` installs it into
-`build/site-venv/` — with [uv](https://docs.astral.sh/uv/) when it is installed, with
-`venv` and pip otherwise — on the first run and whenever the lock changes. A version is
-raised in the `.in` file, and the lock compiled again with the command written in it.
-Both first run Doxygen over the header and write the API reference from its XML
-as pages of the site into `docs/api/` (ignored by git) with `scripts/api_pages.py`, one
-page per topic, every declaration under an anchor equal to its name; a function missing
-from those pages, or doc-comment markup the script has no rendering for, fails the build.
-The script also writes what it computes rather than reads: under each declaration, the
-examples that call it and the site pages that link to its anchor (so a new page that
-explains a function appears there by itself), under `ph_error_t` the functions that
-return each code, and an A–Z index on the overview. That table is read from the
-`@return` of every function that returns `ph_error_t`, so such a function without an
-`@return` naming its codes as code (`@c PH_ERR_IO`), or a code no `@return` names, fails
-the build. A path
-such as `docs/guide/batch.md` or `docs/algorithm-provenance.md section 3` in a doc comment becomes a link
-to that page or section; a path to a page or a section number that does not exist fails
-the build.
-The build is strict, and three rules keep it green:
+works in both places. `make site` builds it into `build/site/`; `make site-serve` serves it
+on `127.0.0.1:8000` with live reload, and a build can run while the server does (the
+build works in `build/site-src/`, the server in `build/site-serve/`). Both run
+`scripts/site.sh`, which needs the vendored submodules, Doxygen 1.18 and Python 3.12 or
+later, and does four things:
+
+- **The Python packages.** `scripts/site-requirements.txt` is a lock, compiled from
+  `scripts/site-requirements.in`, that pins every package the site is built with, its
+  dependencies included, with hashes. The script installs it into `build/site-venv/` —
+  with [uv](https://docs.astral.sh/uv/) when it is installed, with `venv` and pip
+  otherwise — on the first run and whenever the lock changes. A version is raised in the
+  `.in` file, and the lock compiled again with the command written in it.
+- **The API reference.** Doxygen runs over the header, and `scripts/api_pages.py` writes
+  its XML as pages of the site into `docs/api/` (ignored by git), one page per topic,
+  every declaration under an anchor equal to its name. Under each declaration it adds the
+  examples that call it and the site pages that link to its anchor, under `ph_error_t`
+  the functions that return each code (read from every `@return`), and an A–Z index on
+  the overview. A path such as `docs/guide/batch.md` or `docs/algorithm-provenance.md
+  section 3` in a doc comment becomes a link to that page or section. A function missing
+  from the pages, markup the script has no rendering for, a function returning
+  `ph_error_t` without an `@return` naming its codes as code (`@c PH_ERR_IO`), or a path
+  that does not exist fails the build.
+- **The figures and measured tables.** `tools/site/` builds `site_stages`, a measuring
+  tool linked against the library, from the `release` preset, and draws every figure and
+  measured table of the theory and guide pages into `docs/assets/generated/` (ignored by
+  git): each step of each algorithm, checked against the library's own result, the edits
+  over two corpora, and the times on the machine that builds the site. The photo corpus is
+  downloaded once into `~/.cache/libphash-site/` and checked against
+  `tools/site/corpus_photos.tsv`; without a network the build goes on with what it has.
+  Measurements are cached in `build/site-cache/`, so a rebuild with nothing changed
+  measures nothing. [`tools/site/README.md`](https://github.com/gudoshnikovn/libphash/blob/main/tools/site/README.md)
+  describes the tool and how to add to it.
+- **The strict build.** Zensical builds the pages, and the build fails on any of the
+  rules below.
+
+The rules that keep the build green:
 
 - **Navigation** is `nav` in `zensical.toml`; a new page goes there or the build fails.
   Pages written for the site live in `docs/theory/`, `docs/guide/` and `docs/project/`;
@@ -464,7 +477,11 @@ The build is strict, and three rules keep it green:
   so a misspelled name fails the build too.
 - **Code** on a page is included from a file CI compiles (`--8<-- "examples/basic_hash.c"`),
   not pasted, so it cannot drift from the header. `CHANGELOG.md`, `MIGRATION.md` and
-  `SECURITY.md` are included the same way, from the repository root.
+  `SECURITY.md` are included the same way, from the repository root, and so is every table
+  of measured numbers, from `docs/assets/generated/`.
+- **Pictures** are generated, never drawn or screenshotted by hand: each figure is written
+  twice, for the light and the dark theme, and a page shows the pair with `#only-light` and
+  `#only-dark`. The logo, `docs/assets/logo.svg`, is the one picture kept in git.
 
 ## Naming Conventions
 

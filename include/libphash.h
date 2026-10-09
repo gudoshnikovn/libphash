@@ -1439,9 +1439,9 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
  * pHash treats two radial digests correlating at or above this as the same image
  * (Zauner, Diplomarbeit FH Hagenberg 2010, section 3.2.3). It is provided as a starting
  * point with a citation behind it, not as a tuned recommendation for your corpus:
- * ph_radial_similarity() hands back the raw score precisely so that you can pick your
- * own cut. Do pick it deliberately and measure it — a threshold chosen by eye is the
- * usual reason a perceptual hash "does not work".
+ * ph_radial_similarity() hands back the raw score so that you can pick your own cut,
+ * measured on your own images. What 0.9 accepts on two corpora is measured in
+ * docs/theory/comparing.md.
  * @ingroup compare
  */
 #define PH_RADIAL_PCC_THRESHOLD 0.9

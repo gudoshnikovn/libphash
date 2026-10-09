@@ -115,8 +115,8 @@ The nine numbers describe the levels of each channel, so anything that changes l
 moves the digest and anything that only moves pixels around does not. How far depends on
 how many pixels change, by how much, and on which side of the mean.
 
-![L2 distance from the original under nine transforms](../assets/generated/color_moments/robustness.light.svg#only-light)
-![L2 distance from the original under nine transforms](../assets/generated/color_moments/robustness.dark.svg#only-dark)
+![L2 distance from the original under nine transforms, on the example photograph](../assets/generated/color_moments/robustness.light.svg#only-light)
+![L2 distance from the original under nine transforms, on the example photograph](../assets/generated/color_moments/robustness.dark.svg#only-dark)
 
 - **Brightness, contrast and gamma** change the level of every pixel. Brightness
   multiplies every level by its factor and so, wherever no channel clips, all nine
@@ -322,10 +322,11 @@ changes little. A change of brightness moves every level of every channel.
 ![L2 distance from the original for brightness, contrast and gamma changes of 15 to 20 %, which copies go through, beside hue turns of 30, 90 and 180 degrees, over both corpora, against the threshold that accepts 95 % of copies](../assets/generated/color_moments/tone-color.dark.svg#only-dark)
 
 On the photographs, a hue turned by 30 degrees moves the digest less than a brightness
-change of 15 % does, and the threshold that keeps those copies keeps most of the
-30-degree turns and about half of the larger ones. ColorHash, which counts colors rather than levels, takes most of the same
-recolorings for different images. To tell a recoloring from the original, ColorHash is
-the hash; ColorMoments' distance says first how far the tone moved.
+change of 15 % does, and the threshold that keeps those copies keeps most of the 30-degree
+turns and about half of the larger ones. ColorHash, which counts colors rather than
+levels, takes most of the same recolorings for different images. To tell a recoloring from
+the original, ColorHash is the hash; ColorMoments' distance says first how far the tone
+moved.
 
 --8<-- "docs/assets/generated/color_moments/tone-color-table.md"
 
@@ -423,9 +424,9 @@ Three context settings change the pixels it reads.
 | Setting | Effect on ColorMoments |
 |---|---|
 | [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a decoded single-channel image has no color, and ColorMoments refuses it with [`PH_ERR_REQUIRES_COLOR`](../api/errors.md#PH_ERR_REQUIRES_COLOR) rather than compute three identical channels |
+| [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | none: turning or mirroring an image keeps every pixel |
 | [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | the color transparent pixels are composited onto, whose levels become part of every moment ([which background](preparation.md#which-background)) |
 | [`ph_context_set_decode_scale()`](../api/loading.md#ph_context_set_decode_scale) | a JPEG read by libjpeg-turbo is decoded at ½, ¼ or ⅛ of its size ([measured](preparation.md#decoding-at-a-reduced-scale)); a smaller decode keeps the proportions of the colors, and most digests stay within the threshold for copies at every scale |
-| [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | none: turning or mirroring an image keeps every pixel |
 
 [`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights) has no
 effect: ColorMoments reads $R$, $G$ and $B$ directly. An image that is gray but stored
@@ -450,10 +451,10 @@ Color moments are the method of "Similarity of color images" by Markus Stricker 
 Markus Orengo (Proc. SPIE 2420, 1995). The paper is paywalled and the library could not
 read it. The formulas come from the one restatement found, N. Keen's "Color Moments"
 (University of Edinburgh course notes, 2005), student coursework and a third-party
-account: the weakest source of any algorithm in the library.
-The implementation follows that restatement's three formulas exactly, including the cube
-root that keeps the skewness's sign, and anything changed on the strength of the
-restatement is to be checked against the paper first.
+account: the weakest source of any algorithm in the library. The implementation follows
+that restatement's three formulas exactly, including the cube root that keeps the
+skewness's sign, and anything changed on the strength of the restatement is to be checked
+against the paper first.
 
 Two choices differ from the restatement, each recorded in
 [provenance § 9](../algorithm-provenance.md#9-colormoments). The restatement computes the

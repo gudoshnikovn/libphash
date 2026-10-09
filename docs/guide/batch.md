@@ -106,8 +106,9 @@ failed, and a cancelled batch has real results in the items it started:
 --8<-- "examples/batch_hash.c:statuses"
 ```
 
-An item's `hashes` are valid only when its `status` is `PH_SUCCESS`. What each return value means for the items, and how to get the detail of a failed
-item, is in [Errors in a batch](errors.md#errors-in-a-batch).
+An item's `hashes` are valid only when its `status` is `PH_SUCCESS`. What each return
+value means for the items, and how to get the detail of a failed item, is in [Errors in a
+batch](errors.md#errors-in-a-batch).
 
 ## How many workers
 
@@ -182,9 +183,9 @@ worker's share of the peak is about four bytes per pixel plus the file, as measu
 
 The peak of a batch is therefore about the number of workers times four bytes per pixel of
 its largest images, and grows by the same amount for every worker added, past one per CPU
-as well. An image with an EXIF orientation other than upright holds a second copy of its pixels while
-it is turned, 6 bytes per pixel for that moment. A buffer batch holds no file per worker, since
-the buffers are the caller's.
+as well. An image with an EXIF orientation other than upright holds a second copy of its
+pixels while it is turned, 6 bytes per pixel for that moment. A buffer batch holds no file
+per worker, since the buffers are the caller's.
 
 The bound that matters is the largest image the batch may meet. At the default size limit of
 256 Mi pixels, one worker may hold about 1 GiB, and `threads = 0` on a machine with 64 CPUs

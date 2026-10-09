@@ -42,8 +42,8 @@ not covered here.
 | 3 | Code or prose published by the algorithm's author (including a blog post) |
 | 4 | Third-party description or implementation, including a thesis analyzing someone else's code |
 
-When two sources disagree, the lower-numbered rank wins. A rank-4 source is a hint about where to
-look; it is never the basis for a claim that this code is correct.
+When two sources disagree, the lower-numbered rank wins. A rank-4 source is a hint about
+where to look; it is never the basis for a claim that this code is correct.
 
 **Read** says whether the source was retrieved and read in full. Several are behind IEEE
 and SPIE paywalls; for those, the restatement actually used is named. Nothing in this
@@ -196,8 +196,9 @@ functions"**, arXiv:2011.09473, 2020.
 - <https://arxiv.org/abs/2011.09473>
 - Rank 2 · Abstract read
 
-Cited for the threat model in [Perceptual hashing](theory/perceptual-hashing.md#what-a-perceptual-hash-is-not). It produces exact
-hash collisions between unrelated images through minimal, gradient-guided perturbations,
+Cited for the threat model in
+[Perceptual hashing](theory/perceptual-hashing.md#what-a-perceptual-hash-is-not). It
+produces exact hash collisions between unrelated images through minimal, gradient-guided perturbations,
 and does so "across numerous image pairs and hash types, encompassing both deep learning
 and traditional hashing methods" — the authors point out that an attacker can thereby
 "poison the image lookup table of a duplicate image detection service".
@@ -228,8 +229,8 @@ ICIP*, vol. 3, IEEE, 2000, pp. 664–666.
 - <https://doi.org/10.1109/ICIP.2000.899541>
 - Rank 1 · **Read in full**
 
-Listed because it is usually named as the origin of "wHash", and it is not. It describes a *keyed* algorithm — `h = H(I, K)`, where
-"the key is kept secret, and the hash value of a given image cannot be computed or
+Listed because it is a wavelet-based image hash that predates wHash, and it is not wHash's
+origin. It describes a *keyed* algorithm — `h = H(I, K)`, where "the key is kept secret, and the hash value of a given image cannot be computed or
 verified by an unauthorized party". Neither our wHash nor ImageHash's `whash` has a key.
 
 Nor can it replace wHash as a source. What it specifies is four steps —
@@ -337,12 +338,13 @@ library's BMH values differ from OpenCV's, deliberately.
 Johannes Buchner. <https://github.com/JohannesBuchner/imagehash>
 
 The de facto reference for **aHash**, **dHash**, **pHash**, **wHash** and **ColorHash** in
-the Python ecosystem. Its README cites [K11] for aHash and pHash, [K13] for dHash, a blog post for
-wHash, and **nothing at all** for colorhash.
+the Python ecosystem. Its README cites [K11] for aHash and pHash, [K13] for dHash, a blog
+post for wHash, and **nothing at all** for colorhash.
 
 **It is the origin, not merely a comparison point, for wHash**, which exists here because
-it exists there. For wHash, ImageHash is the closest thing to a specification, and the analysis document says so plainly rather than implying
-an academic pedigree that does not exist.
+it exists there. For wHash, ImageHash is the closest thing to a specification, and the
+analysis document says so plainly rather than implying an academic pedigree that does not
+exist.
 
 ### [Pe16] Petrov — the blog post behind wHash
 
@@ -368,8 +370,8 @@ source" is a checkable statement rather than an assertion.
 | ColorHash | [SB91] | 4 (secondary restatements) | no | none |
 | ColorMoments | [SO95] | 1 | no — via [Ke05], rank 4 | none |
 
-One of the nine, wHash, has no primary source. Per the [verification methodology](methodology.md) it is
-judged only by measurable properties, and its attribution header says so instead of
+One of the nine, wHash, has no primary source. Per the
+[verification methodology](methodology.md) it is judged only by measurable properties, and its attribution header says so instead of
 implying a specification exists.
 
 ## Adding to this file

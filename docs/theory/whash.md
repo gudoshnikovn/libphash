@@ -97,8 +97,8 @@ $$
 h = \sum_{i=0}^{63} b_i \cdot 2^{\,i} .
 $$
 
-![The 64 bits](../assets/generated/whash/bits.light.svg#only-light){ width="420" }
-![The 64 bits](../assets/generated/whash/bits.dark.svg#only-dark){ width="420" }
+![The 64 bits of wHash on the example photograph as an 8×8 grid, a cell filled where its bit is set: where the average is above the median](../assets/generated/whash/bits.light.svg#only-light){ width="420" }
+![The 64 bits of wHash on the example photograph as an 8×8 grid, a cell filled where its bit is set: where the average is above the median](../assets/generated/whash/bits.dark.svg#only-dark){ width="420" }
 
 ### What the wavelet adds
 
@@ -130,8 +130,8 @@ aHash of the same image do not line up bit for bit even where they agree.
 The hash describes the coarse layout of light and dark, as aHash does, and the same
 edits move it.
 
-![Bits that differ from the original under nine transforms](../assets/generated/whash/robustness.light.svg#only-light)
-![Bits that differ from the original under nine transforms](../assets/generated/whash/robustness.dark.svg#only-dark)
+![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/whash/robustness.light.svg#only-light)
+![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/whash/robustness.dark.svg#only-dark)
 
 - **Recompression, resizing, blur and noise** average out over the cells of the grid:
   the hash does not move, or moves by a pair of bits at the strongest settings.
@@ -483,7 +483,7 @@ Five context settings change the pixels wHash reads.
 | [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a JPEG decoder converts to grayscale itself ([measured](preparation.md#the-decoders-grayscale)), which can move a value by one level |
 | [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | on by default: the hash describes the image as displayed, after its EXIF rotation |
 | [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | how transparent pixels are composited before grayscale ([which background](preparation.md#which-background)) |
-| [`ph_context_set_decode_scale()`](../api/loading.md#ph_context_set_decode_scale) | a JPEG read by libjpeg-turbo is decoded at ½, ¼ or ⅛ of its size ([measured](preparation.md#decoding-at-a-reduced-scale)); the 8×8 grid averages the smaller image into the same cells, and nearly every hash stays within the threshold for copies, down to images a few times the grid |
+| [`ph_context_set_decode_scale()`](../api/loading.md#ph_context_set_decode_scale) | a JPEG read by libjpeg-turbo is decoded at ½, ¼ or ⅛ of its size ([measured](preparation.md#decoding-at-a-reduced-scale)); the 16×16 grid averages the smaller image into the same cells, and nearly every hash stays within the threshold for copies, down to images a few times the grid |
 
 A level here and there in the grid moves a block mean by a fraction of a level, and can
 tip only a value that lies next to the median.
@@ -503,13 +503,13 @@ pair is:
 
 ## Where it comes from
 
-wHash has no paper. It is the `whash` of Johannes Buchner's ImageHash library, whose
-only reference is a blog post by Alexander Petrov; ImageHash is a third-party
-implementation, the closest thing to a specification there is. It is often traced to
-"Robust Image Hashing" by Venkatesan, Koon, Jakubowski and Moulin (ICIP 2000), but that
-algorithm is a different one: it draws statistics from randomly tiled wavelet bands under
-a secret key, which makes it a keyed hash, and a keyed hash cannot give the same value on
-every machine with no shared secret, the property this library is built on.
+wHash has no paper. It is the `whash` of Johannes Buchner's ImageHash library, whose only
+reference is a blog post by Alexander Petrov; ImageHash is a third-party implementation,
+the closest thing to a specification there is. "Robust Image Hashing" by Venkatesan, Koon,
+Jakubowski and Moulin (ICIP 2000) is an earlier wavelet-based hash, but a different
+algorithm: it draws statistics from randomly tiled wavelet bands under a secret key, which
+makes it a keyed hash, and a keyed hash cannot give the same value on every machine with
+no shared secret, the property this library is built on.
 
 With no source to conform to, wHash is judged by what can be measured: robustness,
 discrimination, and above all the separation of copies from different images, on this

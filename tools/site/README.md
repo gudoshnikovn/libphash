@@ -1,11 +1,11 @@
 # tools/site — the measuring and drawing behind the documentation site
 
-Every figure, measured table and number on the site's algorithm pages
-(`docs/theory/*.md`) is produced here, from the library the site documents. Nothing is
-drawn by hand and no number is typed into a page: a page includes what this directory
-writes into `docs/assets/generated/`, and shows the code that wrote it. A picture of an
-algorithm's steps is checked against the library while it is made, so it cannot show a
-computation the code does not perform.
+Every figure, measured table and number on the site's pages (`docs/index.md`,
+`docs/theory/*.md`, `docs/guide/*.md`) is produced here, from the library the site
+documents. Nothing is drawn by hand and no number is typed into a page: a page includes
+what this directory writes into `docs/assets/generated/`, and shows the code that wrote
+it. A picture of an algorithm's steps is checked against the library while it is made, so
+it cannot show a computation the code does not perform.
 
 `make site` (or `scripts/site.sh`) runs all of it; `make site-serve` also serves the site.
 
@@ -107,7 +107,9 @@ A page module declares how its algorithm's comparison reads and draws its own fi
 The robustness, corpus, separability, edits and time figures of every page are drawn by
 `render.py` from these declarations; a page module draws only what is its own.
 
-A **topic page** (`pages/preparation.py`, `pages/comparing.py`, `pages/choosing.py`, and the guide pages `pages/loading.py`, `pages/storing.py`, `pages/performance.py` and `pages/batch.py`, in `TOPICS`) has no hash
+A **topic page** (the front page's `pages/home.py`; `pages/preparation.py`,
+`pages/comparing.py`, `pages/choosing.py`; and the guide pages `pages/loading.py`,
+`pages/storing.py`, `pages/performance.py` and `pages/batch.py`, in `TOPICS`) has no hash
 of its own: it declares `NAME`, the directory under `docs/assets/generated/`, and
 `figures(tool, image, out_dir, timing)`, which draws everything it shows, `timing` being
 what `measure/timing.py` measured. `render.py --algo preparation` draws it alone. A topic

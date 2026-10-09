@@ -126,8 +126,8 @@ The digest counts colors, so anything that changes colors moves it and anything 
 only moves pixels around does not. How far a change goes depends on how many pixels it
 pushes across a bin edge.
 
-![Histogram intersection with the original under nine transforms](../assets/generated/color_hash/robustness.light.svg#only-light)
-![Histogram intersection with the original under nine transforms](../assets/generated/color_hash/robustness.dark.svg#only-dark)
+![Histogram intersection with the original under nine transforms, on the example photograph](../assets/generated/color_hash/robustness.light.svg#only-light)
+![Histogram intersection with the original under nine transforms, on the example photograph](../assets/generated/color_hash/robustness.dark.svg#only-dark)
 
 - **Brightness, contrast and gamma** move every pixel along the light–dark axis, whose
   three bins are wide: a pixel that crosses a third moves its whole count to another
@@ -354,11 +354,11 @@ paper, can lose much of its histogram to such a tint.
 ![Histogram intersection of each image with the same image tinted by one or two levels of red, two of blue, or three of all three channels, over both corpora, against the threshold that accepts 95 % of copies](../assets/generated/color_hash/tints.light.svg#only-light)
 ![Histogram intersection of each image with the same image tinted by one or two levels of red, two of blue, or three of all three channels, over both corpora, against the threshold that accepts 95 % of copies](../assets/generated/color_hash/tints.dark.svg#only-dark)
 
-For most images the tint costs little: their colors are away from the corner. For a
-tail of them, the ones whose colors sit on it, one level of red takes the score below
-the threshold, and for a few as low as two different photographs typically score. Adding the same three levels to all
-three channels keeps $rg$ and $by$ where they were and moves only the brightness, and
-costs little to any image.
+For most images the tint costs little: their colors are away from the corner. For a tail
+of them, the ones whose colors sit on it, one level of red takes the score below the
+threshold, and for a few as low as two different photographs typically score. Adding the
+same three levels to all three channels keeps $rg$ and $by$ where they were and moves only
+the brightness, and costs little to any image.
 
 ??? info "The numbers behind the chart"
 
@@ -419,9 +419,9 @@ Three context settings change the pixels it counts.
 | Setting | Effect on ColorHash |
 |---|---|
 | [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a decoded single-channel image has no color, and ColorHash refuses it with [`PH_ERR_REQUIRES_COLOR`](../api/errors.md#PH_ERR_REQUIRES_COLOR) rather than count every pixel as gray |
+| [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | none: turning or mirroring an image keeps every pixel |
 | [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | the color transparent pixels are composited onto, which becomes part of the histogram ([which background](preparation.md#which-background)) |
 | [`ph_context_set_decode_scale()`](../api/loading.md#ph_context_set_decode_scale) | a JPEG read by libjpeg-turbo is decoded at ½, ¼ or ⅛ of its size ([measured](preparation.md#decoding-at-a-reduced-scale)); a smaller decode keeps the proportions of the colors, and nearly every digest stays within the threshold for copies |
-| [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | none: turning or mirroring an image keeps every pixel |
 
 [`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights) has no
 effect: ColorHash reads $R$, $G$ and $B$ directly. An image that is gray but stored with

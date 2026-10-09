@@ -28,8 +28,9 @@ Each answer rests on a chart below:
   it takes ColorHash about half of the way to an unrelated image
   ([edits that change the picture](#edits-that-change-the-picture)). ColorHash separates
   copies from different images less well than every layout hash but mHash on the
-  photographs ([separation](#copies-against-different-images)), and it cannot tell two arrangements of
-  the same colors apart, so it goes beside a layout hash, not instead of one.
+  photographs ([separation](#copies-against-different-images)), and it cannot tell two
+  arrangements of the same colors apart, so it goes beside a layout hash, not instead of
+  one.
 - **Turns and mirrors.** A quarter turn or a mirror image takes every layout hash about as
   far as an unrelated image. A half turn leaves Radial's digest unchanged, since its
   correlation looks for the profile at every shift. The two color hashes do not see the
@@ -56,8 +57,8 @@ images: 0 is the original's hash, 1 is as far as the median pair of different im
 the corpus. A cell is the median over the corpus. The copies are the ones every algorithm
 page charts, one moderate strength of each of nine edits.
 
-![A matrix of nine algorithms by nine edits on the photographs, each cell the median distance of a copy from the original in units of the median distance between different photographs: near 0 nearly everywhere, mHash at 0.74 for a 2° rotation and 0.86 for a 5 % crop, the two color hashes between 0.1 and 0.25 for brightness, contrast and gamma](../assets/generated/choosing/copies-photos.light.svg#only-light)
-![A matrix of nine algorithms by nine edits on the photographs, each cell the median distance of a copy from the original in units of the median distance between different photographs: near 0 nearly everywhere, mHash at 0.74 for a 2° rotation and 0.86 for a 5 % crop, the two color hashes between 0.1 and 0.25 for brightness, contrast and gamma](../assets/generated/choosing/copies-photos.dark.svg#only-dark)
+![A matrix of nine algorithms by nine edits on the photographs, each cell the median distance of a copy from the original in units of the median distance between different photographs: near 0 nearly everywhere, mHash most of the way to 1 for a rotation and a crop, the two color hashes a little above 0 for brightness, contrast and gamma](../assets/generated/choosing/copies-photos.light.svg#only-light)
+![A matrix of nine algorithms by nine edits on the photographs, each cell the median distance of a copy from the original in units of the median distance between different photographs: near 0 nearly everywhere, mHash most of the way to 1 for a rotation and a crop, the two color hashes a little above 0 for brightness, contrast and gamma](../assets/generated/choosing/copies-photos.dark.svg#only-dark)
 
 - **Recompression, scaling, blur and noise** leave nearly every hash where it was. They
   change pixels, not the layout of light and dark or the mix of colors.
@@ -72,13 +73,14 @@ page charts, one moderate strength of each of nine edits.
 A median says where the middle copy lands, not how many copies fall outside a threshold.
 Radial's median for a 2° rotation is as small as aHash's, yet its threshold misses a third
 of the rotated photographs: on this scale, the threshold that accepts 95 % of Radial's
-copies lies closer to 0 than any other algorithm's, and a small move crosses it. [Comparing hashes](comparing.md#what-counts-as-a-copy) counts the copies of
-each edit that a threshold keeps.
+copies lies closer to 0 than any other algorithm's, and a small move crosses it.
+[Comparing hashes](comparing.md#what-counts-as-a-copy) counts the copies of each edit that
+a threshold keeps.
 
 ??? info "The synthetic images"
 
-    ![The same matrix on the 24 synthetic images: near 0 for most cells, mHash between 0.2 and 0.6 for JPEG, scaling, rotation, noise and crop, ColorMoments between 0.24 and 0.4 for brightness, contrast and gamma](../assets/generated/choosing/copies-synthetic.light.svg#only-light)
-    ![The same matrix on the 24 synthetic images: near 0 for most cells, mHash between 0.2 and 0.6 for JPEG, scaling, rotation, noise and crop, ColorMoments between 0.24 and 0.4 for brightness, contrast and gamma](../assets/generated/choosing/copies-synthetic.dark.svg#only-dark)
+    ![The same matrix on the 24 synthetic images: near 0 for most cells, mHash further from 0 for JPEG, scaling, rotation, noise and crop, ColorMoments further from 0 for brightness, contrast and gamma](../assets/generated/choosing/copies-synthetic.light.svg#only-light)
+    ![The same matrix on the 24 synthetic images: near 0 for most cells, mHash further from 0 for JPEG, scaling, rotation, noise and crop, ColorMoments further from 0 for brightness, contrast and gamma](../assets/generated/choosing/copies-synthetic.dark.svg#only-dark)
 
     The sharp edges of the synthetic images make mHash feel recompression, scaling and
     noise as well, and pHash feel rotation more; the rest of the pattern is the
@@ -129,8 +131,9 @@ another color or a fake. The same scale, every strength of each edit:
   lightness, they do.
 - **A turn or a mirror** takes the layout hashes to about 1, and a half turn some of them
   beyond it: a half turn moves every cell of the grid to the opposite one, and the hash
-  of that layout can be further from the original than an unrelated photograph's. Radial is the exception for the
-  half turn and not for the quarter; the color hashes are unchanged by all three.
+  of that layout can be further from the original than an unrelated photograph's. Radial
+  is the exception for the half turn and not for the quarter; the color hashes are
+  unchanged by all three.
 - **A patch** moves every hash a little more as it grows. Radial moves the most, then
   pHash; the color hashes, which see only how much of each color there is, the least.
 

@@ -11,8 +11,21 @@ fingerprint, so that a resized copy, a recompressed JPEG or a slightly brighter 
 a picture lands a few bits away from the original, while an unrelated picture lands about
 half the bits away.
 
-A hash of a 400×400 photo takes 0.05 ms after a 0.23 ms decode, and the same file gives the
-same hash on Linux, macOS and Windows, on x86-64 and arm64.
+![A photograph of a cactus, three copies of it (half the size, saved as JPEG at quality 30, and 30 percent brighter) and a photograph of a cat, each above its pHash drawn as an 8 by 8 grid of bits; the bits that differ from the original's are outlined: none for the first two copies, three for the brighter one, thirty-two for the cat](assets/generated/home/hero.light.svg#only-light)
+![A photograph of a cactus, three copies of it (half the size, saved as JPEG at quality 30, and 30 percent brighter) and a photograph of a cat, each above its pHash drawn as an 8 by 8 grid of bits; the bits that differ from the original's are outlined: none for the first two copies, three for the brighter one, thirty-two for the cat](assets/generated/home/hero.dark.svg#only-dark)
+
+Above, pHash as the library computes it: the copies keep the original's hash, or nearly,
+and the unrelated photograph differs in about half of the 64 bits, which is what two
+unrelated hashes do by chance. The same file gives the same hash on Linux, macOS and
+Windows, on x86-64 and arm64, in any build with the same
+[JPEG decoder](theory/comparing.md#same-hash-on-every-machine).
+
+??? info "The numbers behind the picture"
+
+    --8<-- "docs/assets/generated/home/hero-table.md"
+
+    The copies are three of the edits every algorithm's page measures; the cat is a file
+    of the [photo corpus](project/corpus.md).
 
 <div class="grid cards" markdown>
 
@@ -20,24 +33,43 @@ same hash on Linux, macOS and Windows, on x86-64 and arm64.
 
     ---
 
-    Install a prebuilt archive or build from source, then hash your first image.
+    Install a prebuilt archive or build from source, then hash and compare your first
+    images.
 
     [:octicons-arrow-right-24: Quick start](guide/quickstart.md)
 
--   :lucide-book-open: **Understand the algorithms**
+-   :lucide-book-open: **Understand the idea**
 
     ---
 
-    What perceptual hashing is, and how each of the nine hashes works, where it comes
-    from and where it breaks.
+    What a perceptual hash keeps of an image, what it throws away, and what it cannot be
+    trusted with.
 
     [:octicons-arrow-right-24: Perceptual hashing](theory/perceptual-hashing.md)
+
+-   :lucide-scale: **Pick an algorithm**
+
+    ---
+
+    The nine measured side by side, on photographs and on synthetic images: which edits
+    each survives, how well it tells pictures apart, and what it costs.
+
+    [:octicons-arrow-right-24: Choosing an algorithm](theory/choosing.md)
+
+-   :lucide-ruler: **Pick a threshold**
+
+    ---
+
+    Which function compares which hash, and how far apart two hashes may be and still be
+    the same picture.
+
+    [:octicons-arrow-right-24: Comparing hashes](theory/comparing.md)
 
 -   :lucide-layers: **Hash a whole collection**
 
     ---
 
-    Batch hashing across a thread pool, and what each item costs.
+    Many files across a pool of workers, then storing the hashes and searching them.
 
     [:octicons-arrow-right-24: Hashing many files](guide/batch.md)
 
@@ -88,20 +120,19 @@ flowchart LR
 ```
 
 The four 64-bit hashes are compared by Hamming distance; the others return a digest with
-its own distance function. Which one to use for which job is measured on
-[choosing an algorithm](theory/choosing.md).
+its own distance function. [How libphash works](guide/how-it-works.md) follows an image
+through these steps; each algorithm has its own page under Theory.
 
 ## Performance
 
-Hashing an image that is already loaded, and decoding it, on an Apple M3 Pro (one thread):
+Decoding a JPEG, and each hash at its defaults on the decoded image, one thread[^cost]:
 
-| | 400×400 JPEG | 5472×3648 JPEG (20 Mpx) |
-| --- | --- | --- |
-| decode | 0.23 ms | 54 ms |
-| aHash, pHash, wHash, BMH | 0.05 ms each | 2.6 ms each |
-| dHash | 0.05 ms | 6.3 ms |
-| ColorHash, ColorMoments | 0.13, 0.24 ms | 17, 30 ms |
-| mHash, Radial | 0.92, 0.60 ms | 33, 49 ms |
+--8<-- "docs/assets/generated/home/times.md"
+
+The four 64-bit hashes and BMH cost a small fraction of the decode. mHash and Radial pass
+a filter over the image, and cost more than decoding a small one; on a large image they
+and the two color hashes come closest to the decode. [Performance](guide/performance.md) has the times against image size and
+format, and what lowers them.
 
 ## Also available
 
@@ -109,3 +140,5 @@ Hashing an image that is already loaded, and decoding it, on an Apple M3 Pro (on
   (`pip install python-libphash`).
 - **Upgrading from 1.x:** some hash values change silently; read
   [Migrating from 1.x](guide/migration.md) first.
+
+--8<-- "docs/assets/generated/timing/footnote.md"

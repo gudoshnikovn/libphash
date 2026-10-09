@@ -15,8 +15,10 @@ and the detail finer than that never reaches it.
 
 ## The steps
 
-Every picture on this page is computed by the library from the same photograph, and the
-hash at the end is what `ph_compute_phash()` returns for it.
+The steps below are those of the default sizes, a 32×32 grid and an 8×8 block;
+[`ph_context_set_phash_params()`](../api/params.md#ph_context_set_phash_params) sets
+others, [below](#parameters). Every picture on this page is computed by the library from
+the same photograph, and the hash at the end is what `ph_compute_phash()` returns for it.
 
 ![The five stages of pHash on the example photograph](../assets/generated/phash/pipeline.light.svg#only-light)
 ![The five stages of pHash on the example photograph](../assets/generated/phash/pipeline.dark.svg#only-dark)
@@ -99,8 +101,8 @@ $$
 h = \sum_{i=0}^{63} b_i \cdot 2^{\,i} .
 $$
 
-![The 64 bits](../assets/generated/phash/bits.light.svg#only-light){ width="420" }
-![The 64 bits](../assets/generated/phash/bits.dark.svg#only-dark){ width="420" }
+![The 64 bits of pHash on the example photograph as an 8×8 grid, a cell filled where its bit is set: where the coefficient is above the threshold](../assets/generated/phash/bits.light.svg#only-light){ width="420" }
+![The 64 bits of pHash on the example photograph as an 8×8 grid, a cell filled where its bit is set: where the coefficient is above the threshold](../assets/generated/phash/bits.dark.svg#only-dark){ width="420" }
 
 ### Why a margin above the median
 
@@ -146,8 +148,8 @@ The hash describes the coarse layout of light and dark. An edit that leaves the 
 shapes where they are leaves the low frequencies, and the hash, alone; one that moves the
 shapes moves every coefficient at once.
 
-![Bits that differ from the original under nine transforms](../assets/generated/phash/robustness.light.svg#only-light)
-![Bits that differ from the original under nine transforms](../assets/generated/phash/robustness.dark.svg#only-dark)
+![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/phash/robustness.light.svg#only-light)
+![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/phash/robustness.dark.svg#only-dark)
 
 - **Recompression, resizing, blur and noise** act on fine detail, outside the block: the
   hash does not move, or moves by a bit at the strongest settings.

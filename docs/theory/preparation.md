@@ -139,9 +139,9 @@ frame its value is the median of the grid:
 Gray is the default because it is the one background on which neither median hash
 collapses, though wHash does better on black. Its price is aHash and ColorMoments, and
 Radial on the synthetic images, when the visible part is close to mid-gray. A collection
-of such images hashed with those is better composited on white or black. The cut-outs here are photographs and synthetic images inside an ellipse:
-artwork drawn on a transparent canvas has other shapes, and the shape is part of what
-every hash sees.
+of such images hashed with those is better composited on white or black. The cut-outs
+here are photographs and synthetic images inside an ellipse: artwork drawn on a
+transparent canvas has other shapes, and the shape is part of what every hash sees.
 
 ??? info "How this was measured"
 
@@ -243,8 +243,7 @@ of the corpus charts:
 
 On the photographs the two give the same separability. On the synthetic images,
 38/75/15 separates a little better for aHash, wHash, BMH and mHash, and a little worse for
-Radial. Being closer to the
-standard does not make a hash better at telling images apart.
+Radial. Being closer to the standard does not make a hash better at telling images apart.
 
 ??? info "How this was measured"
 
@@ -279,8 +278,8 @@ So the setting changes the pixels a hash reads only for JPEG. Over the photograp
 The stored luma is rounded where the library's formula truncates, so about half of the
 pixels come out one level brighter; a few differ by more. A level here and there tips only
 the values that lie next to a threshold. The 64-bit hashes stay the same or move by a bit
-or two; mHash and BMH, with many more bits, move on most photographs, by a few. With the setting on, ColorHash and
-ColorMoments refuse every image but a WebP.
+or two; mHash and BMH, with many more bits, move on most photographs, by a few. With the
+setting on, ColorHash and ColorMoments refuse every image but a WebP.
 
 ??? info "How this was measured"
 

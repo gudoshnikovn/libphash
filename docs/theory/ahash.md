@@ -13,8 +13,8 @@ the whole idea of perceptual hashing in two lines of arithmetic.
 
 ## The steps
 
-Every picture on this page is computed by the library from the same photograph, and the
-hash at the end is what `ph_compute_ahash()` returns for it.
+aHash has no parameters. Every picture on this page is computed by the library from the
+same photograph, and the hash at the end is what `ph_compute_ahash()` returns for it.
 
 ![The four stages of aHash on the example photograph](../assets/generated/ahash/pipeline.light.svg#only-light)
 ![The four stages of aHash on the example photograph](../assets/generated/ahash/pipeline.dark.svg#only-dark)
@@ -46,8 +46,8 @@ $$
 The comparison is exact — $64\,p_i \ge \sum_j p_j$ in integers — so a cell only ties with
 the mean when it is equal to it, and a tie sets the bit.
 
-![The 64 bits](../assets/generated/ahash/bits.light.svg#only-light){ width="420" }
-![The 64 bits](../assets/generated/ahash/bits.dark.svg#only-dark){ width="420" }
+![The 64 bits of aHash on the example photograph as an 8×8 grid, a cell filled where its bit is set: where the cell is at or above the mean](../assets/generated/ahash/bits.light.svg#only-light){ width="420" }
+![The 64 bits of aHash on the example photograph as an 8×8 grid, a cell filled where its bit is set: where the cell is at or above the mean](../assets/generated/ahash/bits.dark.svg#only-dark){ width="420" }
 
 **4. Pack the bits.** The first cell goes into the most significant bit:
 
@@ -172,8 +172,8 @@ the top row, the last two the bottom row.
 The bits record which side of the mean each cell is on, so an edit that keeps that order
 keeps the hash, and an edit that moves content between cells does not.
 
-![Bits that differ from the original under nine transforms](../assets/generated/ahash/robustness.light.svg#only-light)
-![Bits that differ from the original under nine transforms](../assets/generated/ahash/robustness.dark.svg#only-dark)
+![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/ahash/robustness.light.svg#only-light)
+![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/ahash/robustness.dark.svg#only-dark)
 
 - **Recompression, resizing, noise and blur** leave the 8×8 averages where they were: the
   hash does not move until the image is blurred to a smear.
@@ -433,8 +433,9 @@ aHash was described by Neal Krawetz in a blog post in 2011; there is no paper. T
 fixes the 8×8 reduction, the grayscale step, the mean and the bit order, and leaves three
 things open, which this implementation pins: the resampling filter (an
 [exact area average](#why-an-exact-area-average)), the grayscale weights (BT.601) and the
-rule for a cell equal to the mean (the bit is set, [compared exactly](#the-mean-and-ties)). With those, the implementation follows the post exactly, bit order included.
-The comparison, with the numbers behind each choice, is in
+rule for a cell equal to the mean (the bit is set,
+[compared exactly](#the-mean-and-ties)). With those, the implementation follows the post
+exactly, bit order included. The comparison, with the numbers behind each choice, is in
 [provenance § 1](../algorithm-provenance.md#1-ahash--average-hash).
 
 --8<-- "docs/assets/generated/timing/footnote.md"

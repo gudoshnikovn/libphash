@@ -61,9 +61,15 @@ cc basic_hash.c -o basic_hash $(pkg-config --cflags --libs libphash)
 --8<-- "examples/compare_two_images.c"
 ```
 
+Two copies of one picture land a few bits apart, and two unrelated pictures about 32 of
+the 64. Where to draw the line between the two depends on the algorithm and on the
+collection; [Comparing hashes](../theory/comparing.md#choosing-a-threshold) measures it.
+
 ## Next
 
 - [Which algorithm to use](../theory/choosing.md), the nine measured side by side.
+- [How far apart two copies may be](../theory/comparing.md#choosing-a-threshold), and
+  which function compares which hash.
 - [Hashing many files](batch.md) at once, across threads.
 - The functions these programs call, in the [API reference](../api/index.md):
   [`ph_create()`](../api/context.md#ph_create),

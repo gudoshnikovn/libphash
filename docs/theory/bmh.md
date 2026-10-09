@@ -108,8 +108,8 @@ sequence of bits and no byte layout, so the order is this library's choice.
 The digest describes the layout of light and dark, as aHash does, at a finer scale, and
 the same edits move it; with four times as many blocks, more of them lie near the median.
 
-![Bits that differ from the original under nine transforms](../assets/generated/bmh/robustness.light.svg#only-light)
-![Bits that differ from the original under nine transforms](../assets/generated/bmh/robustness.dark.svg#only-dark)
+![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/bmh/robustness.light.svg#only-light)
+![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/bmh/robustness.dark.svg#only-dark)
 
 - **Recompression, resizing and noise** average out over the blocks: the digest does not
   move, or moves by a bit or two at the strongest settings.
@@ -309,12 +309,12 @@ How the nine algorithms compare is on
 
 ## Cost
 
-BMH costs what aHash does (the times are in the table at the top of the page): a
-grayscale conversion and one area-average pass over the image, which read every pixel and
-so grow with it, and then work on 256 numbers whatever the image's size. The area pass is
-cached and shared: aHash, pHash and wHash reduce from the same grid, so BMH computed after
-one of them on the same loaded image adds almost nothing. A `block_size` that divides 32 (2, 4, 8,
-16, 32) is assembled from that cached pass; any other takes a pass of its own over the
+BMH costs what aHash does (the times are in the table at the top of the page): a grayscale
+conversion and one area-average pass over the image, which read every pixel and so grow
+with it, and then work on 256 numbers whatever the image's size. The area pass is cached
+and shared: aHash, pHash and wHash reduce from the same grid, so BMH computed after one of
+them on the same loaded image adds almost nothing. A `block_size` that divides 32 (2, 4,
+8, 16, 32) is assembled from that cached pass; any other takes a pass of its own over the
 grayscale image, as costly as the first.
 
 ??? info "How this was measured"
