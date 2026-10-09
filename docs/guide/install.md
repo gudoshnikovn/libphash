@@ -271,11 +271,13 @@ Python binding, maintained together with the library:
 pip install python-libphash
 ```
 
-It is a separate project with its own version numbers and release schedule, and it follows
-a new libphash release after a delay. Which libphash version a binding release contains is
-stated in its README. Hashes are comparable only between the same libphash version and
-settings, so a collection hashed partly from C and partly from Python needs both on the
-same libphash. Bindings for other languages are planned.
+It is a separate project that follows a new libphash release after a delay. From 2.0.1 on,
+its version is the libphash version it contains followed by a revision of the binding:
+`python-libphash` 2.0.1.*N* contains libphash 2.0.1, so `pip install "python-libphash==2.0.1.*"`
+pins the library. The 1.x releases are numbered independently and state the libphash
+version they contain in their README. Hashes are comparable only between the same
+libphash version and settings, so a collection hashed partly from C and partly from Python
+needs both on the same libphash. Bindings for other languages are planned.
 
 ## Check the installation
 
