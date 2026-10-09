@@ -155,6 +155,15 @@ int ph_available_cpus(void) {
     return n > 0 ? n : 1;
 }
 
+/* ph_compute_multi() stops at the first algorithm that fails and keeps the slots it has
+ * written; an item promises every slot zero on a failure, so they are cleared here. */
+static void hash_item(ph_context_t *ctx, uint32_t flags, uint64_t *hashes, ph_error_t *status) {
+    *status = ph_compute_multi(ctx, flags, hashes);
+    if (*status != PH_SUCCESS) {
+        clear_hashes(hashes);
+    }
+}
+
 static void process_file_item(ph_context_t *ctx, ph_batch_item_t *item, uint32_t flags) {
     if (!item->path) {
         clear_hashes(item->hashes);
@@ -167,7 +176,7 @@ static void process_file_item(ph_context_t *ctx, ph_batch_item_t *item, uint32_t
         item->status = err;
         return;
     }
-    item->status = ph_compute_multi(ctx, flags, item->hashes);
+    hash_item(ctx, flags, item->hashes, &item->status);
 }
 
 static void process_buffer_item(ph_context_t *ctx, ph_batch_buffer_item_t *item, uint32_t flags) {
@@ -182,7 +191,7 @@ static void process_buffer_item(ph_context_t *ctx, ph_batch_buffer_item_t *item,
         item->status = err;
         return;
     }
-    item->status = ph_compute_multi(ctx, flags, item->hashes);
+    hash_item(ctx, flags, item->hashes, &item->status);
 }
 
 typedef void (*ph_batch_process_fn)(ph_context_t *ctx, void *item, uint32_t flags);

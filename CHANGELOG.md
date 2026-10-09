@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ph_compute_bmh()` and `ph_compute_radial_hash()` returned the error with the caller's
   digest already cleared. They write it only on success, as every other hash does, and the
   header says so for all three and for `ph_compute_digest()`.
+- **A batch item whose hash fails has every slot zeroed.** When an image loaded but one of
+  the requested hashes then failed (`PH_ERR_ALLOCATION_FAILED`), the item of
+  `ph_hash_files()` or `ph_hash_buffers()` kept the hashes computed before the failing one,
+  against the documented promise that every slot of a failed item is zero. It is zero.
 
 ## [2.0.0] - 2026-10-07
 

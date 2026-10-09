@@ -106,7 +106,8 @@ failed, and a cancelled batch has real results in the items it started:
 --8<-- "examples/batch_hash.c:statuses"
 ```
 
-An item's `hashes` are valid only when its `status` is `PH_SUCCESS`. What each return
+An item's `hashes` are valid only when its `status` is `PH_SUCCESS`; on any other status
+every slot is zero. What each return
 value means for the items, and how to get the detail of a failed item, is in [Errors in a
 batch](errors.md#errors-in-a-batch).
 

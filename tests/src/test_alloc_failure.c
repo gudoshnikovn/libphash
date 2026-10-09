@@ -609,10 +609,44 @@ static void scen_load_scaled(int recording) {
  * thread the allocation order is deterministic. The threaded path's own allocation is
  * covered by test_threaded_batch_thread_array_oom() below. */
 
-#define BATCH_FLAGS (PH_HASH_AHASH | PH_HASH_PHASH)
-static uint64_t g_batch_ref[2][2];
+/* All four hashes: an item whose load succeeds can then fail in any of them, after the
+ * slots of those before it are written. */
+#define BATCH_FLAGS (PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH)
+#define BATCH_SLOTS PH_HASH_FLAGS_COUNT
 
-static void scen_batch_api(int recording) {
+/* Checks one item of a batch call that returned `err`. A failed item has every slot
+ * zero, whatever step it failed in; a successful one has the reference hashes. */
+static void check_batch_item(int i, ph_error_t err, ph_error_t status, const uint64_t *hashes,
+                             uint64_t ref[BATCH_SLOTS], int recording) {
+    if (err != PH_SUCCESS) {
+        if (status != PH_ERR_ALLOCATION_FAILED) {
+            defect("the batch failed but item %d has status %d", i, (int)status);
+        }
+        return;
+    }
+    if (!check("batch item", status, ALLOW_ALLOC | ALLOW_DECODE) || status != PH_SUCCESS) {
+        for (int k = 0; k < PH_BATCH_HASHES_CAPACITY; k++) {
+            if (hashes[k] != 0) {
+                defect("item %d failed with %d but hash slot %d holds %016llx", i, (int)status, k,
+                       (unsigned long long)hashes[k]);
+                return;
+            }
+        }
+        return;
+    }
+    for (int k = 0; k < BATCH_SLOTS; k++) {
+        if (recording) {
+            ref[k] = hashes[k];
+        } else if (hashes[k] != ref[k]) {
+            defect("batch item %d reported success but its hash %d differs", i, k);
+            return;
+        }
+    }
+}
+
+static uint64_t g_buffers_ref[2][BATCH_SLOTS];
+
+static void scen_batch_buffers(int recording) {
     ph_batch_buffer_item_t items[2];
     memset(items, 0, sizeof(items));
     items[0].buffer = g_png.data;
@@ -623,23 +657,22 @@ static void scen_batch_api(int recording) {
     ph_error_t err = ph_hash_buffers(items, 2, BATCH_FLAGS, 1);
     check("ph_hash_buffers", err, ALLOW_ALLOC);
     for (int i = 0; i < 2; i++) {
-        if (err != PH_SUCCESS) {
-            if (items[i].status != PH_ERR_ALLOCATION_FAILED) {
-                defect("ph_hash_buffers failed but item %d has status %d", i, items[i].status);
-            }
-            continue;
-        }
-        if (!check("ph_hash_buffers item", items[i].status, ALLOW_ALLOC | ALLOW_DECODE) ||
-            items[i].status != PH_SUCCESS) {
-            continue;
-        }
-        if (recording) {
-            g_batch_ref[i][0] = items[i].hashes[0];
-            g_batch_ref[i][1] = items[i].hashes[1];
-        } else if (items[i].hashes[0] != g_batch_ref[i][0] ||
-                   items[i].hashes[1] != g_batch_ref[i][1]) {
-            defect("batch item %d reported success but its hashes differ", i);
-        }
+        check_batch_item(i, err, items[i].status, items[i].hashes, g_buffers_ref[i], recording);
+    }
+}
+
+static uint64_t g_files_ref[2][BATCH_SLOTS];
+
+static void scen_batch_files(int recording) {
+    ph_batch_item_t items[2];
+    memset(items, 0, sizeof(items));
+    items[0].path = PNG_PATH;
+    items[1].path = JPEG_PATH;
+
+    ph_error_t err = ph_hash_files(items, 2, BATCH_FLAGS, 1);
+    check("ph_hash_files", err, ALLOW_ALLOC);
+    for (int i = 0; i < 2; i++) {
+        check_batch_item(i, err, items[i].status, items[i].hashes, g_files_ref[i], recording);
     }
 }
 
@@ -692,7 +725,8 @@ static const scenario_t SCENARIOS[] = {
     {"load, grey PNG as colour", scen_load_gray_as_colour},
     {"load, grey PGM as colour", scen_load_pgm_as_colour},
     {"load, decode scale 1/2", scen_load_scaled},
-    {"batch API, sequential", scen_batch_api},
+    {"ph_hash_buffers, sequential", scen_batch_buffers},
+    {"ph_hash_files, sequential", scen_batch_files},
 };
 
 /* ---- driver ------------------------------------------------------------ */
