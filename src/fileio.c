@@ -69,17 +69,9 @@ typedef struct stat ph_file_stat_t;
  * branch takes an errno, the success branch takes a descriptor, and only the
  * convenience wrapper does an open()/close() of its own. */
 
-/* Writes "<verb> '<path>': <reason>" into a diagnostic buffer, the reason printf-style.
- * The buffer (PH_LAST_ERROR_MAX) holds any path the operating system opens, so the
- * message is whole. A path longer still -- one the system refuses as too long, or a
- * Windows long path -- keeps its start and its end around "...", so the reason, the one
- * part the caller does not already know, always survives. Neither cut splits a UTF-8 character: a
- * path in Cyrillic or CJK is two or three bytes a character. */
-static void ph_format_path_msg(char *err_buf, size_t err_len, const char *verb, const char *path,
-                               const char *reason_fmt, ...) PH_PRINTF_FORMAT(5, 6);
-
-static void ph_format_path_msg(char *err_buf, size_t err_len, const char *verb, const char *path,
-                               const char *reason_fmt, ...) {
+/* The message every classification below writes; its contract is in fileio.h. */
+void ph_format_path_msg(char *err_buf, size_t err_len, const char *verb, const char *path,
+                        const char *reason_fmt, ...) {
     if (!err_buf || err_len == 0) {
         return;
     }

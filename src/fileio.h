@@ -6,6 +6,7 @@
  * classified here, as PH_ERR_IO with a diagnostic message, before any decoder sees it. */
 
 #include "libphash.h"
+#include "safety.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -26,5 +27,16 @@ ph_error_t ph_open_file_bytes(const char *filepath, ph_file_bytes_t *out, char *
                               size_t err_len);
 
 void ph_release_file_bytes(ph_file_bytes_t *fb);
+
+/* Writes "<verb> '<path>': <reason>" into a diagnostic buffer, the reason printf-style
+ * and cut to 127 bytes. A context's buffer (PH_LAST_ERROR_MAX) holds any path the
+ * operating system opens, so the message is whole. A path longer still -- one the system
+ * refuses as too long, or a Windows long path -- keeps its start and its end around "...",
+ * so the reason, the one part the caller does not already know, always survives; a
+ * buffer too small even for that gets the plain message, truncated. No cut splits a UTF-8
+ * character: a path in Cyrillic or CJK is two or three bytes a character. err_buf may be
+ * NULL or err_len 0, and then nothing is written. */
+void ph_format_path_msg(char *err_buf, size_t err_len, const char *verb, const char *path,
+                        const char *reason_fmt, ...) PH_PRINTF_FORMAT(5, 6);
 
 #endif /* PH_FILEIO_H */
