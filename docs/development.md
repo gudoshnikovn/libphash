@@ -647,12 +647,14 @@ distinguishes one job from another.
 
 Five more workflows, and Dependabot, run on their own trigger rather than per push:
 
-- **`.github/workflows/site.yml`** — the documentation site, by hand only (*Run
-  workflow*, on the chosen branch): `scripts/site.sh`, strict, so a broken link or
-  anchor, a page missing from the navigation, a missing included file or a figure whose
-  stages disagree with the library fails it. A change to the library's sources measures
-  every figure again, which is most pushes to a release branch, so the site is built when
-  it is wanted rather than on each of them. Python 3.12, the oldest the site supports,
+- **`.github/workflows/site.yml`** — the documentation site: `scripts/site.sh`, strict,
+  so a broken link or anchor, a page missing from the navigation, a missing included file
+  or a figure whose stages disagree with the library fails it. On a push to `main`, which
+  moves only at a release, it publishes the site to GitHub Pages
+  (<https://gudoshnikovn.github.io/libphash/>; *Settings → Pages → Source* is *GitHub
+  Actions*). Elsewhere it runs by hand only (*Run workflow*, on the chosen branch): a
+  change to the library's sources measures every figure again, which is most pushes to a
+  release branch, so the site is built when it is wanted rather than on each of them. Python 3.12, the oldest the site supports,
   installs the hashed lock with pip. The photo corpus is fetched first with
   `tools/site/fetch_corpus.py fetch --strict`, which fails unless every photograph
   arrives and matches the manifest; the measurements in `build/site-cache/` are kept in
