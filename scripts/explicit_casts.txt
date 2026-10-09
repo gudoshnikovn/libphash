@@ -4,10 +4,10 @@
 1 src/arena.h
 8 src/batch.c
 10 src/bytes.h
-9 src/compare.c
+14 src/compare.c
 7 src/config.c
 1 src/digest.h
-10 src/fileio.c
+12 src/fileio.c
 1 src/hashes/ahash.c
 8 src/hashes/algorithm.c
 1 src/hashes/bmh.c
@@ -18,7 +18,7 @@
 4 src/hashes/phash.c
 35 src/hashes/radial.c
 3 src/hashes/whash.c
-10 src/image/color.c
+12 src/image/color.c
 12 src/image/filters.c
 1 src/image/image.h
 4 src/image/resize.c
