@@ -1,3 +1,4 @@
+#include "image/image.h"
 #include "loader.h"
 #include "loaders/backends.h"
 #include "safety.h"
@@ -18,7 +19,6 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
                                   int *channels, int req_comp, uint64_t max_pixels,
                                   ph_decode_scale_t decode_scale, ph_error_t *out_err,
                                   char *err_msg, size_t err_msg_cap) {
-    (void)req_comp;
     /* libwebp's scaling API resizes *after* a full decode -- no decode-time saving --
      * so decode_scale is a JPEG-only optimization (see ph_context_set_decode_scale()),
      * silently ignored here rather than paying a resize for nothing. */
@@ -47,9 +47,10 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
         return NULL;
     }
 
-    /* libwebp has no native grayscale decode — always decode to RGB, plus the alpha
-     * channel when the image has one, which the caller resolves (ph_resolve_alpha()).
-     * Grayscale conversion is handled later by ph_to_grayscale. */
+    /* libwebp decodes to RGB, plus the alpha channel when the image has one, which the
+     * caller resolves (ph_resolve_alpha()). It has no grayscale output, so an image asked
+     * for as gray is folded to gray(+alpha) after the decode with the library's own
+     * weights, as the PNG backend folds its rows: every backend's gray is the same bytes. */
     int out_channels = features.has_alpha ? 4 : 3;
 
     size_t out_size;
@@ -108,6 +109,23 @@ unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int 
                            : "WebP pixel data decode failed (corrupt bitstream)");
         free(output);
         return NULL;
+    }
+
+    if (req_comp == 1) {
+        const int gray_channels = out_channels - 2;
+        unsigned char *gray = malloc(out_size / ph_size(out_channels) * ph_size(gray_channels));
+        if (!gray) {
+            if (out_err) {
+                *out_err = PH_ERR_ALLOCATION_FAILED;
+            }
+            ph_set_err_msg(err_msg, err_msg_cap, "Memory allocation failed");
+            free(output);
+            return NULL;
+        }
+        ph_fold_to_gray(output, gray, ph_size(w) * ph_size(h), out_channels);
+        free(output);
+        output = gray;
+        out_channels = gray_channels;
     }
 
     *width = w;

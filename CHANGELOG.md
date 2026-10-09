@@ -38,6 +38,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   decoded, vectorized: 107.3 against 104.7 ms, the difference being the conversion the
   hash would otherwise make, and the RGB(A) is held one row at a time instead of whole.
   The gray pixels are the same bytes.
+- **A WebP loaded as grayscale has one channel.** With `ph_context_set_load_grayscale()`
+  on, every format was loaded as one gray channel except WebP, which libwebp decodes only
+  in color: it came back with three channels, so `ph_compute_color_hash()` and
+  `ph_compute_color_moments_hash()` worked on it instead of returning
+  `PH_ERR_REQUIRES_COLOR`, and the load saved neither memory nor the conversion. The WebP
+  decoder folds the image to gray with the library's default weights, as the PNG decoder
+  does. The hashes of a grayscale-loaded WebP change in two cases: with an alpha channel
+  the gray is composited instead of the color, which can move a pixel by a level; and
+  weights set with `ph_context_set_gray_weights()` no longer reach it, as they reach no
+  other grayscale load. A WebP without alpha, at the default weights, hashes as before.
 
 ## [2.0.0] - 2026-10-07
 

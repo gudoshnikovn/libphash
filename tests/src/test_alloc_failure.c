@@ -561,19 +561,20 @@ static void scen_load_gray_as_colour(int recording) {
     ph_free(ctx);
 }
 
-/* A colour PNG loaded as grayscale: the decoder folds its RGB(A) to gray, row by row for a
- * plain PNG and after the last pass for an interlaced one, each with its own buffers. A
- * load that succeeds under an injected failure gives the reference aHash. */
-static uint64_t g_colour_as_gray_ahash[2];
+/* A colour image loaded as grayscale: the decoder folds its RGB(A) to gray -- a PNG row by
+ * row, or after the last pass when it is interlaced, a WebP after the decode -- each with
+ * its own buffers. A load that succeeds under an injected failure gives the reference
+ * aHash. */
+static uint64_t g_colour_as_gray_ahash[3];
 
-static void load_colour_as_gray(int recording, int which, const char *path) {
+static void load_colour_as_gray(int recording, int which, const char *path, int allowed) {
     ph_context_t *ctx = NULL;
     if (ph_create(&ctx) != PH_SUCCESS) {
         return;
     }
     ASSERT_OK(ph_context_set_load_grayscale(ctx, 1));
     ph_error_t err = ph_load_from_file(ctx, path);
-    if (check("ph_load_from_file(colour PNG as grey)", err, ALLOW_ALLOC)) {
+    if (check("ph_load_from_file(colour as grey)", err, allowed)) {
         ph_shim_disarm();
         uint64_t ahash = 0;
         ASSERT_OK(ph_compute_ahash(ctx, &ahash));
@@ -588,10 +589,17 @@ static void load_colour_as_gray(int recording, int which, const char *path) {
     ph_free(ctx);
 }
 
-static void scen_load_colour_as_gray(int recording) { load_colour_as_gray(recording, 0, PNG_PATH); }
+static void scen_load_colour_as_gray(int recording) {
+    load_colour_as_gray(recording, 0, PNG_PATH, ALLOW_ALLOC);
+}
 
 static void scen_load_interlaced_as_gray(int recording) {
-    load_colour_as_gray(recording, 1, TEST_DATA_DIR "/png/rgba8_interlaced.png");
+    load_colour_as_gray(recording, 1, TEST_DATA_DIR "/png/rgba8_interlaced.png", ALLOW_ALLOC);
+}
+
+/* ALLOW_CORRUPT and ALLOW_DECODE for the reasons given at their definitions. */
+static void scen_load_webp_as_gray(int recording) {
+    load_colour_as_gray(recording, 2, WEBP_PATH, ALLOW_ALLOC | ALLOW_CORRUPT | ALLOW_DECODE);
 }
 
 /* A grey PGM, which stb_image decodes in every build. */
@@ -759,6 +767,7 @@ static const scenario_t SCENARIOS[] = {
     {"load, grey PGM as colour", scen_load_pgm_as_colour},
     {"load, colour PNG as grey", scen_load_colour_as_gray},
     {"load, interlaced as grey", scen_load_interlaced_as_gray},
+    {"load, WebP as grey", scen_load_webp_as_gray},
     {"load, decode scale 1/2", scen_load_scaled},
     {"ph_hash_buffers, sequential", scen_batch_buffers},
     {"ph_hash_files, sequential", scen_batch_files},

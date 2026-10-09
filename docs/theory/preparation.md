@@ -264,12 +264,12 @@ the decoder returns depends on the format:
 
 - **JPEG**: libjpeg-turbo returns the luma the file stores, without computing color at
   all.
-- **PNG and the formats stb_image reads**: the decoder converts with the library's
+- **PNG, WebP and the formats stb_image reads**: the decoder converts with the library's
   default weights, 38/75/15; weights set with
   [`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights) do not
-  reach it.
-- **WebP**: libwebp has no grayscale output, so the image is loaded in color and the
-  library converts as usual.
+  reach it. libwebp has no grayscale output and libpng's is not these weights, so their
+  backends decode in color and convert. An alpha channel is kept through the conversion
+  and resolved on the gray.
 
 So the setting changes the pixels a hash reads only for JPEG. Over the photographs:
 
@@ -279,7 +279,7 @@ The stored luma is rounded where the library's formula truncates, so about half 
 pixels come out one level brighter; a few differ by more. A level here and there tips only
 the values that lie next to a threshold. The 64-bit hashes stay the same or move by a bit
 or two; mHash and BMH, with many more bits, move on most photographs, by a few. With the
-setting on, ColorHash and ColorMoments refuse every image but a WebP.
+setting on, ColorHash and ColorMoments refuse every image.
 
 ??? info "How this was measured"
 

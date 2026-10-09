@@ -600,8 +600,9 @@ PH_API ph_error_t ph_context_set_whash_remove_max_haar_ll(ph_context_t *ctx, int
  *
  * A grayscale load skips the library's color-to-gray conversion, and for JPEG the
  * decoder's color conversion as well; a JPEG's grayscale is then the luma the file stores,
- * which can differ from the library's conversion by a level. WebP has no grayscale decode
- * and is loaded in color whatever the setting. The setting applies from the next load.
+ * which can differ from the library's conversion by a level. Every other format's gray is
+ * the library's default weights (ph_context_set_gray_weights() does not reach it). The
+ * setting applies from the next load.
  *
  * @note A single-channel image has no color statistics: on one, ph_compute_color_hash()
  *       and ph_compute_color_moments_hash(), and ph_compute_digest() for either, fail with

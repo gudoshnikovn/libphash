@@ -60,7 +60,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
 #endif
 
 #ifdef PH_USE_WEBP
-// --- WebP: libwebp (decodes to RGB, no native grayscale) ---
+// --- WebP: libwebp (decodes to RGB; a grayscale request is folded after the decode) ---
 // libwebp's scaling API resizes *after* a full decode (no decode-time saving), so
 // decode_scale is accepted and ignored here rather than paying a resize for nothing.
 unsigned char *ph_decode_webp_mem(const unsigned char *buffer, size_t size, int *width, int *height,

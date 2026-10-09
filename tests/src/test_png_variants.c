@@ -185,8 +185,38 @@ static void test_broken_files(void) {
     PASS("test_broken_files");
 }
 
+/* The RGB and RGBA pictures as lossless WebP decode to the PNG's pixels, in colour and in
+ * grayscale: the WebP backend folds to gray with the same weights, before the alpha is
+ * resolved, as the PNG one. A WebP loaded as grayscale has one channel, so the color
+ * hashes refuse it as they refuse any other gray load. */
+static void test_webp_matches_png(void) {
+#ifdef PH_USE_WEBP
+    check_fixture(FIXTURE("rgb8.webp"), expect_rgb8, PH_ALPHA_BLEND_GREY);
+    check_fixture(FIXTURE("rgba8.webp"), expect_rgba8, PH_ALPHA_BLEND_GREY);
+    check_fixture(FIXTURE("rgba8.webp"), expect_rgb8, PH_ALPHA_IGNORE);
+
+    const char *const files[] = {FIXTURE("rgb8.webp"), FIXTURE("rgba8.webp"),
+                                 TEST_DATA_DIR "/photo.webp"};
+    for (size_t i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
+        ph_context_t *ctx = NULL;
+        ASSERT_OK(ph_create(&ctx));
+        ASSERT_OK(ph_context_set_load_grayscale(ctx, 1));
+        ASSERT_OK(ph_load_from_file(ctx, files[i]));
+        ASSERT_INT_EQ(1, ctx->image.channels);
+        ph_digest_t d;
+        ASSERT_INT_EQ(PH_ERR_REQUIRES_COLOR, ph_compute_color_hash(ctx, &d));
+        ASSERT_INT_EQ(PH_ERR_REQUIRES_COLOR, ph_compute_color_moments_hash(ctx, &d));
+        ph_free(ctx);
+    }
+    PASS("test_webp_matches_png");
+#else
+    printf("test_webp_matches_png: SKIPPED (no WebP decoder in this build)\n");
+#endif
+}
+
 int main(void) {
     test_valid_variants();
+    test_webp_matches_png();
     test_broken_files();
     printf("test_png_variants: PASSED\n");
     return 0;

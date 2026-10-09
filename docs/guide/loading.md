@@ -130,8 +130,8 @@ with [`PH_ERR_IMAGE_TOO_LARGE`](../api/errors.md#PH_ERR_IMAGE_TOO_LARGE):
   and 2 GiB − 1 byte of encoded file ([Size limits](../theory/preparation.md#size-limits)).
 
 What a load holds in memory, at its peak, is the encoded file (mapped or read), the
-decoded image at 3 bytes a pixel (1 when [loaded as grayscale](#loading-as-grayscale),
-except a WebP), and a second image of the same size while an orientation is applied. The
+decoded image at 3 bytes a pixel (1 when [loaded as grayscale](#loading-as-grayscale)),
+and a second image of the same size while an orientation is applied. The
 first grayscale hash adds 1 byte a pixel, kept until the next load.
 
 A large JPEG can also be decoded at ½, ¼ or ⅛ of its size with
@@ -167,21 +167,21 @@ which algorithm is measured in [Which background](../theory/preparation.md#which
 
 [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale)
 asks the decoder for one channel instead of three. A JPEG's decoder then skips its color
-conversion, stb_image converts as it decodes, the PNG decoder converts right after
-decoding, and the library skips its own conversion: the loaded image is a third of the
-size, and the grayscale hashes read it as it is. libwebp has no grayscale output, so a
-WebP is loaded in color whatever the setting.
+conversion, stb_image converts as it decodes, the PNG decoder converts each row as it is
+decoded, the WebP decoder converts once the image is decoded, and the library skips its
+own conversion: the loaded image is a third of the size, and the grayscale hashes read it
+as it is.
 
 --8<-- "docs/assets/generated/loading/load-times.md"
 
 The saving is a part of the load, not a multiple of it: the decoding of the compressed
 data stays.[^cost] It is worth taking for a JPEG when every hash you compute is a
-grayscale one; on a PNG it saves memory, not time
+grayscale one; on a PNG or a WebP it saves memory, not time
 ([Decoding by format](performance.md#decoding-by-format)). Two things come with it:
 
 - **ColorHash and ColorMoments refuse the image** with
   [`PH_ERR_REQUIRES_COLOR`](../api/errors.md#PH_ERR_REQUIRES_COLOR): one channel has no
-  color to count. A WebP, loaded in color, is the exception.
+  color to count.
 - **A JPEG's grayscale comes from the file**, rounded where the library's own conversion
   truncates, so a hash can move by a bit or two against a color load of the same file
   ([The decoder's grayscale](../theory/preparation.md#the-decoders-grayscale)). Hashes

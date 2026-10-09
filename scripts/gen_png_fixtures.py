@@ -7,13 +7,16 @@ decoded values rather than only a return code. The broken files cover the stages
 a decoder can fail: a bad header, truncated image data, a bad checksum on a critical
 chunk. A bad checksum on an ancillary chunk is not a failure: the chunk is dropped.
 
-Standard library only; the output is deterministic. Run from the repository root:
+The PNGs need the standard library only; the two lossless WebP copies of rgb8.png and
+rgba8.png need cwebp (libwebp's encoder) on the PATH. The output is deterministic for a
+given zlib and cwebp. Run from the repository root:
 
     python3 scripts/gen_png_fixtures.py
 """
 
 import os
 import struct
+import subprocess
 import zlib
 
 OUT = os.path.join("tests", "data", "png")
@@ -126,6 +129,13 @@ def main():
     write("rgba8_interlaced.png",
           png_interlaced(SIDE, SIDE, 8, 6,
                          lambda x, y: bytes(rgb8(x, y) + ((255,) if x % 2 == 0 else (0,)))))
+
+    # The RGB and RGBA pictures as lossless WebP, every sample kept (-exact keeps the
+    # colour under transparent pixels too), for the WebP decoder to match the PNG one.
+    for name in ("rgb8", "rgba8"):
+        subprocess.run(["cwebp", "-quiet", "-lossless", "-exact", "-metadata", "none",
+                        os.path.join(OUT, name + ".png"), "-o", os.path.join(OUT, name + ".webp")],
+                       check=True)
 
     # Broken PNGs.
     good = open(os.path.join(OUT, "rgb8.png"), "rb").read()

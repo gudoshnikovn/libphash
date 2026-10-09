@@ -74,9 +74,9 @@ grayscale changes the load in a different way for each:
 - **A grayscale load saves time on a JPEG only.** libjpeg-turbo skips its color
   conversion. The PNG decoder decodes each row in color and folds it to gray as it goes:
   that takes what the hash's own conversion of a color image would, so the load and the
-  hash together cost the same either way, and the image takes a third of the memory. libwebp has no grayscale output, so a WebP is
-  loaded in color either way
-  ([Loading as grayscale](loading.md#loading-as-grayscale)).
+  hash together cost the same either way, and the image takes a third of the memory.
+  libwebp has no grayscale output either, and the WebP decoder converts the decoded image
+  the same way ([Loading as grayscale](loading.md#loading-as-grayscale)).
 
 The decoders themselves depend on the build. The Full build decodes JPEG with
 libjpeg-turbo, PNG with libpng on zlib-ng and WebP with libwebp; the Minimal build decodes
@@ -120,8 +120,8 @@ it. On a 20-megapixel JPEG, loaded and hashed:
 - **Load as grayscale**, with
   [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale), when
   every hash you compute is a grayscale one: on a JPEG, a part of the load is saved.
-  ColorHash and ColorMoments refuse such an image, and on a PNG it saves memory, not
-  time (above).
+  ColorHash and ColorMoments refuse such an image, and on a PNG or a WebP it saves
+  memory, not time (above).
 - **Compute several hashes from one load.** The grayscale image and the area grid that
   aHash, pHash, wHash and BMH reduce from are computed by the first hash that needs them
   and kept until the next load

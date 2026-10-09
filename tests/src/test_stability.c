@@ -7,7 +7,8 @@
  *
  *   - PNG: every PNG backend folds colour to gray with the library's own weights,
  *     38/75/15 over 128, the ones ph_to_grayscale() uses on the colour load;
- *   - WebP: libwebp has no gray output, so the core converts, as on the colour load;
+ *   - WebP: libwebp has no gray output, and the backend folds its RGB with the same
+ *     weights;
  *   - JPEG through stb_image: decoded to RGB and folded with the same weights.
  *
  * JPEG through libjpeg-turbo is the one real difference: asked for grayscale, it returns
