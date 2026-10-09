@@ -27,6 +27,7 @@
 #include "alloc_shim.h"
 #include "test_macros.h"
 
+#include <errno.h>
 #include <libphash.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -665,43 +666,90 @@ static int utf8_truncated_sequence(const char *s) {
     return 0;
 }
 
-/* A diagnostic that quotes a caller's path is cut to PH_LAST_ERROR_MAX - 1 bytes, and the
- * cut must not split a UTF-8 character: about 75 Cyrillic characters reach the buffer end,
- * and a lone lead byte is a decode error in any binding that reads the message as UTF-8,
- * in place of "file not found". Every length around the buffer
- * size, for two-, three- and four-byte characters. */
-static void test_long_path_message_stays_utf8(ph_context_t *ctx) {
+/* 1 if msg ends with the operating system's sentence for one of the two ways a missing
+ * long path fails to open: it does not exist, or the system refuses it as too long. */
+static int ends_with_open_reason(const char *msg) {
+    const int reasons[] = {ENOENT, ENAMETOOLONG};
+    for (size_t i = 0; i < sizeof(reasons) / sizeof(reasons[0]); i++) {
+        char tail[160];
+        snprintf(tail, sizeof(tail), "': %s", strerror(reasons[i]));
+        size_t m = strlen(msg), t = strlen(tail);
+        if (m >= t && strcmp(msg + m - t, tail) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* A file message quotes the whole path and then the reason, however deep the path: a
+ * thousand bytes of directories reach the reason intact. */
+static void test_long_path_message_is_whole(ph_context_t *ctx) {
+    char path[1001];
+    size_t off = 0;
+    memcpy(path, "/nonexistent", 12);
+    off = 12;
+    while (off + 1 + 40 < sizeof(path) - 8) {
+        path[off++] = '/';
+        memset(path + off, 'd', 40);
+        off += 40;
+    }
+    memcpy(path + off, "/x.png", 7);
+
+    ASSERT_INT_EQ(PH_ERR_IO, ph_load_from_file(ctx, path));
+    char want[1200];
+    snprintf(want, sizeof(want), "Cannot open '%s'", path);
+    const char *msg = ph_get_last_error_message(ctx);
+    if (strncmp(msg, want, strlen(want)) != 0 || !ends_with_open_reason(msg)) {
+        fprintf(stderr,
+                "[FAIL] a %zu-byte path: the message is not the whole path and the reason:\n  %s\n",
+                strlen(path), msg);
+        exit(1);
+    }
+    printf("  a path of nearly 1000 bytes -> the whole path and the reason\n");
+}
+
+/* A path longer than any the system opens keeps its start and its end around "...", the
+ * reason after them, and whole UTF-8 characters at both cuts: a lone lead byte is a
+ * decode error in any binding that reads the message as UTF-8. Every length around the
+ * buffer size, for two-, three- and four-byte characters. */
+static void test_overlong_path_message_keeps_reason(ph_context_t *ctx) {
     static const char *const chars[] = {"\xD1\x84", "\xE4\xB8\xAD", "\xF0\x9F\x98\x80"};
-    char path[1024];
+    static char path[6000];
     for (size_t c = 0; c < sizeof(chars) / sizeof(chars[0]); c++) {
         size_t w = strlen(chars[c]);
-        for (size_t reps = 30; reps < 90; reps++) {
+        for (size_t bytes = 4200; bytes < 4500; bytes += 7) {
             size_t off = 0;
             memcpy(path + off, "/nonexistent/", 13);
             off += 13;
-            for (size_t r = 0; r < reps && off + w < sizeof(path) - 1; r++, off += w) {
+            while (off + w < bytes) {
                 memcpy(path + off, chars[c], w);
+                off += w;
             }
-            path[off] = '\0';
+            memcpy(path + off, "/end.png", 9);
             ASSERT_INT_EQ(PH_ERR_IO, ph_load_from_file(ctx, path));
             const char *msg = ph_get_last_error_message(ctx);
-            if (msg[0] == '\0' || utf8_truncated_sequence(msg)) {
-                fprintf(stderr,
-                        "[FAIL] %zu x %zu-byte character path: message of %zu bytes ends in a "
-                        "cut UTF-8 sequence\n",
-                        reps, w, strlen(msg));
+            const char *defect = utf8_truncated_sequence(msg) ? "cuts a UTF-8 character"
+                                 : strncmp(msg, "Cannot open '/nonexistent/", 26) != 0
+                                     ? "lost the path's start"
+                                 : !strstr(msg, "/end.png'")   ? "lost the path's end"
+                                 : !ends_with_open_reason(msg) ? "lost the reason"
+                                                               : NULL;
+            if (defect) {
+                fprintf(stderr, "[FAIL] %zu-byte path of %zu-byte characters: the message %s: %s\n",
+                        strlen(path), w, defect, msg);
                 exit(1);
             }
         }
     }
-    printf("  long non-ASCII path -> message stays valid UTF-8\n");
+    printf("  a path past the buffer -> its two ends and the reason, valid UTF-8\n");
 }
 
 int main(void) {
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
 
-    test_long_path_message_stays_utf8(ctx);
+    test_long_path_message_is_whole(ctx);
+    test_overlong_path_message_keeps_reason(ctx);
 
     printf("test_error_diagnostics:\n");
     printf(" ph_get_error_string() covers every code:\n");

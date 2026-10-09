@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the requested hashes then failed (`PH_ERR_ALLOCATION_FAILED`), the item of
   `ph_hash_files()` or `ph_hash_buffers()` kept the hashes computed before the failing one,
   against the documented promise that every slot of a failed item is zero. It is zero.
+- **A file's error message keeps its reason however long the path.** The message of
+  `ph_get_last_error_message()` was cut at 159 bytes, and a file message puts the path
+  first, so a path of about 130 bytes or more lost the reason (`No such file or
+  directory`, `file is empty`) and kept only the path. The message holds the whole path,
+  up to the longest the system opens (4096 bytes), and the reason after it; a longer path
+  keeps its start and its end around `...`.
 
 ## [2.0.0] - 2026-10-07
 

@@ -111,7 +111,7 @@ the last load on a context:
 
 | Code | What the detail adds |
 |---|---|
-| `PH_ERR_IO` | the path and the reason, such as `Cannot open 'a.jpg': No such file or directory` or `Cannot read 'photos': not a regular file` |
+| `PH_ERR_IO` | the path and the reason, such as `Cannot open 'a.jpg': No such file or directory` or `Cannot read 'photos': not a regular file`; the path is whole when the system can open a path that long, and otherwise keeps its two ends around `...`, so the reason is always there |
 | `PH_ERR_CORRUPT_DATA` | the decoder's own complaint, such as libjpeg-turbo's `Premature end of JPEG file` |
 | `PH_ERR_UNSUPPORTED_FORMAT` | the reason stb_image, the decoder of last resort, gave, such as `unknown image type` |
 | `PH_ERR_IMAGE_TOO_LARGE` | which limit the image is over |

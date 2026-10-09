@@ -9,8 +9,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Max length (including NUL) of the diagnostic message stashed by a failed load. */
-#define PH_LAST_ERROR_MAX 160
+/* Max length (including NUL) of the diagnostic message stashed by a failed load. A file
+ * message quotes the caller's path, so the buffer holds the longest path POSIX open()
+ * accepts (PATH_MAX, 4096 on Linux, 1024 on macOS) and a reason after it. Its 4 KiB a
+ * context is half the area grid's 8 KiB. */
+#define PH_LAST_ERROR_MAX (4096 + 256)
 
 /* Side of the shared area-average grid: see ph_area_downscale(). Every working size it
  * serves directly -- 32 (pHash), 16 (wHash, BMH), 8 (aHash) -- divides it. */

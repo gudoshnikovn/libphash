@@ -69,28 +69,53 @@ typedef struct stat ph_file_stat_t;
  * branch takes an errno, the success branch takes a descriptor, and only the
  * convenience wrapper does an open()/close() of its own. */
 
-/* printf into a fixed-size diagnostic buffer, with ph_set_err_msg()'s guarantee that a
- * truncation never splits a UTF-8 character. The file messages quote a caller's path, and
- * a path in Cyrillic or CJK reaches the buffer's end in about 75 characters. */
-static void ph_format_err_msg(char *err_buf, size_t err_len, const char *fmt, ...)
-    PH_PRINTF_FORMAT(3, 4);
+/* Writes "<verb> '<path>': <reason>" into a diagnostic buffer, the reason printf-style.
+ * The buffer (PH_LAST_ERROR_MAX) holds any path the operating system opens, so the
+ * message is whole. A path longer still -- one the system refuses as too long, or a
+ * Windows long path -- keeps its start and its end around "...", so the reason, the one
+ * part the caller does not already know, always survives. Neither cut splits a UTF-8 character: a
+ * path in Cyrillic or CJK is two or three bytes a character. */
+static void ph_format_path_msg(char *err_buf, size_t err_len, const char *verb, const char *path,
+                               const char *reason_fmt, ...) PH_PRINTF_FORMAT(5, 6);
 
-static void ph_format_err_msg(char *err_buf, size_t err_len, const char *fmt, ...) {
+static void ph_format_path_msg(char *err_buf, size_t err_len, const char *verb, const char *path,
+                               const char *reason_fmt, ...) {
     if (!err_buf || err_len == 0) {
         return;
     }
+    char reason[128];
     va_list ap;
-    va_start(ap, fmt);
-    int n = vsnprintf(err_buf, err_len, fmt, ap);
+    va_start(ap, reason_fmt);
+    int n = vsnprintf(reason, sizeof(reason), reason_fmt, ap);
     va_end(ap);
     if (n < 0) {
-        err_buf[0] = '\0';
+        reason[0] = '\0';
+    } else if ((size_t)n >= sizeof(reason)) {
+        reason[ph_utf8_cut(reason, sizeof(reason) - 1)] = '\0';
+    }
+
+    static const char ellipsis[] = "...";
+    size_t path_len = strlen(path);
+    size_t fixed = strlen(verb) + strlen(" '") + strlen("': ") + strlen(reason);
+    if (fixed + path_len < err_len) {
+        snprintf(err_buf, err_len, "%s '%s': %s", verb, path, reason);
         return;
     }
-    if ((size_t)n >= err_len) {
-        size_t kept = err_len - 1;
-        err_buf[ph_utf8_cut(err_buf, kept)] = '\0';
+    /* Room for the path's two ends; a buffer too small for even that gets the plain
+     * message, truncated. */
+    if (fixed + sizeof(ellipsis) - 1 + 2 >= err_len) {
+        snprintf(err_buf, err_len, "%s '%s': %s", verb, path, reason);
+        err_buf[ph_utf8_cut(err_buf, strlen(err_buf))] = '\0';
+        return;
     }
+    size_t room = err_len - 1 - fixed - (sizeof(ellipsis) - 1);
+    size_t head = ph_utf8_cut(path, room / 2);
+    size_t tail_start = path_len - (room - room / 2);
+    while (tail_start < path_len && ((unsigned char)path[tail_start] & 0xC0) == 0x80) {
+        tail_start++; /* a continuation byte: start at the next character */
+    }
+    snprintf(err_buf, err_len, "%s '%.*s%s%s': %s", verb, (int)head, path, ellipsis,
+             path + tail_start, reason);
 }
 
 /* Turns a failed open into PH_ERR_IO with a diagnostic message. `open_errno` must
@@ -99,7 +124,7 @@ static void ph_format_err_msg(char *err_buf, size_t err_len, const char *fmt, ..
  * an unreadable one, and on Windows also for a directory). */
 static ph_error_t ph_report_file_open_failure(const char *filepath, int open_errno, char *err_buf,
                                               size_t err_len) {
-    ph_format_err_msg(err_buf, err_len, "Cannot open '%s': %s", filepath, strerror(open_errno));
+    ph_format_path_msg(err_buf, err_len, "Cannot open", filepath, "%s", strerror(open_errno));
     return PH_ERR_IO;
 }
 
@@ -115,16 +140,16 @@ static ph_error_t ph_check_open_file(int fd, const char *filepath, long long *ou
     /* LCOV_EXCL_START -- excluded from coverage: fstat() on a descriptor just opened
      * does not fail outside a kernel or filesystem fault. */
     if (PH_FILE_FSTAT(fd, &st) != 0) {
-        ph_format_err_msg(err_buf, err_len, "Cannot stat '%s': %s", filepath, strerror(errno));
+        ph_format_path_msg(err_buf, err_len, "Cannot stat", filepath, "%s", strerror(errno));
         return PH_ERR_IO;
     }
     /* LCOV_EXCL_STOP */
     if (!S_ISREG(st.st_mode)) {
-        ph_format_err_msg(err_buf, err_len, "Cannot read '%s': not a regular file", filepath);
+        ph_format_path_msg(err_buf, err_len, "Cannot read", filepath, "not a regular file");
         return PH_ERR_IO;
     }
     if (st.st_size <= 0) {
-        ph_format_err_msg(err_buf, err_len, "Cannot read '%s': file is empty", filepath);
+        ph_format_path_msg(err_buf, err_len, "Cannot read", filepath, "file is empty");
         return PH_ERR_IO;
     }
     if (out_size) {
@@ -163,8 +188,8 @@ static ph_error_t ph_read_open_file(int fd, const char *filepath, size_t size, p
                                     char *err_buf, size_t err_len) {
     uint8_t *buf = malloc(size);
     if (!buf) {
-        ph_format_err_msg(err_buf, err_len, "Cannot read '%s': out of memory for %llu bytes",
-                          filepath, (unsigned long long)size);
+        ph_format_path_msg(err_buf, err_len, "Cannot read", filepath,
+                           "out of memory for %llu bytes", (unsigned long long)size);
         return PH_ERR_ALLOCATION_FAILED;
     }
 
@@ -181,7 +206,7 @@ static ph_error_t ph_read_open_file(int fd, const char *filepath, size_t size, p
             if (errno == EINTR) {
                 continue;
             }
-            ph_format_err_msg(err_buf, err_len, "Cannot read '%s': %s", filepath, strerror(errno));
+            ph_format_path_msg(err_buf, err_len, "Cannot read", filepath, "%s", strerror(errno));
             free(buf);
             return PH_ERR_IO;
         }
@@ -192,7 +217,7 @@ static ph_error_t ph_read_open_file(int fd, const char *filepath, size_t size, p
     }
 
     if (got == 0) {
-        ph_format_err_msg(err_buf, err_len, "Cannot read '%s': file is empty", filepath);
+        ph_format_path_msg(err_buf, err_len, "Cannot read", filepath, "file is empty");
         free(buf);
         return PH_ERR_IO;
     }
@@ -237,8 +262,8 @@ ph_error_t ph_open_file_bytes(const char *filepath, ph_file_bytes_t *out, char *
      * at a >4 GB file). Neither mapping nor reading it can work. */
     /* LCOV_EXCL_START -- excluded from coverage: needs a 32-bit size_t and a file over 4 GiB. */
     if ((unsigned long long)size > (unsigned long long)SIZE_MAX) {
-        ph_format_err_msg(err_buf, err_len,
-                          "Cannot read '%s': file is too large to load into memory", filepath);
+        ph_format_path_msg(err_buf, err_len, "Cannot read", filepath,
+                           "file is too large to load into memory");
         PH_FILE_CLOSE(fd);
         return PH_ERR_IO;
     }

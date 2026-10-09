@@ -280,7 +280,9 @@ typedef struct ph_context ph_context_t;
  *
  * Every ph_load_from_*() call clears it on the way in; hashes, setters and comparisons
  * neither set nor clear it. The text is English, for a log or a person: a program
- * branches on the ph_error_t code. See docs/guide/errors.md.
+ * branches on the ph_error_t code. A file's message quotes the whole path, up to the
+ * longest the system opens, and then the reason; a longer path keeps its two ends around
+ * "...", and the reason is never cut. See docs/guide/errors.md.
  *
  * @note Not thread-safe to read concurrently with a load call on the same context;
  * follows the same "one context per thread at a time" rule as the rest of the API.
