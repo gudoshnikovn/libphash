@@ -1,7 +1,7 @@
 # 3.21 for CMAKE_C_STANDARD 17/23 recognition (added in 3.21) and for
 # CMakePresets.json's schema version used by CMakePresets.json at the repo root.
 cmake_minimum_required(VERSION 3.21)
-project(libphash VERSION 2.0.0 LANGUAGES C)
+project(libphash VERSION 2.0.1 LANGUAGES C)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Byte-identical static archives from identical sources (see the file).
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/deterministic_archives.cmake)

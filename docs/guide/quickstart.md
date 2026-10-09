@@ -15,8 +15,8 @@ difference between the Full and Minimal builds, and how to check a download.
     point `pkg-config` at it:
 
     ```sh
-    tar -xzf libphash-2.0.0-linux-x86_64.tar.gz
-    export PKG_CONFIG_PATH="$PWD/libphash-2.0.0-linux-x86_64/lib/pkgconfig"
+    tar -xzf libphash-2.0.1-linux-x86_64.tar.gz
+    export PKG_CONFIG_PATH="$PWD/libphash-2.0.1-linux-x86_64/lib/pkgconfig"
     ```
 
 === "CMake, from source"

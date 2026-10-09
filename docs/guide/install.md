@@ -56,10 +56,10 @@ carries a Full build for four platforms, static and shared:
 
 | Platform | Static | Shared |
 | --- | --- | --- |
-| Linux x86-64 | `libphash-2.0.0-linux-x86_64.tar.gz` | `libphash-2.0.0-linux-x86_64-shared.tar.gz` |
-| Linux arm64 | `libphash-2.0.0-linux-arm64.tar.gz` | `libphash-2.0.0-linux-arm64-shared.tar.gz` |
-| macOS arm64 | `libphash-2.0.0-macos-arm64.tar.gz` | `libphash-2.0.0-macos-arm64-shared.tar.gz` |
-| Windows x86-64 | `libphash-2.0.0-windows-x86_64.zip` | `libphash-2.0.0-windows-x86_64-shared.zip` |
+| Linux x86-64 | `libphash-2.0.1-linux-x86_64.tar.gz` | `libphash-2.0.1-linux-x86_64-shared.tar.gz` |
+| Linux arm64 | `libphash-2.0.1-linux-arm64.tar.gz` | `libphash-2.0.1-linux-arm64-shared.tar.gz` |
+| macOS arm64 | `libphash-2.0.1-macos-arm64.tar.gz` | `libphash-2.0.1-macos-arm64-shared.tar.gz` |
+| Windows x86-64 | `libphash-2.0.1-windows-x86_64.zip` | `libphash-2.0.1-windows-x86_64-shared.zip` |
 
 An archive unpacks into one directory named like the archive, with `include/` (the two
 headers), `lib/` (the library, and in a static archive the decoder libraries it needs),
@@ -82,24 +82,24 @@ built by this repository's release workflow from the tagged commit; checking it 
 
     ```sh
     sha256sum --ignore-missing -c SHA256SUMS.txt
-    gh attestation verify libphash-2.0.0-linux-x86_64.tar.gz --repo gudoshnikovn/libphash
-    tar -xzf libphash-2.0.0-linux-x86_64.tar.gz
+    gh attestation verify libphash-2.0.1-linux-x86_64.tar.gz --repo gudoshnikovn/libphash
+    tar -xzf libphash-2.0.1-linux-x86_64.tar.gz
     ```
 
 === "macOS"
 
     ```sh
     shasum -a 256 --ignore-missing -c SHA256SUMS.txt
-    gh attestation verify libphash-2.0.0-macos-arm64.tar.gz --repo gudoshnikovn/libphash
-    tar -xzf libphash-2.0.0-macos-arm64.tar.gz
+    gh attestation verify libphash-2.0.1-macos-arm64.tar.gz --repo gudoshnikovn/libphash
+    tar -xzf libphash-2.0.1-macos-arm64.tar.gz
     ```
 
 === "Windows (PowerShell)"
 
     ```powershell
-    Get-FileHash libphash-2.0.0-windows-x86_64.zip -Algorithm SHA256
-    gh attestation verify libphash-2.0.0-windows-x86_64.zip --repo gudoshnikovn/libphash
-    Expand-Archive libphash-2.0.0-windows-x86_64.zip -DestinationPath .
+    Get-FileHash libphash-2.0.1-windows-x86_64.zip -Algorithm SHA256
+    gh attestation verify libphash-2.0.1-windows-x86_64.zip --repo gudoshnikovn/libphash
+    Expand-Archive libphash-2.0.1-windows-x86_64.zip -DestinationPath .
     ```
 
     `Get-FileHash` prints the hash; compare it with the archive's line in
@@ -303,8 +303,8 @@ does that:
 ```
 
 ```text
-libphash 2.0.0 (header 2.0.0)
-version=2.0.0 jpeg=libjpeg-turbo png=libpng webp=libwebp zlib=zlib-ng threads=on simd=neon mock=off
+libphash 2.0.1 (header 2.0.1)
+version=2.0.1 jpeg=libjpeg-turbo png=libpng webp=libwebp zlib=zlib-ng threads=on simd=neon mock=off
 ```
 
 That is a Full build on arm64; a Minimal one says `jpeg=stb png=stb webp=none zlib=none`.

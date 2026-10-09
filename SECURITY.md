@@ -163,7 +163,7 @@ things about it:
 To check an archive, with the [GitHub CLI](https://cli.github.com/):
 
 ```bash
-gh attestation verify libphash-2.0.0-linux-x86_64.tar.gz --repo gudoshnikovn/libphash
+gh attestation verify libphash-2.0.1-linux-x86_64.tar.gz --repo gudoshnikovn/libphash
 ```
 
 The command fails unless the archive is byte for byte one this repository's release
