@@ -1,12 +1,12 @@
 name: Site
 
 # The documentation site, built as `make site` builds it, and published to GitHub Pages
-# (https://gudoshnikovn.github.io/libphash/) from `main`. `main` moves only at a release,
-# so the published site describes the latest release. A build measures every figure again
-# whenever the library's sources change, which is most pushes to a release branch, so a
-# release branch builds the site only when it is asked for: "Run workflow" in the Actions
-# tab, on the branch chosen there, builds it and uploads it as an artifact; on `main` the
-# same run publishes it again.
+# (https://gudoshnikovn.github.io/libphash/) by a release: the push of a `v*` tag, the
+# event release.yml publishes the archives on, so the published site describes the latest
+# release. A pre-release tag (one containing `-`) publishes nothing, and no push to a
+# branch runs the workflow: a build measures every figure again whenever the library's
+# sources change. "Run workflow" in the Actions tab builds the site on the branch chosen
+# there and uploads it as an artifact; on `main` the same run publishes it again.
 #
 # The build is strict: scripts/site.sh fails on a broken link or anchor, a page missing
 # from the navigation, an included file that does not exist or a figure whose stages
@@ -17,18 +17,18 @@ name: Site
 # GitHub offers "Run workflow" for a workflow only when its file is on the default branch.
 on:
   push:
-    branches: [main]
+    tags: ['v*', '!v*-*']
   workflow_dispatch:
 
 # Read-only by default: only the deploy job writes, and only to Pages.
 permissions:
   contents: read
 
-# A newer build of a branch replaces an older one, except on `main`: an interrupted
-# deploy is worse than a late one, so a second run there waits.
+# A newer build of a branch replaces an older one. A run that publishes is never
+# cancelled: an interrupted deploy is worse than a late one.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && github.ref != 'refs/heads/main' }}
 
 jobs:
   # Python 3.12, the oldest the site supports, from setup-python: the lock in
@@ -85,15 +85,20 @@ jobs:
         retention-days: 14
 
     - name: Upload the site for Pages
-      if: github.ref == 'refs/heads/main'
+      if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
       uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
       with:
         path: build/site/
 
   # The repository's Settings -> Pages -> Source is "GitHub Actions"; the github-pages
-  # environment is the one GitHub creates for it, and its URL is the site's.
+  # environment is the one GitHub creates for it, and its URL is the site's. The
+  # environment deploys from the branch `main` and from tags `v*`. Two deploys queue one
+  # after the other, whatever ref started them.
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref_type == 'tag' || github.ref == 'refs/heads/main'
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     needs: site
     runs-on: ubuntu-24.04
     timeout-minutes: 10
