@@ -214,8 +214,9 @@ context:
 
 - **A load replaces the image.** It frees the previous image and the grayscale cached
   from it before it decodes the next one. The settings stay as they were set.
-- **A load that fails on a file or a buffer's contents leaves the context empty**, as
-  the previous image is dropped before decoding begins, so the next hash fails with [`PH_ERR_EMPTY_IMAGE`](../api/errors.md#PH_ERR_EMPTY_IMAGE) rather than
+- **A failed load from a file or a buffer leaves the context empty**, whatever it failed
+  on, its arguments included: the previous image is dropped as soon as the call starts,
+  so the next hash fails with [`PH_ERR_EMPTY_IMAGE`](../api/errors.md#PH_ERR_EMPTY_IMAGE) rather than
   describing the image before it.
   [`ph_load_from_pixels()`](../api/loading.md#ph_load_from_pixels) is checked before it
   replaces anything, and a call it refuses leaves the previous image loaded.
