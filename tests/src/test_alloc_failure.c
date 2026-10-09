@@ -47,9 +47,7 @@ static void defect(const char *fmt, ...) {
 }
 
 /* ---- guarded outputs ---------------------------------------------------
- * The library writes into caller-owned structs even on the error paths (radial
- * memsets the digest before it allocates). Padding around them catches a write
- * that runs past the declared output. */
+ * Padding around a caller-owned output catches a write that runs past it. */
 
 #define GUARD_BYTE 0x5A
 
@@ -436,21 +434,35 @@ static const algo_t *g_algo;
 static uint64_t g_algo_ref_u64[NUM_ALGOS];
 static ph_digest_t g_algo_ref_digest[NUM_ALGOS];
 
+/* The output starts as this pattern, a size and kind no algorithm returns among them, so
+ * an error that writes any byte of it shows. */
+#define OUTPUT_PATTERN 0xA5
+
+/* Runs one algorithm; an error must leave its output exactly as the caller had it. */
 static int run_algo(ph_context_t *ctx, const algo_t *a, uint64_t *u, ph_digest_t *d) {
     guarded_u64_t gu;
     guarded_digest_t gd;
     ph_error_t err;
+    int untouched;
     if (a->u64) {
         guard_init(&gu, sizeof(gu));
+        memset(&gu.v, OUTPUT_PATTERN, sizeof(gu.v));
+        uint64_t before = gu.v;
         err = a->u64(ctx, &gu.v);
         guard_check(gu.front, gu.back, a->name);
+        untouched = gu.v == before;
         *u = gu.v;
     } else {
         guard_init(&gd, sizeof(gd));
-        memset(&gd.d, 0, sizeof(gd.d));
+        memset(&gd.d, OUTPUT_PATTERN, sizeof(gd.d));
+        ph_digest_t before = gd.d;
         err = a->digest(ctx, &gd.d);
         guard_check(gd.front, gd.back, a->name);
+        untouched = memcmp(&gd.d, &before, sizeof(before)) == 0;
         *d = gd.d;
+    }
+    if (err != PH_SUCCESS && !untouched) {
+        defect("%s returned %d and wrote into its output", a->name, (int)err);
     }
     return check(a->name, err, ALLOW_ALLOC);
 }

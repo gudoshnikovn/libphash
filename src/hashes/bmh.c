@@ -67,16 +67,6 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
     }
     /* LCOV_EXCL_STOP */
 
-    /* One bit per block. The size is capped at PH_DIGEST_MAX_BYTES inside
-     * ph_digest_shape(): unreachable through the public API, because
-     * ph_context_set_block_params() rejects block_size > PH_BLOCK_MAX_SIZE (32, whose
-     * 32*32 bits = 128 bytes exactly fill a digest). Kept as defence in depth for a
-     * config field written by some other route (tests do exactly that). Note what the cap
-     * does and why the setter bound matters: the reported size is truncated while all
-     * `total_pixels` blocks are still hashed, so the caller would get PH_SUCCESS with a
-     * silently partial hash -- the anti-pattern the setter's rejection prevents. */
-    ph_digest_begin(out_digest, ctx, PH_ALGO_BMH);
-
     ph_arena_mark_t arena_mark = ph_arena_mark(ctx);
     uint8_t *block_data = ph_get_scratchpad(ctx, total_pixels);
     if (!block_data) {
@@ -119,6 +109,16 @@ PH_API ph_error_t ph_compute_bmh(ph_context_t *ctx, ph_digest_t *out_digest) {
         }
     }
 
+    /* One bit per block. The size is capped at PH_DIGEST_MAX_BYTES inside
+     * ph_digest_shape(): unreachable through the public API, because
+     * ph_context_set_block_params() rejects block_size > PH_BLOCK_MAX_SIZE (32, whose
+     * 32*32 bits = 128 bytes exactly fill a digest). Kept as defence in depth for a
+     * config field written by some other route (tests do exactly that). Note what the cap
+     * does and why the setter bound matters: the reported size is truncated while all
+     * `total_pixels` blocks are still hashed, so the caller would get PH_SUCCESS with a
+     * silently partial hash -- the anti-pattern the setter's rejection prevents. Nothing past
+     * this point can fail, so the caller's digest is written only on success. */
+    ph_digest_begin(out_digest, ctx, PH_ALGO_BMH);
     size_t max_bits = out_digest->size * 8u;
     for (size_t i = 0; i < total_pixels && i < max_bits; i++) {
         if (block_data[i] >= median) {

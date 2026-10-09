@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   failed load does: the context holds no image and a hash returns `PH_ERR_EMPTY_IMAGE`.
   An empty file already behaved this way (`PH_ERR_IO`); an empty buffer now matches it.
   `ph_load_from_pixels()` is unchanged and keeps the previous image on any error.
+- **mHash, BMH and Radial leave the digest untouched when they fail.** On a failed
+  allocation (and, for mHash, a kernel that does not build) `ph_compute_mhash()`,
+  `ph_compute_bmh()` and `ph_compute_radial_hash()` returned the error with the caller's
+  digest already cleared. They write it only on success, as every other hash does, and the
+  header says so for all three and for `ph_compute_digest()`.
 
 ## [2.0.0] - 2026-10-07
 

@@ -130,16 +130,13 @@ thread that uses the context, not alongside a load on another.
 
 ## What a failure leaves behind
 
-An output is read only after a `PH_SUCCESS`. Most calls leave their outputs as they were
-when they fail, and the ones that state it in the API reference, such as the color hashes
-and the functions that read a hash back from text, promise it. Three write before they can
-tell they will fail:
+An output is read only after a `PH_SUCCESS`. A call that fails leaves its outputs as they
+were, and the API reference states it for every hash and for the functions that read a
+hash back from text. Two calls write several results and answer for them differently:
 
 - [`ph_compute_multi()`](../api/hash64.md#ph_compute_multi) stops at the first algorithm
   that fails, and the slots of those before it already hold their hashes. Nothing in the
   array says how far it got, so on a failure the whole array is unusable.
-- mHash, BMH and Radial clear the digest before they allocate their working memory, so
-  when that allocation fails the digest is zeroed rather than left as it was.
 - A batch item that fails has every hash slot zeroed and its code in `status`.
 
 A setter that refuses a value leaves the configuration as it was: no value is clamped

@@ -187,8 +187,6 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
     const int block = n / PH_MH_GRID;
     const size_t npix = ph_size(n) * ph_size(n);
 
-    ph_digest_begin(out_digest, ctx, PH_ALGO_MHASH);
-
     uint8_t *gray = ph_get_gray(ctx);
     if (!gray) {
         return PH_ERR_ALLOCATION_FAILED;
@@ -261,7 +259,9 @@ PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *out_digest) {
     ph_mh_block_sums(norm, n, block, kernel, side, work, blocks);
 
     /* Nine bits per 3x3 window of the block grid, thresholded against the window's own
-     * mean, packed most-significant bit first as the source packs them. */
+     * mean, packed most-significant bit first as the source packs them. Nothing past this
+     * point can fail, so the caller's digest is written only on success. */
+    ph_digest_begin(out_digest, ctx, PH_ALGO_MHASH);
     int bit = 0;
     for (int wy = 0; wy < PH_MH_WINDOWS_PER_AXIS; wy++) {
         for (int wx = 0; wx < PH_MH_WINDOWS_PER_AXIS; wx++) {

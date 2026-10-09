@@ -1205,7 +1205,7 @@ typedef enum {
  * @param ctx The context, with an image loaded.
  * @param algo The algorithm.
  * @param[out] out_digest Receives the digest; its size and kind are what ph_digest_info()
- *                        reports for this context and algorithm.
+ *                        reports for this context and algorithm. Untouched on error.
  * @return As the algorithm's ph_compute_* function -- @c PH_SUCCESS,
  *         @c PH_ERR_INVALID_ARGUMENT, @c PH_ERR_EMPTY_IMAGE, @c PH_ERR_REQUIRES_COLOR or
  *         @c PH_ERR_ALLOCATION_FAILED -- and @c PH_ERR_INVALID_ARGUMENT for an @p algo that
@@ -1259,7 +1259,7 @@ PH_NODISCARD PH_API ph_error_t ph_algorithm_from_name(const char *name, ph_algor
 /**
  * @brief Computes Block Mean Hash (BMH). Returns a `block_size * block_size`-bit digest
  * (256 bits / 32 bytes at the default block_size 16; see ph_context_set_block_params()).
- * See docs/theory/bmh.md.
+ * See docs/theory/bmh.md. On an error @p out_digest is left untouched.
  * @return @c PH_SUCCESS, @c PH_ERR_INVALID_ARGUMENT for a NULL argument,
  *         @c PH_ERR_EMPTY_IMAGE if no image is loaded, or @c PH_ERR_ALLOCATION_FAILED.
  * @ingroup digests
@@ -1327,6 +1327,7 @@ PH_NODISCARD PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_diges
  * The digest is a bit vector: compare it with ph_hamming_distance_digest() or
  * ph_similarity_digest(). See docs/theory/mhash.md.
  *
+ * On an error @p out_digest is left untouched.
  * @return @c PH_SUCCESS, @c PH_ERR_INVALID_ARGUMENT for a NULL argument,
  *         @c PH_ERR_EMPTY_IMAGE if no image is loaded, or @c PH_ERR_ALLOCATION_FAILED.
  * @ingroup digests
@@ -1351,6 +1352,8 @@ PH_NODISCARD PH_API ph_error_t ph_compute_mhash(ph_context_t *ctx, ph_digest_t *
  *          bytes are quantized coefficients, not bits or a point in space. The digest
  *          tolerates a rotation of a few degrees and an exact half turn, not an arbitrary
  *          one. See docs/theory/radial.md.
+ *
+ * On an error @p out_digest is left untouched.
  * @return @c PH_SUCCESS (the all-zero digest included), @c PH_ERR_INVALID_ARGUMENT for a
  *         NULL argument, @c PH_ERR_EMPTY_IMAGE if no image is loaded, or
  *         @c PH_ERR_ALLOCATION_FAILED.

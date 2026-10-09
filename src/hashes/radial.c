@@ -184,10 +184,6 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     }
     /* LCOV_EXCL_STOP */
 
-    /* Quantised DCT coefficients, PH_RADIAL_COEFFS of them whatever the angle count:
-     * compare with ph_radial_similarity(). */
-    ph_digest_begin(out_digest, ctx, PH_ALGO_RADIAL);
-
     size_t img_size = ph_size(ctx->image.width) * ph_size(ctx->image.height);
 
     uint8_t *gray = ph_get_gray(ctx);
@@ -263,6 +259,7 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
         spread_sq <= PH_RADIAL_MIN_RELATIVE_SPREAD * mean_v * mean_v) {
         ph_arena_release(ctx, arena_mark);
         free(blurred);
+        ph_digest_begin(out_digest, ctx, PH_ALGO_RADIAL);
         return PH_SUCCESS;
     }
     double spread = sqrt(spread_sq);
@@ -282,6 +279,11 @@ PH_API ph_error_t ph_compute_radial_hash(ph_context_t *ctx, ph_digest_t *out_dig
     if (err != PH_SUCCESS) {
         return err;
     }
+
+    /* Quantised DCT coefficients, PH_RADIAL_COEFFS of them whatever the angle count:
+     * compare with ph_radial_similarity(). Nothing past this point can fail, so the
+     * caller's digest is written only on success. */
+    ph_digest_begin(out_digest, ctx, PH_ALGO_RADIAL);
 
     /* Quantise as pHash does: affine map from [min, max] over the 40 coefficients onto
      * 0..255. */
