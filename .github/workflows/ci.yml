@@ -130,6 +130,65 @@ jobs:
         path: build/api-docs/html/
         retention-days: 14
 
+  # The documentation site, built as `make site` builds it: scripts/site.sh, strict, so a
+  # broken link or anchor, a page missing from the navigation, an included file that does
+  # not exist or a figure whose stages disagree with the library fails the job. The script
+  # is the only way in: zensical.toml is the configuration `zensical serve` reads, and the
+  # strict build runs on a copy of it that the script writes.
+  #
+  # Python 3.12, the oldest the site supports, from setup-python: the lock in
+  # scripts/site-requirements.txt is compiled for every platform from 3.12 on, and the
+  # script installs it with pip and --require-hashes. The photo corpus is fetched first,
+  # in a step of its own that fails unless every photograph in the manifest arrives and
+  # matches its digest (it comes from a fixed commit of libphash-site-corpus, one archive);
+  # a local build without a network goes on with fewer, and the site CI builds never does.
+  # The measurements are kept in the Actions cache only to save time: each one in
+  # build/site-cache/ is keyed on what decides it -- the library, the tool, the corpus
+  # and, for a time, the machine -- so a change to the library measures everything again.
+  site:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - uses: ./.github/actions/setup-build
+      with:
+        ccache: 'true'
+        apt-packages: cmake nasm
+
+    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+      with:
+        python-version: '3.12'
+        cache: pip
+        cache-dependency-path: scripts/site-requirements.txt
+
+    - name: Install Doxygen (pinned)
+      run: |
+        ./scripts/install_doxygen.sh "$RUNNER_TEMP/doxygen"
+        echo "$RUNNER_TEMP/doxygen/bin" >> "$GITHUB_PATH"
+
+    - name: Fetch the photo corpus (every photograph, or fail)
+      run: python3 tools/site/fetch_corpus.py fetch --strict >/dev/null
+
+    - name: Restore the measurements
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: build/site-cache
+        key: site-measurements-${{ runner.arch }}-${{ github.sha }}
+        restore-keys: site-measurements-${{ runner.arch }}-
+
+    - name: Documentation site (make site)
+      run: ./scripts/site.sh
+
+    - name: Upload the site
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: site-html
+        path: build/site/
+        retention-days: 14
+
   # Full vendored build (all bundled decoders) across the platforms/arches we
   # actually ship for. PHASH_STRICT_DEPS=ON turns a silent decoder fallback
   # (e.g. a vendored submodule not checked out) into a hard configure failure, so a CI green

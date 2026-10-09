@@ -147,5 +147,8 @@ corpus cannot support: how an algorithm behaves on photographs.
 
 It is the site's, not the tests'. No test reads it, and the build of the library never
 downloads it; only the site's build does, once, into a cache outside the repository,
-checking each file against its digest. The tests keep every property of the synthetic
+checking each file against its digest. It downloads them from
+[a copy of the corpus](https://github.com/gudoshnikovn/libphash-site-corpus) at a fixed
+commit rather than from Commons, whose renditions carry each file's metadata and change
+their bytes when a description is edited. The tests keep every property of the synthetic
 corpus above, and the site's charts carry the name of the corpus each was drawn from.

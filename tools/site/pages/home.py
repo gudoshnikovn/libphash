@@ -36,10 +36,11 @@ OTHER = "Young tabby cat keeping watch.jpg"
 
 def _other_photo():
     """The unrelated photograph's local path, or None when the corpus is not available."""
+    paths, _ = fetch_corpus.fetch()
     for row in fetch_corpus.read_manifest():
         if row["file"] == OTHER:
             path = os.path.join(fetch_corpus.cache_dir(), fetch_corpus.local_name(row))
-            return path if os.path.exists(path) else None
+            return path if path in paths else None
     raise SystemExit(f"home: {OTHER} is not in the photo corpus manifest")
 
 

@@ -28,7 +28,7 @@ scripts/site.sh
 | Path | What it holds |
 |---|---|
 | `render.py` | The command line: every page's figures, then the shared charts (`--algo ahash,…` for some pages only) |
-| `fetch_corpus.py`, `corpus_photos.tsv` | The photo corpus: its manifest, the download into `~/.cache/libphash-site/` checked against each file's SHA-256, the attribution page (`fetch_corpus.py --help`) |
+| `fetch_corpus.py`, `corpus_photos.tsv` | The photo corpus: its manifest, the download into `~/.cache/libphash-site/` from the copy at a fixed commit of [libphash-site-corpus](https://github.com/gudoshnikovn/libphash-site-corpus), checked against each file's SHA-256, the attribution page (`fetch_corpus.py --help`) |
 | `stages/` | `site_stages`, the measuring tool in C, linked against the library like the tests |
 | `measure/` | Running `site_stages`, the edits, the corpora, separability, the times, and the cache |
 | `draw/` | The two themes, the panels several pages draw, the robustness, corpus and edit charts, the Markdown tables |

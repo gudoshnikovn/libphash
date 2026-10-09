@@ -7,11 +7,20 @@ author, and the page on Commons where both can be checked. This script downloads
 into a cache outside the repository and checks every file against its digest, so the
 charts are drawn from exactly the bytes the manifest names.
 
-    fetch_corpus.py fetch [--cache DIR]
+The files come from a copy of the corpus, a fixed commit of the libphash-site-corpus
+repository that holds every photograph of the manifest under its SHA-256 (MIRROR), and
+from Commons only for a photograph the copy lacks. Commons alone would not do: a rendition
+carries the file's metadata, so an edit to a file's description on Commons changes the
+bytes of its rendition while its pixels stay the same, and the download no longer matches
+the manifest. A commit, once made, never changes.
+
+    fetch_corpus.py fetch [--cache DIR] [--strict]
         Downloads what the cache lacks and prints the paths of the verified files. A
         file that cannot be downloaded, or whose bytes differ from the manifest, is left
         out with a warning: the charts say how many photographs they were drawn from, so
-        a smaller corpus is visible on the page rather than silently different.
+        a smaller corpus is visible on the page rather than silently different. With
+        --strict a missing file fails the command instead; CI fetches the corpus this
+        way before it builds the site, so the site it builds has every photograph.
 
     fetch_corpus.py page --out docs/project/corpus.md
         Writes the site's attribution page from the manifest: every photograph, with a
@@ -21,6 +30,11 @@ charts are drawn from exactly the bytes the manifest names.
         Rebuilds the manifest from Commons (below). Run by hand, never by the build:
         the selection is a decision, recorded in the repository, not something a build
         repeats.
+
+    fetch_corpus.py mirror --out DIR
+        Writes the copy of the corpus into DIR (photos/<sha256>.<ext> and the manifest)
+        from the verified files of the cache. After a new manifest, this is committed to
+        libphash-site-corpus and MIRROR names the new commit.
 
 The selection: files that Commons' reviewers rated Quality images, whose license, read
 from each file's own metadata, is CC0 or public domain, spread over the subjects in
@@ -39,6 +53,7 @@ import os
 import random
 import re
 import sys
+import tarfile
 import time
 import urllib.error
 import urllib.parse
@@ -76,6 +91,14 @@ SEED = 20261007
 EXCLUDE = {"File:Anterior view of human male, retouched.jpg"}
 MAX_PER_AUTHOR = 3
 LICENSES = {"cc0", "pd"}  # extmetadata "License" codes accepted
+# The copy of the corpus every build downloads from: the commit of libphash-site-corpus
+# that holds this manifest's photographs.
+MIRROR_REPO = "gudoshnikovn/libphash-site-corpus"
+MIRROR_COMMIT = "c625fbedd46f3303c3f4278d6e20969de369b522"
+MIRROR = f"https://raw.githubusercontent.com/{MIRROR_REPO}/{MIRROR_COMMIT}/photos/"
+# The whole commit as one archive: a cache missing most of the corpus downloads this
+# instead of each file in turn.
+MIRROR_ARCHIVE = f"https://codeload.github.com/{MIRROR_REPO}/tar.gz/{MIRROR_COMMIT}"
 
 
 def cache_dir(override=None):
@@ -103,48 +126,104 @@ def read_manifest():
     return rows
 
 
+def extension(row):
+    return os.path.splitext(urllib.parse.urlsplit(row["url"]).path)[1].lower()
+
+
 def local_name(row):
-    return row["sha256"][:16] + os.path.splitext(row["url"])[1].lower()
+    return row["sha256"][:16] + extension(row)
 
 
 # --8<-- [start:fetch]
+def download(row, unreachable):
+    """The photograph's bytes as the manifest names them, from the copy of the corpus or
+    else from Commons; (None, why) when neither has them. A source that cannot be reached
+    is added to `unreachable` and not tried again."""
+    why = "no source"
+    for source in (MIRROR + row["sha256"] + extension(row), row["url"]):
+        host = urllib.parse.urlsplit(source).netloc
+        if host in unreachable:
+            continue
+        try:
+            data = get(source)
+        except urllib.error.HTTPError as e:
+            why = f"{host}: {e}"
+            continue
+        except OSError as e:
+            unreachable[host] = str(e)
+            why = f"cannot reach {host} ({e})"
+            continue
+        finally:
+            if source == row["url"]:
+                time.sleep(0.2)  # Commons asks clients to pace their requests
+        if hashlib.sha256(data).hexdigest() == row["sha256"]:
+            return data, None
+        why = f"{host}: the download differs from the manifest"
+    return None, why
+
+
+def unpack_archive(rows, d):
+    """Writes the rows' photographs that the copy's archive holds, verified, into d.
+    An archive that cannot be downloaded or read writes nothing; the files are then
+    downloaded one by one."""
+    wanted = {row["sha256"] + extension(row): row for row in rows}
+    try:
+        req = urllib.request.Request(MIRROR_ARCHIVE, headers={"User-Agent": USER_AGENT})
+        with urllib.request.urlopen(req, timeout=300) as r, \
+                tarfile.open(fileobj=r, mode="r|gz") as tar:
+            for member in tar:
+                row = wanted.get(os.path.basename(member.name))
+                if row is None or not member.isfile():
+                    continue
+                data = tar.extractfile(member).read()
+                if hashlib.sha256(data).hexdigest() != row["sha256"]:
+                    continue
+                path = os.path.join(d, local_name(row))
+                with open(path + ".part", "wb") as f:
+                    f.write(data)
+                os.replace(path + ".part", path)
+    except (OSError, tarfile.TarError) as e:
+        print(f"warning: photo corpus: the archive of the copy: {e}", file=sys.stderr)
+
+
+_fetched = {}
+
+
 def fetch(cache=None):
     """The verified local paths of the manifest's photographs, downloading what is missing.
-    Returns (paths, problems); a photograph that is unavailable is a problem, not an error."""
+    Returns (paths, problems); a photograph that is unavailable is a problem, not an error.
+    One process downloads once: a second call returns the first one's answer."""
     d = cache_dir(cache)
+    if d in _fetched:
+        return _fetched[d]
     os.makedirs(d, exist_ok=True)
-    paths, problems, offline = [], [], 0
-    for row in read_manifest():
+
+    def cached(row):
         path = os.path.join(d, local_name(row))
         if not os.path.exists(path):
-            if offline:
-                offline += 1
-                continue
-            try:
-                data = get(row["url"])
-            except urllib.error.HTTPError as e:
-                problems.append(f"{row['file']}: {e}")
-                continue
-            except OSError as e:
-                # No network: nothing more will download, so the rest is not tried.
-                problems.append(f"cannot reach Commons ({e})")
-                offline = 1
-                continue
-            if hashlib.sha256(data).hexdigest() != row["sha256"]:
-                problems.append(f"{row['file']}: the download differs from the manifest")
-                continue
-            with open(path + ".part", "wb") as f:
-                f.write(data)
-            os.replace(path + ".part", path)
-            time.sleep(0.2)  # Commons asks clients to pace their requests
-        else:
-            with open(path, "rb") as f:
-                if hashlib.sha256(f.read()).hexdigest() != row["sha256"]:
-                    problems.append(f"{row['file']}: the cached copy differs from the manifest")
-                    continue
+            return False
+        with open(path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest() == row["sha256"]
+
+    rows = read_manifest()
+    missing = [row for row in rows if not cached(row)]
+    if len(missing) > 10:
+        unpack_archive(missing, d)
+    paths, problems, unreachable = [], [], {}
+    for row in rows:
+        path = os.path.join(d, local_name(row))
+        if row not in missing or cached(row):
+            paths.append(path)
+            continue
+        data, why = download(row, unreachable)
+        if data is None:
+            problems.append(f"{row['file']}: {why}")
+            continue
+        with open(path + ".part", "wb") as f:
+            f.write(data)
+        os.replace(path + ".part", path)
         paths.append(path)
-    if offline:
-        problems.append(f"{offline} photographs are neither cached nor downloadable")
+    _fetched[d] = (paths, problems)
     return paths, problems
 # --8<-- [end:fetch]
 
@@ -257,8 +336,9 @@ subjects ({subjects}) so that no one kind of picture dominates, with at most
 
 The files are not part of the repository and not part of the library's tests.
 `tools/site/corpus_photos.tsv` lists them with the SHA-256 of each, and the site's build
-downloads them once into a cache and checks every file against its digest, so the charts
-are drawn from exactly the files listed here.
+downloads them once into a cache, from
+[a copy kept for the site](https://github.com/{mirror}), and checks every file against its
+digest, so the charts are drawn from exactly the files listed here.
 
 | # | File | Subject | Author | License |
 |---|---|---|---|---|
@@ -269,7 +349,7 @@ def write_page(out):
     rows = read_manifest()
     with open(out, "w") as f:
         subjects = sorted({r["subject"] for r in rows} - {"other"})
-        f.write(PAGE_HEAD.format(n=len(rows), per_author=MAX_PER_AUTHOR,
+        f.write(PAGE_HEAD.format(n=len(rows), per_author=MAX_PER_AUTHOR, mirror=MIRROR_REPO,
                                  subjects=", ".join(subjects)))
         for i, r in enumerate(rows, 1):
             name = r["file"].replace("|", "\\|").replace("[", "\\[").replace("]", "\\]")
@@ -279,11 +359,31 @@ def write_page(out):
                     f"{r['license']} |\n")
 
 
+def write_mirror(out):
+    """The copy of the corpus, from the cache: every photograph, verified, under its digest."""
+    paths, problems = fetch()
+    if problems:
+        for msg in problems:
+            print(f"error: {msg}", file=sys.stderr)
+        return 1
+    os.makedirs(os.path.join(out, "photos"), exist_ok=True)
+    for row in read_manifest():
+        with open(os.path.join(cache_dir(), local_name(row)), "rb") as f:
+            data = f.read()
+        with open(os.path.join(out, "photos", row["sha256"] + extension(row)), "wb") as f:
+            f.write(data)
+    with open(MANIFEST, "rb") as src, open(os.path.join(out, "corpus_photos.tsv"), "wb") as dst:
+        dst.write(src.read())
+    return 0
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("command", choices=["fetch", "manifest", "page"])
+    p.add_argument("command", choices=["fetch", "manifest", "page", "mirror"])
     p.add_argument("--cache")
-    p.add_argument("--out", help="page: the Markdown file to write")
+    p.add_argument("--out", help="page: the Markdown file to write; mirror: the directory")
+    p.add_argument("--strict", action="store_true",
+                   help="fetch: fail unless every photograph is available")
     args = p.parse_args()
     if args.command == "manifest":
         build_manifest()
@@ -291,11 +391,13 @@ def main():
     if args.command == "page":
         write_page(args.out)
         return 0
+    if args.command == "mirror":
+        return write_mirror(args.out)
     paths, problems = fetch(args.cache)
     for msg in problems:
         print(f"warning: {msg}", file=sys.stderr)
     print("\n".join(paths))
-    return 0
+    return 1 if args.strict and problems else 0
 
 
 if __name__ == "__main__":

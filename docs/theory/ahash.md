@@ -289,8 +289,8 @@ more.
     distinct originals is compared too, by `site_stages pairs`. Below is the code that
     ran.
 
-    The photographs are downloaded once and checked against the SHA-256 the manifest
-    records for each:
+    The photographs are downloaded once, from a copy of the corpus at a fixed commit, and
+    checked against the SHA-256 the manifest records for each:
 
     ```python title="tools/site/fetch_corpus.py"
     --8<-- "tools/site/fetch_corpus.py:fetch"
