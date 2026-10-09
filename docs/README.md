@@ -16,8 +16,9 @@ Welcome to the internal technical documentation for `libphash`. This directory c
   [`theory/`](theory/perceptual-hashing.md), [`guide/`](guide/quickstart.md) and
   `project/`; the navigation is in `zensical.toml` at the repository root.
 
-- [**Architecture Overview**](architecture.md)
-  System design, module breakdown, and core data structures.
+- [**How libphash works**](guide/how-it-works.md)
+  The path of an image from a file to a hash, what a context holds, and which decoder
+  reads which format.
 - [**Batch Hashing and Threads**](batch.md)
   Hashing many images at once: the worker pool, thread safety, memory and cost per item.
 - [**Development Guide**](development.md)

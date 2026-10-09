@@ -509,11 +509,81 @@ the diff for review. And clang-tidy's `bugprone-misplaced-widening-cast`, in the
 `strict-warnings` job, catches a cast that widens the result of an arithmetic which has
 already overflowed in the narrower type, such as `(uint64_t)(a * b)` on two ints.
 
+## Source map
+
+What the library does, step by step and without the source, is on
+[How libphash works](guide/how-it-works.md). This is where each step lives.
+
+**`src/`, the context and everything around it.**
+
+| File | Holds |
+|---|---|
+| `core.c` | `ph_create()`/`ph_free()`, the error strings and the last-error message, and the three `ph_load_from_*()` entry points: decode, transparency, orientation, in that order |
+| `config.c` | the `ph_context_set_*()` setters, `ph_context_get_gray_weights()`, `ph_context_get_dimensions()`, and the defaults a new context starts from |
+| `arena.c` | the scratch arena the hashes take their working buffers from; the only file that touches its fields |
+| `fileio.c` | a file's bytes from exactly one `open()`, memory-mapped where the platform allows it and read into the heap otherwise; every reason a path cannot be loaded is `PH_ERR_IO` here, before a decoder sees a byte |
+| `loader.c` | `ph_decode_buffer()`, the dispatcher every encoded load goes through: the size limits, the table of decoder backends, the stb_image fallback and the classification of its failures |
+| `compare.c` | the comparison functions and the hex text form of hashes and digests |
+| `batch.c` | `ph_hash_files()`/`ph_hash_buffers()` and their `_ex` forms, the worker pool and the CPU count behind `threads = 0` |
+| `version.c` | `ph_version()`, `ph_version_number()`, `ph_get_build_info()` and the `ph_can_use_*()` queries |
+
+**`src/loaders/`, one file per decoder.** `jpeg.c` (libjpeg-turbo through its libjpeg API),
+`png_libpng.c` (libpng; the Makefile does not build it, as it needs the vendored library),
+`webp.c` (libwebp's simple decode API), each compiled to nothing unless its `PH_USE_*` flag
+is set, and `stb_image_impl.c`, the one translation unit that compiles `vendor/stb_image.h`.
+The table that orders them is `backends[]` in `loader.c`: the native decoders, the test-only
+mock decoder when `PHASH_ENABLE_MOCK_BACKEND` is on, then stb_image.
+
+**`src/image/`, pixel-level steps.**
+
+| File | Holds |
+|---|---|
+| `color.c` | transparency (`ph_resolve_alpha()`), grayscale conversion (NEON on Arm) and its cache (`ph_get_gray()`), gamma |
+| `orient.c` | the EXIF orientation reader for JPEG, PNG and WebP, and the eight-case pixel transform |
+| `resize.c` | the exact area average over the cached 32×32 grid of area sums (`ph_area_downscale()`), and the box and Mitchell filters |
+| `stb_resize_impl.c` | the translation unit that compiles `vendor/stb_image_resize2.h`, behind the box and Mitchell filters |
+| `filters.c` | the σ-parameterized Gaussian blur (mHash, Radial) and histogram equalization (mHash) |
+
+**`src/hashes/`, one file per algorithm** — `ahash.c`, `dhash.c`, `phash.c`, `whash.c`,
+`mhash.c`, `bmh.c`, `radial.c`, `color_histogram.c` (ColorHash), `color_moments.c` — and
+three shared by them: `algorithm.c` (`ph_algorithm_t` as a value, its name, and
+`ph_digest_shape()`, the one place a digest's size and kind are decided), `multi.c`
+(`ph_compute_multi()`) and `common.c` (the median threshold pHash and wHash share). What
+each algorithm computes is on its page under `docs/theory/`; where it comes from, in
+`docs/algorithm-provenance.md`.
+
+**Internal headers.** There is no catch-all header; each subsystem has its own.
+
+| Header | Holds |
+|---|---|
+| `context.h` | `struct ph_context`: the loaded image and its caches, the configuration, the last-error message, the arena |
+| `arena.h` | the arena's interface: scratch blocks, marks and releases |
+| `safety.h` | the decode limits, overflow-checked allocation sizes and the diagnostic message helpers |
+| `bytes.h` | fixed-width integers read from bytes in a stated byte order (container headers, EXIF) |
+| `digest.h` | the checks on a caller's `ph_digest_t` that every comparison shares |
+| `fileio.h` | the file's bytes, from `fileio.c` |
+| `batch.h` | the available CPU count |
+| `loader.h` | the build's `PH_USE_*` flags, `ph_decode_buffer()`, each native decoder's decode function and the backend type `{can_read, decode}` |
+| `image/image.h` | the pixel-level steps of `src/image/` |
+| `hashes/hashes.h` | what the algorithms share, and every algorithm's constants and parameter bounds with their static assertions |
+| `loaders/backends.h` | the format probes (magic bytes, header dimensions) and each native backend's `can_read()` |
+
+**One image, through the code.** `ph_load_from_file()` (`core.c`) clears the context's
+image and takes the file's bytes from `ph_open_file_bytes()` (`fileio.c`);
+`ph_load_from_memory()` starts with the caller's buffer. Both continue in
+`ph_load_encoded_bytes()` (`core.c`): `ph_decode_buffer()` (`loader.c`) checks the limits and
+hands the bytes to the first backend whose `can_read()` claims them, `ph_resolve_alpha()`
+(`image/color.c`) removes the alpha channel, and with auto-orientation on
+`ph_apply_exif_orientation()` (`image/orient.c`) turns the pixels by the tag read from the
+same bytes. A hash such as `ph_compute_phash()` (`hashes/phash.c`) then takes its buffers
+from `ph_get_scratchpad()` (`arena.c`) and its input from `ph_area_downscale()`
+(`image/resize.c`), which computes the grayscale image through `ph_get_gray()`
+(`image/color.c`) on first use and keeps it, with the area sums, until the next load.
+
 ## Headers and includes
 
 - `include/libphash.h` is the whole public API. Everything under `src/` is internal and
-  split by subsystem: `context.h`, `arena.h`, `safety.h`, `bytes.h`, `digest.h`, `fileio.h`,
-  `batch.h`, `loader.h`, `image/image.h`, `hashes/hashes.h`, `loaders/backends.h`.
+  split by subsystem, one header each ([Source map](#source-map)).
 - A file includes the headers whose names it uses, spelled by their path from `src/`
   (`#include "image/image.h"`), never through a sibling's includes and never with `../`.
 - The vendored single-file stb headers are the one exception: they are included by their
@@ -670,8 +740,8 @@ bound is 3 bits.
 ### 3. Fuzzing (`tests/fuzz/fuzz_load.c`)
 
 A libFuzzer harness over the whole untrusted-input path: `ph_load_from_memory()`, which
-reaches every decoder through the same dispatcher as a file load (see
-`docs/architecture.md`), then one hash algorithm on the result. Build it with
+reaches every decoder through the same dispatcher as a file load
+([Source map](#source-map)), then one hash algorithm on the result. Build it with
 `-DPHASH_BUILD_FUZZERS=ON`; this is a configure-time error under GCC, since libFuzzer
 needs compiler-rt, which only Clang ships. The option instruments every C file in the
 build — libphash and the vendored libjpeg-turbo, libpng, zlib-ng and libwebp alike — with
@@ -952,4 +1022,4 @@ copied-in stb headers against upstream.
     - Add image processing kernels to `src/image/`.
     - Add new decoders to `src/loaders/`.
 3.  **Build**: `Makefile` and `CMakeLists.txt` are configured to detect new files in these directories automatically.
-4.  **Documentation**: Update the algorithm's page in `docs/theory/` or `docs/architecture.md` and the function comments in the header (Doxygen style).
+4.  **Documentation**: Update the algorithm's page in `docs/theory/`, the [Source map](#source-map) for a new file, and the function comments in the header (Doxygen style).
