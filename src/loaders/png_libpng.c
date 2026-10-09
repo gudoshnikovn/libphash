@@ -147,15 +147,16 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
      * can free an info struct that may or may not have been created yet; the rest of
      * the function keeps using the plain info_ptr below.
      *
-     * data_for_cleanup/row_ptrs_for_cleanup exist for the same reason, covering
-     * png_read_image() below: it can still longjmp here (e.g. Z_MEM_ERROR from zlib
-     * running out of memory mid-IDAT, translated to png_error() by
-     * png_zstream_error()) after this function's own `data`/`row_ptrs` buffers are
-     * already allocated -- without these, that path would leak both, since the plain
-     * `data`/`row_ptrs` locals below aren't in scope up here and can't be read from
-     * the jump branch regardless (same indeterminate-value rule as info_for_cleanup).
+     * data_for_cleanup/row_ptrs_for_cleanup/decoded_for_cleanup exist for the same
+     * reason, covering png_read_image() and png_read_row() below: they can still longjmp
+     * here (e.g. Z_MEM_ERROR from zlib running out of memory mid-IDAT, translated to
+     * png_error() by png_zstream_error()) after this function's own buffers -- the
+     * image, the row pointers, the decoded rows a gray fold reads -- are already
+     * allocated. Without these, that path would leak them, since the plain locals below
+     * aren't in scope up here and can't be read from the jump branch regardless (same
+     * indeterminate-value rule as info_for_cleanup).
      *
-     * Note the placement of the `volatile` on the two below: `unsigned char *
+     * Note the placement of the `volatile` on the pointers below: `unsigned char *
      * volatile` (volatile pointer) is what's needed, not `volatile unsigned char *`
      * (pointer to volatile data) -- the latter leaves the pointer *variable* itself
      * unprotected across the longjmp, which is exactly the object C11 7.13.2.1p3
@@ -165,6 +166,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     volatile png_infop info_for_cleanup = NULL;
     unsigned char *volatile data_for_cleanup = NULL;
     png_bytep *volatile row_ptrs_for_cleanup = NULL;
+    unsigned char *volatile decoded_for_cleanup = NULL;
 
     if (setjmp(png_jmpbuf(png_ptr))) {
         // png_error_fn already captured the message and/or code (PH_ERR_IMAGE_TOO_LARGE
@@ -172,6 +174,7 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
         // path is libpng's own fatal errors, which are always a malformed bitstream).
         png_infop jumped_info = info_for_cleanup;
         free(row_ptrs_for_cleanup);
+        free(decoded_for_cleanup);
         free(data_for_cleanup);
         if (out_err && *out_err == PH_SUCCESS) {
             *out_err = PH_ERR_CORRUPT_DATA;
@@ -260,6 +263,8 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
 
     size_t rowbytes = png_get_rowbytes(png_ptr, info_ptr);
     int out_channels = (int)(rowbytes / w);
+    /* What this function returns: the decoded samples, or their fold to gray(+alpha). */
+    const int image_channels = fold_to_gray ? out_channels - 2 : out_channels;
 
     size_t alloc_size;
     /* LCOV_EXCL_START -- excluded from coverage: fails only where size_t is 32 bits; run
@@ -275,7 +280,8 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     }
     /* LCOV_EXCL_STOP */
 
-    unsigned char *data = malloc(alloc_size);
+    unsigned char *data = malloc(
+        fold_to_gray ? (alloc_size / ph_size(out_channels)) * ph_size(image_channels) : alloc_size);
     if (!data) {
         if (out_err) {
             *out_err = PH_ERR_ALLOCATION_FAILED;
@@ -286,65 +292,100 @@ unsigned char *ph_decode_png_mem(const unsigned char *buffer, size_t size, int *
     }
     data_for_cleanup = data;
 
-    /* Overflow-checked like its neighbour above. `h` comes straight from the PNG header as a
-     * png_uint_32, so on a 32-bit target sizeof(png_bytep) * h wraps and produces a too-small array
-     * that png_read_image() then writes past. Refuse instead. */
-    size_t row_ptrs_size;
-    /* LCOV_EXCL_START -- excluded from coverage: h is at most PH_MAX_IMAGE_DIMENSION, so
-     * h row pointers fit any size_t. */
-    if (!ph_safe_image_alloc_size(sizeof(png_bytep), h, 1, &row_ptrs_size)) {
-        if (out_err) {
-            *out_err = PH_ERR_IMAGE_TOO_LARGE;
-        }
-        ph_set_err_msg(ectx.err_msg, ectx.err_msg_cap,
-                       "Image exceeds the configured maximum pixel count");
-        free(data);
-        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
-        return NULL;
-    }
-    /* LCOV_EXCL_STOP */
-
-    png_bytep *row_ptrs = malloc(row_ptrs_size);
-    if (!row_ptrs) {
-        if (out_err) {
-            *out_err = PH_ERR_ALLOCATION_FAILED;
-        }
-        ph_set_err_msg(ectx.err_msg, ectx.err_msg_cap, "Memory allocation failed");
-        free(data);
-        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
-        return NULL;
-    }
-    row_ptrs_for_cleanup = row_ptrs;
-
-    for (png_uint_32 i = 0; i < h; i++) {
-        row_ptrs[i] = data + i * rowbytes;
-    }
-
-    png_read_image(png_ptr, row_ptrs);
-    free(row_ptrs);
-    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
-
-    if (fold_to_gray) {
-        /* RGB(A) -> gray(+alpha), in place: each pixel shrinks, so a forward pass never
-         * overwrites a byte it has yet to read. Rows are tightly packed (rowbytes is
-         * w * out_channels for 8-bit samples). */
-        const int gray_channels = out_channels - 2;
-        const size_t num_pixels = (size_t)w * h; /* in size_t: a png_uint_32 product wraps */
-        const size_t in_px = ph_size(out_channels), out_px = ph_size(gray_channels);
-        for (size_t i = 0; i < num_pixels; i++) {
-            const unsigned char *src = data + i * in_px;
-            unsigned char *dst = data + i * out_px;
-            const unsigned char alpha = (out_channels == 4) ? src[3] : 0;
-            /* The weights sum to 128, so the shifted sum is at most 255. */
-            dst[0] =
-                (unsigned char)((PH_GRAY_R * src[0] + PH_GRAY_G * src[1] + PH_GRAY_B * src[2]) >>
-                                7);
-            if (out_channels == 4) {
-                dst[1] = alpha;
+    if (fold_to_gray && png_get_interlace_type(png_ptr, info_ptr) == PNG_INTERLACE_NONE) {
+        /* A colour image asked for as gray: each decoded row is folded straight into the
+         * image, so the RGB(A) never exists whole -- one row of it instead of three or four
+         * bytes a pixel -- and the fold reads one buffer and writes another, which is what
+         * lets it run vectorised. */
+        unsigned char *row = malloc(rowbytes);
+        if (!row) {
+            if (out_err) {
+                *out_err = PH_ERR_ALLOCATION_FAILED;
             }
+            ph_set_err_msg(ectx.err_msg, ectx.err_msg_cap, "Memory allocation failed");
+            free(data);
+            png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+            return NULL;
         }
-        out_channels = gray_channels;
+        decoded_for_cleanup = row;
+        const size_t out_row = (size_t)w * ph_size(image_channels);
+        for (png_uint_32 y = 0; y < h; y++) {
+            png_read_row(png_ptr, row, NULL);
+            ph_fold_to_gray(row, data + y * out_row, w, out_channels);
+        }
+        decoded_for_cleanup = NULL;
+        free(row);
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+    } else {
+        /* The whole image at once: every image asked for in its own channels, and an
+         * interlaced colour one asked for as gray, whose rows arrive spread over seven
+         * passes and are folded once the last has landed. */
+        unsigned char *decoded = data;
+        if (fold_to_gray) {
+            decoded = malloc(alloc_size);
+            if (!decoded) {
+                if (out_err) {
+                    *out_err = PH_ERR_ALLOCATION_FAILED;
+                }
+                ph_set_err_msg(ectx.err_msg, ectx.err_msg_cap, "Memory allocation failed");
+                free(data);
+                png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+                return NULL;
+            }
+            decoded_for_cleanup = decoded;
+        }
+
+        /* Overflow-checked like its neighbour above. `h` comes straight from the PNG header
+         * as a png_uint_32, so on a 32-bit target sizeof(png_bytep) * h wraps and produces a
+         * too-small array that png_read_image() then writes past. Refuse instead. */
+        size_t row_ptrs_size;
+        /* LCOV_EXCL_START -- excluded from coverage: h is at most PH_MAX_IMAGE_DIMENSION,
+         * so h row pointers fit any size_t. */
+        if (!ph_safe_image_alloc_size(sizeof(png_bytep), h, 1, &row_ptrs_size)) {
+            if (out_err) {
+                *out_err = PH_ERR_IMAGE_TOO_LARGE;
+            }
+            ph_set_err_msg(ectx.err_msg, ectx.err_msg_cap,
+                           "Image exceeds the configured maximum pixel count");
+            if (decoded != data) {
+                free(decoded);
+            }
+            free(data);
+            png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+            return NULL;
+        }
+        /* LCOV_EXCL_STOP */
+
+        png_bytep *row_ptrs = malloc(row_ptrs_size);
+        if (!row_ptrs) {
+            if (out_err) {
+                *out_err = PH_ERR_ALLOCATION_FAILED;
+            }
+            ph_set_err_msg(ectx.err_msg, ectx.err_msg_cap, "Memory allocation failed");
+            if (decoded != data) {
+                free(decoded);
+            }
+            free(data);
+            png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+            return NULL;
+        }
+        row_ptrs_for_cleanup = row_ptrs;
+
+        for (png_uint_32 i = 0; i < h; i++) {
+            row_ptrs[i] = decoded + i * rowbytes;
+        }
+
+        png_read_image(png_ptr, row_ptrs);
+        free(row_ptrs);
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+
+        if (fold_to_gray) {
+            /* in size_t: a png_uint_32 product wraps */
+            ph_fold_to_gray(decoded, data, (size_t)w * h, out_channels);
+            free(decoded);
+        }
     }
+    out_channels = image_channels;
 
     /* Both within PH_MAX_IMAGE_DIMENSION, checked before the decode. */
     *width = (int)w;

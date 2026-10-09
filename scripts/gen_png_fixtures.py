@@ -32,6 +32,24 @@ def png(width, height, bit_depth, color_type, rows, extra=b""):
             chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
 
 
+# Adam7: (x0, y0, dx, dy) of each of the seven passes.
+ADAM7 = [(0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2),
+         (0, 1, 1, 2)]
+
+
+def png_interlaced(width, height, bit_depth, color_type, pixel):
+    """An Adam7-interlaced PNG of 8-bit samples; pixel(x, y) returns the samples' bytes."""
+    ihdr = struct.pack(">IIBBBBB", width, height, bit_depth, color_type, 0, 0, 1)
+    raw = b""
+    for x0, y0, dx, dy in ADAM7:
+        for y in range(y0, height, dy):
+            row = b"".join(pixel(x, y) for x in range(x0, width, dx))
+            if row:
+                raw += b"\x00" + row
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) +
+            chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+
+
 def pack_bits(values, depth):
     """Packs samples of `depth` bits (1, 2 or 4) MSB first, padding the last byte."""
     out, acc, n = bytearray(), 0, 0
@@ -100,6 +118,14 @@ def main():
                            [bytes(c for x in xs
                                   for c in rgb8(x, y) + ((255,) if x % 2 == 0 else (0,)))
                             for y in xs]))
+
+    # The RGB and RGBA pictures again, Adam7-interlaced: the same pixels, whose rows a
+    # decoder receives over seven passes.
+    write("rgb8_interlaced.png",
+          png_interlaced(SIDE, SIDE, 8, 2, lambda x, y: bytes(rgb8(x, y))))
+    write("rgba8_interlaced.png",
+          png_interlaced(SIDE, SIDE, 8, 6,
+                         lambda x, y: bytes(rgb8(x, y) + ((255,) if x % 2 == 0 else (0,)))))
 
     # Broken PNGs.
     good = open(os.path.join(OUT, "rgb8.png"), "rb").read()

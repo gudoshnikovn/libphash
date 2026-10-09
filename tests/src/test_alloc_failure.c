@@ -561,6 +561,39 @@ static void scen_load_gray_as_colour(int recording) {
     ph_free(ctx);
 }
 
+/* A colour PNG loaded as grayscale: the decoder folds its RGB(A) to gray, row by row for a
+ * plain PNG and after the last pass for an interlaced one, each with its own buffers. A
+ * load that succeeds under an injected failure gives the reference aHash. */
+static uint64_t g_colour_as_gray_ahash[2];
+
+static void load_colour_as_gray(int recording, int which, const char *path) {
+    ph_context_t *ctx = NULL;
+    if (ph_create(&ctx) != PH_SUCCESS) {
+        return;
+    }
+    ASSERT_OK(ph_context_set_load_grayscale(ctx, 1));
+    ph_error_t err = ph_load_from_file(ctx, path);
+    if (check("ph_load_from_file(colour PNG as grey)", err, ALLOW_ALLOC)) {
+        ph_shim_disarm();
+        uint64_t ahash = 0;
+        ASSERT_OK(ph_compute_ahash(ctx, &ahash));
+        if (recording) {
+            g_colour_as_gray_ahash[which] = ahash;
+        } else if (ahash != g_colour_as_gray_ahash[which]) {
+            defect("the colour-as-grey load reported success but the image hashes differently");
+        }
+    } else if (ph_is_loaded(ctx)) {
+        defect("the colour-as-grey load failed but the context reports an image is loaded");
+    }
+    ph_free(ctx);
+}
+
+static void scen_load_colour_as_gray(int recording) { load_colour_as_gray(recording, 0, PNG_PATH); }
+
+static void scen_load_interlaced_as_gray(int recording) {
+    load_colour_as_gray(recording, 1, TEST_DATA_DIR "/png/rgba8_interlaced.png");
+}
+
 /* A grey PGM, which stb_image decodes in every build. */
 static const uint8_t pgm[] = "P5\n4 3\n255\n\x10\x20\x30\x40\x50\x60\x70\x80\x90\xa0\xb0\xc0";
 
@@ -724,6 +757,8 @@ static const scenario_t SCENARIOS[] = {
     {"load_from_pixels", scen_load_pixels},
     {"load, grey PNG as colour", scen_load_gray_as_colour},
     {"load, grey PGM as colour", scen_load_pgm_as_colour},
+    {"load, colour PNG as grey", scen_load_colour_as_gray},
+    {"load, interlaced as grey", scen_load_interlaced_as_gray},
     {"load, decode scale 1/2", scen_load_scaled},
     {"ph_hash_buffers, sequential", scen_batch_buffers},
     {"ph_hash_files, sequential", scen_batch_files},

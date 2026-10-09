@@ -186,6 +186,61 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
     grayscale_scalar_range(s, d, num_pixels - i, channels, r_w, g_w, b_w);
 }
 
+/* One loop per pixel size, so the stride is a constant and the compiler vectorises it
+ * where no explicit SIMD path below does. */
+static void fold_scalar_range(const uint8_t *restrict s, uint8_t *restrict d, size_t count,
+                              int channels) {
+    if (channels == 3) {
+        for (size_t i = 0; i < count; i++) {
+            d[i] = (uint8_t)((PH_GRAY_R * s[3 * i] + PH_GRAY_G * s[3 * i + 1] +
+                              PH_GRAY_B * s[3 * i + 2]) >>
+                             PH_GRAY_WEIGHT_SHIFT);
+        }
+    } else {
+        for (size_t i = 0; i < count; i++) {
+            d[2 * i] = (uint8_t)((PH_GRAY_R * s[4 * i] + PH_GRAY_G * s[4 * i + 1] +
+                                  PH_GRAY_B * s[4 * i + 2]) >>
+                                 PH_GRAY_WEIGHT_SHIFT);
+            d[2 * i + 1] = s[4 * i + 3];
+        }
+    }
+}
+
+void ph_fold_to_gray_scalar(const uint8_t *restrict src, uint8_t *restrict dst, size_t num_pixels,
+                            int channels) {
+    fold_scalar_range(src, dst, num_pixels, channels);
+}
+
+void ph_fold_to_gray(const uint8_t *restrict src, uint8_t *restrict dst, size_t num_pixels,
+                     int channels) {
+    size_t i = 0;
+#if defined(__ARM_NEON)
+    const uint8x8_t r_weight = vdup_n_u8(PH_GRAY_R);
+    const uint8x8_t g_weight = vdup_n_u8(PH_GRAY_G);
+    const uint8x8_t b_weight = vdup_n_u8(PH_GRAY_B);
+    if (channels == 3) {
+        for (; i + 8 <= num_pixels; i += 8) {
+            uint8x8x3_t rgb = vld3_u8(src + 3 * i);
+            uint16x8_t gray = vmull_u8(rgb.val[0], r_weight);
+            gray = vmlal_u8(gray, rgb.val[1], g_weight);
+            gray = vmlal_u8(gray, rgb.val[2], b_weight);
+            vst1_u8(dst + i, vshrn_n_u16(gray, PH_GRAY_WEIGHT_SHIFT));
+        }
+    } else {
+        for (; i + 8 <= num_pixels; i += 8) {
+            uint8x8x4_t rgba = vld4_u8(src + 4 * i);
+            uint16x8_t gray = vmull_u8(rgba.val[0], r_weight);
+            gray = vmlal_u8(gray, rgba.val[1], g_weight);
+            gray = vmlal_u8(gray, rgba.val[2], b_weight);
+            uint8x8x2_t ga = {{vshrn_n_u16(gray, PH_GRAY_WEIGHT_SHIFT), rgba.val[3]}};
+            vst2_u8(dst + 2 * i, ga);
+        }
+    }
+#endif
+    const size_t out_px = channels == 3 ? 1 : 2;
+    fold_scalar_range(src + i * ph_size(channels), dst + i * out_px, num_pixels - i, channels);
+}
+
 /* Applied from exactly one place: ph_compute_radial_hash() (src/hashes/radial.c).
  * The setting lives on the context and reads as general preprocessing, but no other
  * algorithm touches it -- see the warning on ph_context_set_gamma().

@@ -20,6 +20,18 @@ void ph_to_grayscale(const ph_context_t *ctx, const uint8_t *src, int w, int h, 
 void ph_to_grayscale_scalar(const ph_context_t *ctx, const uint8_t *src, int w, int h, int channels,
                             uint8_t *dst);
 
+/* A decoder's grayscale: 8-bit RGB (3 channels) to gray, or RGBA (4) to gray + alpha, with
+ * the default weights (PH_GRAY_R/G/B) whatever the context's -- the fold the native
+ * decoders without a grayscale output of their own apply, so every backend's gray is the
+ * same bytes. `src` and `dst` must not overlap. */
+void ph_fold_to_gray(const uint8_t *restrict src, uint8_t *restrict dst, size_t num_pixels,
+                     int channels);
+
+/* Same contract as ph_fold_to_gray(), always the scalar path; for
+ * tests/src/test_simd_equivalence.c only. */
+void ph_fold_to_gray_scalar(const uint8_t *restrict src, uint8_t *restrict dst, size_t num_pixels,
+                            int channels);
+
 /* Removes the alpha channel of a freshly decoded or copied image, in place: 4 channels
  * (RGBA) become 3, 2 (gray + alpha) become 1; 1 and 3 are left alone. Every mode but
  * PH_ALPHA_IGNORE composites onto its background, per channel,

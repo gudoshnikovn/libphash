@@ -176,7 +176,7 @@ WebP is loaded in color whatever the setting.
 
 The saving is a part of the load, not a multiple of it: the decoding of the compressed
 data stays.[^cost] It is worth taking for a JPEG when every hash you compute is a
-grayscale one; a PNG loads more slowly as grayscale than in color
+grayscale one; on a PNG it saves memory, not time
 ([Decoding by format](performance.md#decoding-by-format)). Two things come with it:
 
 - **ColorHash and ColorMoments refuse the image** with

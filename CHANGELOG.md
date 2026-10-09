@@ -31,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   directory`, `file is empty`) and kept only the path. The message holds the whole path,
   up to the longest the system opens (4096 bytes), and the reason after it; a longer path
   keeps its start and its end around `...`.
+- **Loading a PNG as grayscale costs what loading it in color does.** With
+  `ph_context_set_load_grayscale()` on, a color PNG was decoded whole to RGB(A) and folded
+  to gray in a scalar pass, which made the load about 10 % slower than in color (117.7
+  against 105.6 ms for 20 megapixels on an Apple M3 Pro). Each row is folded as it is
+  decoded, vectorized: 107.3 against 104.7 ms, the difference being the conversion the
+  hash would otherwise make, and the RGB(A) is held one row at a time instead of whole.
+  The gray pixels are the same bytes.
 
 ## [2.0.0] - 2026-10-07
 

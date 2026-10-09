@@ -65,16 +65,17 @@ Which hash to choose for its cost and what it detects is on
 The same photograph decodes at very different speeds as JPEG, PNG and WebP, and asking for
 grayscale changes the load in a different way for each:
 
-![Three panels, JPEG, PNG and WebP, each with the time to load the photograph in color and as grayscale against megapixels on logarithmic axes: JPEG is the fastest and its grayscale load a little faster than its color load; PNG is about twice JPEG at the largest size, its grayscale load slower than its color load; WebP is the slowest, its two loads equal](../assets/generated/performance/formats.light.svg#only-light)
-![Three panels, JPEG, PNG and WebP, each with the time to load the photograph in color and as grayscale against megapixels on logarithmic axes: JPEG is the fastest and its grayscale load a little faster than its color load; PNG is about twice JPEG at the largest size, its grayscale load slower than its color load; WebP is the slowest, its two loads equal](../assets/generated/performance/formats.dark.svg#only-dark)
+![Three panels, JPEG, PNG and WebP, each with the time to load the photograph in color and as grayscale against megapixels on logarithmic axes: JPEG is the fastest and its grayscale load a little faster than its color load; PNG is about twice JPEG at the largest size, its two loads nearly equal; WebP is the slowest, its two loads equal](../assets/generated/performance/formats.light.svg#only-light)
+![Three panels, JPEG, PNG and WebP, each with the time to load the photograph in color and as grayscale against megapixels on logarithmic axes: JPEG is the fastest and its grayscale load a little faster than its color load; PNG is about twice JPEG at the largest size, its two loads nearly equal; WebP is the slowest, its two loads equal](../assets/generated/performance/formats.dark.svg#only-dark)
 
 - **JPEG is the fastest to decode** at every size. PNG takes about twice as long on the
   largest image and several times as long on the smallest; WebP is the slowest of the
   three on the large images.
 - **A grayscale load saves time on a JPEG only.** libjpeg-turbo skips its color
-  conversion. The PNG decoder decodes in color and converts afterwards, which costs more
-  than loading in color and letting the hash convert. libwebp has no grayscale output, so
-  a WebP is loaded in color either way
+  conversion. The PNG decoder decodes each row in color and folds it to gray as it goes:
+  that takes what the hash's own conversion of a color image would, so the load and the
+  hash together cost the same either way, and the image takes a third of the memory. libwebp has no grayscale output, so a WebP is
+  loaded in color either way
   ([Loading as grayscale](loading.md#loading-as-grayscale)).
 
 The decoders themselves depend on the build. The Full build decodes JPEG with
@@ -119,8 +120,8 @@ it. On a 20-megapixel JPEG, loaded and hashed:
 - **Load as grayscale**, with
   [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale), when
   every hash you compute is a grayscale one: on a JPEG, a part of the load is saved.
-  ColorHash and ColorMoments refuse such an image, and on a PNG it costs more than it
-  saves (above).
+  ColorHash and ColorMoments refuse such an image, and on a PNG it saves memory, not
+  time (above).
 - **Compute several hashes from one load.** The grayscale image and the area grid that
   aHash, pHash, wHash and BMH reduce from are computed by the first hash that needs them
   and kept until the next load

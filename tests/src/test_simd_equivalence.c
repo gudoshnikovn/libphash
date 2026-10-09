@@ -1,20 +1,21 @@
 /*
  * test_simd_equivalence.c
  *
- * Checks color.c's NEON grayscale path against its scalar fallback, and compare.c's
- * word-at-a-time Hamming distance against its byte-at-a-time twin. A mismatch here means
- * two different hashes (or distances) for the same input depending on which
- * architecture ran it -- exactly the class of bug that would otherwise surface as an
- * unexplained golden-hash mismatch.
+ * Checks color.c's NEON grayscale paths -- the context's conversion and the decoders'
+ * fold -- against their scalar fallbacks, and compare.c's word-at-a-time Hamming distance
+ * against its byte-at-a-time twin. A mismatch here means two different hashes (or
+ * distances) for the same input depending on which architecture ran it -- exactly the
+ * class of bug that would otherwise surface as an unexplained golden-hash mismatch.
  *
  * Every function below exists in two forms: the production one and a `_scalar` twin that
  * always takes the plain C path, declared in the src/ header next to it for this purpose
  * only. This test calls both on the same inputs and compares the outputs exactly: both
  * are integer arithmetic.
  *
- * Without NEON (__ARM_NEON undefined) the grayscale pair is literally the same code path,
+ * Without NEON (__ARM_NEON undefined) each grayscale pair is literally the same code path,
  * so that comparison is tautological there -- the test still passes, it just isn't
- * exercising it. The Hamming pair differs on every target. There is no floating-point
+ * exercising it; the fold is checked against its formula on every target. The Hamming
+ * pair differs on every target. There is no floating-point
  * SIMD path in the library to compare: the one place it would matter, pHash's DCT, is a
  * single plain loop on every architecture.
  */
@@ -126,6 +127,57 @@ static void test_grayscale_equivalence(void) {
 }
 
 /* =========================================================
+ * ph_fold_to_gray vs ph_fold_to_gray_scalar, and both against the formula
+ * ========================================================= */
+
+static void run_fold_case(size_t num_pixels, int channels) {
+    const size_t out_px = channels == 3 ? 1 : 2;
+    uint8_t *src = malloc(num_pixels * (size_t)channels + 1);
+    uint8_t *dst_simd = malloc(num_pixels * out_px + 1);
+    uint8_t *dst_scalar = malloc(num_pixels * out_px + 1);
+    ASSERT_PTR_NOT_NULL(src);
+    ASSERT_PTR_NOT_NULL(dst_simd);
+    ASSERT_PTR_NOT_NULL(dst_scalar);
+    fill_random(src, num_pixels * (size_t)channels);
+    memset(dst_simd, 0xAA, num_pixels * out_px + 1);
+    memset(dst_scalar, 0x55, num_pixels * out_px + 1);
+
+    ph_fold_to_gray(src, dst_simd, num_pixels, channels);
+    ph_fold_to_gray_scalar(src, dst_scalar, num_pixels, channels);
+
+    for (size_t i = 0; i < num_pixels; i++) {
+        const uint8_t *p = src + i * (size_t)channels;
+        uint8_t gray = (uint8_t)((PH_GRAY_R * p[0] + PH_GRAY_G * p[1] + PH_GRAY_B * p[2]) >> 7);
+        for (size_t k = 0; k < out_px; k++) {
+            uint8_t want = k == 0 ? gray : p[3];
+            ASSERT_MSG(dst_simd[i * out_px + k] == want && dst_scalar[i * out_px + k] == want,
+                       "ph_fold_to_gray (%zu px, %d ch): pixel %zu byte %zu: simd=%u scalar=%u "
+                       "expected=%u",
+                       num_pixels, channels, i, k, dst_simd[i * out_px + k],
+                       dst_scalar[i * out_px + k], want);
+        }
+    }
+    /* Nothing past the last pixel is written. */
+    ASSERT(dst_simd[num_pixels * out_px] == 0xAA);
+    ASSERT(dst_scalar[num_pixels * out_px] == 0x55);
+
+    free(src);
+    free(dst_simd);
+    free(dst_scalar);
+}
+
+static void test_fold_equivalence(void) {
+    static const size_t counts[] = {0, 1, 7, 8, 9, 15, 16, 17, 31, 32, 33, 64, 65, 100, 1001};
+    for (int channels = 3; channels <= 4; channels++) {
+        for (size_t i = 0; i < sizeof(counts) / sizeof(counts[0]); i++) {
+            g_rng = ph_test_rng(0x4242u + (uint32_t)i * 13u + (uint32_t)channels);
+            run_fold_case(counts[i], channels);
+        }
+    }
+    PASS("test_fold_equivalence");
+}
+
+/* =========================================================
  * ph_hamming_distance_digest vs ph_hamming_distance_digest_scalar
  * ========================================================= */
 
@@ -177,6 +229,7 @@ static void test_hamming_distance_equivalence(void) {
 
 int main(void) {
     test_grayscale_equivalence();
+    test_fold_equivalence();
     test_hamming_distance_equivalence();
 
     printf("\nAll SIMD/scalar equivalence tests passed!\n");
