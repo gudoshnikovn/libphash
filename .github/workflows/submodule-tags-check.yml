@@ -1,16 +1,16 @@
-name: stb freshness check
+name: submodule tags check
 
-# The two copied-in stb headers (vendor/stb_image.h, vendor/stb_image_resize2.h)
-# aren't git submodules and nothings/stb cuts no release tags, so the submodule tags
-# check (submodule-tags-check.yml) can't see when they move on. This runs
-# scripts/check_stb_freshness.sh on a schedule and opens (or updates) a tracking issue
-# when a header is stale, rather than failing the run -- see SECURITY.md's "Vendored
-# dependencies" section for why a bump isn't a drop-in file replacement. A check that
-# cannot run at all does fail the run.
+# The four vendored submodules (.gitmodules) are each pinned to an upstream release tag.
+# Dependabot cannot keep them there -- its gitsubmodule updates follow a branch's newest
+# commit, not its tags -- so this runs scripts/check_submodule_tags.sh on a schedule and
+# opens (or updates) a tracking issue when a submodule is behind upstream's newest
+# release or not on a release tag at all, rather than failing the run: a bump is a
+# reviewed task (SECURITY.md, "Vendored dependencies"). A check that cannot run at all
+# does fail the run.
 
 on:
   schedule:
-    - cron: '0 6 1 * *' # first of the month
+    - cron: '0 6 * * 1' # Mondays
   workflow_dispatch: {}
 
 permissions:
@@ -31,22 +31,23 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Check stb header freshness
+      - name: Check submodule tags
         id: check
-        # 0 fresh, 1 stale (tracking issue below), anything else means the check
-        # could not run -- see the header of scripts/check_stb_freshness.sh.
+        # 0 on the newest release tags, 1 behind or untagged (tracking issue below),
+        # anything else means the check could not run -- see the header of
+        # scripts/check_submodule_tags.sh.
         run: |
           set +e
-          bash scripts/check_stb_freshness.sh > "$RUNNER_TEMP/stb-freshness.txt"
+          bash scripts/check_submodule_tags.sh > "$RUNNER_TEMP/submodule-tags.txt"
           status=$?
           set -e
-          cat "$RUNNER_TEMP/stb-freshness.txt"
+          cat "$RUNNER_TEMP/submodule-tags.txt"
           echo "status=$status" >> "$GITHUB_OUTPUT"
 
       - name: Fail if the check could not run
         if: steps.check.outputs.status != '0' && steps.check.outputs.status != '1'
         run: |
-          echo "::error::scripts/check_stb_freshness.sh exited with ${{ steps.check.outputs.status }}: the freshness check itself is broken"
+          echo "::error::scripts/check_submodule_tags.sh exited with ${{ steps.check.outputs.status }}: the tags check itself is broken"
           exit 1
 
       - name: Open or update tracking issue
@@ -54,22 +55,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          title="vendor/stb_image*.h are behind upstream nothings/stb"
-          body="$RUNNER_TEMP/stb-freshness-issue.md"
+          title="A vendored submodule is not on its upstream's newest release tag"
+          body="$RUNNER_TEMP/submodule-tags-issue.md"
           {
             cat <<'EOF'
-          Detected by the scheduled `stb-freshness-check` workflow.
+          Detected by the scheduled `submodule-tags-check` workflow.
 
           ```
           EOF
-            cat "$RUNNER_TEMP/stb-freshness.txt"
+            cat "$RUNNER_TEMP/submodule-tags.txt"
             cat <<'EOF'
           ```
 
-          Bumping either file means applying its local patch from `vendor/patches/` to
-          the new upstream file and re-verifying it against
-          `tests/src/test_alloc_failure.c` -- the steps are in `vendor/patches/README.md`.
-          It is not a drop-in file replacement.
+          A bump moves the submodule to the new release tag, updates its version in
+          `THIRD-PARTY-NOTICES.md` and runs the whole CI matrix; a decoder change can move
+          decoded pixels, which `tests/src/test_golden_hashes.c` would show.
           EOF
           } > "$body"
           # The label is created on first use, so the workflow does not depend on

@@ -645,7 +645,7 @@ itself cannot move into the action, because a local action is read from the work
 copy. Configure and build steps stay in the jobs, since their arguments are what
 distinguishes one job from another.
 
-Four more workflows, and Dependabot, run on their own trigger rather than per push:
+Five more workflows, and Dependabot, run on their own trigger rather than per push:
 
 - **`.github/workflows/site.yml`** — the documentation site, by hand only (*Run
   workflow*, on the chosen branch): `scripts/site.sh`, strict, so a broken link or
@@ -673,8 +673,13 @@ Four more workflows, and Dependabot, run on their own trigger rather than per pu
   copied-in stb headers (`vendor/stb_image.h`, `vendor/stb_image_resize2.h`) have
   drifted from upstream and opens a tracking issue if so. See `SECURITY.md`'s
   "Vendored dependencies" section.
-- **`.github/dependabot.yml`** — weekly PRs bumping the four vendored submodules
-  (libjpeg-turbo, libpng, libwebp, zlib-ng) and the GitHub Actions themselves.
+- **`.github/workflows/submodule-tags-check.yml`** — weekly, checks that each of the four
+  vendored submodules (libjpeg-turbo, libpng, libwebp, zlib-ng) is on an upstream
+  release tag, and on the newest one, and opens a tracking issue if not. See
+  `SECURITY.md`'s "Vendored dependencies" section.
+- **`.github/dependabot.yml`** — weekly PRs bumping the GitHub Actions. The submodules
+  are not in it: its submodule updates follow a branch's newest commit, not a release
+  tag.
 
 ### Running CI on a branch
 

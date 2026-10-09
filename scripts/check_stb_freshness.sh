@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Checks whether the two copied-in stb headers (vendor/stb_image.h,
-# vendor/stb_image_resize2.h -- not git submodules, so Dependabot can't see them,
-# see .github/dependabot.yml and SECURITY.md) are still current against upstream
+# vendor/stb_image_resize2.h -- not git submodules, so scripts/check_submodule_tags.sh
+# does not see them, see SECURITY.md) are still current against upstream
 # nothings/stb. Compares each file's pristine upstream SHA-256, as recorded in
 # THIRD-PARTY-NOTICES.md, against the current raw file on upstream's default branch.
 #
