@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [2.0.1] - 2026-10-09
+
 ### Added
 
 - **A documentation site: <https://gudoshnikovn.github.io/libphash/>.** Every algorithm
@@ -745,7 +749,8 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
 Earlier releases (1.0.0 – 1.9.0) predate this changelog. See the git history and the
 release tags for details.
 
-[Unreleased]: https://github.com/gudoshnikovn/libphash/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/gudoshnikovn/libphash/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/gudoshnikovn/libphash/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/gudoshnikovn/libphash/compare/1.10.4...v2.0.0
 [1.10.4]: https://github.com/gudoshnikovn/libphash/compare/1.10.3...1.10.4
 [1.10.3]: https://github.com/gudoshnikovn/libphash/compare/1.10.2...1.10.3
