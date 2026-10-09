@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A documentation site: <https://gudoshnikovn.github.io/libphash/>.** Every algorithm
+  has a page that follows `ph_compute_*()` step by step on one photograph, lays out its
+  digest, and measures it: how far common edits (resizing, JPEG recompression, brightness,
+  crops, rotation) move the hash, how well it separates copies from different images over
+  a synthetic corpus and 200 CC0 photographs, what it costs, and what each parameter
+  changes. Theory pages cover image preparation, comparing hashes and choosing a
+  threshold, and choosing among the nine algorithms; guides cover installing, loading,
+  configuring a context, handling errors, hashing many files, storing and searching
+  hashes, performance and migrating from 1.x. The API reference is generated from
+  `libphash.h`, every function with the error codes it returns. Every figure and measured
+  table is computed by the library being documented, and the build fails when a figure's
+  intermediate stages do not reproduce the library's hash. The source is `docs/`, built
+  with `make site`.
+- **Four examples**, built and run in CI with the others: `load_sources.c` (one picture
+  from pixels, from an encoded buffer and from a file, the same hash from each),
+  `configure.c` (configuring every context alike, and when a setting takes effect),
+  `hash_distance.c` (four 64-bit hashes of two images from one `ph_compute_multi()` call
+  each) and `find_duplicates.c` (hashing many files with pHash and listing every pair
+  within a threshold).
+
+### Changed
+
+- **`ph_radial_similarity()` is about ten times faster and exact up to its last
+  rounding.** It summed the correlation at each shift in `double`, 1600 dependent
+  additions for two 40-byte digests (946 ns a comparison on an Apple M3 Pro). The bytes
+  are integers, so every sum is now an exact integer, the peak is taken over the exact
+  numerators, and one division and one square root come last (86.5 ns). The score can
+  differ from the old one in its last bits (at most about 1e-15); it is closer to the
+  exact correlation and no longer depends on the order of a sum, and the documented
+  symmetry holds bit for bit, where the old sums could differ between `(a, b)` and
+  `(b, a)` in the last place. Radial digests are unchanged.
+
 ### Fixed
 
 - **A load rejected for its arguments leaves no image behind.** `ph_load_from_file()` with
@@ -48,18 +82,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the gray is composited instead of the color, which can move a pixel by a level; and
   weights set with `ph_context_set_gray_weights()` no longer reach it, as they reach no
   other grayscale load. A WebP without alpha, at the default weights, hashes as before.
-
-### Changed
-
-- **`ph_radial_similarity()` is about ten times faster and exact up to its last
-  rounding.** It summed the correlation at each shift in `double`, 1600 dependent
-  additions for two 40-byte digests (946 ns a comparison on an Apple M3 Pro). The bytes
-  are integers, so every sum is now an exact integer, the peak is taken over the exact
-  numerators, and one division and one square root come last (86.5 ns). The score can
-  differ from the old one in its last bits (at most about 1e-15); it is closer to the
-  exact correlation and no longer depends on the order of a sum, and the documented
-  symmetry holds bit for bit, where the old sums could differ between `(a, b)` and
-  `(b, a)` in the last place. Radial digests are unchanged.
+- **`ph_get_last_error_message()` is documented as the detail of the last load.** Its doc
+  comment called it the most recent failure on the context, empty until something fails.
+  Only the `ph_load_from_*()` functions write it: each clears it on the way in, and hashes,
+  setters and comparisons leave it as it was, so after a failed hash it holds the previous
+  load's detail, and after a successful load it is empty. The behavior is unchanged.
+- **The pHash hash has `reduction_size`² bits, the DC coefficient's included.** The doc
+  comment of `ph_context_set_phash_params()` said the DC coefficient is excluded, giving
+  `reduction_size`² − 1 bits. The DC coefficient is left out of choosing the threshold
+  only; its bit is in the hash and always set, so the default hash has 64 bits, 63 of
+  which carry information, as `ph_compute_phash()` said. The hashes are unchanged.
+- **`ph_context_set_whash_remove_max_haar_ll()` can change a wHash.** Its doc comment said
+  the option does nothing either way. Removing the mean shifts the band and its median
+  alike, but a value that ties with the median is then decided by rounding error; in the
+  fast mode, whose grid holds whole numbers, that happens on about one photograph in ten.
+  The option stays off by default.
 
 ## [2.0.0] - 2026-10-07
 
