@@ -25,7 +25,7 @@ issue. Please include:
 - What you observed (crash, sanitizer report, hang, wrong output with a security
   implication) versus what you expected.
 - Which decoder backend(s) it reproduces under, if known (native libjpeg-turbo/libpng/
-  libwebp, or the `stb_image` fallback) — see `docs/development.md` for how to
+  libwebp, or the `stb_image` fallback) — see the [development guide](https://gudoshnikovn.github.io/libphash/development/) for how to
   build each configuration.
 
 **Response SLA:** an acknowledgment within 7 days, and a fix or a mitigation plan
@@ -62,7 +62,7 @@ Out of scope:
   authentication or moderation primitive. An attacker who can choose two images can
   always force a hash collision between them, or break a match between an image and
   a modified copy of itself; this is expected and is not a vulnerability to report.
-  See "What a perceptual hash is not" in `docs/theory/perceptual-hashing.md` and `docs/references.md` (Dolhansky &
+  See [What a perceptual hash is not](https://gudoshnikovn.github.io/libphash/theory/perceptual-hashing/#what-a-perceptual-hash-is-not) and the [references](https://gudoshnikovn.github.io/libphash/references/) (Dolhansky &
   Canton Ferrer 2020) for why no perceptual hash, keyed or not, fits an adversarial
   use case, and why this library does not claim to.
 - Anything requiring the caller to already pass attacker-controlled data to a
@@ -95,8 +95,8 @@ suite).
 - **The same hash value from builds with different JPEG decoders.** Every algorithm gives
   the same bits on every OS, architecture and compiler the CI matrix covers, but
   libjpeg-turbo and stb_image decode a JPEG to slightly different pixels, so the hash of a
-  JPEG depends on which one the build uses — see `docs/theory/comparing.md`, "Same hash on
-  every machine". This is a reproducibility property, not a security one.
+  JPEG depends on which one the build uses — see
+  [Same hash on every machine](https://gudoshnikovn.github.io/libphash/theory/comparing/#same-hash-on-every-machine). This is a reproducibility property, not a security one.
 - **Resistance to a deliberate adversary trying to produce a hash collision or a
   hash mismatch for two images.** See "What counts as a vulnerability here" above —
   this is out of scope by design, not an oversight.
@@ -112,7 +112,7 @@ This library bundles four decoder libraries as git submodules
 directly into the tree rather than submoduled (`vendor/stb_image.h`,
 `vendor/stb_image_resize2.h` — both locally patched; see `THIRD-PARTY-NOTICES.md`
 for their exact pinned versions and hashes, `vendor/patches/` for the local patches they
-carry, and `docs/development.md` for the reasons).
+carry, and the [development guide](https://gudoshnikovn.github.io/libphash/development/) for the reasons).
 
 - **Submoduled dependencies:** [Dependabot](https://docs.github.com/en/code-security/dependabot)
   is configured (`.github/dependabot.yml`, `gitsubmodule` ecosystem) to open a pull

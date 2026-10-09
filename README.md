@@ -1,18 +1,32 @@
 # libphash
 
+[![CI](https://github.com/gudoshnikovn/libphash/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/gudoshnikovn/libphash/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/gudoshnikovn/libphash)](https://github.com/gudoshnikovn/libphash/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/gudoshnikovn/libphash)](LICENSE)
+
+**[Documentation](https://gudoshnikovn.github.io/libphash/)** · [API reference](https://gudoshnikovn.github.io/libphash/api/) · [Install](https://gudoshnikovn.github.io/libphash/guide/install/) ·
+[Choosing an algorithm](https://gudoshnikovn.github.io/libphash/theory/choosing/) ·
+[Releases](https://github.com/gudoshnikovn/libphash/releases) ·
+[Changelog](https://gudoshnikovn.github.io/libphash/project/changelog/) ·
+[Python binding](https://github.com/gudoshnikovn/python-libphash)
+
 A perceptual image hashing library in C: nine algorithms, native SIMD-accelerated
-JPEG/PNG/WebP decoders, and a hash of a 400×400 photo in 0.05 ms after a 0.23 ms decode
+JPEG/PNG/WebP decoders, and a hash of a 400×400 photo in 0.05 ms after a 0.24 ms decode
 (numbers under "Performance" below).
+
+The [documentation site](https://gudoshnikovn.github.io/libphash/) explains how each algorithm works, with figures and
+measurements made by this code on a synthetic and a photo corpus, and carries the API
+reference generated from `include/libphash.h`.
 
 - **Try it in two minutes** — download a prebuilt archive and run an example:
   [Try it](#try-it).
 - **Build it into a program** — [Building & Installation](#building--installation), then
   [Usage](#usage-example) and the [examples](examples/README.md).
-- **Choose an algorithm, or understand one** — [`docs/theory/choosing.md`](docs/theory/choosing.md);
-  everything else is indexed in [`docs/`](docs/README.md).
+- **Choose an algorithm, or understand one** — [Choosing an algorithm](https://gudoshnikovn.github.io/libphash/theory/choosing/)
+  on the site, and a page per algorithm from there.
 
-**Upgrading from 1.x?** See [`CHANGELOG.md`](CHANGELOG.md) for what changed and
-[`MIGRATION.md`](MIGRATION.md) for what to do about it — 2.0.0 changes some hash values
+**Upgrading from 1.x?** See the [changelog](https://gudoshnikovn.github.io/libphash/project/changelog/) for what changed and
+the [migration guide](https://gudoshnikovn.github.io/libphash/guide/migration/) for what to do about it — 2.0.0 changes some hash values
 silently (no error, no warning), most importantly because EXIF auto-orientation is now
 on by default.
 
@@ -25,7 +39,7 @@ inside a trusted pipeline. Every design decision in this library is made for tha
 **It is not built to withstand someone trying to fool it.** Every hash here is
 deterministic and unkeyed — the same file and settings give the same value on any
 machine (for JPEG, with the same decoder; see
-[`docs/theory/comparing.md`](docs/theory/comparing.md#same-hash-on-every-machine)), with no shared
+[Comparing hashes](https://gudoshnikovn.github.io/libphash/theory/comparing/#same-hash-on-every-machine)), with no shared
 secret — and that property, which is what makes deduplication work at all, is also
 what makes the hashes straightforward to attack on purpose. Anyone who benefits from a
 wrong answer can construct a visually different image with a matching hash, or perturb an
@@ -38,8 +52,8 @@ none is implemented here. Reaching for a neural embedding instead does not close
 published collision attacks cover learned hashes too.
 
 The reasoning, the citations, and what follows from this choice for how the algorithms are
-verified are in [`docs/theory/perceptual-hashing.md`](docs/theory/perceptual-hashing.md#what-a-perceptual-hash-is-not)
-and [`docs/algorithm-provenance.md`](docs/algorithm-provenance.md).
+verified are in [Perceptual hashing](https://gudoshnikovn.github.io/libphash/theory/perceptual-hashing/#what-a-perceptual-hash-is-not)
+and [Algorithm provenance](https://gudoshnikovn.github.io/libphash/algorithm-provenance/).
 
 ## Language Bindings
 
@@ -50,18 +64,18 @@ and [`docs/algorithm-provenance.md`](docs/algorithm-provenance.md).
 
 ## Core Features
 
-* **Multiple Algorithms**: `aHash`, `dHash`, `pHash` (DCT-based), `wHash` (Wavelet), `mHash`, `BMH`, `Radial`, `ColorHash`, and `ColorMoments`. Every one of them is traced to its source in [`docs/references.md`](docs/references.md), and every known divergence from that source is written down in [`docs/algorithm-provenance.md`](docs/algorithm-provenance.md).
+* **Multiple Algorithms**: `aHash`, `dHash`, `pHash` (DCT-based), `wHash` (Wavelet), `mHash`, `BMH`, `Radial`, `ColorHash`, and `ColorMoments`. Every one of them is traced to its source in the [references](https://gudoshnikovn.github.io/libphash/references/), and every known divergence from that source is written down in [Algorithm provenance](https://gudoshnikovn.github.io/libphash/algorithm-provenance/).
 * **High-Performance Decoders**: Built-in support for `libjpeg-turbo`, `libpng`, and `libwebp` with SIMD acceleration (NEON/SSE) and `mmap` optimization.
 * **Broad Format Fallback**: JPEG/PNG/WebP are decoded by the SIMD-accelerated native backends above; anything else — BMP, GIF, TGA, PSD, HDR, PIC, PNM — falls back to the bundled `stb_image` decoder automatically, no configuration needed. Not covered: TIFF (unsupported by `stb_image`) and animated GIF beyond the first frame (only the first frame is hashed). Animated WebP is rejected outright (not decoded to a frame) when the native WebP backend is in use.
 * **Fast Grayscale Loading**: Native decoders can perform grayscale conversion during decompression: 47 ms instead of 54 ms for a 20-megapixel JPEG, and one byte per pixel instead of three.
 * **Zero-Fragmentation Arena**: Optimized context-based **Arena Allocator** for internal operations, ensuring predictable performance in high-load environments.
 * **Decompression-Bomb Protection**: Images are rejected with `PH_ERR_IMAGE_TOO_LARGE` before any pixel buffer is allocated if they exceed a configurable pixel-count limit (256 Mi = 268,435,456 pixels by default; tune or disable via `ph_context_set_max_pixels()`).
-* **Automatic EXIF/WebP Orientation**: on by default — a hash describes what a viewer displays, not the raw sensor buffer. Opt out with `ph_context_set_auto_orient(ctx, 0)` if you need hashes of the stored (unrotated) pixels, e.g. to match hashes stored by 1.x; see [`MIGRATION.md`](MIGRATION.md).
+* **Automatic EXIF/WebP Orientation**: on by default — a hash describes what a viewer displays, not the raw sensor buffer. Opt out with `ph_context_set_auto_orient(ctx, 0)` if you need hashes of the stored (unrotated) pixels, e.g. to match hashes stored by 1.x; see the [migration guide](https://gudoshnikovn.github.io/libphash/guide/migration/).
 * **Batch API**: `ph_hash_files()`/`ph_hash_buffers()` hash many images across an optional internal thread pool, and `ph_compute_multi()` computes several of the four `uint64_t` algorithms (aHash/dHash/pHash/wHash) in one call sharing the same grayscale conversion.
 * **Detailed error codes**: `ph_error_t` distinguishes an unsupported format, corrupt data, an unavailable decoder, an I/O failure, and an oversized image, instead of one generic failure — see `include/libphash.h`.
 * **Digest helpers**: `ph_digest_to_hex()`/`ph_digest_from_hex()`/`ph_hash_to_hex()`/`ph_hash_from_hex()` for storing/transmitting hashes as text, `ph_similarity()`/`ph_similarity_digest()` for a normalized [0,1] score alongside the raw distance functions.
 * **FFI-Friendly**: Clean C API with opaque pointers, flat structs and fixed-width enums, designed for FFI bindings from any language.
-* **Cross-Platform**: Linux (x86-64, arm64, 32-bit x86), macOS arm64 and Windows x86-64, built and tested by CI on every push, with the same hash values on all of them — see [`docs/development.md`](docs/development.md#supported-platforms).
+* **Cross-Platform**: Linux (x86-64, arm64, 32-bit x86), macOS arm64 and Windows x86-64, built and tested by CI on every push, with the same hash values on all of them — see [Supported platforms](https://gudoshnikovn.github.io/libphash/development/#supported-platforms).
 
 ---
 
@@ -81,7 +95,7 @@ Release build with the bundled decoders, one thread, minimum of 5–300 runs):
 A hash's cost grows with the image's pixel count, since the reduction to its working size
 reads every pixel; for large JPEGs `ph_context_set_decode_scale()` cuts both. The batch API
 spreads files over every CPU. How the time grows with the image, by format, and what each
-setting saves is in [`docs/guide/performance.md`](docs/guide/performance.md).
+setting saves is in [Performance](https://gudoshnikovn.github.io/libphash/guide/performance/).
 
 ## Build configurations
 
@@ -113,7 +127,7 @@ are; the other examples are listed in [`examples/README.md`](examples/README.md)
 
 Every route — archives, CMake, the Makefile, `add_subdirectory()`, Python — with the
 difference between the Full and Minimal builds and how to check the result:
-[`docs/guide/install.md`](docs/guide/install.md).
+[Installing](https://gudoshnikovn.github.io/libphash/guide/install/).
 
 ### Prebuilt binaries
 
@@ -227,7 +241,7 @@ target_link_libraries(my_app PRIVATE phash::phash)
 
 Both forms pull in whatever the installed build was actually configured with
 (`-lphash_jpeg -lpng16 -lwebpdecoder -lz`, or nothing extra for a minimal/stb_image-only
-build) — you don't need to track that list by hand. See `MIGRATION.md` if you're
+build) — you don't need to track that list by hand. See the [migration guide](https://gudoshnikovn.github.io/libphash/guide/migration/) if you're
 moving a 1.x integration that linked by hand onto either of these.
 
 ---

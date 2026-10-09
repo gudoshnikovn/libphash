@@ -1,7 +1,8 @@
 # libphash documentation
 
-This directory is the source of the documentation site, and every page in it also reads
-on GitHub as it is. `make site` builds the site into `build/site/`, and `make site-serve`
+This directory is the source of the documentation site,
+<https://gudoshnikovn.github.io/libphash/>, and every page in it also reads on GitHub as
+it is. `make site` builds the site into `build/site/`, and `make site-serve`
 serves it with live reload; [Documentation site](development.md#documentation-site) in
 the development guide says what the build does and the rules that keep it green. The
 site's navigation is `nav` in `zensical.toml` at the repository root.

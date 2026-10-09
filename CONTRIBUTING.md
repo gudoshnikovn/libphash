@@ -4,7 +4,7 @@ Thanks for considering a contribution. This document covers the practical parts 
 getting a build running, what a pull request needs before it can be reviewed, and the
 handful of rules that keep the public API stable across releases. For the reasoning
 behind the build system, the test strategy, and the sanitizer/coverage setup, see
-[`docs/development.md`](docs/development.md); this file assumes that context and does
+the [development guide](https://gudoshnikovn.github.io/libphash/development/); this file assumes that context and does
 not repeat it.
 
 ## Getting started
@@ -16,7 +16,7 @@ git submodule update --init --recursive   # only needed for the CMake (vendored)
 ```
 
 Two build systems exist and are not interchangeable — see
-[`docs/development.md`](docs/development.md#build-systems-and-their-defaults) for the
+the [development guide](https://gudoshnikovn.github.io/libphash/development/#build-systems-and-their-defaults) for the
 full comparison:
 
 ```bash

@@ -18,6 +18,6 @@ header.
 | [`error_handling.c`](error_handling.c) | What each error code means and what a caller does about it, on real inputs: a missing path, a non-image, a damaged file, an image over the size limit, a format the build cannot decode. |
 | [`cmake_consumer/`](cmake_consumer/) | A CMake project using an installed libphash through `find_package(phash 2)` and `phash::phash`. `scripts/smoke_install.sh` builds it in CI. |
 
-[`../docs/guide/batch.md`](../docs/guide/batch.md) covers the batch API in depth,
-[`../docs/theory/choosing.md`](../docs/theory/choosing.md) which algorithm to pick, and the API
-reference (`make docs`) every function.
+[Hashing many files](https://gudoshnikovn.github.io/libphash/guide/batch/) covers the batch API in depth,
+[Choosing an algorithm](https://gudoshnikovn.github.io/libphash/theory/choosing/) which algorithm to pick, and the
+[API reference](https://gudoshnikovn.github.io/libphash/api/) every function.
