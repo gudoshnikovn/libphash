@@ -162,7 +162,7 @@ Options for a configure of your own, `cmake -B build -D<option>=<value>`:
 | `PHASH_USE_LIBPNG` | `ON` | PNG through the bundled libpng; `OFF` — through stb_image |
 | `PHASH_USE_ZLIB_NG` | `ON` | libpng inflates with the bundled zlib-ng; `OFF` — with the system zlib |
 | `PHASH_USE_WEBP` | `ON` | WebP through the bundled libwebp; `OFF` — no WebP |
-| `PHASH_ENABLE_THREADS` | `ON` | a worker pool for [batch hashing](../batch.md); `OFF` — batches run on the calling thread, and no thread library is linked |
+| `PHASH_ENABLE_THREADS` | `ON` | a worker pool for [batch hashing](batch.md); `OFF` — batches run on the calling thread, and no thread library is linked |
 | `PHASH_OPTIMIZE_NATIVE` | `OFF` | `-march=native`: a library for this CPU only, not for others of its architecture |
 | `PHASH_STRICT_DEPS` | `OFF` | a missing decoder submodule fails the configure, instead of a warning and stb_image in its place (the `release` preset turns it on) |
 | `PHASH_BUILD_TESTS` | `ON` | the test programs `ctest` runs |

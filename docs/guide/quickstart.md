@@ -64,7 +64,7 @@ cc basic_hash.c -o basic_hash $(pkg-config --cflags --libs libphash)
 ## Next
 
 - [Which algorithm to use](../theory/choosing.md), the nine measured side by side.
-- [Hashing many files](../batch.md) at once, across threads.
+- [Hashing many files](batch.md) at once, across threads.
 - The functions these programs call, in the [API reference](../api/index.md):
   [`ph_create()`](../api/context.md#ph_create),
   [`ph_load_from_file()`](../api/loading.md#ph_load_from_file),

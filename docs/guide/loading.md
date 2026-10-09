@@ -237,7 +237,7 @@ place.
 A context is used by one thread at a time. A program that loads on several threads gives
 each its own context, or hands the files to
 [`ph_hash_files()`](../api/batch.md#ph_hash_files), whose workers do the same
-([Hashing many files](../batch.md)).
+([Hashing many files](batch.md)).
 
 ## When a load fails
 

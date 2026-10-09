@@ -449,7 +449,7 @@ return each code, and an A–Z index on the overview. That table is read from th
 `@return` of every function that returns `ph_error_t`, so such a function without an
 `@return` naming its codes as code (`@c PH_ERR_IO`), or a code no `@return` names, fails
 the build. A path
-such as `docs/batch.md` or `docs/algorithm-provenance.md section 3` in a doc comment becomes a link
+such as `docs/guide/batch.md` or `docs/algorithm-provenance.md section 3` in a doc comment becomes a link
 to that page or section; a path to a page or a section number that does not exist fails
 the build.
 The build is strict, and three rules keep it green:

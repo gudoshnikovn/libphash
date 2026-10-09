@@ -7,10 +7,13 @@
 #    define _POSIX_C_SOURCE 200809L
 #endif
 
+#include "batch.h"
+
 #include "stages.h"
 
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <time.h>
 
 #ifdef __APPLE__
@@ -461,3 +464,71 @@ int mode_scan(int argc, char **argv) {
 }
 
 /* --8<-- [end:scan] */
+
+/* --8<-- [start:batch] */
+/* The highest resident memory of this process so far, in bytes: a high-water mark that
+ * never goes down, which is why every thread count of `batch` runs as a process of its
+ * own. */
+static long long peak_resident_bytes(void) {
+    struct rusage ru;
+    if (getrusage(RUSAGE_SELF, &ru) != 0) {
+        return -1;
+    }
+#ifdef __APPLE__
+    return (long long)ru.ru_maxrss; /* bytes on Darwin */
+#else
+    return (long long)ru.ru_maxrss * 1024; /* kilobytes on Linux */
+#endif
+}
+
+/* site_stages batch <image> <threads> <items> <runs>: ph_hash_files() on `items` entries
+ * that all name the image, with the four 64-bit hashes, once to warm up and then `runs`
+ * times. Prints the shortest run in seconds, the workers it ran, the CPUs `threads = 0`
+ * would use, and the peak resident memory of the process before the first batch and after
+ * the last, with the build that ran them. Every item must succeed. */
+int mode_batch(int argc, char **argv) {
+    (void)argc;
+    int threads = atoi(argv[1]), runs = atoi(argv[3]);
+    long count = atol(argv[2]);
+    if (threads < 1 || count < 1 || runs < 1) {
+        return fail("threads, items and runs must be positive", argv[1]);
+    }
+    size_t n = (size_t)count;
+    ph_batch_item_t *items = calloc(n, sizeof(*items));
+    if (!items) {
+        return fail("out of memory for", argv[2]);
+    }
+    for (size_t i = 0; i < n; i++) {
+        items[i].path = argv[0];
+    }
+    long long before = peak_resident_bytes();
+    double best = 0.0;
+    for (int r = -1; r < runs; r++) { /* r = -1: the warm-up */
+        double t0 = seconds();
+        ph_error_t err = ph_hash_files(items, n, PH_HASH_FLAGS_ALL, threads);
+        double t = seconds() - t0;
+        for (size_t i = 0; i < n && err == PH_SUCCESS; i++) {
+            err = items[i].status;
+        }
+        if (err != PH_SUCCESS) {
+            free(items);
+            return fail("batch failed on", argv[0]);
+        }
+        if (r == 0 || (r > 0 && t < best)) {
+            best = t;
+        }
+    }
+    free(items);
+    json_t j = json_begin(stdout);
+    json_string(&j, "build_info", ph_get_build_info());
+    json_int(&j, "cpus", ph_available_cpus()); /* what threads = 0 would start */
+    json_int(&j, "items", (long long)n);
+    json_int(&j, "workers", (long long)((size_t)threads < n ? (size_t)threads : n));
+    json_double(&j, "seconds", best);
+    json_int(&j, "peak_before", before);
+    json_int(&j, "peak_after", peak_resident_bytes());
+    json_end(&j);
+    return 0;
+}
+
+/* --8<-- [end:batch] */

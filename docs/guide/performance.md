@@ -132,7 +132,7 @@ it. On a 20-megapixel JPEG, loaded and hashed:
 
 - **Hash many images at once** with
   [`ph_hash_files()`](../api/batch.md#ph_hash_files), which spreads them over a pool of
-  worker threads ([Batch hashing and threads](../batch.md)).
+  worker threads ([Hashing many files](batch.md)).
 
 Creating a context for each image costs nothing measurable beside the load
 ([Loading images](loading.md#one-context-many-images) has the times), so a context is

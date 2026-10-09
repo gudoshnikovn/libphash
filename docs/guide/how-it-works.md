@@ -77,7 +77,7 @@ the same context keeps its settings and its memory. Because of all four, it is a
 unit of threading. One context is used by one thread at a time, and two threads with a
 context each need no lock between them. [`ph_hash_files()`](../api/batch.md#ph_hash_files) follows the same
 rule inside: each of its workers creates a context of its own, configured as a copy of a
-template ([Hashing many files](../batch.md#threads-what-is-safe)). One image is always
+template ([Hashing many files](batch.md#threads-what-is-safe)). One image is always
 loaded and hashed on one thread
 ([One image, one thread](performance.md#one-image-one-thread)).
 
@@ -111,6 +111,6 @@ on with [`ph_can_use_jpeg()`](../api/build.md#ph_can_use_jpeg),
 | keep hashes and find near duplicates | [Storing and searching hashes](storing.md) |
 | act on a failure | [Handling errors](errors.md) |
 | make hashing cheaper | [Performance](performance.md) |
-| hash many files on several threads | [Hashing many files](../batch.md) |
+| hash many files on several threads | [Hashing many files](batch.md) |
 | know what a step does to a hash | [Image preparation](../theory/preparation.md) |
 | see where each part lives in the source | [Development: source map](../development.md#source-map) |

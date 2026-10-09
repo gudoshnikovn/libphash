@@ -197,4 +197,4 @@ An item has a code and no detail message: each worker's context is freed when th
 ends. A program that wants the detail for a failed item loads that one file again with
 `ph_load_from_file()` and reads
 [`ph_get_last_error_message()`](../api/errors.md#ph_get_last_error_message).
-[Hashing many files](../batch.md) covers the rest of a batch.
+[Hashing many files](batch.md) covers the rest of a batch.

@@ -124,7 +124,7 @@ starts; an image loaded on the template is ignored.
 [`ph_hash_buffers()`](../api/batch.md#ph_hash_buffers) take no context and always use the
 defaults, the default size limit included. A batch computes the four 64-bit hashes, so of
 the hash settings it reads only the grayscale weights and the pHash and wHash ones
-([Hashing many files](../batch.md#how-a-batch-runs)).
+([Hashing many files](batch.md#a-configuration-progress-and-cancellation)).
 
 ## In code
 

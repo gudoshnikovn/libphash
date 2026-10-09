@@ -128,3 +128,53 @@ def measure_sizes(tool):
 
     return cached("timing-sizes", key, measure, "timing by size")
 # --8<-- [end:sizes]
+
+
+# --8<-- [start:batch]
+# A batch of one photograph's path, repeated: ph_hash_files() with the four 64-bit hashes,
+# at every worker count from one to the CPUs the library counts for `threads = 0`, and at
+# twice that; on the photograph at 20 megapixels and at a quarter of one, the shortest of
+# five runs after a warm-up. Each run is a process of its own, as its peak memory is the
+# process's high-water mark. The memory of a worker is measured once more on the
+# 20-megapixel JPEG, PNG and WebP, at one worker and at one per CPU.
+BATCH_SIZES = {20: 44, 0.25: 2000}  # megapixels: items in the batch
+BATCH_RUNS = 5
+
+
+def _batch(tool, path, threads, items, runs):
+    out = subprocess.run([tool, "batch", path, str(threads), str(items), str(runs)],
+                         check=True, capture_output=True, text=True).stdout
+    data = json.loads(out)
+    if "threads=on" not in data["build_info"]:
+        raise SystemExit("site_stages batch: the library was built without threads")
+    data["per_worker"] = (data["peak_after"] - data["peak_before"]) / data["workers"]
+    return data
+
+
+def measure_batch(tool):
+    """{"machine": {...}, "cpus": n, "scaling": {mpx: [run per worker count]},
+    "memory": {format: {"bytes": the file's size, "runs": [run at one worker, run at one
+    per CPU]}}}, each run as `site_stages batch` prints it plus "per_worker", the
+    growth of the peak divided by the workers; from the cache when nothing that decides
+    them has changed."""
+    host = machine()
+    paths = sized_images()
+    key = fingerprint(KEY_FILES, [tool] + sorted(paths.values()),
+                      json.dumps(host, sort_keys=True))
+
+    def measure():
+        cpus = _batch(tool, paths[0.25, "jpeg"], 1, 1, 1)["cpus"]
+        counts = list(range(1, cpus + 1)) + [2 * cpus]
+        scaling = {}
+        for mpx, items in BATCH_SIZES.items():
+            scaling[str(mpx)] = [_batch(tool, paths[mpx, "jpeg"], t, max(items, 2 * t),
+                                        BATCH_RUNS) for t in counts]
+        memory = {}
+        for fmt in FORMATS:
+            path = paths[20, fmt]
+            runs = [_batch(tool, path, t, 2 * t, 1) for t in (1, cpus)]
+            memory[fmt] = {"bytes": os.path.getsize(path), "runs": runs}
+        return {"machine": host, "cpus": cpus, "scaling": scaling, "memory": memory}
+
+    return cached("timing-batch", key, measure, "batches")
+# --8<-- [end:batch]

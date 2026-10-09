@@ -51,7 +51,7 @@ nav = [
     { "Storing and searching" = "guide/storing.md" },
     { "Handling errors" = "guide/errors.md" },
     { "Performance" = "guide/performance.md" },
-    { "Hashing many files" = "batch.md" },
+    { "Hashing many files" = "guide/batch.md" },
     { "Migrating from 1.x" = "guide/migration.md" },
     { "Benchmarks" = [
       { "Overview" = "benchmarks/README.md" },
@@ -156,7 +156,10 @@ pymdownx.smartsymbols = {}
 # The build turns check_paths on, so an included file that does not exist fails it; the
 # server leaves it off, because it stops for good on the first missing file, and a page is
 # often written before scripts/site.sh has generated the tables it includes.
+# A section of a file (`--8<-- "file.c:name"`) is shown without the indentation it has in
+# the file, so a few lines from inside a function read like the function's own.
 pymdownx.snippets.base_path = ["."]
+pymdownx.snippets.dedent_subsections = true
 pymdownx.snippets.check_paths = false
 pymdownx.superfences.custom_fences = [
   { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },

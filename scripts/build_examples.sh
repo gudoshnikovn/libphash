@@ -57,8 +57,11 @@ for src in "$ROOT_DIR"/examples/*.c; do
             "$WORK_DIR/$name" "$D/photo.jpeg" "$D/photo_rotated_90.jpeg"
             ;;
         batch_hash)
-            "$WORK_DIR/$name" "$D/photo.jpeg" "$D/photo_copy.jpeg" "$D/photo_complex.png" \
-                "$D/no-such-file.jpg"
+            # The template and the defaults hash the same files differently.
+            for mode in "" --defaults; do
+                "$WORK_DIR/$name" $mode "$D/photo.jpeg" "$D/photo_copy.jpeg" \
+                    "$D/photo_complex.png" "$D/no-such-file.jpg"
+            done
             ;;
         find_duplicates)
             # Two files of one picture among others, and a path that fails on its own.

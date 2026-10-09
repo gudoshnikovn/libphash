@@ -170,6 +170,7 @@ int mode_sizes(int argc, char **argv);
 int mode_corpus(int argc, char **argv);
 int mode_time(int argc, char **argv);
 int mode_scan(int argc, char **argv);
+int mode_batch(int argc, char **argv);
 int mode_loaded(int argc, char **argv);
 int mode_area(int argc, char **argv);
 

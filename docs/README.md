@@ -19,7 +19,7 @@ Welcome to the internal technical documentation for `libphash`. This directory c
 - [**How libphash works**](guide/how-it-works.md)
   The path of an image from a file to a hash, what a context holds, and which decoder
   reads which format.
-- [**Batch Hashing and Threads**](batch.md)
+- [**Hashing many files**](guide/batch.md)
   Hashing many images at once: the worker pool, thread safety, memory and cost per item.
 - [**Development Guide**](development.md)
   Build instructions, testing strategies, coding standards, and naming conventions.

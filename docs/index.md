@@ -39,7 +39,7 @@ same hash on Linux, macOS and Windows, on x86-64 and arm64.
 
     Batch hashing across a thread pool, and what each item costs.
 
-    [:octicons-arrow-right-24: Hashing many files](batch.md)
+    [:octicons-arrow-right-24: Hashing many files](guide/batch.md)
 
 -   :lucide-file-code: **Look up a function**
 

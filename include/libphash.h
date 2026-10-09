@@ -267,7 +267,7 @@ typedef enum {
  * worker thread in their pool creates and owns its own context. They take no context
  * themselves, so several threads may run batches at the same time. One image is always
  * loaded and hashed on a single thread -- parallelism is across images, through the
- * batch functions or the caller's own threads. See docs/batch.md.
+ * batch functions or the caller's own threads. See docs/guide/batch.md.
  * @ingroup context
  */
 typedef struct ph_context ph_context_t;
@@ -996,32 +996,21 @@ typedef struct {
 /**
  * @brief Hashes a batch of image files, optionally across a pool of internal threads.
  *
- * Each item is loaded and hashed independently. Internally this calls the same
- * `ph_compute_multi()` used for a single image: the file is decoded once, converted to
- * grayscale once and reduced by one shared area-average pass, whatever the flags; dHash
- * adds a resampling pass of its own. A decode/hash failure on one
- * item is recorded in that item's `status` and does not stop the rest of the batch from being
- * processed.
+ * Each item is loaded with ph_load_from_file() and hashed with ph_compute_multi() on a
+ * context of its worker's own. A failure on one item is recorded in that item's `status`
+ * and does not stop the rest of the batch.
  *
- * This is ph_hash_files_ex() with every option at its default, and three of those
- * defaults matter:
+ * This is ph_hash_files_ex() with every option at its default:
  *
- * - **Default configuration.** Every item is hashed as by a freshly created context:
- *   nothing set with a `ph_context_set_*` function applies, so for a context whose
- *   configuration you changed, the batch and the single-image path give *different*
- *   hashes for the same file. That includes `max_pixels`, the decompression-bomb guard:
- *   the batch uses the default limit (see ph_context_set_max_pixels()), not a stricter
- *   one you set elsewhere. Pass a configured context through ph_hash_files_ex() instead.
- * - **Blocking and not cancellable.** The call returns only after the last item, and
- *   reports no progress. To bound the time, split the list yourself, or use
- *   ph_hash_files_ex() with a `should_continue` callback.
+ * - **Default configuration.** Every item is hashed as by a freshly created context,
+ *   default `max_pixels` limit included: nothing set with a `ph_context_set_*` function
+ *   applies. Pass a configured context through ph_hash_files_ex() instead.
+ * - **Blocking and not cancellable.** The call returns after the last item and reports no
+ *   progress; ph_hash_files_ex() adds both.
  * - **Peak memory grows with the thread count.** Each worker holds one decoded image at a
- *   time -- its RGB pixels plus a grayscale copy, about 4 bytes per pixel -- so the peak
- *   is roughly `workers x 4 x the largest image's pixel count`. At the default
- *   `max_pixels` limit that is up to about 1 GB per worker, and `threads = 0` starts one
- *   worker per core: on a 64-core machine, images near that limit can need 64 GB.
- *   Measured: 20-megapixel JPEGs take about 80 MB per worker. Cap it by passing an
- *   explicit thread count, a lower `max_pixels` through ph_hash_files_ex(), or both.
+ *   time, about 4 bytes per pixel, so `threads = 0` on a machine with many CPUs can hold
+ *   many large images at once. Bound it with an explicit thread count, a lower
+ *   `max_pixels` through ph_hash_files_ex(), or both.
  *
  * Return contract -- the overall return value reports only failures that stopped the batch
  * from being *worked on at all*; anything that happened to an individual image is in that
@@ -1034,13 +1023,13 @@ typedef struct {
  * - `PH_SUCCESS` with `n == 0` -- no-op. `items` may be NULL in this case.
  * - `PH_ERR_ALLOCATION_FAILED` -- the batch could not be worked on: no internal context or
  *   worker could be created, so not one item was looked at and all of them are left at
- *   `PH_ERR_ALLOCATION_FAILED`. This covers the sequential path failing to allocate its
- *   context, failing to allocate the worker array, failing to create any thread, and every
- *   created thread bailing out because it could not allocate its own context. Partial
- *   degradation is *not* reported here: if even one worker starts it processes the whole
- *   batch by itself and the call returns `PH_SUCCESS`.
+ *   `PH_ERR_ALLOCATION_FAILED`. Partial degradation is *not* reported here: if even one
+ *   worker starts it processes the whole batch by itself and the call returns
+ *   `PH_SUCCESS`.
  * - `PH_SUCCESS` otherwise -- the batch was processed to the end. This says nothing about
  *   whether any individual image succeeded; inspect every `items[i].status`.
+ *
+ * See docs/guide/batch.md.
  *
  * @param items Array of batch entries; `path`/`hashes`/`status` are read/written in place.
  * @param n Number of entries in `items`. 0 is a no-op that returns PH_SUCCESS, provided
@@ -1048,30 +1037,12 @@ typedef struct {
  * @param flags Bitwise-OR of `ph_hash_flags_t` values selecting which algorithms to
  *              compute for every item. See `ph_compute_multi()` for the `hashes[]`
  *              packing convention.
- * @param threads Worker thread count. 0 = one per CPU this process may use (see below),
- *                1 = run sequentially on the calling thread with no thread creation,
- *                >1 = that many workers.
- *                Never more workers than items: a count above `n` runs `n` workers.
- *                Ignored (always sequential) if the library was built without
- *                `PHASH_ENABLE_THREADS` (ON by default in both CMake and the Makefile).
- *
- *                What `threads = 0` counts: the online CPUs, narrowed on Linux by the
- *                process's affinity mask (`taskset`, `docker --cpuset-cpus`) and by a cgroup
- *                v1/v2 CPU quota rounded up (`docker --cpus`, Kubernetes CPU limits), and on
- *                Windows by the process affinity mask. macOS has neither and uses the
- *                online count.
- *
- *                Platform note for `threads = 0`: on POSIX the count can reach every
- *                online CPU, but on Windows it covers only the *current processor group*,
- *                which the OS caps at 64 logical processors. On a machine with more than
- *                that (large servers, some CI runners) `threads = 0` therefore uses at most
- *                64 workers on Windows while the POSIX build uses all of them. This is a
- *                deliberate limitation, not an oversight: raising the count alone would not
- *                help, because a thread inherits its creator's processor group and the extra
- *                workers would contend for the same 64 logical processors. Spreading workers
- *                across groups needs explicit group affinity and is not implemented. If you
- *                need more than 64 workers on such a machine, pass the count explicitly and
- *                set the affinity yourself.
+ * @param threads Worker thread count. 0 = one per CPU this process may use: the online
+ *                CPUs, narrowed on Linux by the affinity mask and a cgroup CPU quota, and
+ *                on Windows by the affinity mask within one processor group, so at most
+ *                64. 1 = run sequentially on the calling thread with no thread creation.
+ *                >1 = that many workers. Never more workers than items. Ignored (always
+ *                sequential) if the library was built without `PHASH_ENABLE_THREADS`.
  * @return @c PH_SUCCESS once the batch has been processed (regardless of per-item
  *         outcomes), @c PH_ERR_INVALID_ARGUMENT for a malformed call, or
  *         @c PH_ERR_ALLOCATION_FAILED if no item could be worked on at all. See the return
@@ -1088,12 +1059,10 @@ PH_NODISCARD PH_API ph_error_t ph_hash_files(ph_batch_item_t *items, size_t n, u
  * Identical semantics and identical return contract, including validation running before
  * the `n == 0` shortcut: `ph_hash_buffers(NULL, 0, 0, -5)` returns PH_ERR_INVALID_ARGUMENT.
  * An entry whose `buffer` is NULL or whose `length` is 0 is a per-item
- * PH_ERR_INVALID_ARGUMENT in `status`, not an overall failure. The `threads = 0` platform
- * note from `ph_hash_files()` applies here unchanged: on Windows the auto-detected count is
- * limited to the current processor group's 64 logical processors. So do its three notes on
- * defaults -- default configuration, no cancellation, memory per worker -- and
- * ph_hash_buffers_ex() is the way around them. The encoded buffers themselves are the
- * caller's and are not copied, so they add nothing per worker.
+ * PH_ERR_INVALID_ARGUMENT in `status`, not an overall failure. The notes of
+ * `ph_hash_files()` on `threads` and on its defaults -- default configuration, no
+ * cancellation, memory per worker -- apply unchanged, and ph_hash_buffers_ex() is the way
+ * around the defaults. The encoded buffers themselves are the caller's and are not copied.
  * @return As ph_hash_files(): @c PH_SUCCESS, @c PH_ERR_INVALID_ARGUMENT or
  *         @c PH_ERR_ALLOCATION_FAILED.
  * @ingroup batch
