@@ -168,16 +168,17 @@ which algorithm is measured in [Which background](../theory/preparation.md#which
 
 [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale)
 asks the decoder for one channel instead of three. A JPEG's decoder then skips its color
-conversion, the PNG decoder and stb_image convert as they decode, and the library skips its
-own conversion: the loaded image is a third of the size, and the grayscale hashes read it
-as it is. libwebp has no grayscale output, so a WebP is loaded in color whatever the
-setting.
+conversion, stb_image converts as it decodes, the PNG decoder converts right after
+decoding, and the library skips its own conversion: the loaded image is a third of the
+size, and the grayscale hashes read it as it is. libwebp has no grayscale output, so a
+WebP is loaded in color whatever the setting.
 
 --8<-- "docs/assets/generated/loading/load-times.md"
 
 The saving is a part of the load, not a multiple of it: the decoding of the compressed
-data stays.[^cost] It is worth taking when every hash you compute is a grayscale one. Two things
-come with it:
+data stays.[^cost] It is worth taking for a JPEG when every hash you compute is a
+grayscale one; a PNG loads more slowly as grayscale than in color
+([Decoding by format](performance.md#decoding-by-format)). Two things come with it:
 
 - **ColorHash and ColorMoments refuse the image** with
   [`PH_ERR_REQUIRES_COLOR`](../api/errors.md#PH_ERR_REQUIRES_COLOR): one channel has no

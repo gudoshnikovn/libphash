@@ -50,7 +50,8 @@ arguments lists every mode.
 - `site_stages <algo>-<what> <image>...` prints one JSON line per image: a measurement
   over a corpus that one page makes (block sizes, settings, modes). These are built on
   `for_each_image()`.
-- `measure`, `pairs`, `time` and `corpus` serve every page; `sizes` prints each
+- `measure`, `pairs`, `time` and `corpus` serve every page (`time <image> [case...]`
+  runs the cases named, or all of `time_cases[]`); `sizes` prints each
   algorithm's digest size, kind and text length, for the pages that compare them;
   `scan` times one comparison of a linear search, for the page on searching.
 - `loaded <outdir> <image>...` writes each image as the library loaded it and its
@@ -73,7 +74,7 @@ arguments lists every mode.
 | `corpus.py` | The two corpora (`images()`), every edit of every image and every pair (`measure_corpus()`), and any mode over every original and its copies (`measure_settings()`) |
 | `separability.py` | What a copy is (`COPY_STRENGTHS`), d′ and the threshold that accepts 95 % of the copies; `variant_distances()`, the same distances for one setting of a `<algo>-variants` mode |
 | `metric.py` | How a page's metric reads: bits that differ, or the algorithm's own score |
-| `timing.py` | The times, on the machine that builds the site |
+| `timing.py` | The times, on the machine that builds the site: `measure_timing()` on the two example photographs, and `measure_sizes()` on one photograph at six sizes in JPEG, PNG and WebP (`sized_images()`, written once under `build/site-cache/sizes/`) |
 | `digests.py` | Hexadecimal digests read back as bytes and bits |
 | `cache.py` | `cached(name, key, compute)`: `build/site-cache/<name>.json` |
 
@@ -104,7 +105,7 @@ A page module declares how its algorithm's comparison reads and draws its own fi
 The robustness, corpus, separability, edits and time figures of every page are drawn by
 `render.py` from these declarations; a page module draws only what is its own.
 
-A **topic page** (`pages/preparation.py`, `pages/comparing.py`, `pages/choosing.py`, and the guide pages `pages/loading.py` and `pages/storing.py`, in `TOPICS`) has no hash
+A **topic page** (`pages/preparation.py`, `pages/comparing.py`, `pages/choosing.py`, and the guide pages `pages/loading.py`, `pages/storing.py` and `pages/performance.py`, in `TOPICS`) has no hash
 of its own: it declares `NAME`, the directory under `docs/assets/generated/`, and
 `figures(tool, image, out_dir, timing)`, which draws everything it shows, `timing` being
 what `measure/timing.py` measured. `render.py --algo preparation` draws it alone. A topic

@@ -62,3 +62,69 @@ def measure_timing(tool):
 
     return cached("timing", key, measure, "timing")
 # --8<-- [end:timing]
+
+
+# --8<-- [start:sizes]
+# One photograph at several sizes, in megapixels, and in three formats: the large example
+# photograph scaled down, keeping its aspect ratio, and encoded the same way at every size,
+# so that a time changes with the number of pixels and nothing else. The JPEG is timed
+# decoding and hashing; the PNG and the WebP decoding only, as a hash reads the decoded
+# pixels whatever the file was.
+SIZES_MPX = (0.25, 1, 2, 5, 10, 20)
+FORMATS = {"jpeg": ("JPEG", {"quality": 90}), "png": ("PNG", {}),
+           "webp": ("WEBP", {"quality": 90})}
+LOADS = ("decode", "gray_decode")
+HASHES = ("ahash", "dhash", "phash", "whash", "bmh", "mhash", "radial", "color_hash",
+          "color_moments", "multi")
+
+
+def sized_images():
+    """{(mpx, format): path}: the large photograph at each size in each format, written
+    under build/site-cache/sizes/ once and kept."""
+    from PIL import Image
+
+    source = os.path.join(ROOT, IMAGES["large"])
+    out_dir = os.path.join(ROOT, "build", "site-cache", "sizes")
+    os.makedirs(out_dir, exist_ok=True)
+    paths, image = {}, None
+    for mpx in SIZES_MPX:
+        for fmt, (pil, options) in FORMATS.items():
+            path = os.path.join(out_dir, f"{mpx:g}mpx.{fmt}")
+            paths[mpx, fmt] = path
+            if os.path.exists(path):
+                continue
+            if image is None:
+                image = Image.open(source).convert("RGB")
+            w, h = image.size
+            scale = (mpx * 1e6 / (w * h)) ** 0.5
+            size = (round(w * scale), round(h * scale))
+            image.resize(size, Image.Resampling.LANCZOS).save(path, pil, **options)
+    return paths
+
+
+def measure_sizes(tool):
+    """{"machine": {...}, "sizes": [{"mpx", "width", "height", "jpeg": {case: ms, "bytes":
+    the file's size}, "png": {...}, "webp": {...}}]}: the minimum time of each case of `site_stages time` on
+    the photograph at each size, from the cache when nothing that decides them has changed."""
+    host = machine()
+    paths = sized_images()
+    key = fingerprint(KEY_FILES, [tool] + sorted(paths.values()),
+                      json.dumps(host, sort_keys=True))
+
+    def measure():
+        sizes = []
+        for mpx in SIZES_MPX:
+            row = {"mpx": mpx}
+            for fmt in FORMATS:
+                cases = LOADS + (HASHES if fmt == "jpeg" else ())
+                out = json.loads(subprocess.run([tool, "time", paths[mpx, fmt], *cases],
+                                                check=True, capture_output=True,
+                                                text=True).stdout)
+                row.update(width=out["width"], height=out["height"])
+                row[fmt] = {c: v["min_ms"] for c, v in out["cases"].items()}
+                row[fmt]["bytes"] = os.path.getsize(paths[mpx, fmt])
+            sizes.append(row)
+        return {"machine": host, "sizes": sizes}
+
+    return cached("timing-sizes", key, measure, "timing by size")
+# --8<-- [end:sizes]

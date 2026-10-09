@@ -56,9 +56,8 @@ def write_timing(data, algorithms, out_dir):
     timing_dir = os.path.join(out_dir, "timing")
     write_text(timing_dir, "footnote.md",
                f"[^cost]: Measured when this site was built, on {describe(data)}: the "
-               "minimum of at least five runs after a warm-up, each hash the first on a "
-               "freshly loaded image. The code is under “How this was measured” beside "
-               "the times.")
+               "minimum of at least five runs after a warm-up. What each time covers, and "
+               "the code, are under “How this was measured” beside it.")
 
     def table(cases, bold=()):
         rows = ["| Case | " + f"{size} | {mpx} |", "|---|---|---|"]

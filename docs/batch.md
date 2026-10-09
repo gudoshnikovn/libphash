@@ -37,15 +37,8 @@ worker (94 MB at one thread, 1.35 GB at sixteen). To bound it, pass an explicit 
 count, a lower `max_pixels` on the template, or both.
 
 **One image, one thread.** Parallelism is across images only: `threads` sizes the
-batch's worker pool and nothing else. A single image — in a batch worker or through a
-direct `ph_load_*()`/`ph_compute_*()` call — is decoded, converted to gray and hashed on
-the calling thread at every stage. Splitting one image across threads would buy little
-where the time goes: on a 20-megapixel JPEG the decode is about 85% of a
-`ph_compute_multi()` call with all four flags, and neither libjpeg-turbo nor libpng can
-split one decode across threads. It would also oversubscribe the machine whenever a
-batch already runs one worker per CPU, which is why libwebp's optional second decoding
-thread is left off as well. A caller with one large JPEG and idle cores gains more from
-`ph_context_set_decode_scale()`.
+batch's worker pool and nothing else, and a single image is decoded and hashed on one
+thread. Why, measured, is on [Performance](guide/performance.md#one-image-one-thread).
 
 ## Threads: what is safe
 

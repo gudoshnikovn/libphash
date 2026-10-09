@@ -1,16 +1,40 @@
 /* site_stages: the times on the site's Cost rows and tables (tools/site/measure/timing.py). */
+
+/* clock_gettime() and CLOCK_MONOTONIC are POSIX, not ISO C; the project compiles as strict
+ * ISO C, under which glibc declares them only when asked. Darwin uses mach_absolute_time()
+ * instead (below), which _POSIX_C_SOURCE would hide. Must precede every #include. */
+#if !defined(__APPLE__) && !defined(_WIN32)
+#    define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "stages.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
+#ifdef __APPLE__
+#    include <mach/mach_time.h>
+#endif
+
 /* --8<-- [start:time] */
-/* Seconds on a clock that only moves forward for the purpose: C11's timespec_get(). */
+/* Seconds on a monotonic clock, as tests/src/bench_hash.c reads it. The calendar clock
+ * (timespec_get() with TIME_UTC) would step back when the system corrects its time, and a
+ * run spanning the step would come out negative and become the minimum. On Darwin,
+ * CLOCK_MONOTONIC counts whole microseconds, 2 % of the cheapest hash; mach_absolute_time()
+ * counts nanoseconds. */
 static double seconds(void) {
+#ifdef __APPLE__
+    static mach_timebase_info_data_t tb;
+    if (tb.denom == 0) {
+        mach_timebase_info(&tb);
+    }
+    return (double)mach_absolute_time() * tb.numer / tb.denom * 1e-9;
+#else
     struct timespec ts;
-    timespec_get(&ts, TIME_UTC);
+    clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec + (double)ts.tv_nsec * 1e-9;
+#endif
 }
 
 /* One timed case: `run` does the work once on a loaded image and returns nonzero on
@@ -34,6 +58,16 @@ static int time_hash(ph_context_t *ctx, const char *path, int algo) {
     (void)path;
     ph_digest_t d;
     return ph_compute_digest(ctx, (ph_algorithm_t)algo, &d) != PH_SUCCESS;
+}
+
+/* The four 64-bit hashes in one ph_compute_multi() call, which computes the grayscale
+ * image and the area grid once for all of them. */
+static int time_multi(ph_context_t *ctx, const char *path, int arg) {
+    (void)path;
+    (void)arg;
+    uint64_t h[PH_HASH_FLAGS_COUNT];
+    return ph_compute_multi(ctx, PH_HASH_AHASH | PH_HASH_DHASH | PH_HASH_PHASH | PH_HASH_WHASH,
+                            h) != PH_SUCCESS;
 }
 
 static int time_whash_full(ph_context_t *ctx, const char *path, int arg) {
@@ -122,6 +156,7 @@ static const time_case_t time_cases[] = {
     {"radial", time_hash, PH_ALGO_RADIAL},
     {"color_hash", time_hash, PH_ALGO_COLOR_HASH},
     {"color_moments", time_hash, PH_ALGO_COLOR_MOMENTS},
+    {"multi", time_multi, 0},
     {"mhash_size_62", time_mhash_size, 62},
     {"mhash_size_128", time_mhash_size, 128},
     {"mhash_size_256", time_mhash_size, 256},
@@ -157,6 +192,8 @@ static const time_case_t time_cases[] = {
     LOADED("scale_eighth_radial", PH_DECODE_SCALE_EIGHTH, PH_ALGO_RADIAL),
     LOADED("gray_decode", LOAD_GRAY, LOAD_ONLY),
     LOADED("gray_phash", LOAD_GRAY, PH_ALGO_PHASH),
+    LOADED("gray_mhash", LOAD_GRAY, PH_ALGO_MHASH),
+    LOADED("gray_radial", LOAD_GRAY, PH_ALGO_RADIAL),
     LOADED("fresh_decode", LOAD_FRESH, LOAD_ONLY),
     LOADED("fresh_phash", LOAD_FRESH, PH_ALGO_PHASH),
 };
@@ -175,10 +212,29 @@ enum {
 
 #define TIME_MIN_SECONDS 1.0
 
-/* site_stages time <image>: every case of time_cases[] on the image; the minimum and the
- * median of its runs, in milliseconds, as one JSON object, with the build that ran them. */
+/* Whether case `name` is among the `n` names of `only`; every case is when `n` is 0. */
+static int time_chosen(const char *name, int n, char **only) {
+    for (int i = 0; i < n; i++) {
+        if (strcmp(name, only[i]) == 0) {
+            return 1;
+        }
+    }
+    return n == 0;
+}
+
+/* site_stages time <image> [case...]: every case of time_cases[] on the image, or the cases
+ * named; the minimum and the median of its runs, in milliseconds, as one JSON object, with
+ * the build that ran them. */
 int mode_time(int argc, char **argv) {
-    (void)argc;
+    for (int i = 1; i < argc; i++) {
+        int known = 0;
+        for (size_t c = 0; c < COUNT(time_cases); c++) {
+            known |= strcmp(argv[i], time_cases[c].name) == 0;
+        }
+        if (!known) {
+            return fail("no such timed case", argv[i]);
+        }
+    }
     ph_context_t *ctx = NULL;
     if (load_image(&ctx, argv[0])) {
         return 1;
@@ -194,6 +250,9 @@ int mode_time(int argc, char **argv) {
     static double ms[TIME_MAX_RUNS];
     for (size_t c = 0; c < COUNT(time_cases); c++) {
         const time_case_t *tc = &time_cases[c];
+        if (!time_chosen(tc->name, argc - 1, argv + 1)) {
+            continue;
+        }
         int runs = 0;
         double total = 0.0;
         for (int k = -1; k < TIME_MAX_RUNS; k++) { /* k = -1: the warm-up */

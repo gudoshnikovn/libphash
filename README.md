@@ -68,20 +68,20 @@ and [`docs/algorithm-provenance.md`](docs/algorithm-provenance.md).
 ## Performance
 
 Time to hash an image that is already loaded, and to decode it, on an Apple M3 Pro (CMake
-Release build with the bundled decoders, one thread, minimum of 30–300 runs):
+Release build with the bundled decoders, one thread, minimum of 5–300 runs):
 
 | | 400×400 JPEG | 5472×3648 JPEG (20 Mpx) |
 | --- | --- | --- |
-| decode | 0.23 ms | 54 ms |
+| decode | 0.24 ms | 56 ms |
 | aHash, pHash, wHash, BMH | 0.05 ms each | 2.6 ms each |
-| dHash | 0.05 ms | 6.3 ms |
-| ColorHash, ColorMoments | 0.13, 0.24 ms | 17, 30 ms |
-| mHash, Radial | 0.92, 0.60 ms | 33, 49 ms |
+| dHash | 0.06 ms | 6.3 ms |
+| ColorHash, ColorMoments | 0.13, 0.25 ms | 17, 31 ms |
+| mHash, Radial | 0.94, 0.61 ms | 34, 49 ms |
 
 A hash's cost grows with the image's pixel count, since the reduction to its working size
 reads every pixel; for large JPEGs `ph_context_set_decode_scale()` cuts both. The batch API
-spreads files over every CPU. The full table and the method are in
-[`docs/theory/choosing.md`](docs/theory/choosing.md#cost).
+spreads files over every CPU. How the time grows with the image, by format, and what each
+setting saves is in [`docs/guide/performance.md`](docs/guide/performance.md).
 
 ## Build configurations
 

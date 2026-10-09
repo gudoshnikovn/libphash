@@ -923,10 +923,9 @@ typedef enum {
  * `flags`. The work over the full image is cached on the context and done once, whichever
  * algorithms ask for it: the grayscale conversion, and one area-average pass that aHash,
  * pHash (at the default `dct_size`) and wHash (`PH_WHASH_FAST`) all reduce from -- BMH
- * shares it too. dHash resamples on its own. On a 20-megapixel image the four together
- * cost about half of what four independent resizes would.
- * Results are bit-for-bit identical to calling the equivalent `ph_compute_*` function
- * directly.
+ * shares it too. dHash resamples on its own. Results are bit-for-bit identical to calling
+ * the equivalent `ph_compute_*` function directly. What the sharing saves is measured in
+ * docs/guide/performance.md.
  *
  * Computation stops at the first algorithm that fails and its error code is returned.
  *
