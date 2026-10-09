@@ -460,7 +460,7 @@ later, and does four things:
   downloaded once into `~/.cache/libphash-site/`, from a fixed commit of
   [libphash-site-corpus](https://github.com/gudoshnikovn/libphash-site-corpus) (Commons only
   for a file the copy lacks), and checked against `tools/site/corpus_photos.tsv`; without a network a local build goes on with what it has,
-  and the CI `site` job fails unless every photograph is there.
+  and the `site.yml` workflow fails unless every photograph is there.
   Measurements are cached in `build/site-cache/`, so a rebuild with nothing changed
   measures nothing. [`tools/site/README.md`](https://github.com/gudoshnikovn/libphash/blob/main/tools/site/README.md)
   describes the tool and how to add to it.
@@ -619,7 +619,6 @@ on any pull request targeting either, and by hand through `workflow_dispatch` (s
 | Job | What it checks |
 |---|---|
 | `format-check` | `scripts/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`, `tools/`; `scripts/check_docs_coverage.sh`; `scripts/check_final_state_voice.sh`, which fails on tracker ids, paths into local planning notes and release-cycle wording (a feature "since" a version) in tracked text; `shellcheck --severity=warning` over `scripts/*.sh`; `scripts/check_casts.py`, the explicit-cast count per file in `src/` against `scripts/explicit_casts.txt`; `scripts/check_coverage.py --check-docs`, which keeps the coverage table below equal to `scripts/coverage_thresholds.txt`; `scripts/check_spelling.py`, American spelling in the documentation and the public header; and `make docs` (`scripts/api_docs.sh`, the pinned Doxygen 1.18 from `scripts/install_doxygen.sh`), the API reference, which fails on any undocumented public declaration and is uploaded as the `api-reference-html` artifact. Fast, no library build, catches these before the slower jobs run. |
-| `site` | `scripts/site.sh`, the documentation site as `make site` builds it, strict: a broken link or anchor, a page missing from the navigation, a missing included file or a figure whose stages disagree with the library fails it. Python 3.12, the oldest the site supports, installing the hashed lock with pip. The photo corpus is fetched first with `tools/site/fetch_corpus.py fetch --strict`, which fails unless every photograph arrives and matches the manifest; the measurements in `build/site-cache/` are kept in the Actions cache. The site is uploaded as the `site-html` artifact. |
 | `build-and-test` | Full vendored build (libjpeg-turbo + libpng + libwebp + zlib-ng) across linux-x86_64 (gcc, clang), linux-arm64, macos-arm64, plus the shared library on linux-x86_64 (gcc). `PHASH_STRICT_DEPS=ON`, so a decoder silently falling back to stb_image is a hard configure failure, not a quiet pass. |
 | `build-and-test-windows` | The same full vendored build under MSVC on windows-latest, with NASM for libjpeg-turbo's SIMD: the configuration of the windows-x86_64 release archives, built and tested before a tag. |
 | `build-options` | stb_image-only builds with `PHASH_ENABLE_THREADS=OFF` (the batch API's sequential path) and with `PHASH_ENABLE_MOCK_BACKEND=ON` (the test-only `DE AD` decoder and the test branches written for it). `PHASH_OPTIMIZE_NATIVE` has no job: `-march=native` compiles for whatever CPU the runner has, so a result would describe that machine rather than the option. |
@@ -646,7 +645,18 @@ itself cannot move into the action, because a local action is read from the work
 copy. Configure and build steps stay in the jobs, since their arguments are what
 distinguishes one job from another.
 
-Three more workflows, and Dependabot, run on their own trigger rather than per push:
+Four more workflows, and Dependabot, run on their own trigger rather than per push:
+
+- **`.github/workflows/site.yml`** — the documentation site, by hand only (*Run
+  workflow*, on the chosen branch): `scripts/site.sh`, strict, so a broken link or
+  anchor, a page missing from the navigation, a missing included file or a figure whose
+  stages disagree with the library fails it. A change to the library's sources measures
+  every figure again, which is most pushes to a release branch, so the site is built when
+  it is wanted rather than on each of them. Python 3.12, the oldest the site supports,
+  installs the hashed lock with pip. The photo corpus is fetched first with
+  `tools/site/fetch_corpus.py fetch --strict`, which fails unless every photograph
+  arrives and matches the manifest; the measurements in `build/site-cache/` are kept in
+  the Actions cache. The site is uploaded as the `site-html` artifact.
 
 - **`.github/workflows/release.yml`** — on a pushed `v*` tag, builds the static and
   shared release archives for every platform, smoke-tests each one from a clean

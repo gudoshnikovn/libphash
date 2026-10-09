@@ -19,8 +19,8 @@ the manifest. A commit, once made, never changes.
         file that cannot be downloaded, or whose bytes differ from the manifest, is left
         out with a warning: the charts say how many photographs they were drawn from, so
         a smaller corpus is visible on the page rather than silently different. With
-        --strict a missing file fails the command instead; CI fetches the corpus this
-        way before it builds the site, so the site it builds has every photograph.
+        --strict a missing file fails the command instead; the site workflow fetches
+        the corpus this way before it builds the site, so the site it builds has every photograph.
 
     fetch_corpus.py page --out docs/project/corpus.md
         Writes the site's attribution page from the manifest: every photograph, with a
