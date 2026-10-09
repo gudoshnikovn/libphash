@@ -510,7 +510,7 @@ The default, 32, is therefore also the best of the range.
 
 ## Settings that affect it
 
-Four context settings change the pixels pHash reads.
+Five context settings change the pixels pHash reads.
 
 | Setting | Effect on pHash |
 |---|---|
@@ -518,6 +518,7 @@ Four context settings change the pixels pHash reads.
 | [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a JPEG decoder converts to grayscale itself ([measured](preparation.md#the-decoders-grayscale)), which can move a value by one level |
 | [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | on by default: the hash describes the image as displayed, after its EXIF rotation |
 | [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | how transparent pixels are composited before grayscale ([which background](preparation.md#which-background)) |
+| [`ph_context_set_decode_scale()`](../api/loading.md#ph_context_set_decode_scale) | a JPEG read by libjpeg-turbo is decoded at ½, ¼ or ⅛ of its size ([measured](preparation.md#decoding-at-a-reduced-scale)); the 32×32 grid averages the smaller image into the same cells, and every hash stays within the threshold for copies at every scale |
 
 A level here and there in the 32×32 grid moves every coefficient a little, and can tip
 only one that lies near the threshold.

@@ -485,7 +485,7 @@ has the sweep).
 
 ## Settings that affect it
 
-Four context settings change the pixels mHash reads.
+Five context settings change the pixels mHash reads.
 
 | Setting | Effect on mHash |
 |---|---|
@@ -493,6 +493,7 @@ Four context settings change the pixels mHash reads.
 | [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a JPEG decoder converts to grayscale itself ([measured](preparation.md#the-decoders-grayscale)), which moves gray levels by one here and there |
 | [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | on by default: the hash describes the image as displayed, after its EXIF rotation |
 | [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | how transparent pixels are composited before grayscale ([which background](preparation.md#which-background)) |
+| [`ph_context_set_decode_scale()`](../api/loading.md#ph_context_set_decode_scale) | a JPEG read by libjpeg-turbo is decoded at ½, ¼ or ⅛ of its size ([measured](preparation.md#decoding-at-a-reduced-scale)); the blur's σ is fixed in pixels, so a smaller decode changes what mHash reads, and the digest moves at every scale, toward its threshold for copies |
 
 A gray level here and there reaches the response through the kernel, and the block sums
 of fine detail are sensitive to it:

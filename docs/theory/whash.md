@@ -475,7 +475,7 @@ configuration. On the tests' synthetic corpus, turning it on lowers separability
 
 ## Settings that affect it
 
-Four context settings change the pixels wHash reads.
+Five context settings change the pixels wHash reads.
 
 | Setting | Effect on wHash |
 |---|---|
@@ -483,6 +483,7 @@ Four context settings change the pixels wHash reads.
 | [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a JPEG decoder converts to grayscale itself ([measured](preparation.md#the-decoders-grayscale)), which can move a value by one level |
 | [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | on by default: the hash describes the image as displayed, after its EXIF rotation |
 | [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | how transparent pixels are composited before grayscale ([which background](preparation.md#which-background)) |
+| [`ph_context_set_decode_scale()`](../api/loading.md#ph_context_set_decode_scale) | a JPEG read by libjpeg-turbo is decoded at ½, ¼ or ⅛ of its size ([measured](preparation.md#decoding-at-a-reduced-scale)); the 8×8 grid averages the smaller image into the same cells, and nearly every hash stays within the threshold for copies, down to images a few times the grid |
 
 A level here and there in the grid moves a block mean by a fraction of a level, and can
 tip only a value that lies next to the median.

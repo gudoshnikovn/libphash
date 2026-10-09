@@ -560,7 +560,7 @@ hash reads the setting.
 
 ## Settings that affect it
 
-Four context settings change the pixels Radial reads, besides its own parameters.
+Five context settings change the pixels Radial reads, besides its own parameters.
 
 | Setting | Effect on Radial |
 |---|---|
@@ -568,6 +568,7 @@ Four context settings change the pixels Radial reads, besides its own parameters
 | [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a JPEG decoder converts to grayscale itself ([measured](preparation.md#the-decoders-grayscale)), which can move a value by one level |
 | [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | on by default: the digest describes the image as displayed, after its EXIF rotation; a photograph stored on its side and read without it scores as an unrelated image |
 | [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | how transparent pixels are composited before grayscale ([which background](preparation.md#which-background)) |
+| [`ph_context_set_decode_scale()`](../api/loading.md#ph_context_set_decode_scale) | a JPEG read by libjpeg-turbo is decoded at ½, ¼ or ⅛ of its size ([measured](preparation.md#decoding-at-a-reduced-scale)); the blur is fixed in pixels, so a smaller decode changes what the lines sample; Radial moves the most of the nine hashes, and at an eighth of a 1280-pixel photograph most digests fall outside the threshold for copies |
 
 A level here and there is averaged away by the blur and the 128 points of a line.
 

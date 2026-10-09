@@ -464,7 +464,7 @@ PH_API ph_error_t ph_context_set_gray_weights(ph_context_t *ctx, int r, int g, i
  * ph_context_set_gray_weights(): (100, 10, 18) is stored as (100, 10, 18) because it
  * already sums to 128, but (1, 1, 1) is stored as (42, 42, 44). The only configuration
  * getter, because this is the only setter that transforms its input; the others store
- * exactly what they were given.
+ * their value as given, a flag as 0 or 1.
  * @param ctx The context.
  * @param[out] r,g,b Receive the weights. None may be NULL.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for a NULL argument (nothing is

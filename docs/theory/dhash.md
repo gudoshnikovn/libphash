@@ -448,7 +448,7 @@ times are in the table at the top of the page.
 
 ## Settings that affect it
 
-dHash has no parameters of its own: the grid is always 9×8. Four context settings change
+dHash has no parameters of its own: the grid is always 9×8. Five context settings change
 the pixels it reads.
 
 | Setting | Effect on dHash |
@@ -457,6 +457,7 @@ the pixels it reads.
 | [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a JPEG decoder converts to grayscale itself ([measured](preparation.md#the-decoders-grayscale)), which can tip a pair of nearly equal neighbors |
 | [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | on by default: the hash describes the image as displayed, after its EXIF rotation |
 | [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | how transparent pixels are composited before grayscale ([which background](preparation.md#which-background)) |
+| [`ph_context_set_decode_scale()`](../api/loading.md#ph_context_set_decode_scale) | a JPEG read by libjpeg-turbo is decoded at ½, ¼ or ⅛ of its size ([measured](preparation.md#decoding-at-a-reduced-scale)); the 9×8 grid averages the smaller image into the same cells, and nearly every hash stays within the threshold for copies, down to images a few times the grid |
 
 With [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale)
 on, a JPEG is decoded straight to the luminance channel the file stores, which the

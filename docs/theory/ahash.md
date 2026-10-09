@@ -402,7 +402,7 @@ from the same grid.
 
 ## Settings that affect it
 
-aHash has no parameters of its own: the grid is always 8×8. Four context settings change
+aHash has no parameters of its own: the grid is always 8×8. Five context settings change
 the pixels it reads.
 
 | Setting | Effect on aHash |
@@ -411,6 +411,7 @@ the pixels it reads.
 | [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a JPEG decoder converts to grayscale itself ([measured](preparation.md#the-decoders-grayscale)), which can move a value by one level |
 | [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | on by default: the hash describes the image as displayed, after its EXIF rotation |
 | [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | how transparent pixels are composited before grayscale ([which background](preparation.md#which-background)) |
+| [`ph_context_set_decode_scale()`](../api/loading.md#ph_context_set_decode_scale) | a JPEG read by libjpeg-turbo is decoded at ½, ¼ or ⅛ of its size ([measured](preparation.md#decoding-at-a-reduced-scale)); the 8×8 grid averages the smaller image into the same cells, and nearly every hash stays within the threshold for copies, down to images a few times the grid |
 
 A level here and there moves a cell by a fraction of a level, and can tip only a cell that
 lies next to the mean.

@@ -418,12 +418,13 @@ numbers at the end cost nothing next to the pixels.
 ## Settings that affect it
 
 ColorMoments has no parameters of its own, and the grayscale settings do not reach it.
-Two context settings change the pixels it reads.
+Three context settings change the pixels it reads.
 
 | Setting | Effect on ColorMoments |
 |---|---|
 | [`ph_context_set_load_grayscale()`](../api/loading.md#ph_context_set_load_grayscale) | a decoded single-channel image has no color, and ColorMoments refuses it with [`PH_ERR_REQUIRES_COLOR`](../api/errors.md#PH_ERR_REQUIRES_COLOR) rather than compute three identical channels |
 | [`ph_context_set_alpha_mode()`](../api/loading.md#ph_context_set_alpha_mode) | the color transparent pixels are composited onto, whose levels become part of every moment ([which background](preparation.md#which-background)) |
+| [`ph_context_set_decode_scale()`](../api/loading.md#ph_context_set_decode_scale) | a JPEG read by libjpeg-turbo is decoded at ½, ¼ or ⅛ of its size ([measured](preparation.md#decoding-at-a-reduced-scale)); a smaller decode keeps the proportions of the colors, and most digests stay within the threshold for copies at every scale |
 | [`ph_context_set_auto_orient()`](../api/loading.md#ph_context_set_auto_orient) | none: turning or mirroring an image keeps every pixel |
 
 [`ph_context_set_gray_weights()`](../api/params.md#ph_context_set_gray_weights) has no
