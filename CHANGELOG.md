@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FIFO among the paths of `ph_hash_files()` held up its worker and the rest of the batch.
   It returns `PH_ERR_IO`, "not a regular file", as for any other path that is not a
   regular file (#15).
+- **A static Debug or MSVC install names the libraries it installed.** The CMake package
+  and `libphash.pc` named the vendored decoder archives by their Release, Unix names, so a
+  consumer could not link: a Debug install has `libpng16d.a` where both said `libpng16.a`,
+  and under MSVC `libphash.pc` said `-lwebpdecoder -lz` for `libwebpdecoder.lib` and
+  `zlibstatic.lib`. Both take each name from the file the build produced, in the
+  configuration that is installed. A prefix holds one configuration; the install guide
+  says so (#14).
 
 ## [2.0.1] - 2026-10-09
 

@@ -6,12 +6,19 @@ include(CMakeFindDependencyMacro)
 # target's INTERFACE_LINK_LIBRARIES (wrapped in $<LINK_ONLY:>), so a consumer
 # resolving phash::phash must be able to resolve Threads::Threads too --
 # otherwise find_package(phash) fails outright with "the target was not found".
-# Vendored codec archives don't need this: they're exported as absolute paths
-# via $<INSTALL_INTERFACE:>, not as imported targets.
 set(PHASH_NEEDS_THREADS_DEP @PHASH_NEEDS_THREADS_DEP@)
 if(PHASH_NEEDS_THREADS_DEP)
     find_dependency(Threads)
 endif()
+
+# The vendored codec archives of a STATIC libphash, installed next to it, are the
+# phash::vendored_* imported targets on phash::phash's link interface. This file
+# declares them with the file names of the configuration that was installed; it is
+# empty for a shared libphash. The archives sit two levels up, in the libdir that
+# holds cmake/phash/.
+get_filename_component(_phash_libdir "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
+include("${CMAKE_CURRENT_LIST_DIR}/phashVendored.cmake")
+unset(_phash_libdir)
 
 include("${CMAKE_CURRENT_LIST_DIR}/phashTargets.cmake")
 

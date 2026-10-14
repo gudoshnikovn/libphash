@@ -1010,10 +1010,12 @@ jobs:
         apt-packages: cmake nasm pkg-config
 
     # cmake --install into a throwaway prefix + build a mini find_package(phash)
-    # consumer against it. Exercises both the static and shared build.
+    # consumer against it. Exercises both the static and shared build, and a static
+    # Debug one, whose vendored archives have names of their own (libpng16d.a).
     - name: Smoke-test install()/pkg-config/find_package(phash)
       run: |
         ./scripts/smoke_install.sh static
+        ./scripts/smoke_install.sh static Debug
         ./scripts/smoke_install.sh shared
         ./scripts/smoke_make_install.sh
         # libphash must not reconfigure a parent that pulls it in via
@@ -1029,3 +1031,33 @@ jobs:
 
     - name: Build and run examples/
       run: ./scripts/build_examples.sh
+
+  # The same install smoke test under MSVC, static, where the vendored archives are named
+  # by each vendor's MSVC conventions (libwebpdecoder.lib, libpng16_static.lib,
+  # zlibstatic.lib, the last two with a "d" in Debug) and libphash.pc's -l flags have to
+  # match them. The Visual
+  # Studio generator is multi-config, so this is also the --config path of the install.
+  # No NASM: libjpeg-turbo's SIMD does not change what is installed.
+  install-smoke-test-windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        build-type: [Release, Debug]
+    runs-on: windows-latest
+    timeout-minutes: 30
+    name: install-smoke-test-windows (${{ matrix.build-type }})
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - uses: ./.github/actions/setup-build
+      with:
+        apt-packages: ''
+        brew-packages: ''
+
+    - name: Smoke-test install()/pkg-config/find_package(phash)
+      shell: bash
+      env:
+        BUILD_TYPE: ${{ matrix.build-type }}
+      run: ./scripts/smoke_install.sh static "$BUILD_TYPE"

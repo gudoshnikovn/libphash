@@ -9,6 +9,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
+# Git Bash on Windows: a native cmake reads /tmp/... as a path on the current drive, so
+# every path handed to it is written the mixed way (C:/Users/...), which bash reads too.
+ON_WINDOWS=""
+if command -v cygpath >/dev/null 2>&1; then
+    WORK_DIR="$(cygpath -m "$WORK_DIR")"
+    ON_WINDOWS=1
+fi
 
 BUILD_DIR="$WORK_DIR/build"
 PREFIX_DIR="$WORK_DIR/prefix"
@@ -28,14 +35,19 @@ run_consumer() {
     return 1
 }
 
-echo "==> Configuring + building libphash (${1:-static})"
-CMAKE_ARGS=(-DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$PREFIX_DIR" -DPHASH_BUILD_TESTS=OFF)
+# $1: static (default) or shared. $2: the build type, Release by default; a Debug build
+# names some vendored archives differently (libpng16d.a), and the installed package and
+# .pc have to name the files that are there.
+BUILD_TYPE="${2:-Release}"
+echo "==> Configuring + building libphash (${1:-static}, $BUILD_TYPE)"
+CMAKE_ARGS=(-DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DCMAKE_INSTALL_PREFIX="$PREFIX_DIR" -DPHASH_BUILD_TESTS=OFF)
 if [[ "${1:-static}" == "shared" ]]; then
     CMAKE_ARGS+=(-DPHASH_BUILD_SHARED=ON)
 fi
 cmake -S "$ROOT_DIR" -B "$BUILD_DIR" "${CMAKE_ARGS[@]}"
-cmake --build "$BUILD_DIR" --target phash -j
-cmake --install "$BUILD_DIR"
+# --config for a multi-config generator (Visual Studio), ignored by a single-config one.
+cmake --build "$BUILD_DIR" --target phash --config "$BUILD_TYPE" -j
+cmake --install "$BUILD_DIR" --config "$BUILD_TYPE"
 
 # Structural check on the generated .pc: `prefix` is the .pc file's own directory walked
 # back up (${pcfiledir}), and `libdir`/`includedir` are relative to ${prefix} -- the form
@@ -59,16 +71,54 @@ for var in libdir includedir; do
     esac
 done
 
+# Every -lNAME of the installed .pc has to name a file in lib/, the one a linker looks
+# for: libNAME.a (or libNAME.so/.dylib) with a Unix linker, NAME.lib under MSVC (pkgconf
+# --msvc-syntax). Read from the file itself, so it holds where no pkg-config or no cc is
+# installed, and for the names a Debug build gives the vendored archives.
+echo "==> Checking every -l in libphash.pc names an installed file"
+libs_line=$(sed -n 's/^Libs: //p' "$PC_FILE")
+for flag in $libs_line; do
+    case "$flag" in
+        -l*) name="${flag#-l}" ;;
+        *) continue ;;
+    esac
+    found=""
+    for f in "lib$name.a" "lib$name.so" "lib$name.dylib" "$name.lib"; do
+        if [[ -f "$PREFIX_DIR/lib/$f" ]]; then
+            found="lib/$f"
+        fi
+    done
+    if [[ -z "$found" ]]; then
+        case "$name" in
+            m | dl | pthread | z) found="the system's" ;; # z: a build with the system zlib
+            *)
+                echo "!!! libphash.pc has $flag, but lib/ has no such file:" >&2
+                ls "$PREFIX_DIR/lib" >&2
+                exit 1
+                ;;
+        esac
+    fi
+    echo "    $flag -> $found"
+done
+
 echo "==> Building consumer via find_package(phash)"
 mkdir -p "$CONSUMER_DIR"
 # The consumer is examples/cmake_consumer, the one the README points to.
 cp "$ROOT_DIR/examples/cmake_consumer/CMakeLists.txt" "$ROOT_DIR/examples/cmake_consumer/main.c" \
     "$CONSUMER_DIR/"
-cmake -S "$CONSUMER_DIR" -B "$CONSUMER_DIR/build" -DCMAKE_PREFIX_PATH="$PREFIX_DIR"
-cmake --build "$CONSUMER_DIR/build" -j
-run_consumer "$CONSUMER_DIR/build/consumer" "$PREFIX_DIR/lib"
+cmake -S "$CONSUMER_DIR" -B "$CONSUMER_DIR/build" -DCMAKE_PREFIX_PATH="$PREFIX_DIR" \
+    -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
+cmake --build "$CONSUMER_DIR/build" --config "$BUILD_TYPE" -j
+CONSUMER_BIN="$CONSUMER_DIR/build/consumer"
+if [[ -f "$CONSUMER_DIR/build/$BUILD_TYPE/consumer.exe" ]]; then
+    CONSUMER_BIN="$CONSUMER_DIR/build/$BUILD_TYPE/consumer.exe"
+fi
+run_consumer "$CONSUMER_BIN" "$PREFIX_DIR/lib"
 
-if command -v pkg-config >/dev/null 2>&1; then
+# Not on Windows: the archives are MSVC's, and a `cc` or `pkg-config` found in Git Bash
+# belongs to another toolchain. The -l check above is what covers the .pc there.
+if [[ -z "$ON_WINDOWS" ]] && command -v pkg-config >/dev/null 2>&1 &&
+    command -v cc >/dev/null 2>&1; then
     echo "==> Building consumer via pkg-config"
     PKG_CONFIG_PATH="$PREFIX_DIR/lib/pkgconfig" pkg-config --exists libphash
     PKG_FLAGS=$(PKG_CONFIG_PATH="$PREFIX_DIR/lib/pkgconfig" pkg-config --cflags --libs libphash)
@@ -99,7 +149,7 @@ if command -v pkg-config >/dev/null 2>&1; then
     cc "$CONSUMER_DIR/main.c" $MOVED_FLAGS -o "$CONSUMER_DIR/consumer_moved"
     run_consumer "$CONSUMER_DIR/consumer_moved" "$MOVED_DIR/lib"
 else
-    echo "==> pkg-config not found, skipping that half of the smoke test"
+    echo "==> Windows, or no pkg-config or cc: skipping the pkg-config build"
 fi
 
 echo "==> Smoke test passed"

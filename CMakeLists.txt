@@ -79,59 +79,43 @@ macro(phash_pop_global_build_flags)
     endif()
 endmacro()
 
-# Computes a vendored static target's real installed file name, for baking
-# into an INSTALL_INTERFACE consumer link path as a plain string.
+# Installs a vendored codec archive next to a STATIC libphash and puts it on the link
+# line of both installed consumers: find_package(phash) and libphash.pc.
 #
-# $<TARGET_FILE_NAME:...> looks like the obvious tool for this, but doesn't
-# work inside INSTALL_INTERFACE here: these targets (zlib-ng, png_static,
-# webpdecoder) are deliberately not part of phash's export set
-# (see the comment above target_link_libraries(phash PRIVATE
-# $<BUILD_INTERFACE:png_static> ...) below), so by the time a consumer's
-# CMake evaluates that generator expression, the target it names doesn't
-# exist in that project at all, and the consumer's configure fails with
-# "No target png_static" (scripts/smoke_install.sh covers this).
+# The installed file name is not known here at configure time. A vendor sets its own
+# PREFIX, OUTPUT_NAME and per-configuration postfix (libpng16d.a in Debug, zlibstaticd.lib
+# for zlib-ng under MSVC), libwebp sets CMAKE_STATIC_LIBRARY_PREFIX to "lib" in its own
+# directory under MSVC (libwebpdecoder.lib), and a multi-config generator only learns the
+# configuration at build time. $<TARGET_FILE_NAME:...> knows all of it, but it can only be
+# evaluated here, in the project that has the target: these targets are deliberately not
+# in phash's export set (see target_link_libraries(phash PRIVATE
+# $<BUILD_INTERFACE:png_static> ...) below), so in a consumer's configure the same
+# expression would fail with "No target png_static" (scripts/smoke_install.sh covers this).
 #
-# So this reads each of PREFIX/OUTPUT_NAME/SUFFIX back from the target right
-# now, while it still exists in this configure, falling back to CMake's
-# regular static-library defaults for whichever property the vendor's own
-# CMakeLists didn't override -- the same three inputs $<TARGET_FILE_NAME:...>
-# itself would combine, just resolved eagerly instead of deferred.
-#
-# Optional third argument `src_dir`: a vendor can retarget
-# CMAKE_STATIC_LIBRARY_PREFIX itself (a plain variable, not a target
-# property) from inside its own add_subdirectory() tree -- libwebp does
-# exactly this for MSVC ("match the naming convention used by nmake"),
-# forcing a literal "lib" prefix even on Windows. That assignment is scoped
-# to libwebp's own subdirectory and never reaches this file's scope, so
-# get_target_property(PREFIX) sees nothing and CMAKE_STATIC_LIBRARY_PREFIX
-# here is back to MSVC's own default ("") the moment add_subdirectory()
-# returns. get_directory_property(... DEFINITION ...) against that
-# subdirectory is the one way to read the variable's value as it stood
-# during that directory's own processing. Without the src_dir fallback,
-# libwebp's INSTALL_INTERFACE path gets the wrong file name under MSVC.
-function(phash_static_lib_filename out_var target)
-    set(_phash_src_dir "")
-    if(ARGC GREATER 2)
-        set(_phash_src_dir "${ARGV2}")
-    endif()
-
-    get_target_property(_phash_prefix ${target} PREFIX)
-    if(NOT _phash_prefix AND _phash_src_dir)
-        get_directory_property(_phash_prefix DIRECTORY "${_phash_src_dir}"
-            DEFINITION CMAKE_STATIC_LIBRARY_PREFIX)
-    endif()
-    if(NOT _phash_prefix)
-        set(_phash_prefix "${CMAKE_STATIC_LIBRARY_PREFIX}")
-    endif()
-    get_target_property(_phash_name ${target} OUTPUT_NAME)
-    if(NOT _phash_name)
-        set(_phash_name "${target}")
-    endif()
-    get_target_property(_phash_suffix ${target} SUFFIX)
-    if(NOT _phash_suffix)
-        set(_phash_suffix "${CMAKE_STATIC_LIBRARY_SUFFIX}")
-    endif()
-    set(${out_var} "${_phash_prefix}${_phash_name}${_phash_suffix}" PARENT_SCOPE)
+# So the names are evaluated by file(GENERATE), once per configuration, into two installed
+# files: phashVendored.cmake, which declares an imported target phash::vendored_<target>
+# for each archive, and libphash.pc, which gets an -l flag for it. The exported phash::phash
+# names the imported target, which keeps the archives in link order. An install prefix
+# holds one configuration: libphash's own archive has the same name in every one.
+function(phash_install_vendored_archive target)
+    install(TARGETS ${target} ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
+    set(_phash_imported phash::vendored_${target})
+    set(PHASH_INSTALL_LINK_LIBS ${PHASH_INSTALL_LINK_LIBS}
+        $<INSTALL_INTERFACE:${_phash_imported}> PARENT_SCOPE)
+    string(APPEND PHASH_VENDORED_CMAKE
+        "if(NOT TARGET ${_phash_imported})\n"
+        "    add_library(${_phash_imported} STATIC IMPORTED)\n"
+        "    set_target_properties(${_phash_imported} PROPERTIES\n"
+        "        IMPORTED_LOCATION \"\${_phash_libdir}/$<TARGET_FILE_NAME:${target}>\")\n"
+        "endif()\n")
+    set(PHASH_VENDORED_CMAKE "${PHASH_VENDORED_CMAKE}" PARENT_SCOPE)
+    # -lNAME finds <implicit prefix>NAME<suffix>: lib<NAME>.a with a Unix linker,
+    # <NAME>.lib for pkgconf under MSVC, whose implicit prefix is empty. A prefix of the
+    # vendor's own that is not the implicit one stays part of NAME.
+    set(_phash_prefix $<TARGET_FILE_PREFIX:${target}>)
+    set(PHASH_PC_LIBS_PRIVATE ${PHASH_PC_LIBS_PRIVATE}
+        "-l$<IF:$<STREQUAL:${_phash_prefix},${CMAKE_STATIC_LIBRARY_PREFIX}>,,${_phash_prefix}>$<TARGET_FILE_BASE_NAME:${target}>"
+        PARENT_SCOPE)
 endfunction()
 
 # --- Version header (single source of truth: the project() VERSION above) ---
@@ -252,6 +236,7 @@ if(PHASH_IS_TOP_LEVEL)
     # single-pass GNU ld: codecs before the zlib they depend on.
     set(PHASH_PC_LIBS_PRIVATE "")
     set(PHASH_INSTALL_LINK_LIBS "")
+    set(PHASH_VENDORED_CMAKE "")
 endif()
 
 # Vendored codec archives only need to be installed/relinked for a STATIC
@@ -710,17 +695,13 @@ if(PHASH_USE_ZLIB_NG)
     target_compile_definitions(phash PRIVATE PH_USE_ZLIB_NG)
     set(PHASH_ZLIB_TARGET zlib-ng)
     if(PHASH_INSTALL_PRIVATE_DEPS)
-        install(TARGETS zlib-ng ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-        # phash_static_lib_filename(), not a hardcoded "libz.a": see that
-        # function's own comment (near the top of this file) for why.
-        phash_static_lib_filename(PHASH_ZLIB_LIB_FILENAME zlib-ng)
-        set(PHASH_ZLIB_INSTALL_LINK_LIB
-            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/${PHASH_ZLIB_LIB_FILENAME}>)
+        # Installed and linked after the codecs that need it, below.
+        set(PHASH_ZLIB_VENDORED ON)
     endif()
 else()
     if(PHASH_INSTALL_PRIVATE_DEPS)
         # System zlib -- nothing to install, just record the dependency.
-        set(PHASH_ZLIB_INSTALL_LINK_LIB $<INSTALL_INTERFACE:z>)
+        set(PHASH_ZLIB_VENDORED OFF)
     endif()
 endif()
 
@@ -750,20 +731,7 @@ if(PHASH_USE_LIBPNG)
         ${CMAKE_CURRENT_BINARY_DIR}/vendor/libpng
     )
     if(PHASH_INSTALL_PRIVATE_DEPS)
-        # libpng renames its static target's output (e.g. "png16", not
-        # "png_static") via OUTPUT_NAME -- read it back rather than assuming,
-        # for the pkg-config "-l" flag below (phash_static_lib_filename()
-        # covers the actual installed file name, but pkg-config's -lNAME
-        # needs the bare name instead).
-        get_target_property(PHASH_PNG_LIB_NAME png_static OUTPUT_NAME)
-        if(NOT PHASH_PNG_LIB_NAME)
-            set(PHASH_PNG_LIB_NAME png_static)
-        endif()
-        install(TARGETS png_static ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-        phash_static_lib_filename(PHASH_PNG_LIB_FILENAME png_static)
-        list(APPEND PHASH_INSTALL_LINK_LIBS
-            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/${PHASH_PNG_LIB_FILENAME}>)
-        list(APPEND PHASH_PC_LIBS_PRIVATE "-l${PHASH_PNG_LIB_NAME}")
+        phash_install_vendored_archive(png_static)
         set(PHASH_ZLIB_NEEDED ON)
     endif()
 endif()
@@ -800,21 +768,17 @@ if(PHASH_USE_WEBP)
         # libwebp tags this target with its own public headers -- we only want
         # its archive installed (phash's own libphash.h is the public surface).
         set_target_properties(webpdecoder PROPERTIES PUBLIC_HEADER "")
-        install(TARGETS webpdecoder ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR})
-        # libwebp is why phash_static_lib_filename() takes a src_dir: under MSVC it
-        # sets CMAKE_STATIC_LIBRARY_PREFIX to "lib" inside its own directory scope
-        # (installed file is "libwebpdecoder.lib", not "webpdecoder.lib").
-        phash_static_lib_filename(PHASH_WEBP_LIB_FILENAME webpdecoder
-            "${CMAKE_CURRENT_SOURCE_DIR}/vendor/libwebp")
-        list(APPEND PHASH_INSTALL_LINK_LIBS
-            $<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/${PHASH_WEBP_LIB_FILENAME}>)
-        list(APPEND PHASH_PC_LIBS_PRIVATE "-lwebpdecoder")
+        phash_install_vendored_archive(webpdecoder)
     endif()
 endif()
 
 if(PHASH_INSTALL_PRIVATE_DEPS AND PHASH_ZLIB_NEEDED)
-    list(APPEND PHASH_INSTALL_LINK_LIBS ${PHASH_ZLIB_INSTALL_LINK_LIB})
-    list(APPEND PHASH_PC_LIBS_PRIVATE "-lz")
+    if(PHASH_ZLIB_VENDORED)
+        phash_install_vendored_archive(zlib-ng)
+    else()
+        list(APPEND PHASH_INSTALL_LINK_LIBS $<INSTALL_INTERFACE:z>)
+        list(APPEND PHASH_PC_LIBS_PRIVATE "-lz")
+    endif()
 endif()
 
 # --- install() / find_package(phash) / pkg-config ---
@@ -880,9 +844,15 @@ if(PHASH_IS_TOP_LEVEL)
         ${CMAKE_CURRENT_BINARY_DIR}/phashConfig.cmake
         INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/phash
     )
+    # The imported targets of the vendored archives, declared by
+    # phash_install_vendored_archive(); empty for a shared libphash, which carries them.
+    file(GENERATE
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/install-$<CONFIG>/phashVendored.cmake
+        CONTENT "${PHASH_VENDORED_CMAKE}")
     install(FILES
         ${CMAKE_CURRENT_BINARY_DIR}/phashConfig.cmake
         ${CMAKE_CURRENT_BINARY_DIR}/phashConfigVersion.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/install-$<CONFIG>/phashVendored.cmake
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/phash
     )
 
@@ -949,12 +919,18 @@ if(PHASH_IS_TOP_LEVEL)
         endif()
     endforeach()
 
+    # The -l flags of the vendored archives are generator expressions (see
+    # phash_install_vendored_archive()), so the configured file is evaluated once more
+    # per configuration, and the configuration being installed picks its own.
     configure_file(
         ${CMAKE_CURRENT_SOURCE_DIR}/libphash.pc.in
-        ${CMAKE_CURRENT_BINARY_DIR}/libphash.pc
+        ${CMAKE_CURRENT_BINARY_DIR}/libphash.pc.in
         @ONLY
     )
-    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libphash.pc
+    file(GENERATE
+        OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/install-$<CONFIG>/libphash.pc
+        INPUT ${CMAKE_CURRENT_BINARY_DIR}/libphash.pc.in)
+    install(FILES ${CMAKE_CURRENT_BINARY_DIR}/install-$<CONFIG>/libphash.pc
         DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
     )
 endif()

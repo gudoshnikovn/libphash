@@ -139,6 +139,12 @@ configure without them rather than build a Minimal library under the Full name.
 prefix you cannot write to, such as the default `/usr/local` on most systems, needs `sudo`
 for the install step only.
 
+A prefix holds one build configuration: `libphash.a` has the same name in a Debug and a
+Release build, so a second `cmake --install` into the same prefix replaces the first, CMake
+package and `libphash.pc` included. With a multi-config generator (Visual Studio, Xcode)
+pick it with `cmake --install <build dir> --config Debug`; Release and Debug go to
+prefixes of their own.
+
 The presets a consumer is likely to want:
 
 | Preset | Builds | In |
