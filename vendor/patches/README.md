@@ -6,7 +6,7 @@
 
 | File | Upstream | Patch | What it changes |
 |---|---|---|---|
-| `stb_image.h` | v2.30, `013ac3b` | `stb_image.h.patch` | An allocation failure in the zlib entry points and in the allocating format probes is reported through `stbi_failure_reason()` as `"outofmem"` instead of being lost or overwritten. |
+| `stb_image.h` | v2.30, `013ac3b` | `stb_image.h.patch` | An allocation failure in the zlib entry points and in the allocating format probes is reported through `stbi_failure_reason()` as `"outofmem"` instead of being lost or overwritten; a TGA or HDR whose pixel data ends early is a decode error instead of an image with uninitialized pixels. |
 | `stb_image_resize2.h` | v2.18, `904aa67` | `stb_image_resize2.h.patch` | The out-of-memory paths under `STBIR__SEPARATE_ALLOCATIONS` free only what was allocated and leak nothing. |
 
 Every change is also marked in the file itself with

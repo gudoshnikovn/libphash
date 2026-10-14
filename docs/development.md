@@ -1040,9 +1040,19 @@ that reason in two independent places, so a decode that failed purely because
   each dispatch and read only where the dispatch is about to give up — the
   success path is untouched.
 
+**Known vendor patch — short reads in TGA and HDR in `vendor/stb_image.h`.**
+`stbi__getn()` copies nothing when the input ends before the requested length and
+returns 0, and two callers ignore that: the row read of an uncompressed TGA (into the
+`malloc()`ed image) and the flat pixel read of an HDR narrower than 8 pixels (into a
+4-byte stack buffer). Upstream, a truncated file of either kind decodes successfully
+with uninitialized memory in the image, so the same bytes hash differently from load to
+load. Both reads fail the decode with `"outofdata"` instead, which `src/loader.c`
+reports as `PH_ERR_CORRUPT_DATA`; `test_loader` loads every cut of a TGA and an HDR
+fixture that ends inside the pixel data.
+
 Each change carries the same `/* libphash local patch (not upstream): ... */`
 marker as the resize patch above (search the file for it), and the whole change is
-`vendor/patches/stb_image.h.patch`. Without the patch, 5 of `test_alloc_failure`'s 83
+`vendor/patches/stb_image.h.patch`. Without the allocation-failure part, 5 of `test_alloc_failure`'s 83
 failure points misreport. As with the resize patch, a bump of this vendored file applies
 it to the new upstream file, re-verifies it against `test_alloc_failure`, and records the
 commit and the new pair of hashes in `THIRD-PARTY-NOTICES.md` (`vendor/patches/README.md`). `src/loader.c` classifies a

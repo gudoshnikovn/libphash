@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **A truncated TGA or HDR file is rejected instead of hashed from uninitialized
+  memory.** The `stb_image` fallback, present in every build, decoded an uncompressed TGA
+  or a narrow HDR whose pixel data ended early with `PH_SUCCESS`, leaving the missing
+  pixels as whatever the heap or stack held, so the same file hashed differently from load
+  to load. Such a file is `PH_ERR_CORRUPT_DATA`
+  ([GHSA-xjg6-832m-2xwg](https://github.com/gudoshnikovn/libphash/security/advisories/GHSA-xjg6-832m-2xwg)).
+
 ### Fixed
 
 - **A FIFO with no writer is rejected at once.** `ph_load_from_file()` on such a FIFO

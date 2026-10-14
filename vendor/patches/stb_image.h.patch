@@ -1,11 +1,9 @@
 --- a/stb_image.h
 +++ b/stb_image.h
-@@ -980,7 +980,22 @@
-    stbi__g_failure_reason = str;
-    return 0;
+@@ -982,6 +982,21 @@
  }
-+#endif
-+
+ #endif
+ 
 +/* libphash local patch (not upstream): a format probe (stbi__*_test /
 + * stbi__*_info) that fails because an allocation failed reports that the same
 + * way it reports "this isn't my format" -- by returning 0. The dispatch in
@@ -18,11 +16,12 @@
 +static
 +#ifdef STBI_THREAD_LOCAL
 +STBI_THREAD_LOCAL
- #endif
++#endif
 +int stbi__g_probe_outofmem;
- 
++
  static void *stbi__malloc(size_t size)
  {
+     return STBI_MALLOC(size);
 @@ -1097,7 +1112,20 @@
  
  #define stbi__errpf(x,y)   ((float *)(size_t) (stbi__err(x,y)?NULL:NULL))
@@ -52,19 +51,19 @@
  
     // test the formats with a very explicit header first (at least a FOURCC
     // or distinctive magic number first)
-@@ -1183,6 +1212,12 @@
-    if (stbi__tga_test(s))
+@@ -1184,6 +1213,12 @@
        return stbi__tga_load(s,x,y,comp,req_comp, ri);
     #endif
-+
+ 
 +   /* libphash local patch (not upstream): a probe above ran out of memory rather
 +    * than declining the format, so "unknown image type" would be a verdict on a
 +    * file we never finished looking at. */
 +   if (stbi__g_probe_outofmem)
 +      return stbi__errpuc("outofmem", "Out of memory");
- 
++
     return stbi__errpuc("unknown image type", "Image not of any known type, or corrupt");
  }
+ 
 @@ -4043,7 +4078,8 @@
  {
     int r;
@@ -127,7 +126,22 @@
     a.zbuffer = (stbi_uc *) buffer;
     a.zbuffer_end = (stbi_uc *) buffer+len;
     if (stbi__do_zlib(&a, p, 16384, 1, 0)) {
-@@ -6639,7 +6691,8 @@
+@@ -5934,7 +5986,13 @@
+       for (i=0; i < tga_height; ++i) {
+          int row = tga_inverted ? tga_height -i - 1 : i;
+          stbi_uc *tga_row = tga_data + row*tga_width*tga_comp;
+-         stbi__getn(s, tga_row, tga_width * tga_comp);
++         /* libphash local patch (not upstream): upstream ignores a short read here, and
++          * stbi__getn() copies nothing when the input ends first, so the rest of the
++          * image is left as whatever malloc() returned. */
++         if (!stbi__getn(s, tga_row, tga_width * tga_comp)) {
++            STBI_FREE(tga_data);
++            return stbi__errpuc("outofdata", "Corrupt TGA");
++         }
+       }
+    } else  {
+       //   do I need to load a palette?
+@@ -6639,7 +6697,8 @@
  static int stbi__gif_info_raw(stbi__context *s, int *x, int *y, int *comp)
  {
     stbi__gif* g = (stbi__gif*) stbi__malloc(sizeof(stbi__gif));
@@ -137,7 +151,22 @@
     if (!stbi__gif_header(s, g, comp, 1)) {
        STBI_FREE(g);
        stbi__rewind( s );
-@@ -7631,6 +7684,8 @@
+@@ -7219,7 +7278,13 @@
+          for (i=0; i < width; ++i) {
+             stbi_uc rgbe[4];
+            main_decode_loop:
+-            stbi__getn(s, rgbe, 4);
++            /* libphash local patch (not upstream): upstream ignores a short read here,
++             * and stbi__getn() copies nothing when the input ends first, so the pixel
++             * would be converted from an uninitialized stack buffer. */
++            if (!stbi__getn(s, rgbe, 4)) {
++               STBI_FREE(hdr_data);
++               return stbi__errpf("outofdata", "Corrupt HDR");
++            }
+             stbi__hdr_convert(hdr_data + j * width * req_comp + i * req_comp, rgbe, req_comp);
+          }
+       }
+@@ -7631,6 +7696,8 @@
  
  static int stbi__info_main(stbi__context *s, int *x, int *y, int *comp)
  {
@@ -146,7 +175,7 @@
     #ifndef STBI_NO_JPEG
     if (stbi__jpeg_info(s, x, y, comp)) return 1;
     #endif
-@@ -7668,6 +7723,10 @@
+@@ -7668,6 +7735,10 @@
     if (stbi__tga_info(s, x, y, comp))
         return 1;
     #endif

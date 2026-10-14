@@ -975,6 +975,34 @@ static void test_zero_dimension_rejected(void) {
     PASS("test_zero_dimension_rejected");
 }
 
+// An image whose pixel data stops short of what its header declares is corrupt, in every
+// format: a decoder that hands back the image anyway hands back pixels nobody wrote, and
+// the hash of the same bytes would differ from load to load. Every cut of the TGA and HDR
+// fixtures above that keeps the header and loses some pixel data: uncompressed TGA rows
+// and flat (width below 8) HDR pixels are each read as one block.
+static void test_truncated_pixel_data_rejected(void) {
+    struct {
+        const char *name;
+        const uint8_t *data;
+        size_t len, header_len;
+    } cases[] = {
+        {"tga", tga_2x2, sizeof(tga_2x2), 18},
+        {"hdr", hdr_2x2, sizeof(hdr_2x2), 45},
+    };
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        for (size_t n = cases[i].header_len; n < cases[i].len; n++) {
+            ph_error_t err = ph_load_from_memory(ctx, cases[i].data, n);
+            ASSERT_MSG(err == PH_ERR_CORRUPT_DATA, "%s cut to %zu of %zu bytes: %d (%s)",
+                       cases[i].name, n, cases[i].len, err, ph_get_last_error_message(ctx));
+            ASSERT_INT_EQ(0, ph_is_loaded(ctx));
+        }
+    }
+    ph_free(ctx);
+    PASS("test_truncated_pixel_data_rejected");
+}
+
 int main() {
     test_stb_path_limits();
     test_truncated_input_rejected_in_every_build();
@@ -998,5 +1026,6 @@ int main() {
     test_bmp_extreme_aspect_ratio_rejected();
     test_stb_failure_classification();
     test_zero_dimension_rejected();
+    test_truncated_pixel_data_rejected();
     return 0;
 }

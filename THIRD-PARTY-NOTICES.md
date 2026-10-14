@@ -64,13 +64,13 @@ portions hereof, for any purpose, without fee, subject to the following restrict
 
 * **Project:** [https://github.com/nothings/stb](https://github.com/nothings/stb)
 * **License:** Public Domain / MIT / Unlicense
-* **Vendored version:** v2.30, **locally modified** (`vendor/stb_image.h`, SHA-256 `ab6110a65873d5cd828001246f851506f2126e1e418e5c01a989871d089b4009`; as imported from upstream commit `013ac3beddff3dbffafd5177e7972067cd2b5083`, before the local patch: `594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3`; local patch: `vendor/patches/stb_image.h.patch`)
+* **Vendored version:** v2.30, **locally modified** (`vendor/stb_image.h`, SHA-256 `cd3afe0478cd1c75613f9e3b2406503dbde9c991a45e4e9454560742961049c8`; as imported from upstream commit `013ac3beddff3dbffafd5177e7972067cd2b5083`, before the local patch: `594c2fe35d49488b4382dbfaec8f98366defca819d916ac95becf3e75f4200b3`; local patch: `vendor/patches/stb_image.h.patch`)
 
 This software is dual-licensed to the public domain and under the following license: you are free to use this software under the terms of the MIT license or the Unlicense.
 
 Copyright (c) 2017 Sean Barrett.
 
-**Modifications by the libphash authors:** allocation failures inside the zlib entry points and inside the allocating format probes are made visible through `stbi_failure_reason()` instead of being lost or overwritten. Each change is marked in the file with `/* libphash local patch (not upstream): ... */`, the whole change is `vendor/patches/stb_image.h.patch`, and the reasoning is in `docs/development.md`. Both licenses permit modification; the notice above is retained, and this paragraph records the change as required of a modified copy.
+**Modifications by the libphash authors:** allocation failures inside the zlib entry points and inside the allocating format probes are made visible through `stbi_failure_reason()` instead of being lost or overwritten, and a TGA or HDR file whose pixel data ends early fails to decode instead of yielding an image with uninitialized pixels. Each change is marked in the file with `/* libphash local patch (not upstream): ... */`, the whole change is `vendor/patches/stb_image.h.patch`, and the reasoning is in `docs/development.md`. Both licenses permit modification; the notice above is retained, and this paragraph records the change as required of a modified copy.
 
 ---
 
