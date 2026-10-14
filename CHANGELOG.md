@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **A FIFO with no writer is rejected at once.** `ph_load_from_file()` on such a FIFO
+  waited in `open()` for a writer that never came, so the call did not return, and one
+  FIFO among the paths of `ph_hash_files()` held up its worker and the rest of the batch.
+  It returns `PH_ERR_IO`, "not a regular file", as for any other path that is not a
+  regular file (#15).
 
 ## [2.0.1] - 2026-10-09
 

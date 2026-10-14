@@ -10,7 +10,13 @@
  * fixture is created by the test itself, and the one case with no portable
  * spelling (a file that cannot be read) is produced per platform -- by dropping
  * the read permission on POSIX, and by holding the file open with sharing denied
- * on Windows, which is what makes an open fail with EACCES there. */
+ * on Windows, which is what makes an open fail with EACCES there.
+ *
+ * A FIFO with no writer is POSIX-only and is the one case where the verdict has a
+ * time bound as well: open(2) on such a FIFO waits for a writer unless it is
+ * non-blocking, so the load has to return PH_ERR_IO at once rather than never. An
+ * alarm turns a hang into a failure, so that CTest reports it instead of waiting
+ * for its own timeout. */
 
 #include "test_macros.h"
 
@@ -28,6 +34,7 @@
 #    define ph_test_rmdir(p)  _rmdir(p)
 #    define ph_test_unlink(p) _unlink(p)
 #else
+#    include <signal.h>
 #    include <sys/stat.h>
 #    include <unistd.h>
 #    define ph_test_mkdir(p)  mkdir((p), 0755)
@@ -39,6 +46,7 @@
 #define TMP_EMPTY   "ph_io_probe_empty.png"
 #define TMP_LOCKED  "ph_io_probe_locked.png"
 #define TMP_MISSING "ph_io_probe_missing.png"
+#define TMP_FIFO    "ph_io_probe_fifo.png"
 
 /* Every entry in the table must yield PH_ERR_IO *and* a diagnostic message: the
  * code says "I could not read it", the message says why. */
@@ -122,6 +130,52 @@ static void test_unreadable_file(ph_context_t *ctx) {
     ph_test_unlink(TMP_LOCKED);
 }
 
+#ifndef _WIN32
+/* Seconds a FIFO case may take; a load that returns at all returns in microseconds. */
+#    define FIFO_ALARM_SECONDS 5
+
+static void on_fifo_alarm(int sig) {
+    (void)sig;
+    static const char msg[] = "[FAIL] a load of a FIFO with no writer did not return\n";
+    (void)!write(STDERR_FILENO, msg, sizeof(msg) - 1);
+    _exit(1);
+}
+
+static void make_fifo(void) {
+    ph_test_unlink(TMP_FIFO);
+    ASSERT_INT_EQ(0, mkfifo(TMP_FIFO, 0600));
+}
+
+static void test_fifo(ph_context_t *ctx) {
+    make_fifo();
+    signal(SIGALRM, on_fifo_alarm);
+    alarm(FIFO_ALARM_SECONDS);
+    expect_io(ctx, TMP_FIFO, "FIFO with no writer");
+    alarm(0);
+    ph_test_unlink(TMP_FIFO);
+}
+
+/* One FIFO in a batch is one failed item: it must not hold up its worker and, with
+ * it, the items after it. */
+static void test_fifo_in_batch(void) {
+    make_fifo();
+    ph_batch_item_t items[3];
+    memset(items, 0, sizeof(items));
+    items[0].path = TEST_DATA_DIR "/photo.jpeg";
+    items[1].path = TMP_FIFO;
+    items[2].path = TEST_DATA_DIR "/photo.jpeg";
+    signal(SIGALRM, on_fifo_alarm);
+    alarm(FIFO_ALARM_SECONDS);
+    ASSERT_OK(ph_hash_files(items, 3, PH_HASH_AHASH, 1));
+    alarm(0);
+    ASSERT_INT_EQ(PH_SUCCESS, items[0].status);
+    ASSERT_INT_EQ(PH_ERR_IO, items[1].status);
+    ASSERT_INT_EQ(PH_SUCCESS, items[2].status);
+    printf("  %-22s -> PH_SUCCESS, PH_ERR_IO, PH_SUCCESS\n", "batch with a FIFO");
+    ph_test_unlink(TMP_FIFO);
+}
+#endif
+
 /* The counter-check: the probe must reject only what it cannot read. A readable
  * fixture still loads, and a readable-but-broken one is still reported as corrupt
  * data -- otherwise "PH_ERR_IO everywhere" would be a trivially passing table. */
@@ -141,6 +195,10 @@ int main(void) {
     test_directory(ctx);
     test_empty_file(ctx);
     test_unreadable_file(ctx);
+#ifndef _WIN32
+    test_fifo(ctx);
+    test_fifo_in_batch();
+#endif
     test_readable_files_are_not_io_errors(ctx);
 
     ph_free(ctx);

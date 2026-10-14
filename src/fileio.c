@@ -44,7 +44,12 @@ typedef struct __stat64 ph_file_stat_t;
 #    endif
 #else
 typedef struct stat ph_file_stat_t;
-#    define PH_FILE_OPEN_RDONLY(path) open((path), O_RDONLY)
+/* O_NONBLOCK because open(2) on a FIFO with no writer would otherwise wait for one,
+ * and the load would never return; the S_ISREG check after it rejects the FIFO
+ * like any other non-regular file. On a regular file the flag changes nothing:
+ * reads and mmap of one never block in the O_NONBLOCK sense. A stat() of the path
+ * before a blocking open() would leave a window in which the path is swapped. */
+#    define PH_FILE_OPEN_RDONLY(path) open((path), O_RDONLY | O_NONBLOCK)
 #    define PH_FILE_FSTAT(fd, st)     fstat((fd), (st))
 #    define PH_FILE_READ(fd, buf, n)  read((fd), (buf), (n))
 #    define PH_FILE_CLOSE(fd)         close(fd)
