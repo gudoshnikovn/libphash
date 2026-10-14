@@ -989,6 +989,7 @@ static void test_truncated_pixel_data_rejected(void) {
         {"tga", tga_2x2, sizeof(tga_2x2), 18},
         {"hdr", hdr_2x2, sizeof(hdr_2x2), 45},
     };
+
     ph_context_t *ctx = NULL;
     ASSERT_OK(ph_create(&ctx));
     for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
