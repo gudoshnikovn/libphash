@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tracked text describes the library as it is, not how it got there. A reader of this
-# repository has no issue tracker, no planning notes and no intermediate builds: a
-# comment that cites one is a reference to nothing, and "since 2.0.0" in a header is
+# repository sees its GitHub issues, but not local planning notes or intermediate
+# builds: a comment that cites those is a reference to nothing, and "since 2.0.0" in a header is
 # out of date the day it ships. Comparisons with 1.x belong in CHANGELOG.md and
 # MIGRATION.md only.
 #

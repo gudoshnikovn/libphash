@@ -56,11 +56,10 @@ src/**/*.gcno
 # Claude Code agent worktrees (transient, per-session)
 .claude/worktrees/
 
-# Internal planning/review material — kept locally, never committed
-tasks/
+# Local maintainer material, never committed: upstream bug notes and scratch data (tmp/),
+# the coding assistant's instructions (CLAUDE.md). Planning lives in GitHub issues.
 tmp/
 CLAUDE.md
-REVIEW_v2.0.0.md
 
 # Downloaded papers (see docs/references.md). Kept out of git deliberately: these are
 # copyrighted by IEEE, SPIE and others, and committing a PDF to a public repository
