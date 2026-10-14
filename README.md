@@ -8,7 +8,7 @@
 [Choosing an algorithm](https://gudoshnikovn.github.io/libphash/theory/choosing/) ·
 [Releases](https://github.com/gudoshnikovn/libphash/releases) ·
 [Changelog](https://gudoshnikovn.github.io/libphash/project/changelog/) ·
-[Python binding](https://github.com/gudoshnikovn/python-libphash)
+[Python binding](https://gudoshnikovn.github.io/python-libphash/)
 
 A perceptual image hashing library in C: nine algorithms, native SIMD-accelerated
 JPEG/PNG/WebP decoders, and a hash of a 400×400 photo in 0.05 ms after a 0.24 ms decode
@@ -57,7 +57,7 @@ and [Algorithm provenance](https://gudoshnikovn.github.io/libphash/algorithm-pro
 
 ## Language Bindings
 
-* **Python**: [python-libphash](https://github.com/gudoshnikovn/python-libphash) (`pip install python-libphash`), the official binding, released on its own schedule
+* **Python**: [python-libphash](https://gudoshnikovn.github.io/python-libphash/) (`pip install python-libphash`), the official binding, released for every libphash release
 * *More bindings (Node.js, Rust, Go) are in development.*
 
 ---

@@ -264,14 +264,14 @@ function as imported from a DLL.
 
 ## Python
 
-[`python-libphash`](https://github.com/gudoshnikovn/python-libphash) is the official
+[`python-libphash`](https://gudoshnikovn.github.io/python-libphash/) is the official
 Python binding, maintained together with the library:
 
 ```sh
 pip install python-libphash
 ```
 
-It is a separate project that follows a new libphash release after a delay. From 2.0.1 on,
+It is a separate project, released for every libphash release. From 2.0.1 on,
 its version is the libphash version it contains followed by a revision of the binding:
 `python-libphash` 2.0.1.*N* contains libphash 2.0.1, so `pip install "python-libphash==2.0.1.*"`
 pins the library. The 1.x releases are numbered independently and state the libphash

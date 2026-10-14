@@ -136,7 +136,7 @@ format, and what lowers them.
 
 ## Also available
 
-- **Python:** [python-libphash](https://github.com/gudoshnikovn/python-libphash)
+- **Python:** [python-libphash](https://gudoshnikovn.github.io/python-libphash/)
   (`pip install python-libphash`).
 - **Upgrading from 1.x:** some hash values change silently; read
   [Migrating from 1.x](guide/migration.md) first.
