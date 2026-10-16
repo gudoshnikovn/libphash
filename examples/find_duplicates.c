@@ -1,6 +1,6 @@
 /* Finds the pictures that appear more than once among many files: hashes every file with
  * pHash, prints each hash as it would be stored, then every pair within a threshold,
- * closest first. Build/run:
+ * closest first, and the groups those pairs join the files into. Build/run:
  *   cc find_duplicates.c -o find_duplicates $(pkg-config --cflags --libs libphash)
  *   ./find_duplicates 7 a.jpg b.jpg c.png ...
  * The threshold is the most bits two hashes of one picture may differ in; measure it on
@@ -20,6 +20,30 @@ static int by_distance(const void *x, const void *y) {
     return p->distance - q->distance;
 }
 
+typedef struct {
+    size_t group, file;
+} member_t;
+
+static int by_group(const void *x, const void *y) {
+    const member_t *p = x, *q = y;
+    if (p->group != q->group) {
+        return p->group < q->group ? -1 : 1;
+    }
+    return p->file < q->file ? -1 : p->file > q->file;
+}
+
+/* --8<-- [start:find] */
+/* The group a file belongs to: the file its chain of parents ends at, the group's first. */
+static size_t find(size_t *parent, size_t i) {
+    while (parent[i] != i) {
+        parent[i] = parent[parent[i]];
+        i = parent[i];
+    }
+    return i;
+}
+
+/* --8<-- [end:find] */
+
 int main(int argc, char **argv) {
     if (argc < 3) {
         fprintf(stderr, "usage: %s <max-bits> <image>...\n", argv[0]);
@@ -33,20 +57,29 @@ int main(int argc, char **argv) {
     }
     size_t n = (size_t)(argc - 2);
     ph_batch_item_t *items = calloc(n, sizeof(*items));
-    if (!items) {
+    size_t *parent = malloc(n * sizeof(*parent));
+    member_t *members = malloc(n * sizeof(*members));
+    if (!items || !parent || !members) {
+        free(items);
+        free(parent);
+        free(members);
         return 1;
     }
+
+    /* --8<-- [start:hash] */
     for (size_t i = 0; i < n; i++) {
         items[i].path = argv[i + 2];
     }
-
     /* Every file hashed with pHash on all CPUs; a file that cannot be read fails alone. */
     ph_error_t err = ph_hash_files(items, n, PH_HASH_PHASH, 0);
     if (err != PH_SUCCESS) {
         fprintf(stderr, "batch failed: %s\n", ph_get_error_string(err));
         free(items);
+        free(parent);
+        free(members);
         return 1;
     }
+    /* --8<-- [end:hash] */
 
     /* A stored hash carries what decides its value: the algorithm, the library version,
      * and whether JPEG went through libjpeg-turbo or stb_image. The settings are the
@@ -62,6 +95,7 @@ int main(int argc, char **argv) {
         }
     }
 
+    /* --8<-- [start:pairs] */
     /* Every pair compared once: n * (n - 1) / 2 Hamming distances, a linear scan per file. */
     size_t found = 0, room = 16;
     pair_t *pairs = malloc(room * sizeof(*pairs));
@@ -89,6 +123,8 @@ int main(int argc, char **argv) {
     }
     if (!pairs) {
         free(items);
+        free(parent);
+        free(members);
         return 1;
     }
     qsort(pairs, found, sizeof(*pairs), by_distance);
@@ -97,8 +133,51 @@ int main(int argc, char **argv) {
                items[pairs[k].b].path);
     }
     printf("pairs within %ld bits: %zu\n", max_bits, found);
+    /* --8<-- [end:pairs] */
+
+    /* --8<-- [start:groups] */
+    /* Each pair joins the groups of its two files, so a group holds every file a chain of
+     * pairs connects. Sorted by group, the files of each group sit together, the groups in the
+     * order of their first files. Two files of
+     * one group may be further apart than the threshold; its widest pair says how far. */
+    for (size_t i = 0; i < n; i++) {
+        parent[i] = i;
+    }
+    for (size_t k = 0; k < found; k++) {
+        size_t a = find(parent, pairs[k].a), b = find(parent, pairs[k].b);
+        parent[a > b ? a : b] = a < b ? a : b; /* a group is known by its first file */
+    }
+    for (size_t i = 0; i < n; i++) {
+        members[i] = (member_t){find(parent, i), i};
+    }
+    qsort(members, n, sizeof(*members), by_group);
+    size_t groups = 0;
+    for (size_t first = 0, last; first < n; first = last) {
+        for (last = first + 1; last < n && members[last].group == members[first].group;) {
+            last++;
+        }
+        if (last - first < 2) {
+            continue;
+        }
+        int widest = 0;
+        for (size_t i = first; i < last; i++) {
+            for (size_t j = i + 1; j < last; j++) {
+                int d = ph_hamming_distance(items[members[i].file].hashes[0],
+                                            items[members[j].file].hashes[0]);
+                widest = d > widest ? d : widest;
+            }
+        }
+        printf("group %zu: %zu files, widest pair %d bits\n", ++groups, last - first, widest);
+        for (size_t i = first; i < last; i++) {
+            printf("  %s\n", items[members[i].file].path);
+        }
+    }
+    printf("groups: %zu\n", groups);
+    /* --8<-- [end:groups] */
 
     free(pairs);
+    free(members);
+    free(parent);
     free(items);
     return 0;
 }

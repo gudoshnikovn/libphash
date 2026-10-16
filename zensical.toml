@@ -45,6 +45,7 @@ nav = [
   { "Guide" = [
     { "Quick start" = "guide/quickstart.md" },
     { "Installing" = "guide/install.md" },
+    { "Finding duplicate images" = "guide/find-duplicate-images.md" },
     { "How libphash works" = "guide/how-it-works.md" },
     { "Loading images" = "guide/loading.md" },
     { "Configuring a context" = "guide/configuring.md" },

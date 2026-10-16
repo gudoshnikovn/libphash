@@ -98,9 +98,9 @@ cc basic_hash.c -o basic_hash $(pkg-config --cflags --libs libphash)
 
 ## What it is for, and what it is not
 
-**For finding duplicate and near-duplicate images in a collection you control:**
-deduplicating an archive, clustering a catalog, keying a cache, answering "have I stored
-this before" inside a trusted pipeline.
+**For [finding duplicate and near-duplicate images](guide/find-duplicate-images.md) in a
+collection you control:** deduplicating an archive, clustering a catalog, keying a cache,
+answering "have I stored this before" inside a trusted pipeline.
 
 **Not for anything where someone benefits from a wrong answer.** Every hash here is
 deterministic and unkeyed, which is what makes deduplication work and also what makes the

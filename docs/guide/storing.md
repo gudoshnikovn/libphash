@@ -1,6 +1,6 @@
 ---
-title: 'Storing and searching image hashes for duplicates'
-description: 'What to store beside a perceptual hash, how to store each kind, what a search over stored hashes costs, measured, and how an index such as a BK-tree cuts it.'
+title: 'Storing perceptual hashes and searching them at scale'
+description: 'What to store beside a perceptual hash to keep it comparable, how to store each kind, what a search over stored hashes costs, and how an index cuts it.'
 ---
 
 # Storing and searching hashes
@@ -36,7 +36,8 @@ of them can be read from the hash afterwards:
   [`ph_can_use_jpeg()`](../api/build.md#ph_can_use_jpeg) says which one the build has.
 
 A collection computed in one run with one configuration stores these once, beside it,
-as the example below prints them on its first line; a collection that grows over years
+as the program of [Finding duplicate images](find-duplicate-images.md#the-program) prints
+them on its first line; a collection that grows over years
 of upgrades stores them with every hash, or at least the version.
 
 ## How each hash is stored
@@ -61,20 +62,14 @@ struct: a `ph_digest_t` takes 136 bytes whatever its size. Reading the bytes bac
 filling a zeroed `ph_digest_t` and setting both `size` and `kind`; a digest whose `kind`
 is left at zero is compared with any other without the check.
 
-## Finding near duplicates
+## Searching stored hashes
 
-The example hashes every file given to it with pHash, on all processors, prints each
-hash as it would be stored, and then compares every pair, printing those within the
-threshold given on its command line, closest first. A file that cannot be read is
-reported and left out, and the others are compared.
-
-```c title="examples/find_duplicates.c"
---8<-- "examples/find_duplicates.c"
-```
-
+A search keeps the stored hashes within a threshold of a query's hash; the threshold is
+the collection's own ([Choosing a threshold](../theory/comparing.md#choosing-a-threshold)).
 Comparing every pair of a collection of $n$ hashes is $n(n-1)/2$ comparisons, and looking
 up one new image is $n$: a **linear scan**, the simplest search there is, and exact,
-since it compares with every stored hash.
+since it compares with every stored hash. [Finding duplicate images](find-duplicate-images.md)
+does it for every pair of a set of files, and joins the close ones into groups.
 
 ### What a linear scan costs
 
@@ -186,16 +181,6 @@ flowchart TD
     A -->|"distance 2"| D[Hash]
     B -->|"distance 5"| E[Hash]
 ```
-
-## Choosing the threshold
-
-The threshold belongs to the collection, and a threshold measured on one set of images is
-a guess on another ([Choosing a threshold](../theory/comparing.md#choosing-a-threshold)).
-The example helps measure one: run it with a loose threshold over images whose duplicates
-are known, and read the pairs from the closest out. The distance at which pairs stop being
-the same picture is where the threshold goes, and
-[Measuring a threshold on your own collection](../theory/comparing.md#measuring-a-threshold-on-your-own-collection)
-turns that into a share of copies accepted and a share of different pairs let through.
 
 ## When the library or the settings change
 

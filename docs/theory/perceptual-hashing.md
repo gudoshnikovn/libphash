@@ -117,8 +117,10 @@ duplicate-detection service. A neural embedding in place of a perceptual hash wo
 close the gap: such embeddings are not trained for adversarial robustness, and adversarial
 examples are that family's oldest known failure mode.
 
-**Use these hashes for** finding duplicates and near-duplicates in a collection you
-control, clustering, cache keys, "have I seen this before" in a trusted pipeline.
+**Use these hashes for**
+[finding duplicates and near-duplicates](../guide/find-duplicate-images.md) in a
+collection you control, clustering, cache keys, "have I seen this before" in a trusted
+pipeline.
 
 **Do not use them for** anything where someone benefits from a wrong answer: copyright
 enforcement, content moderation, blocklists, checking the integrity of an image. The

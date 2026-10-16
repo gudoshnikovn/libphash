@@ -72,6 +72,8 @@ collection; [Comparing hashes](../theory/comparing.md#choosing-a-threshold) meas
 
 ## Next
 
+- [Finding duplicate images](find-duplicate-images.md) in a folder, from hashing every
+  file to groups of copies.
 - [Which algorithm to use](../theory/choosing.md), the nine measured side by side.
 - [How far apart two copies may be](../theory/comparing.md#choosing-a-threshold), and
   which function compares which hash.
