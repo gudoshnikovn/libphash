@@ -7,6 +7,7 @@ import numpy as np
 from matplotlib.colors import LinearSegmentedColormap, TwoSlopeNorm
 
 from draw.markdown import write_text
+from draw.social import card
 from draw.style import gray_panel, hide_axes, image_panel, save, stage_strip, style_axes
 from draw.timing_tables import ms
 from measure import corpus
@@ -273,6 +274,7 @@ def figures(tool, image, out_dir):
         return fig
 
     save(pipeline, out, "pipeline")
+    card(pipeline, out_dir, ALGO, f"theory/{ALGO.replace('_', '-')}.md")
     save(kernel_fig, out, "kernel")
     save(equalize, out, "equalize")
     save(response_grid, out, "response")

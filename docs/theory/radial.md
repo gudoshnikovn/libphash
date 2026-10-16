@@ -1,3 +1,9 @@
+---
+title: 'Radial variance hash: the algorithm explained'
+description: 'How the radial variance hash works: brightness variance along 180 lines through the center, compressed into 40 numbers; robustness to rotation, measured.'
+image: assets/generated/social/radial.png
+---
+
 # Radial — Radial Variance Hash
 
 Draw lines through the center of the image, one per degree, and measure how much the

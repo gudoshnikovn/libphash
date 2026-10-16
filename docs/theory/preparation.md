@@ -1,3 +1,8 @@
+---
+title: 'Image preparation for perceptual hashing'
+description: 'What happens to an image before it is hashed: decoding, transparency, EXIF orientation, grayscale and resizing, and how each step changes the hash, measured.'
+---
+
 # Image preparation
 
 Every hash in libphash reads an image that the library has already prepared. The file is

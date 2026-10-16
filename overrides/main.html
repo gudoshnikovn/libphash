@@ -1,0 +1,100 @@
+{#-
+  What every page of the site says about itself to a search engine and to a link preview,
+  on top of the theme's own <head> (description, canonical URL).
+
+  A page's front matter decides it: `title` is the page's title in a search result and a
+  preview (the navigation and the page's heading keep their own, shorter, names), and
+  `description` the text under it (without a double quote: the theme writes it into an
+  attribute unescaped); `image` is the preview image, one of the cards
+  tools/site/draw/social.py draws, and a page without one shows the front page's card.
+  scripts/check_site_meta.py fails the build on a page without a title or description, or
+  with a description another page has.
+
+  The structured data is SoftwareSourceCode on the front page, which describes the library,
+  and TechArticle on every other page. A value Zensical does not define is guarded with
+  `is defined`: its templates fail on an undefined value.
+-#}
+{% extends "base.html" %}
+
+{% block htmltitle %}
+  {% if page.meta and page.meta.title %}
+    {% if config.site_name in page.meta.title %}
+      <title>{{ page.meta.title | e }}</title>
+    {% else %}
+      <title>{{ page.meta.title | e }} - {{ config.site_name }}</title>
+    {% endif %}
+  {% elif page.title %}
+    <title>{{ page.title | striptags }} - {{ config.site_name }}</title>
+  {% else %}
+    <title>{{ config.site_name }}</title>
+  {% endif %}
+{% endblock %}
+
+{% block extrahead %}
+  {% if page.canonical_url %}
+    {% set home = page.canonical_url == config.site_url %}
+    {% if page.meta and page.meta.title %}
+      {% set title = page.meta.title %}
+    {% else %}
+      {% set title = page.title | striptags %}
+    {% endif %}
+    {% if page.meta and page.meta.description %}
+      {% set description = page.meta.description %}
+    {% else %}
+      {% set description = config.site_description %}
+    {% endif %}
+    {% if page.meta and page.meta.image %}
+      {% set image = config.site_url ~ page.meta.image %}
+    {% else %}
+      {% set image = config.site_url ~ "assets/generated/social/site.png" %}
+    {% endif %}
+    {% if page.meta and page.meta.image %}
+      {% set image_alt = title ~ ": its steps on an example photograph" %}
+    {% else %}
+      {% set image_alt = "A photograph, three copies of it and an unrelated photograph, each above its pHash" %}
+    {% endif %}
+    <meta property="og:type" content="{{ 'website' if home else 'article' }}">
+    <meta property="og:site_name" content="{{ config.site_name }}">
+    <meta property="og:title" content="{{ title | e }}">
+    <meta property="og:description" content="{{ description | e }}">
+    <meta property="og:url" content="{{ page.canonical_url | e }}">
+    <meta property="og:image" content="{{ image | e }}">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="{{ image_alt | e }}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ title | e }}">
+    <meta name="twitter:description" content="{{ description | e }}">
+    <meta name="twitter:image" content="{{ image | e }}">
+    <meta name="twitter:image:alt" content="{{ image_alt | e }}">
+    {% set author = {"@type": "Person", "name": "Nikolay Gudoshnikov",
+                     "url": "https://github.com/gudoshnikovn"} %}
+    {% if home %}
+      {% set data = {
+        "@context": "https://schema.org",
+        "@type": "SoftwareSourceCode",
+        "name": config.site_name,
+        "description": description,
+        "url": page.canonical_url,
+        "image": image,
+        "codeRepository": config.repo_url,
+        "programmingLanguage": "C",
+        "license": "https://opensource.org/licenses/MIT",
+        "author": author
+      } %}
+    {% else %}
+      {% set data = {
+        "@context": "https://schema.org",
+        "@type": "TechArticle",
+        "headline": title,
+        "description": description,
+        "url": page.canonical_url,
+        "image": image,
+        "author": author,
+        "isPartOf": {"@type": "WebSite", "name": config.site_name, "url": config.site_url}
+      } %}
+    {% endif %}
+    <script type="application/ld+json">{{ data | tojson }}</script>
+  {% endif %}
+{% endblock %}

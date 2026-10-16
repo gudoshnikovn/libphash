@@ -1,3 +1,8 @@
+---
+title: 'Hashing many images in parallel'
+description: 'Hash many images on a thread pool with ph_hash_files() and ph_hash_buffers(): the code, the options, the results, how many workers to run and their memory.'
+---
+
 # Hashing many files
 
 A collection of images is hashed one image at a time, and the images are independent of

@@ -1,3 +1,8 @@
+---
+title: 'Comparing image hashes: Hamming distance and thresholds'
+description: 'How to compare perceptual hashes: Hamming distance and the other metrics, which goes with which algorithm, and what a duplicate threshold costs, measured.'
+---
+
 # Comparing hashes
 
 A hash on its own says nothing; two of them compared say how alike two images are, and a

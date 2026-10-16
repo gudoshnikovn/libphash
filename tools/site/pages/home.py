@@ -16,6 +16,7 @@ from PIL import Image
 
 import fetch_corpus
 from draw.markdown import table, write_text
+from draw.social import SITE, card
 from draw.style import hide_axes, save, value_cells
 from measure.metric import bits_that_differ
 from measure.tool import run_lines, run_stages
@@ -95,6 +96,7 @@ def hero(tool, image, out):
         f.subplots_adjust(wspace=0.12, hspace=0.02)
         return f
     save(fig, os.path.join(out, NAME), "hero")
+    card(fig, out, SITE, "index.md")
     rows = [[caption, f"`{hexhash}`", str(d)]
             for (caption, _), (hexhash, _), d in zip(panels, hashes, distances)]
     note = ("" if other else "\n\nThe unrelated photograph comes from the photo corpus, "

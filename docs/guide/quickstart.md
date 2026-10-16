@@ -1,3 +1,8 @@
+---
+title: 'Quick start: hash and compare images in C'
+description: 'From nothing to the perceptual hash of your first image in C, then to comparing two images: build, load, hash and Hamming distance in a few lines.'
+---
+
 # Quick start
 
 From nothing to the hash of your first image, and then to comparing two images.

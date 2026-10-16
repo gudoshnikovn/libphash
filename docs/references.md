@@ -1,3 +1,8 @@
+---
+title: 'References: the papers behind each image hash'
+description: 'The papers, libraries and documents that aHash, dHash, pHash, wHash, mHash, BMH, Radial and the color hashes in libphash are built on, with links.'
+---
+
 # References
 
 The sources this library's algorithms are built on. Every hash in `libphash` is someone

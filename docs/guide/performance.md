@@ -1,3 +1,8 @@
+---
+title: 'Performance: decoding and hashing speed, measured'
+description: 'What decoding and hashing an image cost and how both grow with its size, measured for every algorithm on JPEG, PNG and WebP, and the settings that save time.'
+---
+
 # Performance
 
 Hashing an image is two steps: decoding the file into pixels, and computing the hash from

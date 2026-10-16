@@ -93,6 +93,9 @@ extra_javascript = [
 
 [project.theme]
 language = "en"
+# What a page says about itself in the <head>: its title in a search result, the Open
+# Graph and Twitter tags of a link preview, its structured data (overrides/main.html).
+custom_dir = "overrides"
 # Sixteen bits of a hash, drawn in the accent of the site's figures; the palette below
 # takes the same accent, defined in stylesheets/site.css.
 logo = "assets/logo.svg"

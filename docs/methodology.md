@@ -1,3 +1,8 @@
+---
+title: 'Verification methodology: how the hashes are checked'
+description: 'What libphash treats as a correct hash and how it checks it: the premise, the criterion for a defect, formula checks on intermediate values, and the corpus.'
+---
+
 # Verification methodology
 
 What this project treats as correct and how it checks it, so that a disagreement about a

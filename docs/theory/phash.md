@@ -1,3 +1,9 @@
+---
+title: 'pHash: the DCT perceptual hash algorithm explained'
+description: 'How pHash works, step by step: a 32×32 image, the discrete cosine transform, the 8×8 low-frequency block cut at its median; robustness and cost, measured.'
+image: assets/generated/social/phash.png
+---
+
 # pHash — Perceptual Hash
 
 Shrink the image to 32×32, describe it as a sum of cosine patterns with the discrete

@@ -1,4 +1,6 @@
 ---
+title: 'libphash — perceptual image hashing library in C'
+description: 'Perceptual image hashing in C: aHash, dHash, pHash, wHash, mHash, BMH, Radial and color hashes, fast JPEG, PNG and WebP decoding, and a Python binding.'
 hide:
   - navigation
   - toc

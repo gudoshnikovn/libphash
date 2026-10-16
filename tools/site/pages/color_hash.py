@@ -11,6 +11,7 @@ from PIL import Image
 
 from draw.corpus_charts import share
 from draw.markdown import write_text
+from draw.social import card
 from draw.style import hide_axes, save, style_axes
 from measure import corpus
 from measure.cache import cached
@@ -189,6 +190,7 @@ def figures(tool, image, out_dir):
         return fig
 
     save(pipeline, out, "pipeline")
+    card(pipeline, out_dir, ALGO, f"theory/{ALGO.replace('_', '-')}.md")
     save(plane, out, "plane")
     save(layout, out, "bit-order")
     _write_stage_numbers(st, out)

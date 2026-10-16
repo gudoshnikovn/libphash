@@ -1,3 +1,8 @@
+---
+title: 'Benchmark: libjpeg-turbo, libpng and zlib-ng against stb_image'
+description: 'What libjpeg-turbo, libpng and zlib-ng gain over the stb_image fallback in decoding time, memory and binary size, with the full tables and conditions.'
+---
+
 # 2026-10-04 — libjpeg-turbo, libpng and zlib-ng against stb_image
 
 **Question.** What does each vendored decoder buy over the `stb_image` fallback, in

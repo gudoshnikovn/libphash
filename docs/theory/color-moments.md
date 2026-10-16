@@ -1,3 +1,9 @@
+---
+title: 'ColorMoments: the color moments image hash explained'
+description: 'How the color moments hash works: mean, spread and skew of each color channel, nine numbers; what tells two images apart by it and what does not, measured.'
+image: assets/generated/social/color_moments.png
+---
+
 # ColorMoments — Color Moments
 
 Describe each of the image's three color channels by three numbers: how bright it is on

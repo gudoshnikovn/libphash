@@ -1,3 +1,8 @@
+---
+title: 'Configuring a context: every setting and its default'
+description: 'All thirteen libphash context settings with their defaults, when each is read, which ones change hash values, and how to share one configuration.'
+---
+
 # Configuring a context
 
 A context carries its settings next to the image: thirteen `ph_context_set_*()`

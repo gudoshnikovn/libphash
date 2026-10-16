@@ -1,3 +1,8 @@
+---
+title: 'Installing libphash: prebuilt archives, CMake or Makefile'
+description: 'How to install the libphash C library: a prebuilt archive, a CMake or Makefile build, or the source tree inside your CMake project; pip for Python.'
+---
+
 # Installing
 
 libphash is a C library with one public header, `libphash.h`. There are four ways to get

@@ -320,7 +320,12 @@ def build_manifest():
     print(f"manifest: {len(chosen)} photographs in {MANIFEST}", file=sys.stderr)
 
 
-PAGE_HEAD = """# Photo corpus
+PAGE_HEAD = """---
+title: 'Photo corpus: {n} public-domain photographs for measuring image hashes'
+description: 'The {n} CC0 and public-domain photographs from Wikimedia Commons that the robustness and separability charts are measured on, with their authors.'
+---
+
+# Photo corpus
 
 The robustness and separability charts on the algorithm pages are drawn over two corpora.
 One is the synthetic corpus the tests use ([verification methodology](../methodology.md#the-corpus)).

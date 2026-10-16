@@ -1,3 +1,8 @@
+---
+title: 'Choosing a perceptual hash: aHash vs dHash vs pHash and more'
+description: 'Nine image hashes side by side on the same measurements: robustness to each edit, how well copies separate from other images, speed and digest size.'
+---
+
 # Choosing an algorithm
 
 The nine algorithms answer the same question, "is this the same picture?", from different

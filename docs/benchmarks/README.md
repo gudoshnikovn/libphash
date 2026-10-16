@@ -1,3 +1,8 @@
+---
+title: 'Benchmark records'
+description: 'Measurements behind the decisions about libphash: which image decoders it bundles and which build options it defaults to, each with its exact conditions.'
+---
+
 # Benchmark records
 
 Measurements behind decisions about the library: which decoders it vendors, which build

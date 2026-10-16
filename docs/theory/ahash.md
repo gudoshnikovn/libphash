@@ -1,3 +1,9 @@
+---
+title: 'aHash: the average hash algorithm explained'
+description: 'How the average hash (aHash) works, step by step on a photograph: 8×8 reduction, the mean, 64 bits; what changes it, how copies separate, what it costs.'
+image: assets/generated/social/ahash.png
+---
+
 # aHash — Average Hash
 
 Shrink the image to 8×8, and record for each of the 64 cells whether it is brighter or

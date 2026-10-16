@@ -1,3 +1,9 @@
+---
+title: 'BMH: the block mean hash algorithm explained'
+description: 'How the block mean hash (BMH) works: the means of a 16×16 grid of blocks cut at their median, 256 bits; what changes it and what it costs, measured.'
+image: assets/generated/social/bmh.png
+---
+
 # BMH — Block Mean Hash
 
 Divide the image into a 16×16 grid of blocks, take the mean of each, and record for each

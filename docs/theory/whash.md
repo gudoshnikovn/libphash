@@ -1,3 +1,9 @@
+---
+title: 'wHash: the wavelet hash algorithm explained'
+description: 'How the wavelet hash (wHash) works: one level of the Haar wavelet on a 16×16 image, the average band cut at its median; robustness against aHash, measured.'
+image: assets/generated/social/whash.png
+---
+
 # wHash — Wavelet Hash
 
 Shrink the image to 16×16, split it with one level of the Haar wavelet into a half-size

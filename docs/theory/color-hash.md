@@ -1,3 +1,9 @@
+---
+title: 'ColorHash: the color histogram image hash explained'
+description: 'How the color histogram hash works: pixels counted in 108 color groups, a byte each; it tells a change of color and ignores layout. Measured on photographs.'
+image: assets/generated/social/color_hash.png
+---
+
 # ColorHash — Color Histogram
 
 Count how many pixels of the image have each color, after sorting the colors into 108

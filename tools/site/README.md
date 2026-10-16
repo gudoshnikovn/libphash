@@ -89,6 +89,7 @@ arguments lists every mode.
 | `corpus_charts.py` | The same over both corpora, separability, the edits that change the picture; two hashes side by side, edit by edit and by separability (`two_hashes_by_edit()`, `two_hashes_separability()`), for a page that compares its algorithm with its nearest relative |
 | `timing_tables.py` | The Cost row of each page, its table of times, the footnote naming the machine |
 | `markdown.py` | `write_text()`, `table()`: what a page includes beside a figure |
+| `social.py` | `card()`: a page's preview image, 1200×630, its title over one of its figures; every algorithm page draws one from its steps, the front page from its figure (`SITE`), and the other pages show that one |
 
 ### `pages/` — one module per page
 

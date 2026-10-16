@@ -8,6 +8,7 @@ from PIL import Image
 
 from draw.corpus_charts import share
 from draw.markdown import write_text
+from draw.social import card
 from draw.style import gray_panel, hide_axes, image_panel, save, stage_strip, style_axes
 from draw.timing_tables import ms
 from measure import corpus
@@ -231,6 +232,7 @@ def figures(tool, image, out_dir):
         return fig
 
     save(pipeline, out, "pipeline")
+    card(pipeline, out_dir, ALGO, f"theory/{ALGO.replace('_', '-')}.md")
     save(projections, out, "projections")
     save(profile, out, "profile")
     save(dct, out, "dct")

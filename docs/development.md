@@ -1,3 +1,8 @@
+---
+title: 'Development guide'
+description: 'How libphash is built, tested and documented: both build systems and their options, the test suite, sanitizers, fuzzing, coverage and continuous integration.'
+---
+
 # Development Guide
 
 This guide outlines the standards and procedures for contributing to `libphash`.
@@ -484,6 +489,18 @@ The rules that keep the build green:
 - **Pictures** are generated, never drawn or screenshotted by hand: each figure is written
   twice, for the light and the dark theme, and a page shows the pair with `#only-light` and
   `#only-dark`. The logo, `docs/assets/logo.svg`, is the one picture kept in git.
+- **Search and link previews.** Every page opens with front matter: `title`, the page's
+  title in a search result and a link preview, worded the way people search
+  (`pHash: the DCT perceptual hash algorithm explained`), while the navigation and the
+  heading keep the short name; and `description`, 100 to 160 characters of its own and no
+  double quote, the text a search result shows under it. `overrides/main.html` turns them
+  into the `<title>`, the Open Graph and Twitter tags and the structured data, and
+  `scripts/check_site_meta.py` fails the build on a page without them or with a
+  description another page has. An algorithm page also names its preview image, `image:
+  assets/generated/social/<algo>.png`, a 1200×630 card of its title over its steps that
+  `tools/site/draw/social.py` draws in the light theme; every other page shows the front
+  page's card. The API reference and the photo corpus page get theirs from the scripts
+  that generate them.
 
 ## Naming Conventions
 

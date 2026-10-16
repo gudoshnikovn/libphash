@@ -1,3 +1,8 @@
+---
+title: 'Loading images: files, memory buffers and raw pixels'
+description: 'How to load images into libphash: from a file, a memory buffer or raw pixels; which formats each build reads, untrusted input, and the settings of a load.'
+---
+
 # Loading images
 
 Every hash reads the image last loaded into a context. This page covers the three ways to

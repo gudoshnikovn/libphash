@@ -8,6 +8,7 @@ from PIL import Image
 
 from draw.corpus_charts import share, two_hashes_by_edit, two_hashes_separability
 from draw.markdown import write_text
+from draw.social import card
 from draw.style import (draw_bits, gray_panel, hash_footer, hide_axes, image_panel, save,
                         stage_strip)
 from measure import corpus
@@ -152,6 +153,7 @@ def figures(tool, image, out_dir):
         return fig
 
     save(pipeline, out, "pipeline")
+    card(pipeline, out_dir, ALGO, f"theory/{ALGO.replace('_', '-')}.md")
     save(grid_values, out, "grid")
     save(bit_grid, out, "bits")
     save(bit_order, out, "bit-order")

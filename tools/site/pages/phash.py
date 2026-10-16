@@ -8,6 +8,7 @@ from matplotlib.colors import LogNorm
 
 from draw.corpus_charts import share, two_hashes_by_edit, two_hashes_separability
 from draw.markdown import load_grayscale_hash, write_text
+from draw.social import card
 from draw.style import (draw_bits, gray_panel, hash_footer, hide_axes, image_panel, save,
                         stage_strip, style_axes, value_cells)
 from measure import corpus
@@ -228,6 +229,7 @@ def figures(tool, image, out_dir):
         return fig
 
     save(pipeline, out, "pipeline")
+    card(pipeline, out_dir, ALGO, f"theory/{ALGO.replace('_', '-')}.md")
     save(dct_map, out, "dct-map")
     save(basis, out, "basis")
     save(block_values, out, "block")

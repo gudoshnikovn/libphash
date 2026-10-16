@@ -1,3 +1,8 @@
+---
+title: 'Storing and searching image hashes for duplicates'
+description: 'What to store beside a perceptual hash, how to store each kind, what a search over stored hashes costs, measured, and how an index such as a BK-tree cuts it.'
+---
+
 # Storing and searching hashes
 
 A hash is computed once and compared many times: it is stored with the record of its

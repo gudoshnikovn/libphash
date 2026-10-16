@@ -1,3 +1,8 @@
+---
+title: 'Benchmark: PNG decoding with libpng against spng'
+description: 'Whether spng decodes PNG faster than libpng, measured: the question, the answer, and the full tables with the machines and the images.'
+---
+
 # 2026-10-04 — PNG decoding: libpng against spng
 
 **Question.** Is spng, as an alternative PNG backend, faster than libpng?

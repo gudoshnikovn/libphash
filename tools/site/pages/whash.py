@@ -6,6 +6,7 @@ import numpy as np
 
 from draw.corpus_charts import two_hashes_by_edit
 from draw.markdown import load_grayscale_hash, write_text
+from draw.social import card
 from draw.style import (draw_bits, gray_panel, hash_footer, hide_axes, image_panel, save,
                         stage_strip, value_cells)
 from measure import corpus
@@ -228,6 +229,7 @@ def figures(tool, image, out_dir):
         return fig
 
     save(pipeline, out, "pipeline")
+    card(pipeline, out_dir, ALGO, f"theory/{ALGO.replace('_', '-')}.md")
     save(haar_level, out, "haar-level")
     save(pyramid, out, "pyramid")
     save(ll_band, out, "ll-band")

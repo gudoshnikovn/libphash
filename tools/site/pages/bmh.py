@@ -8,6 +8,7 @@ from PIL import Image
 
 from draw.corpus_charts import share
 from draw.markdown import write_text
+from draw.social import card
 from draw.style import (draw_bits, gray_panel, hide_axes, image_panel, save, stage_strip,
                         style_axes, value_cells)
 from measure import corpus
@@ -96,6 +97,7 @@ def figures(tool, image, out_dir):
         return fig
 
     save(pipeline, out, "pipeline")
+    card(pipeline, out_dir, ALGO, f"theory/{ALGO.replace('_', '-')}.md")
     save(median_grid, out, "grid")
     save(bit_order, out, "bit-order")
     save(size_fig, out, "sizes")

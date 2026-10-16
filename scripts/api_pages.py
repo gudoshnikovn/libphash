@@ -854,6 +854,38 @@ class Reference:
                     '<div class="ph-az" markdown>\n\n' + "\n".join(lines) + "\n\n</div>"]
         return out
 
+    # The overview's description in a search result; a topic's is its own brief.
+    INDEX_DESCRIPTION = ("The libphash C API: every function, type and constant of "
+                         "libphash.h by topic, with an A–Z index of every name.")
+    DESCRIPTION_WIDTH = 160
+
+    def front_matter(self, page):
+        """The title and description a search result and a link preview show for a page
+        (overrides/main.html): a topic's title and brief, then as many of the topic's
+        functions as fit, so that a search for a function's name finds its page."""
+        if page == "index.md":
+            title, description = "libphash C API reference", self.INDEX_DESCRIPTION
+        else:
+            topic = page[:-3]
+            group = self.groups[topic]
+            title = f"{group.findtext('title')} — libphash C API"
+            description = plain(group.find("briefdescription"))
+            names = [f"{m.findtext('name')}()" for m in group.iter("memberdef")
+                     if m.get("kind") == "function" and self.home[m.get("id")] == topic]
+            listed = []
+            for name in names:
+                tail = "Reference for " + ", ".join(listed + [name]) + "."
+                if len(description) + 1 + len(tail) > self.DESCRIPTION_WIDTH:
+                    break
+                listed.append(name)
+            if listed:
+                description += " Reference for " + ", ".join(listed) + "."
+        for value in (title, description):
+            if '"' in value:  # the theme writes the description into an attribute unescaped
+                raise GenError(f"{page}: a double quote in its title or description: {value}")
+        quote = lambda v: "'" + v.replace("'", "''") + "'"  # noqa: E731
+        return f"---\ntitle: {quote(title)}\ndescription: {quote(description)}\n---\n"
+
     def check(self, pages):
         """Every exported function exactly once, and nothing on a page it is not."""
         text = "\n".join("\n\n".join(p) for p in pages.values())
@@ -895,8 +927,8 @@ def main():
         if name.endswith(".md") and name not in pages:
             os.remove(out_dir / name)
     for name, blocks in pages.items():
-        (out_dir / name).write_text(GENERATED + "\n\n" + "\n\n".join(blocks) + "\n",
-                                    encoding="utf-8")
+        (out_dir / name).write_text(ref.front_matter(name) + GENERATED + "\n\n"
+                                    + "\n\n".join(blocks) + "\n", encoding="utf-8")
     print(f"api_pages: {len(pages)} pages, {functions} functions into {out_dir}")
     return 0
 

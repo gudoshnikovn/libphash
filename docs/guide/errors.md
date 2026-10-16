@@ -1,3 +1,8 @@
+---
+title: 'Handling errors: every error code and what to do'
+description: 'Every libphash error code with the decision a program makes on it, which step of a load returns which code, the detail message, and what a failure leaves.'
+---
+
 # Handling errors
 
 Every call that can fail says so through its return value, and a program decides from that

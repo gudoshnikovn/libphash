@@ -1,3 +1,8 @@
+---
+title: 'What is a perceptual hash? Image hashing explained'
+description: 'How a perceptual image hash differs from a cryptographic one, which copies it finds (resized, recompressed, edited) and what it cannot do, with examples.'
+---
+
 # Perceptual hashing
 
 A cryptographic hash such as SHA-256 is built so that changing one bit of the input changes

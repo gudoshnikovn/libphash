@@ -1,3 +1,8 @@
+---
+title: 'How libphash works: load, prepare, hash'
+description: 'A map of the path every hash takes in libphash: loading into a context, preparation, the hash function; the settings, error codes and state of each step.'
+---
+
 # How libphash works
 
 Every hash in libphash comes out of the same short path: an image is loaded into a

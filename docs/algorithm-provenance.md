@@ -1,3 +1,8 @@
+---
+title: 'Algorithm provenance: where each image hash comes from'
+description: 'Where each of the nine hashes in libphash comes from, what its source specifies, what this implementation does, and every known divergence between the two.'
+---
+
 # Algorithm provenance
 
 Where each of the nine hashes in `libphash` comes from, what its source actually

@@ -1,3 +1,9 @@
+---
+title: 'dHash: the difference hash algorithm explained'
+description: 'How the difference hash (dHash) works, step by step: a 9×8 grid, each cell against its neighbor, 64 bits; what changes it, measured, and what it costs.'
+image: assets/generated/social/dhash.png
+---
+
 # dHash — Difference Hash
 
 Shrink the image to 9×8, and record for each pair of horizontal neighbors whether the

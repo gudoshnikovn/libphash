@@ -1,3 +1,9 @@
+---
+title: 'mHash: the Marr–Hildreth hash algorithm explained'
+description: 'How the Marr–Hildreth hash (mHash) works: a Mexican-hat filter, a 31×31 grid of blocks, 576 bits; its robustness, sensitivity to shifts and cost, measured.'
+image: assets/generated/social/mhash.png
+---
+
 # mHash — Marr–Hildreth Hash
 
 Bring the image to 512×512, spread its gray levels evenly, and pass it through the

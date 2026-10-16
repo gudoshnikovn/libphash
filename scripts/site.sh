@@ -109,9 +109,10 @@ case "$MODE" in
     build)
         # The build runs in a directory of its own, build/site-src/: Zensical keeps its
         # cache beside the configuration file and reads the pages only from below it, so
-        # the build gets a copy of zensical.toml there and docs/ synced next to it. Its
-        # cache and output are then its own, and a build never deletes the files a running
-        # `zensical serve` is reading (zensical.toml says why the two settings differ).
+        # the build gets a copy of zensical.toml there, and docs/ and the theme's
+        # overrides/ synced next to it. Its cache and output are then its own, and a build
+        # never deletes the files a running `zensical serve` is reading (zensical.toml
+        # says why the two settings differ).
         mkdir -p build/site-src
         sed -e 's|^site_dir = .*|site_dir = "site"|' \
             -e 's|^pymdownx\.snippets\.check_paths = .*|pymdownx.snippets.check_paths = true|' \
@@ -122,8 +123,12 @@ case "$MODE" in
             exit 1
         fi
         sync_into docs build/site-src/docs
+        sync_into overrides build/site-src/overrides
         "$ZS" build --config-file build/site-src/zensical.toml --clean --strict
         rsync -a --delete build/site-src/site/ build/site/
+        # Every page has a title, a description of its own and a preview image
+        # (overrides/main.html writes them from its front matter).
+        "$PY" scripts/check_site_meta.py build/site
         echo "==> site: build/site/index.html"
         ;;
     serve)
