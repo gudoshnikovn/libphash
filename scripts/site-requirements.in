@@ -9,7 +9,7 @@
 # repository. A version is raised here, then the lock is compiled again, in one commit:
 #   uv pip compile --universal --python-version 3.12 --generate-hashes \
 #       scripts/site-requirements.in -o scripts/site-requirements.txt
-zensical==0.0.68
+zensical==0.0.70
 matplotlib==3.11.2
 numpy==2.5.3
 pillow==12.3.0

@@ -183,8 +183,10 @@ pymdownx.tasklist.custom_checkbox = true
 # page is docs/index.md. The Markdown under assets/generated/ is the tables tools/site/
 # measures, which pages include where they are needed; on their own they are fragments. api-index.md is the Doxygen main page; the site shows its text as
 # api/index.md, which scripts/api_pages.py writes from Doxygen's XML with the rest of the
-# API reference. Zensical takes the list from its exclude plugin: it has no exclude_docs
-# setting, and would otherwise publish these files and index them for search.
+# API reference. Zensical would otherwise publish these files and index them for search.
+# The list is the exclude plugin's, a list of globs, because scripts/check_site_links.py
+# and scripts/api_pages.py read the same list; exclude_docs would hold it as one string
+# of gitignore patterns.
 [project.plugins.exclude]
 glob = [
   "README.md",
