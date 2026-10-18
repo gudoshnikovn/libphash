@@ -148,7 +148,8 @@ def thresholds_table(datasets, out):
     """Per algorithm, the threshold that accepts RECALL of the copies on each corpus."""
     present = [(k, d) for k, d in datasets]
     lines = ["| Algorithm | " + " | ".join(
-                 f"{SHORT[k]}: threshold | different pairs within" for k, _ in present) + " |",
+                 f"{SHORT[k]}: threshold for {RECALL:.0%} of copies | "
+                 "different images matched by mistake" for k, _ in present) + " |",
              "|---|" + "---|---|" * len(present)]
     for mod in PAGES:
         cells = []
@@ -160,6 +161,12 @@ def thresholds_table(datasets, out):
             _, t, fmr = separability(copies, different, lower)
             cells.append(f"{_threshold(mod, t)} | {share(fmr, len(different))}")
         lines.append(f"| {TITLES[mod.ALGO]} | " + " | ".join(cells) + " |")
+    # What the second column counts, since a count of pairs alone reads as duplicates found.
+    lines += ["", f"Each threshold accepts {RECALL:.0%} of its corpus's copies. Beside it is "
+              "how many pairs of different images fall within it as well, pairs it would "
+              "wrongly call duplicates, out of every pair of different images in the corpus: "
+              + ", ".join(f"{len(d['different']['ahash']):,} for the {d['n']} {SHORT[k].lower()}"
+                          for k, d in present if d["n"]) + "."]
     write_text(os.path.join(out, NAME), "thresholds.md", "\n".join(lines))
 
 
