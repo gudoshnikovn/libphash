@@ -126,6 +126,9 @@ case "$MODE" in
         sync_into overrides build/site-src/overrides
         "$ZS" build --config-file build/site-src/zensical.toml --clean --strict
         rsync -a --delete build/site-src/site/ build/site/
+        # Every figure gets its size, and all but a page's first a lazy load, so a page
+        # does not fetch both color schemes' copies of every figure as it opens.
+        "$PY" scripts/site_images.py build/site
         # Every page has a title, a description of its own and a preview image
         # (overrides/main.html writes them from its front matter).
         "$PY" scripts/check_site_meta.py build/site

@@ -87,10 +87,8 @@ nav = [
 # underscore, and the A-Z index (scripts/api_pages.py writes the markup it styles).
 extra_css = ["stylesheets/site.css", "stylesheets/api.css"]
 
-extra_javascript = [
-  "javascripts/mathjax.js",
-  "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js",
-]
+# MathJax, which the script loads only on a page with a formula (it says why).
+extra_javascript = ["javascripts/mathjax.js"]
 
 [project.theme]
 language = "en"
@@ -158,7 +156,6 @@ pymdownx.betterem = {}
 pymdownx.details = {}
 pymdownx.emoji.emoji_generator = "zensical.extensions.emoji.to_svg"
 pymdownx.emoji.emoji_index = "zensical.extensions.emoji.twemoji"
-pymdownx.highlight.anchor_linenums = true
 pymdownx.highlight.line_spans = "__span"
 pymdownx.highlight.pygments_lang_class = true
 pymdownx.inlinehilite = {}
