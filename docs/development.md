@@ -452,7 +452,9 @@ later, and does four things:
   every declaration under an anchor equal to its name. Under each declaration it adds the
   examples that call it and the site pages that link to its anchor, under `ph_error_t`
   the functions that return each code (read from every `@return`), and an A–Z index on
-  the overview. A path such as `docs/guide/batch.md` or `docs/algorithm-provenance.md
+  the overview. A declaration's `@since` and deprecation are shown under its heading, in
+  the topic's summary and in the index, and each `@changed` and `@deprecated` as a note
+  after its description. A path such as `docs/guide/batch.md` or `docs/algorithm-provenance.md
   section 3` in a doc comment becomes a link to that page or section. A function missing
   from the pages, markup the script has no rendering for, a function returning
   `ph_error_t` without an `@return` naming its codes as code (`@c PH_ERR_IO`), or a path
@@ -1081,7 +1083,24 @@ copied-in stb headers against upstream.
 
 ## Adding New Features
 
-1.  **Header**: Add the public signature to `include/libphash.h`.
+1.  **Header**: Add the public signature to `include/libphash.h`, with `@since X.Y.Z`
+    (the release it ships in) in the doc comment of every new function, type,
+    enumerator, struct field and macro, and its line in `docs/symbols-in-versions.txt`. A
+    declaration without `@since` belongs to 2.0.0. What happens to a declaration later
+    follows in its doc comment, oldest first: `@changed{X.Y.Z} <what changed>` for each
+    change of its contract in a minor release, and `@deprecated{X.Y.Z} <what to use
+    instead>` for its deprecation, with the same version in the file's deprecated
+    column. A deprecated function is also declared with `PH_DEPRECATED("use …")` on its
+    own line directly above its `PH_API` line, so a call to it draws a compiler warning;
+    a test that still calls it defines `PH_DEPRECATED(msg)` as nothing before including
+    the header. The description itself always states the contract of the current release;
+    the history says what differs from the earlier ones. `make docs` fails when the
+    file, the doc comments and the header of the latest release tag disagree
+    (`scripts/check_symbol_versions.py`): a symbol missing from the file, a date that
+    differs from its `@since` or `@deprecated{X.Y.Z}`, a history out of version order, a
+    `@deprecated` without a version, a deprecated function without `PH_DEPRECATED` or
+    the reverse, a symbol dated to a released version that its tag
+    does not have, or one dated later that the tag already has.
 2.  **Implementation**: 
     - Add hash algorithms to `src/hashes/`.
     - Add image processing kernels to `src/image/`.

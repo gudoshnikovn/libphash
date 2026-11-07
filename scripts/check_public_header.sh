@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Checks that the public header, include/libphash.h, stands on its own under a
 # given ISO C dialect: a consumer TU that includes nothing else must compile with
-# zero warnings, and PH_NODISCARD must still fire on a discarded result.
+# zero warnings, PH_NODISCARD must still fire on a discarded result, and PH_DEPRECATED
+# on a call, with its message.
 #
 # Why this is separate from check_strict_iso.sh: that script compiles the
 # library's own translation units, all of which happen to include libphash.h, so a
@@ -94,4 +95,25 @@ if ! printf '%s\n' "$diag" | grep -q 'discard.c:4:[0-9]*: warning:'; then
 fi
 echo "    discarded ph_create() result: warned"
 
-echo "==> include/libphash.h is self-contained and keeps PH_NODISCARD as -std=$STD"
+# PH_DEPRECATED goes through the same attribute branches as PH_NODISCARD. The header
+# itself may deprecate nothing, so the TU declares a function of its own with it, as the
+# header writes one: the macro on its own line above the PH_API declaration.
+cat > "$WORK_DIR/deprecated.c" <<'EOF'
+#include <libphash.h>
+PH_DEPRECATED("use ph_hamming_distance()")
+PH_NODISCARD PH_API int ph_probe_deprecated(void);
+int main(void) { return ph_probe_deprecated(); }
+EOF
+if ! diag="$("$CC_BIN" "${FLAGS[@]}" -fsyntax-only "$WORK_DIR/deprecated.c" 2>&1)"; then
+    printf '%s\n' "$diag" >&2
+    echo "!!! a PH_DEPRECATED declaration does not compile as -std=$STD" >&2
+    exit 1
+fi
+if ! printf '%s\n' "$diag" | grep -q 'deprecated.c:4:[0-9]*: warning:.*use ph_hamming_distance()'; then
+    printf '%s\n' "$diag" >&2
+    echo "!!! PH_DEPRECATED is inert as -std=$STD: a call draws no warning with its message" >&2
+    exit 1
+fi
+echo "    call to a PH_DEPRECATED function: warned"
+
+echo "==> include/libphash.h is self-contained and keeps PH_NODISCARD and PH_DEPRECATED as -std=$STD"

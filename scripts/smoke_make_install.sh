@@ -16,7 +16,8 @@ MAKE="${MAKE:-make}"
 echo "==> make install PREFIX=$PREFIX_DIR"
 "$MAKE" -C "$ROOT_DIR" -j libphash.a >/dev/null
 "$MAKE" -C "$ROOT_DIR" install PREFIX="$PREFIX_DIR" >/dev/null
-for f in lib/libphash.a include/libphash.h include/phash_version.h lib/pkgconfig/libphash.pc; do
+for f in lib/libphash.a include/libphash.h include/phash_version.h lib/pkgconfig/libphash.pc \
+    share/libphash/symbols-in-versions.txt; do
     [ -f "$PREFIX_DIR/$f" ] || { echo "!!! make install did not write $f" >&2; exit 1; }
 done
 grep -q '^prefix=${pcfiledir}/' "$PREFIX_DIR/lib/pkgconfig/libphash.pc" ||

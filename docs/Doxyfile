@@ -20,7 +20,14 @@ SORT_MEMBER_DOCS       = NO
 ENABLE_PREPROCESSING   = YES
 MACRO_EXPANSION        = YES
 EXPAND_ONLY_PREDEF     = YES
-PREDEFINED             = PH_API= PH_NODISCARD=
+PREDEFINED             = PH_API= PH_NODISCARD= "PH_DEPRECATED(msg)="
+
+# A declaration's history after the release that added it (@since): each change of its
+# contract as @changed{X.Y.Z} <what changed>, and its deprecation as
+# @deprecated{X.Y.Z} <what to use instead>. scripts/check_symbol_versions.py reads the
+# titles these expand to, and rejects a @deprecated without a version.
+ALIASES                = "changed{1}=@par Changed in \1:^^" \
+                         "deprecated{1}=@deprecated Deprecated in \1:"
 
 QUIET                  = YES
 WARN_IF_UNDOCUMENTED   = YES

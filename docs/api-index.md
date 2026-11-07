@@ -16,3 +16,9 @@ explained in @ref errors; the version and the decoders a build carries are in @r
 
 The guides — which algorithm to choose, how batches and threads behave, how the library
 is built and verified — are the Markdown pages in the repository's `docs/` directory.
+
+A declaration added after 2.0.0 shows the release that added it ("since 2.1.0"); one
+without is part of 2.0.0. A change of its contract in a later minor release ("Changed in
+…") and its deprecation ("Deprecated in …") follow its description. [symbols-in-versions.txt](../symbols-in-versions.txt) lists
+every public symbol with the release that added it, as plain text a binding can read; the
+library installs it under `share/libphash/`.

@@ -276,7 +276,8 @@ benchmark: bench_hash
 
 # --- install / uninstall ---
 # `make install PREFIX=/opt/libphash` (default /usr/local; DESTDIR for staging) puts
-# libphash.a, the two public headers and libphash.pc under PREFIX/lib and PREFIX/include.
+# libphash.a, the two public headers and libphash.pc under PREFIX/lib and PREFIX/include,
+# and docs/symbols-in-versions.txt under PREFIX/share/libphash.
 # The .pc comes from the same libphash.pc.in as the CMake build's, in the same
 # relocatable form (prefix relative to the .pc file's own directory), with what this
 # build links in Libs: there is no shared library for Libs.private to serve.
@@ -295,7 +296,9 @@ ifeq ($(USE_WEBP),1)
 endif
 
 install: $(LIB_NAME) $(GENERATED_DIR)/phash_version.h
-	install -d $(DESTDIR)$(PREFIX)/lib/pkgconfig $(DESTDIR)$(PREFIX)/include
+	install -d $(DESTDIR)$(PREFIX)/lib/pkgconfig $(DESTDIR)$(PREFIX)/include \
+	    $(DESTDIR)$(PREFIX)/share/libphash
+	install -m 644 docs/symbols-in-versions.txt $(DESTDIR)$(PREFIX)/share/libphash/
 	install -m 644 $(LIB_NAME) $(DESTDIR)$(PREFIX)/lib/$(LIB_NAME)
 	install -m 644 $(INC_DIR)/libphash.h $(GENERATED_DIR)/phash_version.h $(DESTDIR)$(PREFIX)/include/
 	sed -e 's|@PHASH_PC_PREFIX@|$${pcfiledir}/../..|' \
@@ -310,7 +313,8 @@ install: $(LIB_NAME) $(GENERATED_DIR)/phash_version.h
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/lib/$(LIB_NAME) $(DESTDIR)$(PREFIX)/lib/pkgconfig/libphash.pc \
-	      $(DESTDIR)$(PREFIX)/include/libphash.h $(DESTDIR)$(PREFIX)/include/phash_version.h
+	      $(DESTDIR)$(PREFIX)/include/libphash.h $(DESTDIR)$(PREFIX)/include/phash_version.h \
+	      $(DESTDIR)$(PREFIX)/share/libphash/symbols-in-versions.txt
 
 # Smoke-test both builds' packaging: CMake's install()/pkg-config/find_package(phash),
 # static and shared, and this file's install/uninstall. Each installs into a throwaway

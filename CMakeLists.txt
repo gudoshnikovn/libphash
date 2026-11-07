@@ -827,6 +827,11 @@ if(PHASH_IS_TOP_LEVEL)
     install(FILES ${CMAKE_CURRENT_BINARY_DIR}/generated/phash_version.h
         DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
     )
+    # The release that added each public symbol, for a binding to check what the version
+    # it builds against provides.
+    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/docs/symbols-in-versions.txt
+        DESTINATION ${CMAKE_INSTALL_DATADIR}/libphash
+    )
 
     install(EXPORT phashTargets
         FILE phashTargets.cmake

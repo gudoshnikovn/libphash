@@ -48,6 +48,8 @@ cmake -S "$ROOT_DIR" -B "$BUILD_DIR" "${CMAKE_ARGS[@]}"
 # --config for a multi-config generator (Visual Studio), ignored by a single-config one.
 cmake --build "$BUILD_DIR" --target phash --config "$BUILD_TYPE" -j
 cmake --install "$BUILD_DIR" --config "$BUILD_TYPE"
+[[ -f "$PREFIX_DIR/share/libphash/symbols-in-versions.txt" ]] ||
+    { echo "!!! share/libphash/symbols-in-versions.txt was not installed" >&2; exit 1; }
 
 # Structural check on the generated .pc: `prefix` is the .pc file's own directory walked
 # back up (${pcfiledir}), and `libdir`/`includedir` are relative to ${prefix} -- the form

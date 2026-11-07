@@ -22,6 +22,11 @@
  * size and field offsets of every public struct, and the width and values of every public enum. New
  * functions, enumerators and error codes may be added in a minor release; nothing existing is moved
  * or reused.
+ *
+ * Versions: a declaration's @c @@since names the release that added it; one without it is
+ * part of 2.0.0. A later change of its contract and its deprecation follow in its doc
+ * comment ("Changed in", "Deprecated in"). symbols-in-versions.txt, installed under
+ * share/libphash/, lists every public symbol with the release that added it.
  */
 
 /**
@@ -102,6 +107,23 @@
 #        define PH_NODISCARD _Check_return_
 #    else
 #        define PH_NODISCARD
+#    endif
+#endif
+
+// PH_DEPRECATED("use ph_other()") marks a deprecated function, so a call to it draws a
+// compiler warning that carries the message. It goes on its own line directly above the
+// declaration, before PH_NODISCARD and PH_API, for the same C23 reason as PH_NODISCARD;
+// the function's doc comment has the matching @deprecated{X.Y.Z}. A consumer that must
+// keep calling one defines PH_DEPRECATED(msg) as nothing before including this header.
+#ifndef PH_DEPRECATED
+#    if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 202311L
+#        define PH_DEPRECATED(msg) [[deprecated(msg)]]
+#    elif defined(__GNUC__) || defined(__clang__)
+#        define PH_DEPRECATED(msg) __attribute__((deprecated(msg)))
+#    elif defined(_MSC_VER)
+#        define PH_DEPRECATED(msg) __declspec(deprecated(msg))
+#    else
+#        define PH_DEPRECATED(msg)
 #    endif
 #endif
 

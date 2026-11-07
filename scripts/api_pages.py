@@ -33,6 +33,7 @@ import unicodedata
 import xml.etree.ElementTree as ET
 
 from check_site_links import excluded, is_excluded
+from check_symbol_versions import CHANGED, DEPRECATED, deprecated, history, since as since_of
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 HEADER = ROOT / "include" / "libphash.h"
@@ -200,6 +201,7 @@ class Reference:
         self.links = {}  # refid -> (page, anchor or None)
         self.names = {}  # symbol name -> refid, for code spans Doxygen left unlinked
         self.home = {}  # memberdef id -> topic
+        self.elems = {}  # refid -> the XML element it was read from
         self.where = ""
         self._place()
         self.returned_by = self._error_returns()
@@ -219,6 +221,7 @@ class Reference:
                 struct = ET.parse(self.xml_dir / f"{refid}.xml").getroot().find("compounddef")
                 name = struct.findtext("compoundname")
                 self.structs[refid] = (topic, struct)
+                self.elems[refid] = struct
                 self._link(refid, topic, name)
                 for f in struct.iter("memberdef"):
                     self._link(f.get("id"), topic, f"{name}.{f.findtext('name')}", name=False)
@@ -233,8 +236,10 @@ class Reference:
                     raise GenError(f"{name}: listed under {', '.join(topics)}; its doc "
                                    "comment needs one @ingroup naming one of them")
             self.home[mid] = topic
+            self.elems[mid] = m
             self._link(mid, topic, name)
             for v in m.findall("enumvalue"):
+                self.elems[v.get("id")] = v
                 self._link(v.get("id"), topic, v.findtext("name"))
         self.links["indexpage"] = ("index.md", None)
 
@@ -444,7 +449,24 @@ class Reference:
                 return []
             if kind in ("note", "warning"):
                 return [f"!!! {kind}\n\n" + indent("\n\n".join(body))]
+            if kind == "since":
+                return []  # shown in fixed places, read by self.versions()
+            if kind == "par":
+                m = CHANGED.fullmatch(collapse(child.findtext("title") or ""))
+                if not m:
+                    self.fail(child)
+                extra.setdefault("history", []).append(("Changed", m.group(1), body))
+                return []
             self.fail(child)
+        if tag == "xrefsect":
+            body = self.blocks(child.find("xrefdescription"), page, extra)
+            m = DEPRECATED.match(body[0]) if body and \
+                child.findtext("xreftitle") == "Deprecated" else None
+            if not m:
+                self.fail(child)
+            body[0] = body[0][m.end():]
+            extra.setdefault("history", []).append(("Deprecated", m.group(1), body))
+            return []
         if tag == "parameterlist":
             if child.get("kind") != "param":
                 self.fail(child)
@@ -496,23 +518,49 @@ class Reference:
         lines += ["| " + " | ".join(cells) + " |" for _, cells in rows[1:]]
         return "\n".join(lines)
 
-    def description(self, elem, page, extra):
-        """Brief and detailed description of a member or compound, as blocks."""
+    def description(self, elem, page, extra, cell=False):
+        """Brief and detailed description of a member or compound, as blocks, followed by
+        its history: each @changed and its @deprecated, in version order."""
         out = []
         for part in ("briefdescription", "detaileddescription", "inbodydescription"):
             node = elem.find(part)
             if node is not None:
                 out.extend(self.blocks(node, page, extra))
+        for what, version, body in extra.pop("history", []):
+            if cell:
+                out.append(f"**{what} in {version}:** " + " ".join(body))
+            else:
+                kind = "warning" if what == "Deprecated" else "info"
+                out.append(f'!!! {kind} "{what} in {version}"\n\n'
+                           + indent("\n\n".join(body)))
         return out
 
     def one_line(self, elem, page):
         """A description that must fit in a table cell."""
         extra = {}
-        body = self.description(elem, page, extra)
+        # The cell's own text says "Deprecated in": the mark adds only the release.
+        added = [f for f in self.versions(elem) if f.startswith("since")]
+        body = self.description(elem, page, extra, cell=True) + \
+            [f"<small>{a}</small>" for a in added]
         if extra or any("\n" in b for b in body):
             raise GenError(f"{self.where}: a description with lists, notes or parameters "
                            "cannot go in a table cell")
         return " ".join(body).replace("|", "\\|")
+
+    def versions(self, elem):
+        """The facts of a declaration's versions: "since X.Y.Z" when it was added after
+        2.0.0, "deprecated in X.Y.Z" when it is deprecated."""
+        try:
+            added, gone = since_of(elem), deprecated(history(elem))
+        except ValueError as e:
+            raise GenError(f"{self.where}: {e}")
+        return ([f"since {added}"] if added else []) + \
+            ([f"deprecated in {gone}"] if gone else [])
+
+    def since_mark(self, elem):
+        """The versions after a name in a topic's summary."""
+        facts = self.versions(elem)
+        return [f"<small>{' · '.join(facts)}</small>"] if facts else []
 
     # -- members -----------------------------------------------------------------
 
@@ -589,7 +637,8 @@ class Reference:
         return f"### `{name}{suffix}` {{ #{name} data-toc-label=\"{label}\" }}"
 
     def meta(self, m, name, page):
-        """What the declaration itself says about the call: nodiscard, and what it returns."""
+        """What the declaration itself says about the call: nodiscard, what it returns, and
+        its versions."""
         facts = []
         if name in self.header.nodiscard:
             facts.append("nodiscard")
@@ -598,6 +647,7 @@ class Reference:
             base = re.sub(r"\b(const|struct)\b|\*", "", ret).strip()
             link = self.href(self.names[base], page) if base in self.names else None
             facts.append(f"returns [`{ret}`]({link})" if link else f"returns `{ret}`")
+        facts += self.versions(m)
         return " · ".join(facts) + "\n{ .ph-meta }" if facts else ""
 
     def related(self, name, page):
@@ -613,9 +663,14 @@ class Reference:
                 f"[{escape(self.site.title(p))}](../{p})" for p in pages))
         return [line + "\n{ .ph-related }" for line in out]
 
+    def since_meta(self, elem):
+        """The meta line of a declaration that is not a function."""
+        facts = self.versions(elem)
+        return [" · ".join(facts) + "\n{ .ph-meta }"] if facts else []
+
     def enum(self, m, name, page):
         extra = {}
-        out = [self.heading(name)] + self.description(m, page, extra)
+        out = [self.heading(name)] + self.since_meta(m) + self.description(m, page, extra)
         self._no_extra(extra)
         lines = ["| Name | Value | Description |", "|---|---|---|"]
         for v in m.findall("enumvalue"):
@@ -658,7 +713,7 @@ class Reference:
         if ptr:
             definition = f"typedef {ptr.group(1).strip()} (*{ptr.group(2)}){ptr.group(3)}"
         extra = {}
-        out = [self.heading(name), f"```c\n{definition};\n```"]
+        out = [self.heading(name), f"```c\n{definition};\n```"] + self.since_meta(m)
         out += self.description(m, page, extra)
         self._no_extra(extra)
         return out + self.related(name, page)
@@ -667,6 +722,7 @@ class Reference:
         extra = {}
         value = plain(m.find("initializer"))
         out = [self.heading(name), f"```c\n#define {name} {value}\n```"]
+        out += self.since_meta(m)
         out += self.description(m, page, extra)
         self._no_extra(extra)
         return out + self.related(name, page)
@@ -680,7 +736,7 @@ class Reference:
                                  "detaileddescription", "location", "listofallmembers"):
                 self.fail(child)
         extra = {}
-        out = [self.heading(name)] + self.description(s, page, extra)
+        out = [self.heading(name)] + self.since_meta(s) + self.description(s, page, extra)
         self._no_extra(extra)
         lines = ["| Type | Field | Description |", "|---|---|---|"]
         for f in s.iter("memberdef"):
@@ -776,7 +832,8 @@ class Reference:
                 name = elem.findtext("compoundname" if what == "struct" else "name")
                 call = "()" if what == "member" and obj.get("kind") == "function" else ""
                 self.where = f"{page}: {name}"
-                brief = " ".join(self.blocks(elem.find("briefdescription"), page, {}))
+                brief = " ".join(self.blocks(elem.find("briefdescription"), page, {})
+                                 + self.since_mark(elem))
                 brief = brief.replace("|", "\\|")
                 lines.append(f"| [{self.name_cell(name + call)}](#{name}) | {brief} |")
                 widest = max(widest, len(name + call))
@@ -848,8 +905,10 @@ class Reference:
             for _, name, refid in sorted(letters[c]):
                 page, anchor = self.links[refid]
                 call = "()" if name in functions else ""
+                self.where = f"index.md: {name}"
+                note = " · ".join([titles[page]] + self.versions(self.elems[refid]))
                 lines.append(f"- [{self.name_cell(name + call)}]({page}#{anchor}) "
-                             f"<small>{titles[page]}</small>")
+                             f"<small>{note}</small>")
             out += [f"### {c} {{ #a-z-{c.lower()} }}",
                     '<div class="ph-az" markdown>\n\n' + "\n".join(lines) + "\n\n</div>"]
         return out

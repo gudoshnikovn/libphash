@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **The release that added each public symbol.** The API reference shows "since X.Y.Z" on
+  every declaration added after 2.0.0, and "Changed in" and "Deprecated in" notes when
+  its contract changes or it is deprecated. `symbols-in-versions.txt`, installed under
+  `share/libphash/` and published with the API reference, lists every public function,
+  type, enumerator, macro and struct field with the release that added it, so a binding
+  can check what the version it builds against provides (#16).
+- **A call to a deprecated function draws a compiler warning** with what to use instead:
+  such a function is declared `PH_DEPRECATED("...")`, which a consumer that has to keep
+  calling it can define as nothing before including `libphash.h` (#16).
 
 ## [2.0.3] - 2026-11-07
 
