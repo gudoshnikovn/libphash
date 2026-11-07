@@ -254,7 +254,7 @@ This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) f
 
 `libphash` bundles several high-performance libraries to ensure zero-dependency builds:
 
-* **[libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo) (v3.2.0)**: IJG, BSD-3-Clause, zlib.
+* **[libjpeg-turbo](https://github.com/libjpeg-turbo/libjpeg-turbo) (v3.2.1)**: IJG, BSD-3-Clause, zlib.
 * **[libpng](https://github.com/pnggroup/libpng) (v1.6.59)**: libpng License 2.0.
 * **[libwebp](https://github.com/webmproject/libwebp) (v1.6.0)**: WebP License (BSD 3-Clause).
 * **[zlib-ng](https://github.com/zlib-ng/zlib-ng) (v2.3.3)**: zlib License.

@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   "version `GLIBC_2.38' not found". The reader parses the cgroup files itself and the
   library calls nothing newer than glibc 2.34 provides (#55).
 
+### Changed
+
+- **The bundled libjpeg-turbo is 3.2.1** (#57).
+
 ## [2.0.2] - 2026-10-15
 
 ### Security
