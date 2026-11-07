@@ -40,6 +40,11 @@ static void test_quota_parser(void) {
     ASSERT_INT_EQ(0, ph_cpu_quota_limit(NULL));
     ASSERT_INT_EQ(INT_MAX, ph_cpu_quota_limit("9223372036854775807 1"));
     ASSERT_INT_EQ(INT_MAX, ph_cpu_quota_limit("9223372036854775807 100000"));
+    ASSERT_INT_EQ(0, ph_cpu_quota_limit("9223372036854775808 1")); /* out of range */
+    ASSERT_INT_EQ(3, ph_cpu_quota_limit("  +300000\t100000"));
+    ASSERT_INT_EQ(0, ph_cpu_quota_limit("200000"));     /* no period */
+    ASSERT_INT_EQ(0, ph_cpu_quota_limit("12x 100000")); /* not a number */
+    ASSERT_INT_EQ(0, ph_cpu_quota_limit("- 100000"));
     PASS("test_quota_parser");
 }
 

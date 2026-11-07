@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **A Linux build needs no newer glibc than the one it targets.** Built on glibc 2.38 or
+  later, libphash imported `__isoc23_sscanf` and `__isoc23_strtoll` (version
+  `GLIBC_2.38`) from the cgroup CPU-quota reader of the batch API, so a program or Python
+  wheel built there failed to load on an older system, such as Debian 12, with
+  "version `GLIBC_2.38' not found". The reader parses the cgroup files itself and the
+  library calls nothing newer than glibc 2.34 provides (#55).
 
 ## [2.0.2] - 2026-10-15
 

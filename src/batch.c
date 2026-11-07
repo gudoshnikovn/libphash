@@ -55,6 +55,35 @@ static void clear_hashes(uint64_t hashes[PH_BATCH_HASHES_CAPACITY]) {
  * per host CPU there means several times the memory for no throughput (each worker holds
  * a decoded image) and throttled, ragged latency under a CFS quota. */
 
+/* Reads a decimal integer, optionally signed, after leading white space and moves `*s`
+ * past it; 0 when there is no digit or the value does not fit. Hand-written rather than
+ * sscanf()/strtoll(): under _GNU_SOURCE, glibc 2.38 and later bind those to C23 variants
+ * versioned GLIBC_2.38, and every binary linking libphash would then require that glibc. */
+static int ph_parse_ll(const char **s, long long *out) {
+    const char *p = *s;
+    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
+        p++;
+    }
+    int negative = *p == '-';
+    if (*p == '-' || *p == '+') {
+        p++;
+    }
+    if (*p < '0' || *p > '9') {
+        return 0;
+    }
+    long long v = 0;
+    for (; *p >= '0' && *p <= '9'; p++) {
+        int digit = *p - '0';
+        if (v > (LLONG_MAX - digit) / 10) {
+            return 0;
+        }
+        v = v * 10 + digit;
+    }
+    *out = negative ? -v : v;
+    *s = p;
+    return 1;
+}
+
 int ph_cpu_quota_limit(const char *cpu_max) {
     if (!cpu_max) {
         return 0;
@@ -62,7 +91,8 @@ int ph_cpu_quota_limit(const char *cpu_max) {
     long long quota = 0, period = 0;
     /* cgroup v2 cpu.max: "<quota> <period>" or "max <period>"; v1 is read into the same
      * form by the caller. */
-    if (sscanf(cpu_max, "%lld %lld", &quota, &period) != 2 || quota <= 0 || period <= 0) {
+    if (!ph_parse_ll(&cpu_max, &quota) || !ph_parse_ll(&cpu_max, &period) || quota <= 0 ||
+        period <= 0) {
         return 0;
     }
     /* Rounded up without forming quota + period - 1, which overflows near LLONG_MAX. */
@@ -103,7 +133,9 @@ int ph_cgroup_cpu_limit(const char *root) {
     char quota[64], period[64];
     if (ph_read_small_file(root, "cpu/cpu.cfs_quota_us", quota, sizeof(quota)) &&
         ph_read_small_file(root, "cpu/cpu.cfs_period_us", period, sizeof(period))) {
-        snprintf(buf, sizeof(buf), "%lld %lld", atoll(quota), atoll(period));
+        /* Each file holds one number, followed by a newline. */
+        quota[strcspn(quota, "\n")] = '\0';
+        snprintf(buf, sizeof(buf), "%s %s", quota, period);
         return ph_cpu_quota_limit(buf); /* cgroup v1: quota -1 means none */
     }
     return 0;

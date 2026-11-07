@@ -13,6 +13,8 @@
 #   scripts/check_exported_symbols.sh -DPHASH_USE_WEBP=OFF   # ... with extra CMake options
 #   scripts/check_exported_symbols.sh --lib path/to/libphash.so
 #
+# On Linux it also fails on an import of a glibc symbol version newer than 2.34.
+#
 # Linux (ELF) and macOS (Mach-O). Windows exports only __declspec(dllexport), which is
 # PH_API itself, so there is nothing to check there.
 set -euo pipefail
@@ -76,6 +78,19 @@ if [ -n "$missing" ]; then
     echo "check_exported_symbols: $(echo "$missing" | wc -l | tr -d ' ') function(s) of include/libphash.h not exported:" >&2
     echo "$missing" | sed 's/^/  - /' >&2
     status=1
+fi
+# glibc: the library needs no newer symbol version than building on glibc 2.34 gives
+# (pthread_create, the time64 calls). A newer one would come from a call glibc redirects
+# to a versioned variant (e.g. sscanf/strtoll under _GNU_SOURCE, GLIBC_2.38) and would
+# raise the glibc every binary linking libphash needs, whatever glibc it targets.
+if [ "$(uname -s)" = Linux ]; then
+    newer=$(objdump -T "$LIB" | grep -oE 'GLIBC_2\.[0-9]+[^ ]* +[^ ]+$' \
+        | awk '{split($1, v, "."); if (v[2] + 0 > 34) print "  ! " $2 " (" $1 ")"}' | sort -u)
+    if [ -n "$newer" ]; then
+        echo "check_exported_symbols: imports newer than GLIBC_2.34:" >&2
+        echo "$newer" >&2
+        status=1
+    fi
 fi
 [ "$status" -eq 0 ] && echo "check_exported_symbols: $(basename "$LIB") exports exactly the $(echo "$expected" | wc -l | tr -d ' ') functions of include/libphash.h."
 exit "$status"
