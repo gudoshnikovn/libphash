@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [2.0.3] - 2026-11-07
+
 ### Fixed
 
 - **A Linux build needs no newer glibc than the one it targets.** Built on glibc 2.38 or
@@ -786,7 +790,8 @@ see `MIGRATION.md` for the 1.x → 2.0 walkthrough.
 Earlier releases (1.0.0 – 1.9.0) predate this changelog. See the git history and the
 release tags for details.
 
-[Unreleased]: https://github.com/gudoshnikovn/libphash/compare/v2.0.2...HEAD
+[Unreleased]: https://github.com/gudoshnikovn/libphash/compare/v2.0.3...HEAD
+[2.0.3]: https://github.com/gudoshnikovn/libphash/compare/v2.0.2...v2.0.3
 [2.0.2]: https://github.com/gudoshnikovn/libphash/compare/v2.0.1...v2.0.2
 [2.0.1]: https://github.com/gudoshnikovn/libphash/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/gudoshnikovn/libphash/compare/1.10.4...v2.0.0
