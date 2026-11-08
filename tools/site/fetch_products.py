@@ -99,9 +99,8 @@ MAX_SHARE = 0.2       # of the corpus, per product type
 CONNECTIONS = 2       # at most, against S3
 RETRIES = 5
 # The copy of the corpus every build downloads from: the commit of libphash-site-corpus
-# that holds this manifest's images under products/. None until the copy is made; the
-# images then come from ABO's bucket.
-PRODUCTS_MIRROR_COMMIT = None
+# that holds this manifest's images under products/; ABO's bucket is the fallback.
+PRODUCTS_MIRROR_COMMIT = "8969aa7af09b3e400395669ae35d3936fb446a90"
 MIRROR = (f"https://raw.githubusercontent.com/{fetch_corpus.MIRROR_REPO}/"
           f"{PRODUCTS_MIRROR_COMMIT}/products/")
 
