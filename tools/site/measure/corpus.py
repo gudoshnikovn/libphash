@@ -124,7 +124,7 @@ def measure_corpus(tool, corpus):
 # --8<-- [start:variants]
 def write_copies(base, tmp, stem):
     """The copies of the separability measurement: one moderate strength of each of the
-    nine edits (COPY_STRENGTHS), saved as measure/robustness.py saves them; their paths."""
+    edits of transforms() (COPY_STRENGTHS), saved as measure/robustness.py saves them; their paths."""
     return [write_edit(dict(steps)[COPY_STRENGTHS[name]], base,
                        os.path.join(tmp, f"{stem}-{k}"))
             for k, (name, _, steps) in enumerate(transforms())]
@@ -145,7 +145,7 @@ def _variants_one(args):
 
 def measure_settings(tool, mode):
     """{corpus: {"n", "label", "images": [[original, copy…] rows per image]}}: every
-    original of both corpora and its nine copies through `site_stages <mode>`, which
+    original of both corpora and its fifteen copies through `site_stages <mode>`, which
     prints one JSON row of digests per file, one digest per setting it tries. Cached like
     the corpora themselves, as <mode>-<corpus>."""
     result = {}

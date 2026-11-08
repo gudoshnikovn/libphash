@@ -154,7 +154,7 @@ transparent canvas has other shapes, and the shape is part of what every hash se
     from a generator seeded with the image's number, so an image and its copies share it.
     For the color under transparent pixels, the two files of each image are compared by
     `site_stages measure`, once with `--load=alpha=ignore` and once with the default. For
-    the backgrounds, each original is cut out, and each of its nine copies (the
+    the backgrounds, each original is cut out, and each of its fifteen copies (the
     separability chart's) is edited first and cut out after; the copies are compared
     with their original and every pair of originals is compared, loaded with each
     background. `--load=` sets the context before the files after it are loaded.

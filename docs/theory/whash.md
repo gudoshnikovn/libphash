@@ -136,8 +136,8 @@ aHash of the same image do not line up bit for bit even where they agree.
 The hash describes the coarse layout of light and dark, as aHash does, and the same
 edits move it.
 
-![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/whash/robustness.light.svg#only-light)
-![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/whash/robustness.dark.svg#only-dark)
+![Bits that differ from the original under fifteen transforms, on the example photograph](../assets/generated/whash/robustness.light.svg#only-light)
+![Bits that differ from the original under fifteen transforms, on the example photograph](../assets/generated/whash/robustness.dark.svg#only-dark)
 
 - **Recompression, resizing, blur and noise** average out over the cells of the grid:
   the hash does not move, or moves by a pair of bits at the strongest settings.
@@ -204,14 +204,14 @@ below.
 
 ### Over two corpora
 
-The same nine edits, applied to every image of two corpora: 200 public-domain photographs
+The same fifteen edits, applied to every image of two corpora: 200 public-domain photographs
 from Wikimedia Commons ([the list](../project/corpus.md)), and the 24 generated images the
 library's tests measure ([methodology](../methodology.md#the-corpus)), which are not
 photographs. Each line is the median over the corpus and the band around it holds the
 middle half of its images.
 
-![Bits that differ from the original under nine transforms, median and middle half over each corpus](../assets/generated/whash/robustness-corpus.light.svg#only-light)
-![Bits that differ from the original under nine transforms, median and middle half over each corpus](../assets/generated/whash/robustness-corpus.dark.svg#only-dark)
+![Bits that differ from the original under fifteen transforms, median and middle half over each corpus](../assets/generated/whash/robustness-corpus.light.svg#only-light)
+![Bits that differ from the original under fifteen transforms, median and middle half over each corpus](../assets/generated/whash/robustness-corpus.dark.svg#only-dark)
 
 The photographs repeat the single image: rotation and cropping move the hash, and the
 other edits move it by a pair of bits at most, at their strongest. On the synthetic
@@ -224,7 +224,7 @@ gives many equal means, which the median splits by the smallest change.
 
 Robustness alone proves little: a hash that never changes is perfectly robust. What makes
 a hash useful is that copies of an image land closer together than different images do.
-Here a *copy* is an original after one moderate edit (one strength of each of the nine,
+Here a *copy* is an original after one moderate edit (one strength of each of the fifteen,
 listed under "How this was measured"), and *different images* are every pair of distinct
 originals in the corpus.
 
@@ -246,7 +246,7 @@ on these images the cut matters little.
 
 ??? info "How this was measured"
 
-    For each corpus, every image goes through the nine edits above, and each copy is
+    For each corpus, every image goes through the fifteen edits above, and each copy is
     compared with its original exactly as on the single photograph. Every pair of
     distinct originals is compared too, by `site_stages pairs`. Below is the code that
     ran.

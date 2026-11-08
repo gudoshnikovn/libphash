@@ -95,7 +95,7 @@ sets exactly half of the bits unless values tie.
 
 ??? info "How this was measured"
 
-    Every original of both corpora and its nine copies (those of the separability chart
+    Every original of both corpora and its fifteen copies (those of the separability chart
     below) is hashed by `site_stages ahash-variants`, which computes the hash from the grid
     as in the steps above, checks it against
     [`ph_compute_ahash()`](../api/hash64.md#ph_compute_ahash), and thresholds the same grid
@@ -178,8 +178,8 @@ the top row, the last two the bottom row.
 The bits record which side of the mean each cell is on, so an edit that keeps that order
 keeps the hash, and an edit that moves content between cells does not.
 
-![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/ahash/robustness.light.svg#only-light)
-![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/ahash/robustness.dark.svg#only-dark)
+![Bits that differ from the original under fifteen transforms, on the example photograph](../assets/generated/ahash/robustness.light.svg#only-light)
+![Bits that differ from the original under fifteen transforms, on the example photograph](../assets/generated/ahash/robustness.dark.svg#only-dark)
 
 - **Recompression, resizing, noise and blur** leave the 8×8 averages where they were: the
   hash does not move until the image is blurred to a smear.
@@ -251,14 +251,14 @@ below.
 
 ### Over two corpora
 
-The same nine edits, applied to every image of two corpora: 200 public-domain photographs
+The same fifteen edits, applied to every image of two corpora: 200 public-domain photographs
 from Wikimedia Commons ([the list](../project/corpus.md)), and the 24 generated images the
 library's tests measure ([methodology](../methodology.md#the-corpus)), which are not
 photographs. Each line is the median over the corpus and the band around it holds the
 middle half of its images.
 
-![Bits that differ from the original under nine transforms, median and middle half over each corpus](../assets/generated/ahash/robustness-corpus.light.svg#only-light)
-![Bits that differ from the original under nine transforms, median and middle half over each corpus](../assets/generated/ahash/robustness-corpus.dark.svg#only-dark)
+![Bits that differ from the original under fifteen transforms, median and middle half over each corpus](../assets/generated/ahash/robustness-corpus.light.svg#only-light)
+![Bits that differ from the original under fifteen transforms, median and middle half over each corpus](../assets/generated/ahash/robustness-corpus.dark.svg#only-dark)
 
 The photographs say what the single example says: rotation and cropping are the edits
 that move aHash, and everything else moves its median by a few bits at most. The
@@ -269,7 +269,7 @@ patterns, where a small shift moves a whole stripe from one cell into the next.
 
 Robustness alone proves little: a hash that never changes is perfectly robust. What makes
 a hash useful is that copies of an image land closer together than different images do.
-Here a *copy* is an original after one moderate edit (one strength of each of the nine,
+Here a *copy* is an original after one moderate edit (one strength of each of the fifteen,
 listed under "How this was measured"), and *different images* are every pair of distinct
 originals in the corpus.
 
@@ -290,7 +290,7 @@ more.
 
 ??? info "How this was measured"
 
-    For each corpus, every image goes through the nine edits above, and each copy is
+    For each corpus, every image goes through the fifteen edits above, and each copy is
     compared with its original exactly as on the single photograph. Every pair of
     distinct originals is compared too, by `site_stages pairs`. Below is the code that
     ran.

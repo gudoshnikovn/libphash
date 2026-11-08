@@ -52,8 +52,10 @@ def robustness_figure(data, algo, out_dir, mod, caption):
     limits = robust_limits(mod, [convert(v) for name, _, _ in specs for _, v in data[algo][name]
                                  if v is not None])
 
+    rows = -(-len(specs) // 3)
+
     def fig(c):
-        figure, axes = plt.subplots(3, 3, figsize=(10, 7.2), sharey=True)
+        figure, axes = plt.subplots(rows, 3, figsize=(10, 2.4 * rows), sharey=True)
         for ax, (name, xlabel, _) in zip(axes.flat, specs):
             pts = [(s, convert(v)) for s, v in data[algo][name] if v is not None]
             xs = list(range(len(pts)))

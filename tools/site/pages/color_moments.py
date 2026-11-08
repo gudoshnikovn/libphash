@@ -278,7 +278,7 @@ def standardized(v):
 
 def skew_measurement(tool):
     """Per corpus: (originals [image][channel][moment], copies [image][edit][channel]
-    [moment]), from the digests the library computes for every original and its nine
+    [moment]), from the digests the library computes for every original and its fifteen
     copies (corpus.measure_settings)."""
     measured = corpus.measure_settings(tool, "color_moments-digests")
     out = {}

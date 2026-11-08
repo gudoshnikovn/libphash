@@ -154,8 +154,9 @@ A comparison becomes a decision when a threshold is placed on it: two images are
 when their score is at the threshold or closer. Every threshold accepts some share of the
 copies of an image and lets through some share of pairs of different images, and moving it
 trades one against the other. Here, as on the algorithm pages, a *copy* is an image of a
-corpus after one moderate edit (one strength of each of the nine edits: JPEG, downscale,
-rotation, brightness, contrast, gamma, blur, noise, crop), and *different images* are every
+corpus after one moderate edit (one strength of each of the fifteen edits: JPEG, downscale,
+rotation, brightness, contrast, gamma, blur, noise, crop, overlaid text, border,
+screenshot, aspect change, WebP, AVIF), and *different images* are every
 pair of distinct images of the corpus.
 
 ![Nine panels, one per algorithm: the share of copies accepted against the share of different pairs accepted, on a logarithmic axis, for every threshold, one curve for the photographs and one for the synthetic images, with the threshold that accepts 95 % of the copies marked on each](../assets/generated/comparing/curves.light.svg#only-light)
@@ -192,7 +193,7 @@ pages mark.
 ??? info "How this was measured"
 
     The values are the ones the algorithm pages chart: for each corpus, every image is
-    edited with each of the nine edits, and the copy is compared with the original by the
+    edited with each of the fifteen edits, and the copy is compared with the original by the
     algorithm's own function, and every pair of distinct originals is compared the same way.
     The copies are one strength of each edit; the curve is every threshold the measured
     values allow, and the 95 % threshold is the closest value that still accepts 95 % of the

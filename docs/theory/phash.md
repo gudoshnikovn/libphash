@@ -154,8 +154,8 @@ The hash describes the coarse layout of light and dark. An edit that leaves the 
 shapes where they are leaves the low frequencies, and the hash, alone; one that moves the
 shapes moves every coefficient at once.
 
-![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/phash/robustness.light.svg#only-light)
-![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/phash/robustness.dark.svg#only-dark)
+![Bits that differ from the original under fifteen transforms, on the example photograph](../assets/generated/phash/robustness.light.svg#only-light)
+![Bits that differ from the original under fifteen transforms, on the example photograph](../assets/generated/phash/robustness.dark.svg#only-dark)
 
 - **Recompression, resizing, blur and noise** act on fine detail, outside the block: the
   hash does not move, or moves by a bit at the strongest settings.
@@ -223,14 +223,14 @@ below.
 
 ### Over two corpora
 
-The same nine edits, applied to every image of two corpora: 200 public-domain photographs
+The same fifteen edits, applied to every image of two corpora: 200 public-domain photographs
 from Wikimedia Commons ([the list](../project/corpus.md)), and the 24 generated images the
 library's tests measure ([methodology](../methodology.md#the-corpus)), which are not
 photographs. Each line is the median over the corpus and the band around it holds the
 middle half of its images.
 
-![Bits that differ from the original under nine transforms, median and middle half over each corpus](../assets/generated/phash/robustness-corpus.light.svg#only-light)
-![Bits that differ from the original under nine transforms, median and middle half over each corpus](../assets/generated/phash/robustness-corpus.dark.svg#only-dark)
+![Bits that differ from the original under fifteen transforms, median and middle half over each corpus](../assets/generated/phash/robustness-corpus.light.svg#only-light)
+![Bits that differ from the original under fifteen transforms, median and middle half over each corpus](../assets/generated/phash/robustness-corpus.dark.svg#only-dark)
 
 On the photographs the picture is the single image's: rotation and cropping are the edits
 that matter, and they move pHash's median further than aHash's; everything else moves it
@@ -243,7 +243,7 @@ many bits.
 
 Robustness alone proves little: a hash that never changes is perfectly robust. What makes
 a hash useful is that copies of an image land closer together than different images do.
-Here a *copy* is an original after one moderate edit (one strength of each of the nine,
+Here a *copy* is an original after one moderate edit (one strength of each of the fifteen,
 listed under "How this was measured"), and *different images* are every pair of distinct
 originals in the corpus.
 
@@ -269,7 +269,7 @@ narrowest of the four.
 
 ??? info "How this was measured"
 
-    For each corpus, every image goes through the nine edits above, and each copy is
+    For each corpus, every image goes through the fifteen edits above, and each copy is
     compared with its original exactly as on the single photograph. Every pair of
     distinct originals is compared too, by `site_stages pairs`. Below is the code that
     ran.
@@ -467,7 +467,7 @@ corpora, with the sizes 2 and 3 computed the same way, although the library refu
 
 ??? info "How this was measured"
 
-    Every original of both corpora and its nine copies (those of the separability chart
+    Every original of both corpora and its fifteen copies (those of the separability chart
     above) is hashed by `site_stages phash-variants` at every block size from 2 to 8 and
     at every `dct_size` of the next section. Each hash is computed from the block as in
     the steps above and, where the library accepts the parameters, checked against

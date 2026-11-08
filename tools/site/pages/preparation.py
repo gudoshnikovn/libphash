@@ -226,7 +226,7 @@ def _jpeg_roundtrip(im, quality):
 
 # --8<-- [start:copies]
 def cutout_copies(base, seed, tmp, stem):
-    """An original cut out, then its nine copies (the separability chart's), each edited
+    """An original cut out, then its fifteen copies (the separability chart's), each edited
     first and cut out after with the original's ellipse: black under alpha 0."""
     ellipse = ellipse_of(seed)
     files = [_save_png(cutout(base, ellipse, BLACK), os.path.join(tmp, f"{stem}.png"))]
@@ -239,7 +239,7 @@ def cutout_copies(base, seed, tmp, stem):
 
 
 def plain_copies(base, seed, tmp, stem):
-    """An original and its nine copies, as the corpus charts make them."""
+    """An original and its fifteen copies, as the corpus charts make them."""
     ref = os.path.join(tmp, f"{stem}.ppm")
     base.save(ref)
     return [ref] + corpus.write_copies(base, tmp, stem)

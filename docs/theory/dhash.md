@@ -119,7 +119,7 @@ separability chart below:
 
 ??? info "How this was measured"
 
-    Every original of both corpora and its nine copies (those of the separability chart
+    Every original of both corpora and its fifteen copies (those of the separability chart
     below) is hashed by `site_stages dhash-variants`, which computes the hash from the
     Mitchell grid as in the steps above, checks it against
     [`ph_compute_dhash()`](../api/hash64.md#ph_compute_dhash), and makes the same
@@ -158,8 +158,8 @@ A bit records which of two neighbors is darker. An edit that keeps that order ke
 bit; where two neighbors are almost equal, as across a flat wall or sky, almost any edit
 can tip it.
 
-![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/dhash/robustness.light.svg#only-light)
-![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/dhash/robustness.dark.svg#only-dark)
+![Bits that differ from the original under fifteen transforms, on the example photograph](../assets/generated/dhash/robustness.light.svg#only-light)
+![Bits that differ from the original under fifteen transforms, on the example photograph](../assets/generated/dhash/robustness.dark.svg#only-dark)
 
 - **Resizing and blur** leave the order of neighboring cells as it was, and the hash with
   it.
@@ -227,14 +227,14 @@ below.
 
 ### Over two corpora
 
-The same nine edits, applied to every image of two corpora: 200 public-domain photographs
+The same fifteen edits, applied to every image of two corpora: 200 public-domain photographs
 from Wikimedia Commons ([the list](../project/corpus.md)), and the 24 generated images the
 library's tests measure ([methodology](../methodology.md#the-corpus)), which are not
 photographs. Each line is the median over the corpus and the band around it holds the
 middle half of its images.
 
-![Bits that differ from the original under nine transforms, median and middle half over each corpus](../assets/generated/dhash/robustness-corpus.light.svg#only-light)
-![Bits that differ from the original under nine transforms, median and middle half over each corpus](../assets/generated/dhash/robustness-corpus.dark.svg#only-dark)
+![Bits that differ from the original under fifteen transforms, median and middle half over each corpus](../assets/generated/dhash/robustness-corpus.light.svg#only-light)
+![Bits that differ from the original under fifteen transforms, median and middle half over each corpus](../assets/generated/dhash/robustness-corpus.dark.svg#only-dark)
 
 On the photographs, rotation and cropping are again the edits that matter; every other
 edit moves the median by a few bits at most, a little more than it moves aHash's, and
@@ -247,7 +247,7 @@ move.
 
 Robustness alone proves little: a hash that never changes is perfectly robust. What makes
 a hash useful is that copies of an image land closer together than different images do.
-Here a *copy* is an original after one moderate edit (one strength of each of the nine,
+Here a *copy* is an original after one moderate edit (one strength of each of the fifteen,
 listed under "How this was measured"), and *different images* are every pair of distinct
 originals in the corpus.
 
@@ -271,7 +271,7 @@ move more, the order is reversed.
 
 ??? info "How this was measured"
 
-    For each corpus, every image goes through the nine edits above, and each copy is
+    For each corpus, every image goes through the fifteen edits above, and each copy is
     compared with its original exactly as on the single photograph. Every pair of
     distinct originals is compared too, by `site_stages pairs`. Below is the code that
     ran.

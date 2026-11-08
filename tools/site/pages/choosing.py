@@ -27,7 +27,9 @@ NAME = "choosing"
 EDIT_SHORT = {"JPEG quality": "JPEG 50", "Downscale": "Downscale ½", "Rotation": "Rotation 2°",
               "Brightness": "Brightness ×1.15", "Contrast": "Contrast ×1.15",
               "Gamma": "Gamma 1.2", "Gaussian blur": "Blur σ 1", "Noise": "Noise σ 5",
-              "Crop": "Crop 5 %"}
+              "Crop": "Crop 5 %", "Overlay text": "Text 4 %", "Border": "Border 5 %",
+              "Screenshot": "Screenshot ½", "Aspect change": "Aspect ×0.9",
+              "WebP quality": "WebP 75", "AVIF quality": "AVIF 50"}
 # The sequential ramp of the matrix, one hue from near the surface to full strength: the
 # blue of the site's accent (slot 1), stepped toward each theme's surface for 0.
 RAMPS = {"light": ["#f4f8fe", "#cde2fb", "#6da7ec", "#256abf", "#0d366b"],
@@ -74,7 +76,7 @@ def moved(values, different, lower_is_closer):
 
 def matrix(data, group):
     """(columns, rows): the value of moved() for every algorithm and edit of `group`,
-    "copies" (one moderate strength of each of the nine edits a copy goes through) or
+    "copies" (one moderate strength of each of the edits a copy goes through) or
     "edits" (every strength of the edits that change the picture)."""
     columns, rows = [], []
     for mod in PAGES:

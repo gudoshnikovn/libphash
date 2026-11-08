@@ -170,8 +170,8 @@ The digest describes how contrast is spread over the directions through the cent
 Anything that keeps that spread keeps the digest; anything that turns the image or
 changes what lies near the center moves it.
 
-![Peak correlation with the original under nine transforms, on the example photograph, with PH_RADIAL_PCC_THRESHOLD dashed](../assets/generated/radial/robustness.light.svg#only-light)
-![Peak correlation with the original under nine transforms, on the example photograph, with PH_RADIAL_PCC_THRESHOLD dashed](../assets/generated/radial/robustness.dark.svg#only-dark)
+![Peak correlation with the original under fifteen transforms, on the example photograph, with PH_RADIAL_PCC_THRESHOLD dashed](../assets/generated/radial/robustness.light.svg#only-light)
+![Peak correlation with the original under fifteen transforms, on the example photograph, with PH_RADIAL_PCC_THRESHOLD dashed](../assets/generated/radial/robustness.dark.svg#only-dark)
 
 - **Brightness, contrast and gamma** mostly scale the variances, and step 6 takes the
   scale out. What is left is a change in the profile's shape: where a brightening clips
@@ -235,14 +235,14 @@ below.
 
 ### Over two corpora
 
-The same nine edits, applied to every image of two corpora: 200 public-domain photographs
+The same fifteen edits, applied to every image of two corpora: 200 public-domain photographs
 from Wikimedia Commons ([the list](../project/corpus.md)), and the 24 generated images the
 library's tests measure ([methodology](../methodology.md#the-corpus)), which are not
 photographs. Each line is the median over the corpus and the band around it holds the
 middle half of its images.
 
-![Peak correlation with the original under nine transforms, median and middle half over each corpus](../assets/generated/radial/robustness-corpus.light.svg#only-light)
-![Peak correlation with the original under nine transforms, median and middle half over each corpus](../assets/generated/radial/robustness-corpus.dark.svg#only-dark)
+![Peak correlation with the original under fifteen transforms, median and middle half over each corpus](../assets/generated/radial/robustness-corpus.light.svg#only-light)
+![Peak correlation with the original under fifteen transforms, median and middle half over each corpus](../assets/generated/radial/robustness-corpus.dark.svg#only-dark)
 
 The corpora repeat the single photograph: rotation is the one edit that takes the median
 below 0.9 at a moderate strength, at a few degrees, and the strongest downscale and crop
@@ -255,7 +255,7 @@ and take no part ([the table](#copies-and-different-images) counts them).
 
 Robustness alone proves little: a hash that never changes is perfectly robust. What makes
 a hash useful is that copies of an image land closer together than different images do.
-Here a *copy* is an original after one moderate edit (one strength of each of the nine,
+Here a *copy* is an original after one moderate edit (one strength of each of the fifteen,
 listed under "How this was measured"), and *different images* are every pair of distinct
 originals in the corpus.
 
@@ -280,7 +280,7 @@ the same broad shape, and the threshold lets a large share of their pairs throug
 
 ??? info "How this was measured"
 
-    For each corpus, every image goes through the nine edits above, and each copy is
+    For each corpus, every image goes through the fifteen edits above, and each copy is
     compared with its original exactly as on the single photograph. Every pair of
     distinct originals is compared too, by `site_stages pairs`. Below is the code that
     ran.
@@ -545,7 +545,7 @@ hash reads the setting.
 
 ??? info "How the settings were measured"
 
-    Each original and its nine copies are hashed under every setting by
+    Each original and its fifteen copies are hashed under every setting by
     `site_stages radial-variants`, through `ph_compute_radial_hash()`. The scores are
     computed from the digests by the same formula as `ph_radial_similarity()`, in Python
     (above, under [Turning the image](#turning-the-image)); the default's *d′* is checked

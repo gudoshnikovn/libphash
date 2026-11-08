@@ -16,6 +16,12 @@ COPY_STRENGTHS = {
     "Gaussian blur": 1,
     "Noise": 5,
     "Crop": 5,
+    "Overlay text": 4,
+    "Border": 5,
+    "Screenshot": 0.5,
+    "Aspect change": 0.9,
+    "WebP quality": 75,
+    "AVIF quality": 50,
 }
 # --8<-- [end:copies]
 

@@ -114,8 +114,8 @@ sequence of bits and no byte layout, so the order is this library's choice.
 The digest describes the layout of light and dark, as aHash does, at a finer scale, and
 the same edits move it; with four times as many blocks, more of them lie near the median.
 
-![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/bmh/robustness.light.svg#only-light)
-![Bits that differ from the original under nine transforms, on the example photograph](../assets/generated/bmh/robustness.dark.svg#only-dark)
+![Bits that differ from the original under fifteen transforms, on the example photograph](../assets/generated/bmh/robustness.light.svg#only-light)
+![Bits that differ from the original under fifteen transforms, on the example photograph](../assets/generated/bmh/robustness.dark.svg#only-dark)
 
 - **Recompression, resizing and noise** average out over the blocks: the digest does not
   move, or moves by a bit or two at the strongest settings.
@@ -184,14 +184,14 @@ below.
 
 ### Over two corpora
 
-The same nine edits, applied to every image of two corpora: 200 public-domain photographs
+The same fifteen edits, applied to every image of two corpora: 200 public-domain photographs
 from Wikimedia Commons ([the list](../project/corpus.md)), and the 24 generated images the
 library's tests measure ([methodology](../methodology.md#the-corpus)), which are not
 photographs. Each line is the median over the corpus and the band around it holds the
 middle half of its images.
 
-![Bits that differ from the original under nine transforms, median and middle half over each corpus](../assets/generated/bmh/robustness-corpus.light.svg#only-light)
-![Bits that differ from the original under nine transforms, median and middle half over each corpus](../assets/generated/bmh/robustness-corpus.dark.svg#only-dark)
+![Bits that differ from the original under fifteen transforms, median and middle half over each corpus](../assets/generated/bmh/robustness-corpus.light.svg#only-light)
+![Bits that differ from the original under fifteen transforms, median and middle half over each corpus](../assets/generated/bmh/robustness-corpus.dark.svg#only-dark)
 
 The photographs repeat the single image: rotation and cropping move the digest, and the
 other edits move a few of its 256 bits at their strongest. The synthetic images also
@@ -202,7 +202,7 @@ tie at the median, and a small change to a tied block decides its bit.
 
 Robustness alone proves little: a hash that never changes is perfectly robust. What makes
 a hash useful is that copies of an image land closer together than different images do.
-Here a *copy* is an original after one moderate edit (one strength of each of the nine,
+Here a *copy* is an original after one moderate edit (one strength of each of the fifteen,
 listed under "How this was measured"), and *different images* are every pair of distinct
 originals in the corpus.
 
@@ -226,7 +226,7 @@ mostly black, and [the median](#the-median-and-ties) explains why they collide.
 
 ??? info "How this was measured"
 
-    For each corpus, every image goes through the nine edits above, and each copy is
+    For each corpus, every image goes through the fifteen edits above, and each copy is
     compared with its original exactly as on the single photograph. Every pair of
     distinct originals is compared too, by `site_stages pairs`. Below is the code that
     ran.
@@ -393,7 +393,7 @@ of the copies lets through.
 ??? info "How this was measured"
 
     The copies are the ones of the separability chart above, one moderate strength of
-    each of the nine edits; each original and its copies are hashed at every block size
+    each of the fifteen edits; each original and its copies are hashed at every block size
     by `site_stages bmh-variants`, which also thresholds the default grid at its mean.
     The distances, *d′* and the threshold are computed as for the corpus charts, and the
     tool checks that the default size gives the same *d′* as they do. aHash's numbers are

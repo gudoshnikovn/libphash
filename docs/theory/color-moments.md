@@ -121,8 +121,8 @@ The nine numbers describe the levels of each channel, so anything that changes l
 moves the digest and anything that only moves pixels around does not. How far depends on
 how many pixels change, by how much, and on which side of the mean.
 
-![L2 distance from the original under nine transforms, on the example photograph](../assets/generated/color_moments/robustness.light.svg#only-light)
-![L2 distance from the original under nine transforms, on the example photograph](../assets/generated/color_moments/robustness.dark.svg#only-dark)
+![L2 distance from the original under fifteen transforms, on the example photograph](../assets/generated/color_moments/robustness.light.svg#only-light)
+![L2 distance from the original under fifteen transforms, on the example photograph](../assets/generated/color_moments/robustness.dark.svg#only-dark)
 
 - **Brightness, contrast and gamma** change the level of every pixel. Brightness
   multiplies every level by its factor and so, wherever no channel clips, all nine
@@ -190,14 +190,14 @@ below.
 
 ### Over two corpora
 
-The same nine edits, applied to every image of two corpora: 200 public-domain photographs
+The same fifteen edits, applied to every image of two corpora: 200 public-domain photographs
 from Wikimedia Commons ([the list](../project/corpus.md)), and the 24 generated images the
 library's tests measure ([methodology](../methodology.md#the-corpus)), which are not
 photographs. Each line is the median over the corpus and the band around it holds the
 middle half of its images.
 
-![L2 distance from the original under nine transforms, median and middle half over each corpus](../assets/generated/color_moments/robustness-corpus.light.svg#only-light)
-![L2 distance from the original under nine transforms, median and middle half over each corpus](../assets/generated/color_moments/robustness-corpus.dark.svg#only-dark)
+![L2 distance from the original under fifteen transforms, median and middle half over each corpus](../assets/generated/color_moments/robustness-corpus.light.svg#only-light)
+![L2 distance from the original under fifteen transforms, median and middle half over each corpus](../assets/generated/color_moments/robustness-corpus.dark.svg#only-dark)
 
 The corpora repeat the single photograph: the tonal edits, brightness, contrast and
 gamma, move the digest furthest, by about the same distance on both corpora, and the
@@ -209,7 +209,7 @@ photograph's levels are spread already.
 
 Robustness alone proves little: a hash that never changes is perfectly robust. What makes
 a hash useful is that copies of an image land closer together than different images do.
-Here a *copy* is an original after one moderate edit (one strength of each of the nine,
+Here a *copy* is an original after one moderate edit (one strength of each of the fifteen,
 listed under "How this was measured"), and *different images* are every pair of distinct
 originals in the corpus.
 
@@ -234,7 +234,7 @@ colors in the same proportions, in a different pattern.
 
 ??? info "How this was measured"
 
-    For each corpus, every image goes through the nine edits above, and each copy is
+    For each corpus, every image goes through the fifteen edits above, and each copy is
     compared with its original exactly as on the single photograph. Every pair of
     distinct originals is compared too, by `site_stages pairs`. Below is the code that
     ran.
@@ -370,7 +370,7 @@ closer still, and *d′* falls without it.
 
 ??? info "How this was measured"
 
-    The library computes the digest of every original of both corpora and of its nine
+    The library computes the digest of every original of both corpora and of its fifteen
     copies, through `site_stages color_moments-digests`; the nine numbers are decoded from
     each digest, and the distances recomputed from them are checked against the corpus
     charts' before anything is drawn.

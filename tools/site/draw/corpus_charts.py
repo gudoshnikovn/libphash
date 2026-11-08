@@ -35,9 +35,11 @@ def corpus_robustness_figure(datasets, algo, mod, out_dir):
                                      for points in d["robust"][algo].values()
                                      for _, values in points for x in values if x is not None])
 
+    rows = -(-len(specs) // 3)
+
     def fig(c):
         colors = {"photos": c["accent"], "synthetic": c["accent2"]}
-        figure, axes = plt.subplots(3, 3, figsize=(10, 7.6), sharey=True)
+        figure, axes = plt.subplots(rows, 3, figsize=(10, 2.53 * rows), sharey=True)
         for ax, (name, xlabel, steps) in zip(axes.flat, specs):
             xs = list(range(len(steps)))
             reference_line(ax, mod, c)

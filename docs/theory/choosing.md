@@ -60,10 +60,10 @@ intersection, a distance. To set them side by side, each value below is the dist
 copy from the original's own hash in units of the distance between two typical different
 images: 0 is the original's hash, 1 is as far as the median pair of different images of
 the corpus. A cell is the median over the corpus. The copies are the ones every algorithm
-page charts, one moderate strength of each of nine edits.
+page charts, one moderate strength of each of fifteen edits.
 
-![A matrix of nine algorithms by nine edits on the photographs, each cell the median distance of a copy from the original in units of the median distance between different photographs: near 0 nearly everywhere, mHash most of the way to 1 for a rotation and a crop, the two color hashes a little above 0 for brightness, contrast and gamma](../assets/generated/choosing/copies-photos.light.svg#only-light)
-![A matrix of nine algorithms by nine edits on the photographs, each cell the median distance of a copy from the original in units of the median distance between different photographs: near 0 nearly everywhere, mHash most of the way to 1 for a rotation and a crop, the two color hashes a little above 0 for brightness, contrast and gamma](../assets/generated/choosing/copies-photos.dark.svg#only-dark)
+![A matrix of nine algorithms by fifteen edits on the photographs, each cell the median distance of a copy from the original in units of the median distance between different photographs: near 0 nearly everywhere, mHash most of the way to 1 for a rotation and a crop, the two color hashes a little above 0 for brightness, contrast and gamma](../assets/generated/choosing/copies-photos.light.svg#only-light)
+![A matrix of nine algorithms by fifteen edits on the photographs, each cell the median distance of a copy from the original in units of the median distance between different photographs: near 0 nearly everywhere, mHash most of the way to 1 for a rotation and a crop, the two color hashes a little above 0 for brightness, contrast and gamma](../assets/generated/choosing/copies-photos.dark.svg#only-dark)
 
 - **Recompression, scaling, blur and noise** leave nearly every hash where it was. They
   change pixels, not the layout of light and dark or the mix of colors.
