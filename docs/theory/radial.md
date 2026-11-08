@@ -592,6 +592,10 @@ bit-vector comparison refuses a Radial digest:
 --8<-- "examples/digest_and_metrics.c"
 ```
 
+## Revisions
+
+--8<-- "docs/assets/generated/radial/revisions.md"
+
 ## Where it comes from
 
 The radial variance hash is the algorithm of "Robust image hashing based on radial

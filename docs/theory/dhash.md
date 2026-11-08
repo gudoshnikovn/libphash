@@ -487,6 +487,10 @@ three 64-bit algorithms at once:
 --8<-- "examples/hash_distance.c"
 ```
 
+## Revisions
+
+--8<-- "docs/assets/generated/dhash/revisions.md"
+
 ## Where it comes from
 
 dHash was proposed by David Oftedal in a comment on Neal Krawetz's aHash post, and named,

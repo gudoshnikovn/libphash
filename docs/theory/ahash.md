@@ -433,6 +433,10 @@ three 64-bit algorithms at once:
 --8<-- "examples/hash_distance.c"
 ```
 
+## Revisions
+
+--8<-- "docs/assets/generated/ahash/revisions.md"
+
 ## Where it comes from
 
 aHash was described by Neal Krawetz in a blog post in 2011; there is no paper. The post

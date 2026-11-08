@@ -542,6 +542,10 @@ nothing else:
 --8<-- "examples/basic_hash.c"
 ```
 
+## Revisions
+
+--8<-- "docs/assets/generated/phash/revisions.md"
+
 ## Where it comes from
 
 pHash has no paper. It is what the pHash library's `ph_dct_imagehash()` computes, written

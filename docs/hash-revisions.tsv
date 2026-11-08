@@ -1,0 +1,19 @@
+# The history of each algorithm's hash revision: one row per revision, oldest first.
+#
+# Columns (tab-separated): algorithm, revision, library version that introduced it,
+# what changed, recompute. The algorithm is the name ph_algorithm_name() returns;
+# recompute is "yes" when a hash stored under the previous revision must be computed
+# again, "-" for the first revision.
+#
+# Rendered as the revision table on each algorithm page, and checked against
+# PH_ALGORITHM_REVISIONS in src/hashes/algorithm.c by scripts/docs/hash_revisions.py:
+# raising a revision without a row here fails it.
+ahash	1	2.0.0	first revision	-
+dhash	1	2.0.0	first revision	-
+phash	1	2.0.0	first revision	-
+whash	1	2.0.0	first revision	-
+bmh	1	2.0.0	first revision	-
+mhash	1	2.0.0	first revision	-
+radial	1	2.0.0	first revision	-
+color_hash	1	2.0.0	first revision	-
+color_moments	1	2.0.0	first revision	-

@@ -521,6 +521,10 @@ mHash's goes through
 --8<-- "examples/digest_and_metrics.c"
 ```
 
+## Revisions
+
+--8<-- "docs/assets/generated/mhash/revisions.md"
+
 ## Where it comes from
 
 Two sources cover two halves of mHash. The operator is the Laplacian of Gaussian of

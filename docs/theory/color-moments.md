@@ -451,6 +451,10 @@ shows that a bit-vector comparison refuses a digest that is not bits:
 --8<-- "examples/digest_and_metrics.c"
 ```
 
+## Revisions
+
+--8<-- "docs/assets/generated/color_moments/revisions.md"
+
 ## Where it comes from
 
 Color moments are the method of "Similarity of color images" by Markus Stricker and

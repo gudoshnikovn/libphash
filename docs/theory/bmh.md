@@ -446,6 +446,10 @@ and stores the BMH digest as text and reads it back:
 --8<-- "examples/digest_and_metrics.c"
 ```
 
+## Revisions
+
+--8<-- "docs/assets/generated/bmh/revisions.md"
+
 ## Where it comes from
 
 BMH is method 1 of "Block Mean Value Based Image Perceptual Hashing" by Bian Yang, Fan Gu

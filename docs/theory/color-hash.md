@@ -448,6 +448,10 @@ that a bit-vector comparison refuses a histogram:
 --8<-- "examples/digest_and_metrics.c"
 ```
 
+## Revisions
+
+--8<-- "docs/assets/generated/color_hash/revisions.md"
+
 ## Where it comes from
 
 Color indexing by histogram intersection is the method of "Color Indexing" by Michael

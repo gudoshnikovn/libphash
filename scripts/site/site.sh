@@ -99,6 +99,7 @@ cmake --build --preset release --target site_stages
 rm -rf build/site-generated
 "$PY" tools/site/render.py --tool build/release/site_stages --image tests/data/photo.jpeg \
     --out build/site-generated
+"$PY" scripts/docs/hash_revisions.py --out build/site-generated
 sync_into build/site-generated docs/assets/generated
 "$PY" tools/site/fetch_corpus.py page --out build/site-corpus.md
 cmp -s build/site-corpus.md docs/project/corpus.md || cp build/site-corpus.md docs/project/corpus.md

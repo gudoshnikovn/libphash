@@ -507,6 +507,10 @@ pair is:
 --8<-- "examples/hash_distance.c"
 ```
 
+## Revisions
+
+--8<-- "docs/assets/generated/whash/revisions.md"
+
 ## Where it comes from
 
 wHash has no paper. It is the `whash` of Johannes Buchner's ImageHash library, whose only

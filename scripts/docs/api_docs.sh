@@ -3,6 +3,8 @@
 # build/api-docs/html/, and checks that every declaration is in one of its topics
 # (scripts/docs/check_api_groups.py) and that docs/symbols-in-versions.txt dates every symbol
 # as its @since does (scripts/docs/check_symbol_versions.py, which reads the release tags).
+# Also checks that every algorithm revision in the code has a row in docs/hash-revisions.tsv
+# (scripts/docs/hash_revisions.py).
 # `make docs` and the CI format-check job both call this script.
 #
 # Why the version is pinned: the run fails on any Doxygen warning, and what Doxygen
@@ -38,4 +40,5 @@ mkdir -p build/api-docs
 "$DX" docs/Doxyfile
 python3 scripts/docs/check_api_groups.py build/api-docs/xml
 python3 scripts/docs/check_symbol_versions.py build/api-docs/xml
+python3 scripts/docs/hash_revisions.py
 echo "==> API reference: build/api-docs/html/index.html"
