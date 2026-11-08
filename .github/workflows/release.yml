@@ -31,7 +31,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Same release decoder set as CI's build-and-test job and scripts/coverage_cmake.sh's
+  # Same release decoder set as CI's build-and-test job and scripts/coverage/coverage_cmake.sh's
   # "native" leg: libjpeg-turbo + libpng + libwebp + zlib-ng, PHASH_STRICT_DEPS=ON so a
   # silently-missing backend fails the build instead of shipping a quietly
   # degraded artifact.
@@ -90,7 +90,7 @@ jobs:
 
     - name: Package release archives (static + shared)
       shell: bash
-      run: scripts/package_release.sh ${{ matrix.platform }} dist both
+      run: scripts/release/package_release.sh ${{ matrix.platform }} dist both
 
     - name: Upload archives
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -100,7 +100,7 @@ jobs:
         if-no-files-found: error
 
   # Extracts each archive in isolation (no access to the build tree above --
-  # see scripts/smoke_release_artifact.sh) and links a minimal consumer
+  # see scripts/release/smoke_release_artifact.sh) and links a minimal consumer
   # against it via find_package(phash), on the same OS family it was built on.
   smoke:
     needs: build
@@ -139,14 +139,14 @@ jobs:
       run: |
         shopt -s nullglob
         archives=(dist/libphash-*-${{ matrix.platform }}.tar.gz dist/libphash-*-${{ matrix.platform }}.zip)
-        scripts/smoke_release_artifact.sh "${archives[0]:-}" static
+        scripts/release/smoke_release_artifact.sh "${archives[0]:-}" static
 
     - name: Smoke test shared archive
       shell: bash
       run: |
         shopt -s nullglob
         archives=(dist/libphash-*-${{ matrix.platform }}-shared.tar.gz dist/libphash-*-${{ matrix.platform }}-shared.zip)
-        scripts/smoke_release_artifact.sh "${archives[0]:-}" shared
+        scripts/release/smoke_release_artifact.sh "${archives[0]:-}" shared
 
     # The shared library in the archive carries the decoders the release is built with,
     # statically, and no dynamic dependency on a system decoder library. nm/readelf/otool:
@@ -160,7 +160,7 @@ jobs:
         mkdir -p unpacked
         tar -xzf dist/libphash-*-${{ matrix.platform }}-shared.tar.gz -C unpacked
         lib=$(find unpacked -type f \( -name 'libphash.so.*.*.*' -o -name 'libphash.*.*.*.dylib' \) | head -n1)
-        scripts/check_decoder_symbols.sh "$lib"
+        scripts/abi/check_decoder_symbols.sh "$lib"
 
   checksums:
     needs: smoke

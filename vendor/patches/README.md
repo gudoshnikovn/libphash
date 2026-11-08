@@ -13,7 +13,7 @@ Every change is also marked in the file itself with
 `/* libphash local patch (not upstream): ... */`. The reasoning is in
 `docs/development.md` ("Known vendor patch").
 
-`scripts/check_stb_patches.sh` (run in CI) downloads each upstream file at its recorded
+`scripts/vendor/check_stb_patches.sh` (run in CI) downloads each upstream file at its recorded
 commit, checks its hash, applies the patch and requires the result to be the vendored
 file byte for byte.
 
@@ -25,7 +25,7 @@ file byte for byte.
 3. Copy the result over `vendor/<file>` and regenerate the patch from the pristine
    upstream file: `diff -u --label a/<file> --label b/<file> <upstream> vendor/<file> > vendor/patches/<file>.patch`.
 4. Record the commit and both hashes in `THIRD-PARTY-NOTICES.md`, run
-   `scripts/check_stb_patches.sh`, and run `test_alloc_failure` and
+   `scripts/vendor/check_stb_patches.sh`, and run `test_alloc_failure` and
    `test_stb_failure_classification` under `make debug && make test` — the second pins
    the error strings `src/loader.c` matches against.
 

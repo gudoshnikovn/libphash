@@ -108,7 +108,7 @@ enough" section for `make coverage-cmake`, which covers those instead.
 ## Commit and PR conventions
 
 - Documentation, doc comments and commit messages use American spelling (color,
-  behavior, normalize, gray); `scripts/check_spelling.py` in the format check flags the
+  behavior, normalize, gray); `scripts/lint/check_spelling.py` in the format check flags the
   British forms. Text quoted from a source keeps the source's spelling.
 - Commit messages: short imperative summary line, in English, with a body when the
   *why* isn't obvious from the diff alone. No fixed prefix format is enforced, but

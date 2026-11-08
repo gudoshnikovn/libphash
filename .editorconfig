@@ -1,5 +1,5 @@
 # The whitespace settings an editor can apply before clang-format runs; .clang-format
-# remains the authority on C sources (scripts/format.sh).
+# remains the authority on C sources (scripts/build/format.sh).
 root = true
 
 [*]

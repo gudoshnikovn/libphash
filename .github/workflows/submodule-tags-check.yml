@@ -2,7 +2,7 @@ name: submodule tags check
 
 # The four vendored submodules (.gitmodules) are each pinned to an upstream release tag.
 # Dependabot cannot keep them there -- its gitsubmodule updates follow a branch's newest
-# commit, not its tags -- so this runs scripts/check_submodule_tags.sh on a schedule and
+# commit, not its tags -- so this runs scripts/vendor/check_submodule_tags.sh on a schedule and
 # opens (or updates) a tracking issue when a submodule is behind upstream's newest
 # release or not on a release tag at all, rather than failing the run: a bump is a
 # reviewed task (SECURITY.md, "Vendored dependencies"). A check that cannot run at all
@@ -38,7 +38,7 @@ jobs:
         # scripts/check_submodule_tags.sh.
         run: |
           set +e
-          bash scripts/check_submodule_tags.sh > "$RUNNER_TEMP/submodule-tags.txt"
+          bash scripts/vendor/check_submodule_tags.sh > "$RUNNER_TEMP/submodule-tags.txt"
           status=$?
           set -e
           cat "$RUNNER_TEMP/submodule-tags.txt"
@@ -47,7 +47,7 @@ jobs:
       - name: Fail if the check could not run
         if: steps.check.outputs.status != '0' && steps.check.outputs.status != '1'
         run: |
-          echo "::error::scripts/check_submodule_tags.sh exited with ${{ steps.check.outputs.status }}: the tags check itself is broken"
+          echo "::error::scripts/vendor/check_submodule_tags.sh exited with ${{ steps.check.outputs.status }}: the tags check itself is broken"
           exit 1
 
       - name: Open or update tracking issue

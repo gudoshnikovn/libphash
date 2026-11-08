@@ -31,8 +31,8 @@ measurement can be rerun as it was. The decoder comparison runs from the tree:
 
 ```bash
 python3 -m pip install pillow numpy
-python3 scripts/gen_bench_corpus.py tests/data/photo_large.jpeg /tmp/corpus
-scripts/bench_decoders.sh /tmp/corpus /tmp/bench 5 /tmp/bench/result.md
+python3 scripts/bench/gen_bench_corpus.py tests/data/photo_large.jpeg /tmp/corpus
+scripts/bench/bench_decoders.sh /tmp/corpus /tmp/bench 5 /tmp/bench/result.md
 ```
 
 It needs cmake, a C compiler, jq, the zlib headers, nasm on x86, and the vendored

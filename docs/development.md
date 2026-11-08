@@ -44,7 +44,7 @@ There are two build systems, and they are not interchangeable:
 Because they are separate implementations, their defaults can drift, and a default
 that differs between them means a code path that is exercised in one flow and dead in
 the other. The table below is the single place where both are recorded — keep it in
-sync when you add or flip a switch. `scripts/check_docs_coverage.sh` (the `format-check`
+sync when you add or flip a switch. `scripts/lint/check_docs_coverage.sh` (the `format-check`
 job) fails when a `PHASH_*` `option()` in `CMakeLists.txt` has no row here; the defaults
 themselves are checked by reading both files.
 
@@ -197,7 +197,7 @@ under `-jN` (`clean` deleting object files other jobs are compiling). Prefer the
   and `webp.c` compile to nothing without their `PH_USE_*` flag, and `png_libpng.c`
   is not built. The overall percentage this target reports does **not** include the
   native decoders, no matter how high it reads.
-- **`make coverage-cmake`** (`scripts/coverage_cmake.sh`) runs a CMake
+- **`make coverage-cmake`** (`scripts/coverage/coverage_cmake.sh`) runs a CMake
   `-DPHASH_COVERAGE=ON` + `ctest` pass with the default vendored decoder set
   (libjpeg-turbo + libpng + libwebp + zlib-ng, i.e. what CI's `build-and-test` job
   and releases ship) and renders its `lcov` trace under
@@ -218,7 +218,7 @@ under `-jN` (`clean` deleting object files other jobs are compiling). Prefer the
 Neither target subsumes the other — always read the two side by side, and treat a
 report that only ran one of them as measuring at most half the decoder surface.
 
-`scripts/coverage_cmake.sh` treats a failing test the same way `make coverage`
+`scripts/coverage/coverage_cmake.sh` treats a failing test the same way `make coverage`
 does: coverage is a measurement pass, not a correctness gate, so a `ctest` failure
 prints a warning and the script continues rather than aborting (a failed test still
 executed its lines). If a decoder submodule isn't checked out locally, that backend's
@@ -232,7 +232,7 @@ option being `ON` means the backend was actually linked.
 Both targets measure lines **and branches**: the paths that lines alone report as
 covered while their error branch never ran are where the defects live. CI's
 `coverage-cmake` job (Linux x86_64, native decoders) checks the result against
-`scripts/coverage_thresholds.txt` with `scripts/check_coverage.py`, and fails when an
+`scripts/coverage/coverage_thresholds.txt` with `scripts/coverage/check_coverage.py`, and fails when an
 area drops below its minimum:
 
 | Area | Lines | Branches |
@@ -275,7 +275,7 @@ calls, the Win32 thread pool) are not in any number; they are compiled and teste
 CI's Windows build, which measures no coverage.
 
 Locally: `make coverage` (stb_image build) or `make coverage-cmake` (native decoders),
-then `python3 scripts/check_coverage.py docs/coverage/cmake/native.info` for the gate
+then `python3 scripts/coverage/check_coverage.py docs/coverage/cmake/native.info` for the gate
 itself. Both targets print the per-area table.
 
 ### Reproducible archives
@@ -292,13 +292,13 @@ library it copies on macOS; the libjpeg-turbo sub-build gets the same file as
 and DLL, and NASM into its COFF objects; the same file passes `/Brepro` to `cl`, `lib` and
 `link` and `--reproducible` to NASM. MSVC also records each object file's own path in the
 object, so a Windows build reproduces only in the same build directory:
-`scripts/package_release.sh` builds in `build/package/` under the checkout, which on a
+`scripts/release/package_release.sh` builds in `build/package/` under the checkout, which on a
 GitHub runner is always the same path. The Makefile picks
 `ar rcsD` or `ZERO_AR_DATE=1 ar rcs` from what `ar --version` reports.
-`scripts/package_release.sh` packs with `scripts/deterministic_archive.py` (Python's
+`scripts/release/package_release.sh` packs with `scripts/release/deterministic_archive.py` (Python's
 standard library, not the platform's `tar`/`zip`): sorted entries, every timestamp
 `SOURCE_DATE_EPOCH` — by default the time of the commit being packed — owner 0/0, and a
-gzip header with no time or name. `scripts/check_reproducible.sh cmake|make|package`
+gzip header with no time or name. `scripts/release/check_reproducible.sh cmake|make|package`
 builds twice and compares every installed file, `libphash.a` or the release archives; CI
 runs all three on Linux (`reproducible-builds`, one leg each), the first two on macOS
 (`build-and-test`), and `package` on Windows (`reproducible-builds`).
@@ -307,14 +307,14 @@ runs all three on Linux (`reproducible-builds`, one leg each), the first two on 
 
 `cmake --install` writes `libphash.h`, `phash_version.h`, the library, the exported
 `phash::phash` CMake package and `libphash.pc`. Both consumer routes are covered by
-`scripts/smoke_install.sh static|shared` (also `make install-test`), which installs into
+`scripts/release/smoke_install.sh static|shared` (also `make install-test`), which installs into
 a throwaway prefix, builds a consumer through `find_package(phash)` and through
 `pkg-config`, then **moves the prefix** and repeats the `pkg-config` build from the new
 location. `make install` (the Makefile build) writes the static library, both headers and
-a `libphash.pc` in the same form; `scripts/smoke_make_install.sh` (also in
+a `libphash.pc` in the same form; `scripts/release/smoke_make_install.sh` (also in
 `make install-test`) installs it, builds and runs a consumer, moves the prefix, rebuilds,
 and checks that `make uninstall` leaves no file behind.
-`scripts/smoke_release_artifact.sh` does the same as `smoke_install.sh` against an unpacked release
+`scripts/release/smoke_release_artifact.sh` does the same as `smoke_install.sh` against an unpacked release
 archive. Both use the plain command README shows, `pkg-config --cflags --libs libphash`,
 and run every consumer without `LD_LIBRARY_PATH`/`DYLD_LIBRARY_PATH`; a consumer that
 starts only with them is reported as missing its rpath.
@@ -361,7 +361,7 @@ target_link_libraries(my_app PRIVATE phash)
 
 Both parent configurations are supported and covered end to end (configure → build →
 run a real PNG through `ph_load_from_file`) by
-`scripts/smoke_add_subdirectory.sh`, which CI runs alongside `smoke_install.sh`:
+`scripts/release/smoke_add_subdirectory.sh`, which CI runs alongside `smoke_install.sh`:
 
 - `BUILD_SHARED_LIBS=OFF` (static parent),
 - `BUILD_SHARED_LIBS=ON` (shared parent).
@@ -424,8 +424,8 @@ the code follows is held by the gate rather than by habit.
   to run with any other major. The pin is raised only in a commit of its own, together
   with whatever reformatting the new version produces.
 - **Scope**: `src/`, `include/`, all of `tests/` (including `tests/fuzz/`),
-  `examples/` and `tools/`. `scripts/format.sh` holds both the scope and the version; `make format`
-  and the CI `format-check` job both run it (`scripts/format.sh --check` for the CI
+  `examples/` and `tools/`. `scripts/build/format.sh` holds both the scope and the version; `make format`
+  and the CI `format-check` job both run it (`scripts/build/format.sh --check` for the CI
   check).
 - **Line endings and whitespace**: `.gitattributes` keeps every text file LF on every
   platform and marks image fixtures and fuzz inputs binary; `.editorconfig` gives an
@@ -438,16 +438,16 @@ the code follows is held by the gate rather than by habit.
 works in both places. `make site` builds it into `build/site/`; `make site-serve` serves it
 on `127.0.0.1:8000` with live reload, and a build can run while the server does (the
 build works in `build/site-src/`, the server in `build/site-serve/`). Both run
-`scripts/site.sh`, which needs the vendored submodules, Doxygen 1.18 and Python 3.12 or
+`scripts/site/site.sh`, which needs the vendored submodules, Doxygen 1.18 and Python 3.12 or
 later, and does four things:
 
-- **The Python packages.** `scripts/site-requirements.txt` is a lock, compiled from
-  `scripts/site-requirements.in`, that pins every package the site is built with, its
+- **The Python packages.** `scripts/site/site-requirements.txt` is a lock, compiled from
+  `scripts/site/site-requirements.in`, that pins every package the site is built with, its
   dependencies included, with hashes. The script installs it into `build/site-venv/` —
   with [uv](https://docs.astral.sh/uv/) when it is installed, with `venv` and pip
   otherwise — on the first run and whenever the lock changes. A version is raised in the
   `.in` file, and the lock compiled again with the command written in it.
-- **The API reference.** Doxygen runs over the header, and `scripts/api_pages.py` writes
+- **The API reference.** Doxygen runs over the header, and `scripts/docs/api_pages.py` writes
   its XML as pages of the site into `docs/api/` (ignored by git), one page per topic,
   every declaration under an anchor equal to its name. Under each declaration it adds the
   examples that call it and the site pages that link to its anchor, under `ph_error_t`
@@ -480,7 +480,7 @@ The rules that keep the build green:
   Pages written for the site live in `docs/theory/`, `docs/guide/` and `docs/project/`;
   files that code and scripts refer to by path keep their path.
 - **Links** to a page or an anchor are checked by the build. A link to any other file
-  must stay inside `docs/` — `scripts/check_site_links.py` fails on `../src/...` — so a
+  must stay inside `docs/` — `scripts/site/check_site_links.py` fails on `../src/...` — so a
   file elsewhere in the repository is linked by its GitHub URL, and a function by its
   anchor in the API reference, `[ph_compute_ahash()](api/hash64.md#ph_compute_ahash)`,
   so a misspelled name fails the build too.
@@ -497,7 +497,7 @@ The rules that keep the build green:
   heading keep the short name; and `description`, 100 to 160 characters of its own and no
   double quote, the text a search result shows under it. `overrides/main.html` turns them
   into the `<title>`, the Open Graph and Twitter tags and the structured data, and
-  `scripts/check_site_meta.py` fails the build on a page without them or with a
+  `scripts/site/check_site_meta.py` fails the build on a page without them or with a
   description another page has. An algorithm page also names its preview image, `image:
   assets/generated/social/<algo>.png`, a 1200×630 card of its title over its steps that
   `tools/site/draw/social.py` draws in the light theme; every other page shows the front
@@ -508,7 +508,7 @@ The rules that keep the build green:
 
 - **External linkage ⇒ `ph_`.** Every function and variable of ours that is not `static`
   is named `ph_*`, public or internal: the library shares one C namespace with whatever
-  links it. `scripts/check_exported_symbols.sh` fails on any other name (the vendored
+  links it. `scripts/abi/check_exported_symbols.sh` fails on any other name (the vendored
   `stbi_*`/`stbir_*` instantiations excepted).
 - **`static` ⇒ prefix optional.** A `static` function is invisible outside its file;
   both `ph_*` and unprefixed names are in use, and neither is renamed to match the other.
@@ -539,10 +539,10 @@ preference:
    warning go away is a defect: it hides exactly the value the warning is about.
 
 Warnings see implicit conversions, not explicit ones, so two checks watch the casts.
-`scripts/check_casts.py` counts the explicit casts in each file under `src/` (the stb
-instantiations and `(void)` discards aside) against `scripts/explicit_casts.txt`; any
+`scripts/lint/check_casts.py` counts the explicit casts in each file under `src/` (the stb
+instantiations and `(void)` discards aside) against `scripts/lint/explicit_casts.txt`; any
 difference fails `format-check` until the list is updated with
-`scripts/check_casts.py --update` in the same change, so an added cast is always in
+`scripts/lint/check_casts.py --update` in the same change, so an added cast is always in
 the diff for review. And clang-tidy's `bugprone-misplaced-widening-cast`, in the
 `strict-warnings` job, catches a cast that widens the result of an arithmetic which has
 already overflowed in the narrower type, such as `(uint64_t)(a * b)` on two ints.
@@ -637,13 +637,13 @@ on any pull request targeting either, and by hand through `workflow_dispatch` (s
 
 | Job | What it checks |
 |---|---|
-| `format-check` | `scripts/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`, `tools/`; `scripts/check_docs_coverage.sh`; `scripts/check_final_state_voice.sh`, which fails on tracker ids, paths into local planning notes and release-cycle wording (a feature "since" a version) in tracked text; `shellcheck --severity=warning` over `scripts/*.sh`; `scripts/check_casts.py`, the explicit-cast count per file in `src/` against `scripts/explicit_casts.txt`; `scripts/check_coverage.py --check-docs`, which keeps the coverage table below equal to `scripts/coverage_thresholds.txt`; `scripts/check_spelling.py`, American spelling in the documentation and the public header; and `make docs` (`scripts/api_docs.sh`, the pinned Doxygen 1.18 from `scripts/install_doxygen.sh`), the API reference, which fails on any undocumented public declaration and is uploaded as the `api-reference-html` artifact. Fast, no library build, catches these before the slower jobs run. |
+| `format-check` | `scripts/build/format.sh --check` — `clang-format --dry-run --Werror` with the pinned clang-format 23 over `src/`, `include/`, `tests/`, `examples/`, `tools/`; `scripts/lint/check_docs_coverage.sh`; `scripts/lint/check_final_state_voice.sh`, which fails on tracker ids, paths into local planning notes and release-cycle wording (a feature "since" a version) in tracked text; `shellcheck --severity=warning` over `scripts/*/*.sh`; `scripts/lint/check_casts.py`, the explicit-cast count per file in `src/` against `scripts/lint/explicit_casts.txt`; `scripts/coverage/check_coverage.py --check-docs`, which keeps the coverage table below equal to `scripts/coverage/coverage_thresholds.txt`; `scripts/lint/check_spelling.py`, American spelling in the documentation and the public header; and `make docs` (`scripts/docs/api_docs.sh`, the pinned Doxygen 1.18 from `scripts/docs/install_doxygen.sh`), the API reference, which fails on any undocumented public declaration and is uploaded as the `api-reference-html` artifact. Fast, no library build, catches these before the slower jobs run. |
 | `build-and-test` | Full vendored build (libjpeg-turbo + libpng + libwebp + zlib-ng) across linux-x86_64 (gcc, clang), linux-arm64, macos-arm64, plus the shared library on linux-x86_64 (gcc). `PHASH_STRICT_DEPS=ON`, so a decoder silently falling back to stb_image is a hard configure failure, not a quiet pass. |
 | `build-and-test-windows` | The same full vendored build under MSVC on windows-latest, with NASM for libjpeg-turbo's SIMD: the configuration of the windows-x86_64 release archives, built and tested before a tag. |
-| `abi-compat` | The working tree against the ABI of the latest release tag (see the [compatibility policy](project/compatibility.md)): `scripts/check_abi_layout.py`, the size and offset of every field of the release's public structs and the value of every enumerator, compiled against both headers on ubuntu-24.04, macos-latest and windows-latest (MSVC); and on Linux `scripts/check_abidiff.sh`, `abidiff` between the release's shared library and the current one. Additions pass; a removed function, a changed signature, a moved field or a changed enumerator fails. |
+| `abi-compat` | The working tree against the ABI of the latest release tag (see the [compatibility policy](project/compatibility.md)): `scripts/abi/check_abi_layout.py`, the size and offset of every field of the release's public structs and the value of every enumerator, compiled against both headers on ubuntu-24.04, macos-latest and windows-latest (MSVC); and on Linux `scripts/abi/check_abidiff.sh`, `abidiff` between the release's shared library and the current one. Additions pass; a removed function, a changed signature, a moved field or a changed enumerator fails. |
 | `build-options` | stb_image-only builds with `PHASH_ENABLE_THREADS=OFF` (the batch API's sequential path) and with `PHASH_ENABLE_MOCK_BACKEND=ON` (the test-only `DE AD` decoder and the test branches written for it). `PHASH_OPTIMIZE_NATIVE` has no job: `-march=native` compiles for whatever CPU the runner has, so a result would describe that machine rather than the option. |
 | `strict-warnings` | The full vendored build with `PHASH_WARNINGS_AS_ERRORS=ON` (gcc, clang): any warning in libphash's own sources, tests or benchmark fails it. The only job with `-Werror`, so a newer compiler's new warning never breaks a build from source. Its clang leg also runs clang-tidy's `bugprone-misplaced-widening-cast` over `src/`. |
-| `coverage-cmake` | `scripts/coverage_cmake.sh` — line and branch coverage of the vendored decoder build, checked against `scripts/coverage_thresholds.txt` (see "Coverage standard"); the HTML report is published as a downloadable artifact. |
+| `coverage-cmake` | `scripts/coverage/coverage_cmake.sh` — line and branch coverage of the vendored decoder build, checked against `scripts/coverage/coverage_thresholds.txt` (see "Coverage standard"); the HTML report is published as a downloadable artifact. |
 | `minimal-build` | Zero-dependency build on ubuntu-24.04, macos-latest, windows-latest: a checkout without submodules, configured with the default options, so stb_image decodes everything. Checks the one warning that names every missing submodule, and that `PHASH_STRICT_DEPS=ON` turns it into a configure error. |
 | `c-standard-matrix` | Full test suite under `-DCMAKE_C_STANDARD=11/17/23`, gcc+clang, Linux+macOS (no Windows — see the Toolchains section above for why). |
 | `build-and-test-32bit` | The native PNG backend (libpng) built `-m32`, catching `size_t`/`int`-width overflow bugs a 64-bit build can't reach. |
@@ -653,8 +653,8 @@ on any pull request targeting either, and by hand through `workflow_dispatch` (s
 | `tsan` | ThreadSanitizer over the threaded batch path (`src/batch.c`) and the "one context per thread" contract. |
 | `valgrind` | The allocation-failure test suite (`tests/src/test_alloc_failure.c`) under Valgrind — independent of ASan/LSan, which don't mix with it, and the only place that test injects failures under a memory checker: its allocator shim stands down under ASan. Two legs: stb_image only, with a subset of the library's allocation-heavy tests, and every bundled decoder, which fails allocations inside libjpeg-turbo, libpng and libwebp. |
 | `fuzz` | A short (90s) libFuzzer run per PR — a fast regression check, not real corpus exploration; see "Fuzzing" below for the real thing. |
-| `install-smoke-test` | `scripts/smoke_install.sh` and `scripts/smoke_add_subdirectory.sh` — both consumer routes (`find_package`, pkg-config, `add_subdirectory()`), both link configurations; `scripts/smoke_make_install.sh` — the Makefile's `install`/`uninstall`; `scripts/check_exported_symbols.sh`, which fails unless the shared library exports exactly the functions of `include/libphash.h` (no internal helper, no `stb_image`, no vendored decoder); `scripts/build_examples.sh`, which builds and runs `examples/` against the shared library and compiles every C block of `README.md` and `MIGRATION.md` against the installed headers. |
-| `reproducible-builds` | `scripts/check_reproducible.sh` in four parallel legs: the CMake install trees (static and shared), the Makefile's `libphash.a`, and the linux-x86_64 and windows-x86_64 release archives, each built twice and compared byte for byte. |
+| `install-smoke-test` | `scripts/release/smoke_install.sh` and `scripts/release/smoke_add_subdirectory.sh` — both consumer routes (`find_package`, pkg-config, `add_subdirectory()`), both link configurations; `scripts/release/smoke_make_install.sh` — the Makefile's `install`/`uninstall`; `scripts/abi/check_exported_symbols.sh`, which fails unless the shared library exports exactly the functions of `include/libphash.h` (no internal helper, no `stb_image`, no vendored decoder); `scripts/docs/build_examples.sh`, which builds and runs `examples/` against the shared library and compiles every C block of `README.md` and `MIGRATION.md` against the installed headers. |
+| `reproducible-builds` | `scripts/release/check_reproducible.sh` in four parallel legs: the CMake install trees (static and shared), the Makefile's `libphash.a`, and the linux-x86_64 and windows-x86_64 release archives, each built twice and compared byte for byte. |
 
 Every build job starts the same way: a plain `actions/checkout`, then the local
 composite action [`.github/actions/setup-build`](https://github.com/gudoshnikovn/libphash/blob/main/.github/actions/setup-build/action.yml),
@@ -667,7 +667,7 @@ distinguishes one job from another.
 
 Five more workflows, and Dependabot, run on their own trigger rather than per push:
 
-- **`.github/workflows/site.yml`** — the documentation site: `scripts/site.sh`, strict,
+- **`.github/workflows/site.yml`** — the documentation site: `scripts/site/site.sh`, strict,
   so a broken link or anchor, a page missing from the navigation, a missing included file
   or a figure whose stages disagree with the library fails it. A pushed release tag `v*`
   publishes the site to GitHub Pages (<https://gudoshnikovn.github.io/libphash/>;
@@ -729,14 +729,14 @@ Each module should have a corresponding test file. We use a simple `test_macros.
 The PNG and WebP decoder fixtures in `tests/data/png/` — one PNG per pixel format a decoder
 converts (gray at 1, 4 and 8 bits, RGB at 8 and 16 bits, palette with and without `tRNS`,
 RGBA, and RGB and RGBA Adam7-interlaced) and broken files that fail at the header, in truncated image data and on a bad
-checksum — are generated by `python3 scripts/gen_png_fixtures.py` (standard library only).
+checksum — are generated by `python3 scripts/fixtures/gen_png_fixtures.py` (standard library only).
 Their pixels follow formulas that `tests/src/test_png_variants.c` recomputes. The files are
 committed; regenerating them with another zlib may change the compressed bytes, never the
 pixels.
 
 The JPEG fixtures in `tests/data/jpeg/` are one 61×45 image in every coding mode the
 decoder reads — 4:4:4, 4:2:2, 4:4:0, 4:2:0, 4:1:1, grayscale, progressive, restart markers,
-arithmetic coding — encoded by `scripts/gen_jpeg_fixtures.py` with libjpeg-turbo's `cjpeg`
+arithmetic coding — encoded by `scripts/fixtures/gen_jpeg_fixtures.py` with libjpeg-turbo's `cjpeg`
 (the script's docstring shows how to build it from the submodule). JPEG is lossy, so
 `tests/src/test_jpeg_variants.c` cannot recompute the pixels from a formula; it pins the
 size and a checksum of what the native decoder returns for each file, in color and in
@@ -744,7 +744,7 @@ grayscale, at every `decode_scale`. The golden hashes see a 32×32 reduction and
 shift of a few levels; this table does not. A change to the decoder's settings or to the
 libjpeg-turbo version fails it, and the failure prints the new table — accepting it is a
 decision about decoded pixels, made in the same commit as the change that caused it.
-`scripts/check_decoder_symbols.sh` checks the linked result against the build tree's
+`scripts/abi/check_decoder_symbols.sh` checks the linked result against the build tree's
 `PHASH_USE_*` options: every decoder that is on is linked statically and every one that is
 off is absent, zlib-ng is the only zlib (or the system one, with `PHASH_USE_ZLIB_NG=OFF`),
 nothing is a dynamic dependency on a decoder library, and nothing from libjpeg-turbo's
@@ -883,7 +883,7 @@ reporting `min_ms`, `median_ms`, `p90_ms` and `avg_ms`:
 
 A benchmark number is only useful if its run-to-run spread is smaller than the
 regression it is supposed to detect. The floor is measured by running
-`scripts/bench_regression_gate.sh` with the **same binary on both sides**, a comparison
+`scripts/bench/bench_regression_gate.sh` with the **same binary on both sides**, a comparison
 whose true answer is 0% for every metric, and reading it against the thresholds the gate
 ships with: 10% for one metric, 5% for the median change over all of them.
 
@@ -912,7 +912,7 @@ has been published to the run summary and the `benchmark-report` artifact. Run w
 #### Running the gate
 
 The CI `benchmark` job builds two trees in the same job and runs
-`scripts/bench_regression_gate.sh` on them, so runner noise lands on both sides. Which
+`scripts/bench/bench_regression_gate.sh` on them, so runner noise lands on both sides. Which
 commit is the base depends on the event:
 
 | Event | Base |
@@ -948,7 +948,7 @@ default branch.
 Locally, build both versions and pass the two binaries, the one under test first:
 
 ```bash
-scripts/bench_regression_gate.sh build/bench_hash ../base/build/bench_hash 5 10 report.md
+scripts/bench/bench_regression_gate.sh build/bench_hash ../base/build/bench_hash 5 10 report.md
 ```
 
 ### 5. Sanitizers (ASan + UBSan)
@@ -1032,7 +1032,7 @@ upstream master). The whole change is `vendor/patches/stb_image_resize2.h.patch`
 of this vendored file applies it to the new upstream file and re-verifies it against
 `test_alloc_failure` under `make debug && make test` — the steps are in
 `vendor/patches/README.md`. A version bump without the patch reopens the crash and the
-leaks, and `scripts/check_stb_patches.sh` fails on it in CI.
+leaks, and `scripts/vendor/check_stb_patches.sh` fails on it in CI.
 
 **Known vendor patch — the reason reported for an allocation failure in
 `vendor/stb_image.h`.** `src/loader.c` classifies a failed `stbi_load*()` by
@@ -1097,7 +1097,7 @@ copied-in stb headers against upstream.
     the header. The description itself always states the contract of the current release;
     the history says what differs from the earlier ones. `make docs` fails when the
     file, the doc comments and the header of the latest release tag disagree
-    (`scripts/check_symbol_versions.py`): a symbol missing from the file, a date that
+    (`scripts/docs/check_symbol_versions.py`): a symbol missing from the file, a date that
     differs from its `@since` or `@deprecated{X.Y.Z}`, a history out of version order, a
     `@deprecated` without a version, a deprecated function without `PH_DEPRECATED` or
     the reverse, a symbol dated to a released version that its tag

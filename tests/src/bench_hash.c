@@ -115,7 +115,7 @@ double get_time_sec() {
  * A single mean over the whole loop is not a usable benchmark number: one
  * scheduler preemption or page fault inside the loop shifts it by tens of
  * percent, and the caller can't tell that it happened: compared against
- * itself through scripts/bench_regression_gate.sh on an idle machine, a
+ * itself through scripts/bench/bench_regression_gate.sh on an idle machine, a
  * mean-based number shows false 40-45% "regressions". So: warm up first, then time every iteration
  * separately and report robust statistics (min/median/p90) alongside the mean.
  *
@@ -188,7 +188,7 @@ static ph_bench_stats ph_bench_summarize(ph_bench_samples *s) {
 }
 
 /* avg_ms is kept in the JSON for schema compatibility with older gate runs,
- * but min_ms is what scripts/bench_regression_gate.sh compares. */
+ * but min_ms is what scripts/bench/bench_regression_gate.sh compares. */
 static void ph_bench_print_json_stats(const ph_bench_stats *st) {
     printf("\"iterations\": %d, \"total_s\": %.6f, \"min_ms\": %.6f, "
            "\"median_ms\": %.6f, \"p90_ms\": %.6f, \"avg_ms\": %.6f",

@@ -1,7 +1,7 @@
 # Examples
 
 Each example is one C file that builds against an installed libphash with
-`cc <file>.c $(pkg-config --cflags --libs libphash)`. `scripts/build_examples.sh` builds and
+`cc <file>.c $(pkg-config --cflags --libs libphash)`. `scripts/docs/build_examples.sh` builds and
 runs every one of them in CI against a fresh install, so they compile against the current
 header.
 
@@ -16,7 +16,7 @@ header.
 | [`batch_hash.c`](batch_hash.c) | Many files at once on a worker pool: a configuration template, a progress callback, several hashes per file, and a status per file. |
 | [`find_duplicates.c`](find_duplicates.c) | Many files hashed with pHash, each hash printed as it would be stored, with what decides its value, every pair within a threshold, closest first, and the groups of copies those pairs join the files into. |
 | [`error_handling.c`](error_handling.c) | What each error code means and what a caller does about it, on real inputs: a missing path, a non-image, a damaged file, an image over the size limit, a format the build cannot decode. |
-| [`cmake_consumer/`](cmake_consumer/) | A CMake project using an installed libphash through `find_package(phash 2)` and `phash::phash`. `scripts/smoke_install.sh` builds it in CI. |
+| [`cmake_consumer/`](cmake_consumer/) | A CMake project using an installed libphash through `find_package(phash 2)` and `phash::phash`. `scripts/release/smoke_install.sh` builds it in CI. |
 
 [Finding duplicate images](https://gudoshnikovn.github.io/libphash/guide/find-duplicate-images/) walks through `find_duplicates.c`,
 [Hashing many files](https://gudoshnikovn.github.io/libphash/guide/batch/) covers the batch API in depth,

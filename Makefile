@@ -142,8 +142,8 @@ DEPFLAGS = -MMD -MP
 all: $(LIB_NAME) $(TEST_BINS)
 
 # Version header (single source of truth: project() VERSION in CMakeLists.txt)
-$(GENERATED_DIR)/phash_version.h: CMakeLists.txt include/phash_version.h.in scripts/gen_version.sh
-	@./scripts/gen_version.sh CMakeLists.txt include/phash_version.h.in $@
+$(GENERATED_DIR)/phash_version.h: CMakeLists.txt include/phash_version.h.in scripts/build/gen_version.sh
+	@./scripts/build/gen_version.sh CMakeLists.txt include/phash_version.h.in $@
 
 $(OBJS): $(GENERATED_DIR)/phash_version.h
 
@@ -158,23 +158,23 @@ debug:
 # Reformat code. The perimeter and the pinned clang-format major live in the
 # script, which the CI format-check job calls too.
 format:
-	./scripts/format.sh
+	./scripts/build/format.sh
 
 # API reference from include/libphash.h's doc comments (Doxygen), into
 # build/api-docs/html/. The script pins the Doxygen version and the CI format-check job
 # calls it too; any Doxygen warning fails it.
 docs:
-	./scripts/api_docs.sh
+	./scripts/docs/api_docs.sh
 
 # The documentation site (docs/ through Zensical, zensical.toml) into build/site/, with
 # the API reference under api/; site-serve rebuilds on every change and serves it on
 # 127.0.0.1:8000, and `make site` can run while it does. The script pins the Zensical
 # version and builds strictly: a broken link fails it.
 site:
-	./scripts/site.sh
+	./scripts/site/site.sh
 
 site-serve:
-	./scripts/site.sh serve
+	./scripts/site/site.sh serve
 
 # Library build, byte-identical from identical sources: GNU and LLVM ar zero the member
 # timestamps with D; Apple's ar has no D and reads ZERO_AR_DATE instead (the same rule
@@ -258,14 +258,14 @@ coverage:
 	@lcov --capture --directory . --output-file docs/coverage/coverage.info $(LCOV_BRANCH_FLAGS)
 	@lcov --remove docs/coverage/coverage.info '/usr/*' 'tests/*' 'vendor/*' --output-file docs/coverage/coverage.info $(LCOV_BRANCH_FLAGS)
 	@genhtml docs/coverage/coverage.info --output-directory docs/coverage/html $(LCOV_BRANCH_FLAGS)
-	@python3 scripts/check_coverage.py --report docs/coverage/coverage.info
+	@python3 scripts/coverage/check_coverage.py --report docs/coverage/coverage.info
 	@echo "Coverage report generated at docs/coverage/html/index.html"
 
 # Coverage for the CMake build's native decoders (libjpeg-turbo/libpng/
 # libwebp/zlib-ng) -- `coverage` above only ever measures the stb_image-only
-# Makefile flow. See scripts/coverage_cmake.sh for what this actually runs.
+# Makefile flow. See scripts/coverage/coverage_cmake.sh for what this actually runs.
 coverage-cmake:
-	@./scripts/coverage_cmake.sh
+	@./scripts/coverage/coverage_cmake.sh
 
 # The benchmark is a measuring tool, not a test: outside TEST_BINS, built and run here.
 bench_hash: $(TEST_DIR)/bench_hash.c $(LIB_NAME)
@@ -320,9 +320,9 @@ uninstall:
 # static and shared, and this file's install/uninstall. Each installs into a throwaway
 # prefix and builds a consumer against it.
 install-test:
-	./scripts/smoke_install.sh static
-	./scripts/smoke_install.sh shared
-	./scripts/smoke_make_install.sh
+	./scripts/release/smoke_install.sh static
+	./scripts/release/smoke_install.sh shared
+	./scripts/release/smoke_make_install.sh
 
 clean:
 	rm -rf $(OBJ_DIR) $(GENERATED_DIR) *.a *.o *.d test_* bench_hash bench_hash.dSYM build .cache docs/coverage

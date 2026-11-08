@@ -20,7 +20,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/deterministic_archives.cmake)
 # translation unit that needs a POSIX or GNU declaration (clock_gettime(), openat(),
 # mkstemp(), sched_getaffinity(), ...) requests it with a feature-test macro before its
 # first #include. Anything new that reaches for a non-ISO libc name has to do the same;
-# scripts/check_strict_iso.sh is what notices when it doesn't.
+# scripts/lint/check_strict_iso.sh is what notices when it doesn't.
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
@@ -90,7 +90,7 @@ endmacro()
 # evaluated here, in the project that has the target: these targets are deliberately not
 # in phash's export set (see target_link_libraries(phash PRIVATE
 # $<BUILD_INTERFACE:png_static> ...) below), so in a consumer's configure the same
-# expression would fail with "No target png_static" (scripts/smoke_install.sh covers this).
+# expression would fail with "No target png_static" (scripts/release/smoke_install.sh covers this).
 #
 # So the names are evaluated by file(GENERATE), once per configuration, into two installed
 # files: phashVendored.cmake, which declares an imported target phash::vendored_<target>
@@ -146,8 +146,8 @@ option(PHASH_ENABLE_THREADS "Let ph_hash_files()/ph_hash_buffers() spawn a pool 
 # so their max_pixels checks, error-callback plumbing and overflow guards are
 # invisible to it. This option instruments *this*
 # CMake build instead, so a Release-equivalent config with the vendored decoders on
-# can be measured; scripts/coverage_cmake.sh drives it.
-option(PHASH_COVERAGE "Instrument phash and its tests with --coverage (gcov/lcov); see scripts/coverage_cmake.sh" OFF)
+# can be measured; scripts/coverage/coverage_cmake.sh drives it.
+option(PHASH_COVERAGE "Instrument phash and its tests with --coverage (gcov/lcov); see scripts/coverage/coverage_cmake.sh" OFF)
 # Warnings as errors on this project's own targets (the library, tests, fuzzer and
 # benchmark), never on the vendored decoders. For CI's strict-warnings job: a build from
 # source must not break because a newer compiler has a new warning, so it stays off by
@@ -475,7 +475,7 @@ if(PHASH_COVERAGE)
     # function defined in a header (e.g. ph_safe_image_alloc_size() in safety.h)
     # gets its own counter instance per translation unit -- default (non-atomic)
     # counter increments race there and corrupt the merged .gcda, surfacing as
-    # `geninfo: ERROR: Unexpected negative count` when scripts/coverage_cmake.sh
+    # `geninfo: ERROR: Unexpected negative count` when scripts/coverage/coverage_cmake.sh
     # runs lcov --capture. This is a known GCC/gcov
     # limitation (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68080), not a libphash
     # bug; the fix is atomic counter updates, not suppressing/ignoring the error,
@@ -521,7 +521,7 @@ if(PHASH_USE_LIBJPEG_TURBO)
     # would then bind to that zlib instead of the vendored zlib-ng.
     # jpeg-static is the codec alone, and its API reports a failed allocation by error
     # code (JERR_OUT_OF_MEMORY), which the TurboJPEG API folds into a generic fatal error.
-    # scripts/check_decoder_symbols.sh checks the linked result.
+    # scripts/abi/check_decoder_symbols.sh checks the linked result.
     #
     # ExternalProject, not add_subdirectory(): libjpeg-turbo's CMakeLists.txt stops with
     # a FATAL_ERROR when it is not the top-level project. It is configured inside this
@@ -1068,7 +1068,7 @@ if(PHASH_BUILD_TESTS)
     # The documentation site's measuring tool (tools/site/stages/): the pictures and
     # numbers on the algorithm pages. It reads the context's internal state, so it links
     # like the tests do, and draws the tests' synthetic corpus (tests/src/synthetic_corpus.h).
-    # Built only when scripts/site.sh asks for it.
+    # Built only when scripts/site/site.sh asks for it.
     if(NOT PHASH_BUILD_SHARED)
         file(GLOB SITE_STAGES_SOURCES CONFIGURE_DEPENDS
             ${CMAKE_CURRENT_SOURCE_DIR}/tools/site/stages/*.c)

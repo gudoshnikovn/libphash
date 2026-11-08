@@ -8,7 +8,7 @@ name: Site
 # sources change. "Run workflow" in the Actions tab builds the site on the branch chosen
 # there and uploads it as an artifact; on `main` the same run publishes it again.
 #
-# The build is strict: scripts/site.sh fails on a broken link or anchor, a page missing
+# The build is strict: scripts/site/site.sh fails on a broken link or anchor, a page missing
 # from the navigation, an included file that does not exist or a figure whose stages
 # disagree with the library. The script is the only way in: zensical.toml is the
 # configuration `zensical serve` reads, and the strict build runs on a copy of it that
@@ -32,7 +32,7 @@ concurrency:
 
 jobs:
   # Python 3.12, the oldest the site supports, from setup-python: the lock in
-  # scripts/site-requirements.txt is compiled for every platform from 3.12 on, and the
+  # scripts/site/site-requirements.txt is compiled for every platform from 3.12 on, and the
   # script installs it with pip and --require-hashes. The photo corpus is fetched first,
   # in a step of its own that fails unless every photograph in the manifest arrives and
   # matches its digest (it comes from a fixed commit of libphash-site-corpus, one archive);
@@ -47,8 +47,8 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         persist-credentials: false
-        # The release tags: scripts/api_docs.sh dates the public symbols against the
-        # header of the latest one (scripts/check_symbol_versions.py).
+        # The release tags: scripts/docs/api_docs.sh dates the public symbols against the
+        # header of the latest one (scripts/docs/check_symbol_versions.py).
         fetch-depth: 0
 
     - uses: ./.github/actions/setup-build
@@ -60,11 +60,11 @@ jobs:
       with:
         python-version: '3.12'
         cache: pip
-        cache-dependency-path: scripts/site-requirements.txt
+        cache-dependency-path: scripts/site/site-requirements.txt
 
     - name: Install Doxygen (pinned)
       run: |
-        ./scripts/install_doxygen.sh "$RUNNER_TEMP/doxygen"
+        ./scripts/docs/install_doxygen.sh "$RUNNER_TEMP/doxygen"
         echo "$RUNNER_TEMP/doxygen/bin" >> "$GITHUB_PATH"
 
     - name: Fetch the photo corpus (every photograph, or fail)
@@ -78,7 +78,7 @@ jobs:
         restore-keys: site-measurements-${{ runner.arch }}-
 
     - name: Documentation site (make site)
-      run: ./scripts/site.sh
+      run: ./scripts/site/site.sh
 
     - name: Upload the site
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -13,7 +13,7 @@
 # assembles libjpeg-turbo's SIMD code) into its COFF objects. /Brepro makes cl, lib and
 # link write a fixed value, NASM's --reproducible a zero. What remains is the path of
 # each object file, which cl records in the object itself: two MSVC builds match when
-# they are built in the same directory, which is why scripts/package_release.sh builds
+# they are built in the same directory, which is why scripts/release/package_release.sh builds
 # in build/package rather than in a temporary directory.
 #
 # Included by CMakeLists.txt after project(), and given to the libjpeg-turbo sub-build

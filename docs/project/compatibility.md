@@ -69,12 +69,12 @@ cover them. A release that changes them says so in the changelog.
 
 The `abi-compat` job compares the working tree with the latest release tag:
 
-- `scripts/check_abi_layout.py` compiles the release's structs and enums against both
+- `scripts/abi/check_abi_layout.py` compiles the release's structs and enums against both
   headers and compares the size and offset of every field and the value of every
   enumerator, on Linux, macOS and Windows (MSVC);
-- on Linux, `scripts/check_abidiff.sh` builds the release's shared library and the
+- on Linux, `scripts/abi/check_abidiff.sh` builds the release's shared library and the
   current one and compares them with `abidiff` (libabigail): a removed function or a
   changed signature, struct or enum fails, an added function passes.
 
 `make docs` checks the header against `symbols-in-versions.txt` and the latest release
-tag's header (`scripts/check_symbol_versions.py`).
+tag's header (`scripts/docs/check_symbol_versions.py`).

@@ -1,5 +1,5 @@
 # API reference for include/libphash.h, generated from its doc comments.
-# Built by scripts/api_docs.sh (`make docs`), which pins the Doxygen version; the HTML
+# Built by scripts/docs/api_docs.sh (`make docs`), which pins the Doxygen version; the HTML
 # lands in build/api-docs/html/index.html. Any warning -- an undocumented public
 # declaration, a @param that names no parameter -- fails the run, which is how CI keeps
 # the header fully documented.
@@ -24,7 +24,7 @@ PREDEFINED             = PH_API= PH_NODISCARD= "PH_DEPRECATED(msg)="
 
 # A declaration's history after the release that added it (@since): each change of its
 # contract as @changed{X.Y.Z} <what changed>, and its deprecation as
-# @deprecated{X.Y.Z} <what to use instead>. scripts/check_symbol_versions.py reads the
+# @deprecated{X.Y.Z} <what to use instead>. scripts/docs/check_symbol_versions.py reads the
 # titles these expand to, and rejects a @deprecated without a version.
 ALIASES                = "changed{1}=@par Changed in \1:^^" \
                          "deprecated{1}=@deprecated Deprecated in \1:"
@@ -38,7 +38,7 @@ GENERATE_HTML          = YES
 # No graphs: one header has nothing to draw, and Graphviz would be one more dependency.
 HAVE_DOT               = NO
 GENERATE_LATEX         = NO
-# Read by scripts/check_api_groups.py: every declaration must be in a topic.
+# Read by scripts/docs/check_api_groups.py: every declaration must be in a topic.
 GENERATE_XML           = YES
 GENERATE_TREEVIEW      = YES
 SEARCHENGINE           = YES

@@ -52,7 +52,7 @@ concurrency:
 # moving label would change them underneath the gates.
 jobs:
   # Fast, no submodules/build needed -- catches an unformatted diff before
-  # the much slower legs below spend minutes on it. scripts/format.sh is the same
+  # the much slower legs below spend minutes on it. scripts/build/format.sh is the same
   # script `make format` runs, so the perimeter and the clang-format major cannot
   # drift apart between the two.
   #
@@ -68,8 +68,8 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         persist-credentials: false
-        # The release tags: scripts/api_docs.sh dates the public symbols against the
-        # header of the latest one (scripts/check_symbol_versions.py).
+        # The release tags: scripts/docs/api_docs.sh dates the public symbols against the
+        # header of the latest one (scripts/docs/check_symbol_versions.py).
         fetch-depth: 0
 
     - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
@@ -79,48 +79,48 @@ jobs:
     - name: Install clang-format (pinned)
       run: pip install clang-format==23.1.1
 
-    - name: clang-format --dry-run --Werror (scripts/format.sh --check)
-      run: ./scripts/format.sh --check
+    - name: clang-format --dry-run --Werror (scripts/build/format.sh --check)
+      run: ./scripts/build/format.sh --check
 
     - name: Check documentation coverage
-      run: bash scripts/check_docs_coverage.sh
+      run: bash scripts/lint/check_docs_coverage.sh
 
     # Tracked text states what the library is and why, never how it got there: no
     # tracker ids, no paths into local planning notes, no release-cycle wording.
     # Advisory hits ("used to", "again", ...) are printed for review, not failed on.
     - name: Check tracked text for process references
-      run: bash scripts/check_final_state_voice.sh
+      run: bash scripts/lint/check_final_state_voice.sh
 
     # The runner image ships shellcheck. Warnings and errors fail the step; its
     # info-level notes (an unquoted $PKG_FLAGS that is split on purpose, a literal
     # '${prefix}') do not.
     - name: shellcheck scripts/
-      run: shellcheck --severity=warning scripts/*.sh
+      run: shellcheck --severity=warning scripts/*/*.sh
 
-    # Explicit casts per file in src/ against scripts/explicit_casts.txt: an added or
+    # Explicit casts per file in src/ against scripts/lint/explicit_casts.txt: an added or
     # removed cast fails until the list is updated in the same change, so every one is
     # visible in review (docs/development.md, "Conversions and casts").
     - name: Explicit casts as recorded
-      run: python3 scripts/check_casts.py
+      run: python3 scripts/lint/check_casts.py
 
     - name: Coverage thresholds as documented
-      run: python3 scripts/check_coverage.py --check-docs
+      run: python3 scripts/coverage/check_coverage.py --check-docs
 
     - name: American spelling in the documentation
-      run: python3 scripts/check_spelling.py
+      run: python3 scripts/lint/check_spelling.py
 
     # Each copied-in stb header is its recorded upstream commit plus the patch in
     # vendor/patches/, byte for byte. Downloads the two upstream files.
     - name: Vendored stb headers = upstream + vendor/patches
-      run: ./scripts/check_stb_patches.sh
+      run: ./scripts/vendor/check_stb_patches.sh
 
     # The API reference is generated from include/libphash.h; docs/Doxyfile fails on any
     # warning, so an undocumented public declaration fails here. The Doxygen release is
-    # pinned in scripts/install_doxygen.sh and scripts/api_docs.sh, not taken from apt,
+    # pinned in scripts/docs/install_doxygen.sh and scripts/docs/api_docs.sh, not taken from apt,
     # whose version follows the runner image.
     - name: Install Doxygen (pinned)
       run: |
-        ./scripts/install_doxygen.sh "$RUNNER_TEMP/doxygen"
+        ./scripts/docs/install_doxygen.sh "$RUNNER_TEMP/doxygen"
         echo "$RUNNER_TEMP/doxygen/bin" >> "$GITHUB_PATH"
 
     - name: API reference (make docs)
@@ -199,15 +199,15 @@ jobs:
     # one zlib (zlib-ng) and no codec the library does not use. Every CMake job below
     # runs the same step on its own tree.
     - name: Check decoder symbols
-      run: ./scripts/check_decoder_symbols.sh build/${{ matrix.preset }}/test_png_variants
+      run: ./scripts/abi/check_decoder_symbols.sh build/${{ matrix.preset }}/test_png_variants
 
     # Apple's ar and ranlib take ZERO_AR_DATE rather than D; reproducible-builds covers
     # the GNU side.
     - name: Reproducible builds (macOS toolchain)
       if: runner.os == 'macOS'
       run: |
-        ./scripts/check_reproducible.sh cmake
-        ./scripts/check_reproducible.sh make
+        ./scripts/release/check_reproducible.sh cmake
+        ./scripts/release/check_reproducible.sh make
 
   # The windows-x86_64 release archives are this configuration -- every vendored decoder,
   # built by MSVC -- and this is where it is built and tested before a tag. NASM for
@@ -272,11 +272,11 @@ jobs:
         python-version: '3.x'
 
     - name: Struct and enum layout as in the latest release
-      run: python scripts/check_abi_layout.py
+      run: python scripts/abi/check_abi_layout.py
 
     - name: abidiff against the latest release
       if: runner.os == 'Linux'
-      run: ./scripts/check_abidiff.sh
+      run: ./scripts/abi/check_abidiff.sh
 
   # Build options no other job turns: PHASH_ENABLE_THREADS=OFF (the batch API's
   # sequential path, for a platform without threads) and PHASH_ENABLE_MOCK_BACKEND=ON
@@ -311,7 +311,7 @@ jobs:
       run: ctest --preset ${{ matrix.preset }}
 
     - name: Check decoder symbols
-      run: ./scripts/check_decoder_symbols.sh build/${{ matrix.preset }}/test_png_variants
+      run: ./scripts/abi/check_decoder_symbols.sh build/${{ matrix.preset }}/test_png_variants
 
   # Warnings as errors on the project's own code -- library, tests, fuzzer, benchmark --
   # and never on the vendored decoders (PHASH_WARNINGS_AS_ERRORS). A job of its own
@@ -350,7 +350,7 @@ jobs:
       run: ctest --preset strict-warnings
 
     - name: Check decoder symbols
-      run: ./scripts/check_decoder_symbols.sh build/strict-warnings/test_png_variants
+      run: ./scripts/abi/check_decoder_symbols.sh build/strict-warnings/test_png_variants
 
     # A cast applied to the result of an arithmetic that has already overflowed in the
     # narrower type -- (uint64_t)(a * b) on ints -- widens nothing. No compiler warning
@@ -365,7 +365,7 @@ jobs:
   # `make coverage` (Makefile) only measures the stb_image-only path -- none
   # of the native decoding code in src/loaders/ (jpeg.c and webp.c compile to nothing
   # there, and png_libpng.c is not built) exists in that binary. This job runs
-  # scripts/coverage_cmake.sh, which drives the vendored decoder build under
+  # scripts/coverage/coverage_cmake.sh, which drives the vendored decoder build under
   # -DPHASH_COVERAGE=ON, then publishes the HTML report as an artifact. See
   # docs/development.md#two-coverage-targets-and-why-one-isnt-enough.
   coverage-cmake:
@@ -382,12 +382,12 @@ jobs:
         apt-packages: cmake nasm lcov
 
     - name: Run coverage-cmake
-      run: ./scripts/coverage_cmake.sh
+      run: ./scripts/coverage/coverage_cmake.sh
 
     # The one place coverage is a gate: thresholds per area, lines and branches, in
-    # scripts/coverage_thresholds.txt (docs/development.md, "Coverage standard").
+    # scripts/coverage/coverage_thresholds.txt (docs/development.md, "Coverage standard").
     - name: Coverage thresholds
-      run: python3 scripts/check_coverage.py docs/coverage/cmake/native.info
+      run: python3 scripts/coverage/check_coverage.py docs/coverage/cmake/native.info
 
     - name: Upload coverage report
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -453,7 +453,7 @@ jobs:
       if: runner.os != 'Windows'
       env:
         PH_EXPECT_BUILD: jpeg=stb png=stb webp=none zlib=none
-      run: ./scripts/check_decoder_symbols.sh build/test_png_variants
+      run: ./scripts/abi/check_decoder_symbols.sh build/test_png_variants
 
   # Confirms the code actually compiles and passes under each standard the
   # project's CMAKE_C_STANDARD default (C17, see CMakeLists.txt) could plausibly
@@ -504,7 +504,7 @@ jobs:
     # dialect defines __STRICT_ANSI__, glibc then hides every non-ISO declaration,
     # and Darwin's libc hides nothing.
     - name: Strict ISO syntax sweep (src/, tests/src/, examples/)
-      run: ./scripts/check_strict_iso.sh ${{ matrix.std }}
+      run: ./scripts/lint/check_strict_iso.sh ${{ matrix.std }}
 
     # The consumer's view of the same question: a TU that includes only libphash.h
     # must compile warning-free, and PH_NODISCARD must still fire. The sweep above
@@ -512,7 +512,7 @@ jobs:
     # declaration without naming why, and it cannot see an attribute that is
     # silently ignored -- which is a warning, not an error.
     - name: Public header check (self-contained, PH_NODISCARD live)
-      run: ./scripts/check_public_header.sh ${{ matrix.std }}
+      run: ./scripts/lint/check_public_header.sh ${{ matrix.std }}
 
     - name: Configure CMake (minimal, stb_image only)
       run: >
@@ -526,7 +526,7 @@ jobs:
       run: ctest --preset minimal
 
     - name: Check decoder symbols
-      run: ./scripts/check_decoder_symbols.sh build/minimal/test_png_variants
+      run: ./scripts/abi/check_decoder_symbols.sh build/minimal/test_png_variants
 
   # Overflow bugs (e.g. pixel-count overflow, PNG row_ptrs overflow) trigger at much
   # smaller inputs on a 32-bit size_t/int than on 64-bit, which no other leg
@@ -569,7 +569,7 @@ jobs:
       run: ctest --preset i686
 
     - name: Check decoder symbols
-      run: ./scripts/check_decoder_symbols.sh build/i686/test_png_variants
+      run: ./scripts/abi/check_decoder_symbols.sh build/i686/test_png_variants
 
   # The full vendored build in a container that has a compiler, cmake and nasm and no
   # library headers at all. A runner image ships zlib, libpng and friends as -dev
@@ -618,10 +618,10 @@ jobs:
       run: ctest --preset release -R '^(test_golden_hashes|test_build_info)$'
 
     - name: Check decoder symbols
-      run: ./scripts/check_decoder_symbols.sh build/release/test_golden_hashes
+      run: ./scripts/abi/check_decoder_symbols.sh build/release/test_golden_hashes
 
   # Builds the head and a base commit in this same job and compares their
-  # benchmark numbers (scripts/bench_regression_gate.sh), so runner noise hits
+  # benchmark numbers (scripts/bench/bench_regression_gate.sh), so runner noise hits
   # both sides alike instead of being measured against hardcoded numbers. The
   # base is what the event offers as "before this change":
   #  - pull_request: the PR's base commit;
@@ -720,7 +720,7 @@ jobs:
         # A base tree that does not build bench_hash has nothing to compare against.
         gate=0
         if [ -x base/build/bench_hash ]; then
-          STRICT=1 bash pr/scripts/bench_regression_gate.sh \
+          STRICT=1 bash pr/scripts/bench/bench_regression_gate.sh \
             pr/build/bench_hash base/build/bench_hash 5 10 regression.md || gate=$?
           cat regression.md >> benchmark_report.md
         else
@@ -782,7 +782,7 @@ jobs:
       run: ctest --preset asan
 
     - name: Check decoder symbols
-      run: ./scripts/check_decoder_symbols.sh build/asan/test_png_variants
+      run: ./scripts/abi/check_decoder_symbols.sh build/asan/test_png_variants
 
   # The threaded batch path (src/batch.c) and the "one context per thread"
   # contract (include/libphash.h) are the two places in this codebase whose whole point
@@ -846,7 +846,7 @@ jobs:
         ./build/${{ matrix.preset }}/test_thread_safety
 
     - name: Check decoder symbols
-      run: ./scripts/check_decoder_symbols.sh build/${{ matrix.preset }}/test_cold_parallel_decode
+      run: ./scripts/abi/check_decoder_symbols.sh build/${{ matrix.preset }}/test_cold_parallel_decode
 
   # Independent of ASan/LSan above (Valgrind and ASan don't mix -- ASan's own
   # shadow memory looks like a leak to Valgrind and vice versa), and it catches a
@@ -916,10 +916,10 @@ jobs:
       run: |
         for t in $TESTS; do
           echo "valgrind --soname-synonyms=somalloc=nouserintercepts --error-exitcode=1 --leak-check=full --errors-for-leak-kinds=all ./build/${{ matrix.preset }}/$t"
-        done | scripts/run_parallel.sh 4
+        done | scripts/build/run_parallel.sh 4
 
     - name: Check decoder symbols
-      run: ./scripts/check_decoder_symbols.sh build/${{ matrix.preset }}/test_loader
+      run: ./scripts/abi/check_decoder_symbols.sh build/${{ matrix.preset }}/test_loader
 
   fuzz:
     runs-on: ubuntu-24.04
@@ -1034,7 +1034,7 @@ jobs:
 
     - name: Reproducible build (${{ matrix.kind }})
       shell: bash
-      run: ./scripts/check_reproducible.sh ${{ matrix.args }}
+      run: ./scripts/release/check_reproducible.sh ${{ matrix.args }}
 
   install-smoke-test:
     runs-on: ubuntu-24.04
@@ -1054,23 +1054,23 @@ jobs:
     # Debug one, whose vendored archives have names of their own (libpng16d.a).
     - name: Smoke-test install()/pkg-config/find_package(phash)
       run: |
-        ./scripts/smoke_install.sh static
-        ./scripts/smoke_install.sh static Debug
-        ./scripts/smoke_install.sh shared
-        ./scripts/smoke_make_install.sh
+        ./scripts/release/smoke_install.sh static
+        ./scripts/release/smoke_install.sh static Debug
+        ./scripts/release/smoke_install.sh shared
+        ./scripts/release/smoke_make_install.sh
         # libphash must not reconfigure a parent that pulls it in via
         # add_subdirectory(), and the result must build and run -- with the
         # parent static or shared, and across a repeated configure of the same
         # build tree. Only an integration build can show that.
-        ./scripts/smoke_add_subdirectory.sh
+        ./scripts/release/smoke_add_subdirectory.sh
 
     # The shared library exports include/libphash.h and nothing else -- not the
     # internal ph_* helpers, not stb_image, not the vendored decoders it links.
     - name: Check the shared library's exported symbols
-      run: ./scripts/check_exported_symbols.sh
+      run: ./scripts/abi/check_exported_symbols.sh
 
     - name: Build and run examples/
-      run: ./scripts/build_examples.sh
+      run: ./scripts/docs/build_examples.sh
 
   # The same install smoke test under MSVC, static, where the vendored archives are named
   # by each vendor's MSVC conventions (libwebpdecoder.lib, libpng16_static.lib,
@@ -1100,4 +1100,4 @@ jobs:
       shell: bash
       env:
         BUILD_TYPE: ${{ matrix.build-type }}
-      run: ./scripts/smoke_install.sh static "$BUILD_TYPE"
+      run: ./scripts/release/smoke_install.sh static "$BUILD_TYPE"

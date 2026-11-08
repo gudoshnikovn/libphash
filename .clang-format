@@ -1,5 +1,5 @@
 ---
-# Pinned to clang-format 23 (scripts/format.sh). The reasons behind the choices are in
+# Pinned to clang-format 23 (scripts/build/format.sh). The reasons behind the choices are in
 # docs/development.md, "Formatting".
 BasedOnStyle: LLVM
 Language: Cpp

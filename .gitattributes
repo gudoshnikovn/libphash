@@ -1,5 +1,5 @@
 # Text is stored and checked out with LF on every platform: the formatting gate
-# (scripts/format.sh) and the shell scripts both depend on it.
+# (scripts/build/format.sh) and the shell scripts both depend on it.
 * text=auto eol=lf
 
 # Byte-exact inputs. Auto-detection would usually get these right, but a small crafted

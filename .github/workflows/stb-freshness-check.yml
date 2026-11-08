@@ -3,7 +3,7 @@ name: stb freshness check
 # The two copied-in stb headers (vendor/stb_image.h, vendor/stb_image_resize2.h)
 # aren't git submodules and nothings/stb cuts no release tags, so the submodule tags
 # check (submodule-tags-check.yml) can't see when they move on. This runs
-# scripts/check_stb_freshness.sh on a schedule and opens (or updates) a tracking issue
+# scripts/vendor/check_stb_freshness.sh on a schedule and opens (or updates) a tracking issue
 # when a header is stale, rather than failing the run -- see SECURITY.md's "Vendored
 # dependencies" section for why a bump isn't a drop-in file replacement. A check that
 # cannot run at all does fail the run.
@@ -37,7 +37,7 @@ jobs:
         # could not run -- see the header of scripts/check_stb_freshness.sh.
         run: |
           set +e
-          bash scripts/check_stb_freshness.sh > "$RUNNER_TEMP/stb-freshness.txt"
+          bash scripts/vendor/check_stb_freshness.sh > "$RUNNER_TEMP/stb-freshness.txt"
           status=$?
           set -e
           cat "$RUNNER_TEMP/stb-freshness.txt"
@@ -46,7 +46,7 @@ jobs:
       - name: Fail if the check could not run
         if: steps.check.outputs.status != '0' && steps.check.outputs.status != '1'
         run: |
-          echo "::error::scripts/check_stb_freshness.sh exited with ${{ steps.check.outputs.status }}: the freshness check itself is broken"
+          echo "::error::scripts/vendor/check_stb_freshness.sh exited with ${{ steps.check.outputs.status }}: the freshness check itself is broken"
           exit 1
 
       - name: Open or update tracking issue

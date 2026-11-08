@@ -7,12 +7,12 @@ what this directory writes into `docs/assets/generated/`, and shows the code tha
 it. A picture of an algorithm's steps is checked against the library while it is made, so
 it cannot show a computation the code does not perform.
 
-`make site` (or `scripts/site.sh`) runs all of it; `make site-serve` also serves the site.
+`make site` (or `scripts/site/site.sh`) runs all of it; `make site-serve` also serves the site.
 
 ## How it fits together
 
 ```text
-scripts/site.sh
+scripts/site/site.sh
   ├─ cmake --build --preset release --target site_stages      stages/  (C)
   └─ render.py --tool build/release/site_stages --out …        (Python)
        ├─ pages/<algo>.py   each page's own figures, from `site_stages <algo>`
@@ -171,8 +171,8 @@ build/release/site_stages                          # the list of modes
 build/release/site_stages measure a.png b.png …     # any images, by every algorithm
 ```
 
-`scripts/site.sh` creates the Python environment (`build/site-venv/`, pinned by
-`scripts/site-requirements.txt`) on first use.
+`scripts/site/site.sh` creates the Python environment (`build/site-venv/`, pinned by
+`scripts/site/site-requirements.txt`) on first use.
 
 ## Extending it
 

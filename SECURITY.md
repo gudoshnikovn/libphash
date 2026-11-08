@@ -117,19 +117,19 @@ carry, and the [development guide](https://gudoshnikovn.github.io/libphash/devel
 - **Submoduled dependencies** are each pinned to an upstream release tag, never to a
   commit between releases: a release is what upstream tested and announced, and the
   version `THIRD-PARTY-NOTICES.md` names. A weekly scheduled workflow
-  (`.github/workflows/submodule-tags-check.yml`, `scripts/check_submodule_tags.sh`)
+  (`.github/workflows/submodule-tags-check.yml`, `scripts/vendor/check_submodule_tags.sh`)
   checks that each submodule is on a release tag and that the tag is upstream's newest,
   and opens a tracking issue if not. Dependabot's submodule updates are not used: they
   follow a branch's newest commit, not its tags. A bump still needs a human to review it
   against this project's own test suite — a newer decoder version is not merged blindly.
 - **The two copied-in stb headers** are not submodules and have no release tags. A
   monthly scheduled workflow
-  (`.github/workflows/stb-freshness-check.yml`, `scripts/check_stb_freshness.sh`)
+  (`.github/workflows/stb-freshness-check.yml`, `scripts/vendor/check_stb_freshness.sh`)
   compares each file's pinned upstream hash (recorded in `THIRD-PARTY-NOTICES.md`)
   against the current upstream file and opens a tracking issue if they differ — the
   bump itself is still a manual, reviewed task, since it has to reapply the local
   patches in `vendor/patches/` and re-verify against `tests/src/test_alloc_failure.c` rather
-  than being a drop-in file replacement. On every push, `scripts/check_stb_patches.sh`
+  than being a drop-in file replacement. On every push, `scripts/vendor/check_stb_patches.sh`
   checks that each header is exactly its recorded upstream commit plus its patch.
 
 ## Fuzzing

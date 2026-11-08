@@ -134,6 +134,6 @@ above: without them an update leaves no trace. **Both are modified copies** — 
 upstream file at the recorded commit, unchanged except for a local patch to its
 out-of-memory handling, marked in the file, kept as a unified diff in `vendor/patches/` and
 explained in `docs/development.md`. Two hashes are recorded for each: the file as it is
-here, and the upstream file it was derived from. `scripts/check_stb_patches.sh` downloads
+here, and the upstream file it was derived from. `scripts/vendor/check_stb_patches.sh` downloads
 the upstream file at the recorded commit, checks its hash, applies the patch and requires
 the result to be the vendored file byte for byte.

@@ -1,9 +1,9 @@
-# The documentation site, built from docs/ by Zensical (scripts/site.sh, `make site`).
+# The documentation site, built from docs/ by Zensical (scripts/site/site.sh, `make site`).
 # docs/ is the site's only source: the same Markdown files read as plain documents on
 # GitHub. Pages that already have a path the code and scripts refer to keep it; pages
 # written for the site live under docs/theory/ and docs/guide/.
 #
-# This file is what `zensical serve` (`make site-serve`) reads. scripts/site.sh builds the
+# This file is what `zensical serve` (`make site-serve`) reads. scripts/site/site.sh builds the
 # published site from a copy of it in build/site-src/, which differs in two settings:
 # site_dir, and check_paths below. Zensical keeps its cache in .cache/ beside the
 # configuration file and writes the output into site_dir; a build that shared either with
@@ -85,7 +85,7 @@ nav = [
 ]
 
 # The API reference's own layout: its summary tables, names that break only after an
-# underscore, and the A-Z index (scripts/api_pages.py writes the markup it styles).
+# underscore, and the A-Z index (scripts/docs/api_pages.py writes the markup it styles).
 extra_css = ["stylesheets/site.css", "stylesheets/api.css"]
 
 # MathJax, which the script loads only on a page with a formula (it says why).
@@ -167,7 +167,7 @@ pymdownx.smartsymbols = {}
 # copied, so it cannot drift from the header. Paths are relative to the repository root.
 # The build turns check_paths on, so an included file that does not exist fails it; the
 # server leaves it off, because it stops for good on the first missing file, and a page is
-# often written before scripts/site.sh has generated the tables it includes.
+# often written before scripts/site/site.sh has generated the tables it includes.
 # A section of a file (`--8<-- "file.c:name"`) is shown without the indentation it has in
 # the file, so a few lines from inside a function read like the function's own.
 pymdownx.snippets.base_path = ["."]
@@ -184,10 +184,10 @@ pymdownx.tasklist.custom_checkbox = true
 # map of this directory (GitHub shows it when the directory is opened); the site's front
 # page is docs/index.md. The Markdown under assets/generated/ is the tables tools/site/
 # measures, which pages include where they are needed; on their own they are fragments. api-index.md is the Doxygen main page; the site shows its text as
-# api/index.md, which scripts/api_pages.py writes from Doxygen's XML with the rest of the
+# api/index.md, which scripts/docs/api_pages.py writes from Doxygen's XML with the rest of the
 # API reference. Zensical would otherwise publish these files and index them for search.
-# The list is the exclude plugin's, a list of globs, because scripts/check_site_links.py
-# and scripts/api_pages.py read the same list; exclude_docs would hold it as one string
+# The list is the exclude plugin's, a list of globs, because scripts/site/check_site_links.py
+# and scripts/docs/api_pages.py read the same list; exclude_docs would hold it as one string
 # of gitignore patterns.
 [project.plugins.exclude]
 glob = [
