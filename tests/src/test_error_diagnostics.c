@@ -82,6 +82,7 @@ static int ph_error_kind(ph_error_t err) {
         case PH_ERR_REQUIRES_COLOR:
         case PH_ERR_CANCELLED:
         case PH_ERR_NO_STRUCTURE:
+        case PH_ERR_REVISION_MISMATCH:
             return 1;
         case PH_ERR_FORCE_INT32_: /* width spacer, not a code: deliberately not in the table */
             return -1;
@@ -114,6 +115,7 @@ static const error_code_entry_t all_error_codes[] = {
     {PH_ERR_REQUIRES_COLOR, "PH_ERR_REQUIRES_COLOR"},
     {PH_ERR_CANCELLED, "PH_ERR_CANCELLED"},
     {PH_ERR_NO_STRUCTURE, "PH_ERR_NO_STRUCTURE"},
+    {PH_ERR_REVISION_MISMATCH, "PH_ERR_REVISION_MISMATCH"},
 };
 #define NUM_ERROR_CODES (sizeof(all_error_codes) / sizeof(*all_error_codes))
 

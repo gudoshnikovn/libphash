@@ -33,7 +33,8 @@
 void ph_digest_shape(const struct ph_context_config *config, ph_algorithm_t algo, uint8_t *size,
                      uint8_t *kind);
 
-/* Zeroes *out and sets its size and kind from ph_digest_shape(). */
+/* Zeroes *out, sets its size and kind from ph_digest_shape(), and its algorithm and
+ * revision. */
 void ph_digest_begin(ph_digest_t *out, const ph_context_t *ctx, ph_algorithm_t algo);
 
 /* Builds the sampled Laplacian-of-Gaussian kernel of Marr & Hildreth, as pHash

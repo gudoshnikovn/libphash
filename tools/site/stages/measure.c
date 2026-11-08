@@ -142,11 +142,12 @@ int mode_sizes(int argc, char **argv) {
             continue;
         }
         size_t text = strlen(hex);
-        *strchr(hex, ':') = '\0';
+        /* "<algorithm>.<revision>:<kind>:<hex>": the kind is between the two colons. */
+        *strrchr(hex, ':') = '\0';
         json_t j = json_begin(stdout);
         json_string(&j, "algorithm", ph_algorithm_name((ph_algorithm_t)k));
         json_int(&j, "size", d[k].size);
-        json_string(&j, "kind", hex);
+        json_string(&j, "kind", strchr(hex, ':') + 1);
         json_int(&j, "text", (long long)text);
         json_end(&j);
     }

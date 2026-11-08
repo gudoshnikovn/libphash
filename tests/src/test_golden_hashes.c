@@ -17,6 +17,11 @@
 // The files carry the WebP fixtures too. A build without a WebP decoder skips them and
 // does not count their entries; its --update keeps their lines from the existing file.
 //
+// Each line stores the algorithm's revision (ph_algorithm_revision()) beside the value. A
+// value that changes while its algorithm keeps its revision fails, in --update too: a
+// change to what an algorithm computes raises its revision in src/hashes/algorithm.c and
+// is listed in CHANGELOG.md under "Hash changes".
+//
 // Run with --update to regenerate the current build's file after a verified, intentional
 // change to an algorithm's output, and regenerate the other JPEG decoder's file too.
 #include "libphash.h"
@@ -60,6 +65,7 @@ static const digest_fn_t DIGEST_FNS[] = {ph_compute_bmh, ph_compute_color_moment
 typedef struct {
     char filename[64];
     char algo[32];
+    int revision;
     char hex[PH_DIGEST_MAX_BYTES * 2 + 1];
 } golden_entry_t;
 
@@ -99,30 +105,40 @@ static void load_golden(int required) {
         ASSERT_MSG(f != NULL, "could not open %s", golden_path());
     }
     while (g_golden_count < (int)(sizeof(g_golden) / sizeof(g_golden[0])) &&
-           fscanf(f, "%63s %31s %" PH_GOLDEN_STR(PH_GOLDEN_HEX_DIGITS) "s",
+           fscanf(f, "%63s %31s %d %" PH_GOLDEN_STR(PH_GOLDEN_HEX_DIGITS) "s",
                   g_golden[g_golden_count].filename, g_golden[g_golden_count].algo,
-                  g_golden[g_golden_count].hex) == 3) {
+                  &g_golden[g_golden_count].revision, g_golden[g_golden_count].hex) == 4) {
         g_golden_count++;
     }
     fclose(f);
 }
 
-static const char *find_golden(const char *filename, const char *algo) {
+static const golden_entry_t *find_golden(const char *filename, const char *algo) {
     for (int i = 0; i < g_golden_count; i++) {
         if (strcmp(g_golden[i].filename, filename) == 0 && strcmp(g_golden[i].algo, algo) == 0) {
-            return g_golden[i].hex;
+            return &g_golden[i];
         }
     }
     return NULL;
 }
 
-/* One entry, compared exactly; in --update mode, written out instead. */
-static void check_entry(const char *filename, const char *algo, const char *hex, FILE *update_out) {
-    if (update_out) {
-        fprintf(update_out, "%s %s %s\n", filename, algo, hex);
+/* One entry, compared exactly; in --update mode, written out instead, unless its value
+ * changed under the same revision. */
+static void check_entry(const char *filename, const char *algo, int revision, const char *hex,
+                        FILE *update_out) {
+    const golden_entry_t *expected = find_golden(filename, algo);
+    if (expected && expected->revision == revision && strcmp(expected->hex, hex) != 0) {
+        fprintf(stderr,
+                "[FAIL] test_golden_hashes - %s/%s changed without a revision bump (revision "
+                "%d): golden=%s actual=%s\n",
+                filename, algo, revision, expected->hex, hex);
+        g_mismatches++;
         return;
     }
-    const char *expected = find_golden(filename, algo);
+    if (update_out) {
+        fprintf(update_out, "%s %s %d %s\n", filename, algo, revision, hex);
+        return;
+    }
     if (!expected) {
         fprintf(stderr,
                 "[FAIL] test_golden_hashes - no golden entry for %s/%s (run with --update "
@@ -132,9 +148,11 @@ static void check_entry(const char *filename, const char *algo, const char *hex,
         return;
     }
     g_checked++;
-    if (strcmp(expected, hex) != 0) {
-        fprintf(stderr, "[FAIL] test_golden_hashes - %s/%s changed: golden=%s actual=%s\n",
-                filename, algo, expected, hex);
+    if (expected->revision != revision) {
+        fprintf(stderr,
+                "[FAIL] test_golden_hashes - %s/%s is revision %d, the golden file has %d "
+                "(run with --update)\n",
+                filename, algo, revision, expected->revision);
         g_mismatches++;
     }
 }
@@ -161,13 +179,16 @@ static void process_fixture(size_t index, FILE *update_out) {
     for (int i = 0; i < PH_HASH_FLAGS_COUNT; i++) {
         char hex[17];
         ASSERT_OK(ph_hash_to_hex(hashes[i], hex, sizeof(hex)));
-        check_entry(filename, UINT64_ALGO_NAMES[i], hex, update_out);
+        /* hashes[i] is algorithm i: the flag bits are 1 << the algorithm's value. */
+        check_entry(filename, UINT64_ALGO_NAMES[i], ph_algorithm_revision((ph_algorithm_t)i), hex,
+                    update_out);
     }
 
     /* Every algorithm succeeds on every fixture. A failure is a regression like a changed
      * value -- and in --update it must not leave a hole in the regenerated file. The files
-     * store a digest's bytes without the "<kind>:" prefix of the public text form: the kind
-     * comes from the algorithm, and test_digest_helpers checks it. */
+     * store a digest's bytes without the "<algorithm>.<revision>:<kind>:" prefix of the
+     * public text form: the kind comes from the algorithm, and test_digest_helpers checks
+     * it; the revision is the line's own field, taken from the digest. */
     for (size_t i = 0; i < NUM_DIGEST_ALGOS; i++) {
         ph_digest_t digest;
         ph_error_t derr = DIGEST_FNS[i](ctx, &digest);
@@ -179,7 +200,8 @@ static void process_fixture(size_t index, FILE *update_out) {
         }
         char text[PH_DIGEST_HEX_BUFFER_SIZE];
         ASSERT_OK(ph_digest_to_hex(&digest, text, sizeof(text)));
-        check_entry(filename, DIGEST_ALGO_NAMES[i], strchr(text, ':') + 1, update_out);
+        check_entry(filename, DIGEST_ALGO_NAMES[i], digest.revision, strrchr(text, ':') + 1,
+                    update_out);
     }
 
     ph_free(ctx);
@@ -217,7 +239,8 @@ int main(int argc, char **argv) {
         /* Fixtures this build cannot decode keep their existing lines. */
         for (int i = 0; i < g_golden_count; i++) {
             if (is_skipped(g_golden[i].filename)) {
-                fprintf(out, "%s %s %s\n", g_golden[i].filename, g_golden[i].algo, g_golden[i].hex);
+                fprintf(out, "%s %s %d %s\n", g_golden[i].filename, g_golden[i].algo,
+                        g_golden[i].revision, g_golden[i].hex);
             }
         }
         fclose(out);

@@ -3,6 +3,7 @@
 #include <math.h>
 #include <stddef.h> // For size_t
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #if defined(_MSC_VER)
@@ -166,7 +167,13 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b) {
  */
 PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *b,
                                        double *out_pcc) {
-    if (!out_pcc || !ph_digests_comparable_as(a, b, PH_DIGEST_KIND_COEFFICIENTS)) {
+    if (!out_pcc || !a || !b) {
+        return PH_ERR_INVALID_ARGUMENT;
+    }
+    if (ph_digest_revisions_differ(a, b)) {
+        return PH_ERR_REVISION_MISMATCH;
+    }
+    if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_COEFFICIENTS)) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 
@@ -238,9 +245,10 @@ PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const ph_digest_t *
 
 static const char PH_HEX_DIGITS[] = "0123456789abcdef";
 
-/* The text form of a digest is "<kind>:<hex>". The kind names are the lowercase suffixes
- * of the ph_digest_kind_t enumerators, indexed by value, so a binding can derive them
- * from the header mechanically. */
+/* The text form of a digest is "[<algorithm>.<revision>:]<kind>:<hex>", the first part
+ * present exactly when the digest states a revision. The kind names are the lowercase
+ * suffixes of the ph_digest_kind_t enumerators, indexed by value, so a binding can derive
+ * them from the header mechanically; the algorithm names are ph_algorithm_name()'s. */
 static const char *const PH_DIGEST_KIND_NAMES[] = {
     "unspecified", "bits", "coefficients", "vector", "histogram", "vector16",
 };
@@ -248,27 +256,37 @@ static const char *const PH_DIGEST_KIND_NAMES[] = {
 
 _Static_assert(PH_DIGEST_KIND_COUNT == PH_DIGEST_KIND_VECTOR16 + 1,
                "every digest kind needs a name in its text form");
-_Static_assert(sizeof("coefficients:") - 1 + PH_DIGEST_MAX_BYTES * 2 + 1 ==
+/* The longest algorithm and revision part: the longest name and a uint8_t revision. */
+#define PH_DIGEST_TEXT_ALGO_MAX (sizeof("color_moments.255:") - 1)
+_Static_assert(PH_DIGEST_TEXT_ALGO_MAX + sizeof("coefficients:") - 1 + PH_DIGEST_MAX_BYTES * 2 +
+                       1 ==
                    PH_DIGEST_HEX_BUFFER_SIZE,
-               "PH_DIGEST_HEX_BUFFER_SIZE must fit the longest kind name");
+               "PH_DIGEST_HEX_BUFFER_SIZE must fit the longest algorithm and kind names");
 
 PH_API ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out, size_t out_size) {
     /* size == 0 is accepted here and renders as a bare prefix: ph_digest_from_hex() of
      * that produces such a digest, so rejecting it would break the round trip. */
-    if (!ph_digest_is_valid(d) || !out || d->kind >= PH_DIGEST_KIND_COUNT) {
+    if (!ph_digest_is_valid(d) || !out || d->kind >= PH_DIGEST_KIND_COUNT ||
+        (d->revision != 0 && d->algorithm >= PH_ALGORITHM_COUNT)) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 
+    char algo[PH_DIGEST_TEXT_ALGO_MAX + 1] = "";
+    if (d->revision != 0) {
+        snprintf(algo, sizeof(algo), "%s.%d:", ph_algorithm_name(d->algorithm), d->revision);
+    }
+    size_t algo_len = strlen(algo);
     const char *name = PH_DIGEST_KIND_NAMES[d->kind];
     size_t name_len = strlen(name);
-    size_t needed = name_len + 1 + d->size * 2u + 1;
+    size_t needed = algo_len + name_len + 1 + d->size * 2u + 1;
     if (out_size < needed) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 
-    memcpy(out, name, name_len);
-    out[name_len] = ':';
-    char *hex = out + name_len + 1;
+    memcpy(out, algo, algo_len);
+    memcpy(out + algo_len, name, name_len);
+    out[algo_len + name_len] = ':';
+    char *hex = out + algo_len + name_len + 1;
     for (size_t i = 0; i < d->size; i++) {
         hex[i * 2] = PH_HEX_DIGITS[(d->data[i] >> 4) & 0x0F];
         hex[i * 2 + 1] = PH_HEX_DIGITS[d->data[i] & 0x0F];
@@ -298,6 +316,42 @@ PH_API ph_error_t ph_digest_from_hex(const char *text, ph_digest_t *out) {
     const char *colon = strchr(text, ':');
     if (!colon) {
         return PH_ERR_INVALID_ARGUMENT;
+    }
+    /* A dot before the first colon makes it the algorithm and revision part: no kind name
+     * has one. */
+    ph_algorithm_t algo = PH_ALGO_AHASH;
+    int revision = 0;
+    const char *dot = memchr(text, '.', (size_t)(colon - text));
+    if (dot) {
+        char algo_name[PH_DIGEST_TEXT_ALGO_MAX + 1];
+        size_t algo_len = (size_t)(dot - text);
+        if (algo_len >= sizeof(algo_name)) {
+            return PH_ERR_INVALID_ARGUMENT;
+        }
+        memcpy(algo_name, text, algo_len);
+        algo_name[algo_len] = '\0';
+        if (ph_algorithm_from_name(algo_name, &algo) != PH_SUCCESS) {
+            return PH_ERR_INVALID_ARGUMENT;
+        }
+        /* 1 to 255 in decimal, no leading zero: one text per digest. */
+        const char *digits = dot + 1;
+        if (digits == colon || *digits == '0' || colon - digits > 3) {
+            return PH_ERR_INVALID_ARGUMENT;
+        }
+        for (const char *c = digits; c < colon; c++) {
+            if (*c < '0' || *c > '9') {
+                return PH_ERR_INVALID_ARGUMENT;
+            }
+            revision = revision * 10 + (*c - '0');
+        }
+        if (revision > UINT8_MAX) {
+            return PH_ERR_INVALID_ARGUMENT;
+        }
+        text = colon + 1;
+        colon = strchr(text, ':');
+        if (!colon) {
+            return PH_ERR_INVALID_ARGUMENT;
+        }
     }
     size_t name_len = (size_t)(colon - text); /* colon is within text */
     size_t kind = 0;
@@ -330,6 +384,8 @@ PH_API ph_error_t ph_digest_from_hex(const char *text, ph_digest_t *out) {
     memset(decoded.data + n_bytes, 0, PH_DIGEST_MAX_BYTES - n_bytes);
     decoded.size = (uint8_t)n_bytes;
     decoded.kind = (uint8_t)kind;
+    decoded.algorithm = (uint8_t)algo;    /* below PH_ALGORITHM_COUNT; 0 without the part */
+    decoded.revision = (uint8_t)revision; /* at most UINT8_MAX, checked above */
     memset(decoded.reserved, 0, sizeof(decoded.reserved));
     *out = decoded;
     return PH_SUCCESS;

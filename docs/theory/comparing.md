@@ -267,17 +267,21 @@ A hash stored in a database or sent to another process goes as text.
   hexadecimal digits, the most significant byte first, and
   [`ph_hash_from_hex()`](../api/text.md#ph_hash_from_hex) reads exactly 16 digits back, in
   either case, with nothing before or after them.
-- [`ph_digest_to_hex()`](../api/text.md#ph_digest_to_hex) writes a digest as its kind, a
-  colon and its bytes, byte 0 first: `bits:…`, `coefficients:…`, `histogram:…`,
-  `vector16:…`. [`ph_digest_from_hex()`](../api/text.md#ph_digest_from_hex) requires the
-  prefix and restores the kind with the bytes, so two digests read back from storage are
-  refused the wrong comparison exactly as two fresh ones are. A string without a prefix is
-  refused rather than read as untagged; `unspecified:` in front of it accepts it
+- [`ph_digest_to_hex()`](../api/text.md#ph_digest_to_hex) writes a digest as its
+  algorithm and [revision](../api/algorithms.md#ph_algorithm_revision), its kind, and
+  its bytes, byte 0 first, each part ending in a colon: `mhash.1:bits:…`,
+  `radial.1:coefficients:…`, `color_hash.1:histogram:…`,
+  `color_moments.1:vector16:…`. [`ph_digest_from_hex()`](../api/text.md#ph_digest_from_hex)
+  requires the kind and restores it, the algorithm and the revision with the bytes, so two
+  digests read back from storage are refused the wrong comparison exactly as two fresh
+  ones are. A digest that states no revision, as one built by hand, has no algorithm part
+  (`bits:…`), and a string with none reads back as such a digest. A string without a kind
+  is refused rather than read as untagged; `unspecified:` in front of it accepts it
   knowingly. [`PH_DIGEST_HEX_BUFFER_SIZE`](../api/text.md#PH_DIGEST_HEX_BUFFER_SIZE)
   holds the text of any digest.
 
-A 64-bit hash taken as a digest has its bytes in the same order, so its text is `bits:`
-followed by the 16 digits of `ph_hash_to_hex()`.
+A 64-bit hash taken as a digest has its bytes in the same order, so its text is, for an
+aHash, `ahash.1:bits:` followed by the 16 digits of `ph_hash_to_hex()`.
 
 ```c title="examples/digest_and_metrics.c"
 --8<-- "examples/digest_and_metrics.c:text"

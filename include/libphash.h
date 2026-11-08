@@ -230,6 +230,11 @@ typedef enum {
                                      ///< structure to compare: the all-zero digest
                                      ///< ph_compute_radial_hash() returns for an image with no
                                      ///< angular structure (flat, or radially symmetric).
+    PH_ERR_REVISION_MISMATCH = -14,  ///< Two digests compared state different revisions of
+                                     ///< their algorithm (see ph_algorithm_revision()): its
+                                     ///< values changed between the two releases that computed
+                                     ///< them, so no score between them means anything.
+                                     ///< Recompute the older one. @since 2.1.0
     PH_ERR_FORCE_INT32_ = PH_ENUM_FORCE_INT32_VALUE, ///< Not an error code -- see "Enum width".
 } ph_error_t;
 
@@ -366,19 +371,32 @@ typedef enum {
 /**
  * @brief A flat structure representing a hash digest.
  *
+ * Every digest the library computes states the algorithm that computed it and that
+ * algorithm's revision (ph_algorithm_revision()), and the comparison functions refuse two
+ * digests of different algorithms or of different revisions. A @c revision of 0 states
+ * neither -- a digest built by hand, or saved by a 2.0 release -- and such a digest is
+ * compared by its @c kind alone.
+ *
  * @note This structure is FFI-safe and can be allocated on the stack.
  * It does not own any heap memory.
  *
- * @note The struct is 136 bytes: 128 data bytes, `size`, `kind`, and 6 bytes of padding.
+ * @note The struct is 136 bytes: 128 data bytes, `size`, `kind`, `algorithm`, `revision`
+ * and 4 reserved bytes.
+ * @changed{2.1.0} The first two of the six reserved bytes are @c algorithm and
+ * @c revision, which every computed digest sets.
  * @ingroup digests
  */
 typedef struct {
     uint8_t data[PH_DIGEST_MAX_BYTES]; ///< The raw hash bytes.
     uint8_t size;                      ///< Number of valid bytes in 'data'.
     uint8_t kind;                      ///< A @c ph_digest_kind_t. 0 when not stated.
-    uint8_t reserved[6];               ///< Zero. Room for future fields; makes the size a multiple
-                                       ///< of 8. Not alignment: every field is a byte, so
-                                       ///< _Alignof(ph_digest_t) is 1.
+    uint8_t algorithm;   ///< The @c ph_algorithm_t that computed the digest. Meaningful only
+                         ///< when @c revision is not 0. @since 2.1.0
+    uint8_t revision;    ///< The algorithm's revision the digest was computed with, as
+                         ///< ph_algorithm_revision() returns it. 0 when not stated. @since 2.1.0
+    uint8_t reserved[4]; ///< Zero. Room for future fields; makes the size a multiple of 8.
+                         ///< Not alignment: every field is a byte, so _Alignof(ph_digest_t)
+                         ///< is 1.
 } ph_digest_t;
 
 // --- Lifecycle & Configuration ---
@@ -1282,6 +1300,30 @@ PH_API const char *ph_algorithm_name(ph_algorithm_t algo);
  */
 PH_NODISCARD PH_API ph_error_t ph_algorithm_from_name(const char *name, ph_algorithm_t *out_algo);
 
+/**
+ * @brief The revision of an algorithm's values: a number that a release raises whenever it
+ * changes what the algorithm computes.
+ *
+ * Two hashes of one revision of an algorithm, computed with the same settings from the
+ * same pixels, are equal on every build. A patch release never changes an algorithm's
+ * values; a minor release may, and then raises that algorithm's revision and lists the
+ * change in the changelog under "Hash changes". Each algorithm has its own revision, so a
+ * change to one leaves the stored hashes of the others valid. The revision does not depend
+ * on the configuration: the settings a hash was computed with are the caller's to store.
+ * The library computes only the current revision of each algorithm.
+ *
+ * Every computed ph_digest_t states its algorithm and revision, and the digest comparisons
+ * refuse two digests of different revisions: @c PH_ERR_REVISION_MISMATCH, or -1 from the
+ * distance and similarity functions. A uint64_t hash carries neither: store the revision
+ * next to it, and recompute the stored hashes when it changes.
+ *
+ * @param algo The algorithm.
+ * @return The algorithm's revision, 1 or more; 0 for a value that is not an algorithm.
+ * @since 2.1.0
+ * @ingroup algorithms
+ */
+PH_API uint8_t ph_algorithm_revision(ph_algorithm_t algo);
+
 // --- Digest Hash Algorithms ---
 
 /**
@@ -1431,6 +1473,14 @@ PH_API double ph_similarity(uint64_t a, uint64_t b);
  *   - distance/similarity functions: -1 (also for a size of 0, which carries no
  *     bits to compare -- reporting distance 0 there would read as "identical").
  *
+ * So are the algorithm and its revision, when both digests state them (a `revision`
+ * other than 0). Two digests of different algorithms break the contract like two of
+ * different kinds: six algorithms produce bit vectors, and two of the same size would
+ * otherwise compare as noise. Two digests of different revisions of one algorithm get
+ * PH_ERR_REVISION_MISMATCH from the functions returning ph_error_t, and -1 from the
+ * others: the algorithm's values changed between them, and the older one is to be
+ * recomputed. A digest whose `revision` is 0 is compared by its kind alone.
+ *
  * ph_hamming_distance_digest() and ph_similarity_digest() are for
  * PH_DIGEST_KIND_BITS; ph_l2_distance() is for PH_DIGEST_KIND_VECTOR and
  * PH_DIGEST_KIND_VECTOR16; ph_radial_similarity() is for PH_DIGEST_KIND_COEFFICIENTS;
@@ -1441,7 +1491,8 @@ PH_API double ph_similarity(uint64_t a, uint64_t b);
  * @brief Number of differing bits between two @c PH_DIGEST_KIND_BITS digests (mHash, BMH,
  *        or a 64-bit hash taken as a digest).
  * @return 0 to 8 times the digest size; -1 for anything the digest contract above rejects:
- *         NULL, mismatched or invalid sizes, or another kind.
+ *         NULL, mismatched or invalid sizes, another kind, or another algorithm or revision.
+ * @changed{2.1.0} -1 for two digests that state different algorithms or revisions.
  * @ingroup compare
  */
 PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b);
@@ -1451,7 +1502,9 @@ PH_API int ph_hamming_distance_digest(const ph_digest_t *a, const ph_digest_t *b
  *        (ColorMoments, decoded from its 16-bit fixed point) or @c PH_DIGEST_KIND_VECTOR
  *        (one unsigned byte per feature).
  * @return 0.0 or more, in the features' own units; -1.0 for anything the digest contract
- *         above rejects: NULL, mismatched or invalid sizes, or another kind.
+ *         above rejects: NULL, mismatched or invalid sizes, another kind, or another
+ *         algorithm or revision.
+ * @changed{2.1.0} -1.0 for two digests that state different algorithms or revisions.
  * @ingroup compare
  */
 PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b);
@@ -1459,7 +1512,9 @@ PH_API double ph_l2_distance(const ph_digest_t *a, const ph_digest_t *b);
 /**
  * @brief Normalized similarity between two digests, in [0.0, 1.0].
  * @return -1.0 for anything the digest contract above rejects: NULL, mismatched or
- *         invalid sizes, or a kind other than PH_DIGEST_KIND_BITS.
+ *         invalid sizes, a kind other than PH_DIGEST_KIND_BITS, or another algorithm or
+ *         revision.
+ * @changed{2.1.0} -1.0 for two digests that state different algorithms or revisions.
  * @ingroup compare
  */
 PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
@@ -1498,8 +1553,11 @@ PH_API double ph_similarity_digest(const ph_digest_t *a, const ph_digest_t *b);
  *        unspecified), both valid per the contract above.
  * @param out_pcc Receives the score. Untouched on error.
  * @return @c PH_SUCCESS; @c PH_ERR_NO_STRUCTURE if either digest has all bytes equal;
+ *         @c PH_ERR_REVISION_MISMATCH for two digests of different revisions;
  *         @c PH_ERR_INVALID_ARGUMENT for a NULL argument, an invalid or empty digest, two
- *         digests of different sizes, or a digest of another kind.
+ *         digests of different sizes, or a digest of another kind or algorithm.
+ * @changed{2.1.0} @c PH_ERR_REVISION_MISMATCH and @c PH_ERR_INVALID_ARGUMENT for two
+ *         digests that state different revisions or algorithms.
  *
  * @note This returns its result through @p out_pcc rather than as the return value, as
  *       the other comparison functions here do. They signal failure with -1.0, and -1.0
@@ -1528,9 +1586,12 @@ PH_NODISCARD PH_API ph_error_t ph_radial_similarity(const ph_digest_t *a, const 
  *
  * @param a,b Digests of equal size, both from ph_compute_color_hash() (or untagged).
  * @param out_similarity Receives the score. Untouched on error.
- * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT for a NULL argument, an invalid or
+ * @return @c PH_SUCCESS; @c PH_ERR_REVISION_MISMATCH for two digests of different
+ *         revisions; or @c PH_ERR_INVALID_ARGUMENT for a NULL argument, an invalid or
  *         empty digest, two digests of different sizes, or a digest tagged as something
- *         other than a histogram.
+ *         other than a histogram or by another algorithm.
+ * @changed{2.1.0} @c PH_ERR_REVISION_MISMATCH and @c PH_ERR_INVALID_ARGUMENT for two
+ *         digests that state different revisions or algorithms.
  * @ingroup compare
  */
 PH_NODISCARD PH_API ph_error_t ph_histogram_intersection(const ph_digest_t *a, const ph_digest_t *b,
@@ -1538,44 +1599,60 @@ PH_NODISCARD PH_API ph_error_t ph_histogram_intersection(const ph_digest_t *a, c
 /** @} */
 
 /** Buffer size that holds the text form of any digest, terminator included: the longest
- *  kind name plus its colon ("coefficients:", 13 characters), two hex digits per byte of
- *  a full @c PH_DIGEST_MAX_BYTES digest, and the NUL. @ingroup text */
-#define PH_DIGEST_HEX_BUFFER_SIZE (13 + PH_DIGEST_MAX_BYTES * 2 + 1)
+ *  algorithm name with the largest revision and a colon ("color_moments.255:", 18
+ *  characters), the longest kind name plus its colon ("coefficients:", 13), two hex digits
+ *  per byte of a full @c PH_DIGEST_MAX_BYTES digest, and the NUL.
+ *  @changed{2.1.0} 288 bytes, to hold the algorithm and revision. The text of every digest
+ *  the library computes fits in 270, the size without them.
+ *  @ingroup text */
+#define PH_DIGEST_HEX_BUFFER_SIZE (18 + 13 + PH_DIGEST_MAX_BYTES * 2 + 1)
 
 /**
- * @brief Encodes a digest as text: its kind, a colon, then its bytes in lowercase hex.
+ * @brief Encodes a digest as text: its algorithm and revision when it states them, its
+ * kind, a colon, then its bytes in lowercase hex.
  *
+ * A digest whose @c revision is not 0 starts with its algorithm's ph_algorithm_name(), a
+ * dot, the revision in decimal and a colon; one whose @c revision is 0 has no such part.
  * The kind is the lowercase suffix of its ph_digest_kind_t name -- `unspecified`, `bits`,
  * `coefficients`, `vector`, `histogram`, `vector16` -- so a radial digest reads
- * `coefficients:1f80...`. The bytes follow in order, data[0] first. Carrying the kind is
- * what keeps the comparison functions able to refuse the wrong metric for digests that
- * were stored and read back (see ph_digest_kind_t).
+ * `radial.1:coefficients:1f80...`. The bytes follow in order, data[0] first. Carrying the
+ * algorithm, revision and kind is what keeps the comparison functions able to refuse a
+ * wrong comparison for digests that were stored and read back (see ph_digest_kind_t and
+ * ph_algorithm_revision()).
  *
  * @param d Digest to encode.
  * @param out Output buffer. @c PH_DIGEST_HEX_BUFFER_SIZE bytes always suffice.
- * @param out_size Size of 'out' in bytes; at least the kind name's length + 1 +
- *                 d->size * 2 + 1.
+ * @param out_size Size of 'out' in bytes; at least the length of the algorithm and revision
+ *                 part, the kind name's length + 1, d->size * 2, and 1.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT if arguments are invalid, the
- *         digest's kind is not a ph_digest_kind_t value, or @p out_size is too small.
+ *         digest's kind is not a ph_digest_kind_t value, it states a revision of a value
+ *         that is not a ph_algorithm_t, or @p out_size is too small.
+ * @changed{2.1.0} The text starts with the algorithm and revision of a digest that
+ *         states them.
  * @ingroup text
  */
 PH_NODISCARD PH_API ph_error_t ph_digest_to_hex(const ph_digest_t *d, char *out, size_t out_size);
 
 /**
  * @brief Decodes the text form produced by ph_digest_to_hex() back into a digest,
- * kind included.
+ * algorithm, revision and kind included.
  *
- * The kind prefix is required and must be one of the names ph_digest_to_hex() writes,
- * in lowercase; the hex digits after the colon may be either case. A bare hex string
- * without a prefix is rejected rather than read as an untagged digest: prefix it with
- * `unspecified:` to accept it knowingly, or better, with the kind of the algorithm that produced
- * it.
+ * The algorithm and revision part is optional: without it the digest's @c revision is 0,
+ * which states neither, as for the text a 2.0 release writes. With it, the name is one
+ * ph_algorithm_name() returns and the revision a decimal number from 1 to 255 without
+ * leading zeros. The kind prefix is required and must be one of the names
+ * ph_digest_to_hex() writes, in lowercase; the hex digits after the colon may be either
+ * case. A bare hex string without a prefix is rejected rather than read as an untagged
+ * digest: prefix it with `unspecified:` to accept it knowingly, or better, with the kind
+ * of the algorithm that produced it.
  *
- * @param text NUL-terminated string `<kind>:<hex>`; the hex part must have an even number
- * of digits and decode to at most PH_DIGEST_MAX_BYTES bytes.
+ * @param text NUL-terminated string `[<algorithm>.<revision>:]<kind>:<hex>`; the hex part
+ * must have an even number of digits and decode to at most PH_DIGEST_MAX_BYTES bytes.
  * @param out Output digest. Untouched on error.
  * @return @c PH_SUCCESS, or @c PH_ERR_INVALID_ARGUMENT if @p text is malformed, has no or
- *         an unknown kind prefix, or is too long.
+ *         an unknown kind prefix, an unknown algorithm or a revision out of range, or is
+ *         too long.
+ * @changed{2.1.0} Reads the algorithm and revision part.
  * @ingroup text
  */
 PH_NODISCARD PH_API ph_error_t ph_digest_from_hex(const char *text, ph_digest_t *out);

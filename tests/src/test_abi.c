@@ -92,8 +92,22 @@ static void test_batch_options_layout(void) {
     PASS("test_batch_options_layout");
 }
 
+/* ph_digest_t is all bytes: the same offsets on every target, and alignment 1. */
+static void test_digest_layout(void) {
+    ASSERT_INT_EQ(136, (int)sizeof(ph_digest_t));
+    ASSERT_INT_EQ(1, (int)_Alignof(ph_digest_t));
+    ASSERT_INT_EQ(0, (int)offsetof(ph_digest_t, data));
+    ASSERT_INT_EQ(128, (int)offsetof(ph_digest_t, size));
+    ASSERT_INT_EQ(129, (int)offsetof(ph_digest_t, kind));
+    ASSERT_INT_EQ(130, (int)offsetof(ph_digest_t, algorithm));
+    ASSERT_INT_EQ(131, (int)offsetof(ph_digest_t, revision));
+    ASSERT_INT_EQ(132, (int)offsetof(ph_digest_t, reserved));
+    PASS("test_digest_layout");
+}
+
 int main(void) {
     test_public_enums_are_32_bit();
+    test_digest_layout();
     test_batch_hash_capacity_is_decoupled_from_flag_count();
     test_batch_struct_layout();
     test_batch_options_layout();

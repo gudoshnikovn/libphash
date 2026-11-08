@@ -60,6 +60,10 @@ static void reconcile(ph_context_t *ctx, ph_algorithm_t algo, const char *what) 
                 via_dispatch.kind);
         exit(1);
     }
+    /* Every digest states the algorithm that computed it and its revision. */
+    ASSERT_INT_EQ((int)algo, via_dispatch.algorithm);
+    ASSERT_INT_EQ(ph_algorithm_revision(algo), via_dispatch.revision);
+    ASSERT(via_dispatch.revision != 0);
     for (size_t i = size; i < PH_DIGEST_MAX_BYTES; i++) {
         ASSERT_UINT8_EQ(0, via_dispatch.data[i]);
     }
@@ -78,7 +82,7 @@ static void reconcile(ph_context_t *ctx, ph_algorithm_t algo, const char *what) 
         char from_hash[17], text[PH_DIGEST_HEX_BUFFER_SIZE];
         ASSERT_OK(ph_hash_to_hex(hash, from_hash, sizeof(from_hash)));
         ASSERT_OK(ph_digest_to_hex(&via_dispatch, text, sizeof(text)));
-        ASSERT_STR_EQ(from_hash, strchr(text, ':') + 1);
+        ASSERT_STR_EQ(from_hash, strrchr(text, ':') + 1);
     } else {
         ASSERT_INT_EQ(0, memcmp(&direct, &via_dispatch, sizeof(direct)));
     }

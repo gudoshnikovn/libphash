@@ -34,6 +34,8 @@ PH_API const char *ph_get_error_string(ph_error_t err) {
             return "Batch cancelled before this item was started";
         case PH_ERR_NO_STRUCTURE:
             return "Radial digest carries no structure to compare";
+        case PH_ERR_REVISION_MISMATCH:
+            return "Digests computed by different revisions of their algorithm";
         case PH_ERR_FORCE_INT32_: /* width spacer, not an error code */
         default:
             return "Unknown error";

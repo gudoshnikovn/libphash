@@ -49,11 +49,28 @@ static inline int ph_digest_kind_allows(const ph_digest_t *d, ph_digest_kind_t k
     return d->kind == PH_DIGEST_KIND_UNSPECIFIED || d->kind == kind;
 }
 
-/* Both digests valid, non-empty, of equal size, and compatible with `kind`. */
+/* Whether both digests state their algorithm (a nonzero revision) and the two differ. A
+ * digest with revision 0 -- built by hand, or saved by a 2.0 release -- states none, and
+ * is compared by its kind alone. */
+static inline int ph_digest_algorithms_differ(const ph_digest_t *a, const ph_digest_t *b) {
+    return a->revision != 0 && b->revision != 0 && a->algorithm != b->algorithm;
+}
+
+/* Whether both digests state a revision of the same algorithm and the revisions differ:
+ * the algorithm's values changed between the two, so no score between them means
+ * anything. Checked before the shape, since a new revision may change the size. */
+static inline int ph_digest_revisions_differ(const ph_digest_t *a, const ph_digest_t *b) {
+    return a->revision != 0 && b->revision != 0 && a->algorithm == b->algorithm &&
+           a->revision != b->revision;
+}
+
+/* Both digests valid, non-empty, of equal size, compatible with `kind`, and of one
+ * algorithm and revision where both state them. */
 static inline int ph_digests_comparable_as(const ph_digest_t *a, const ph_digest_t *b,
                                            ph_digest_kind_t kind) {
     return ph_digest_is_comparable(a) && ph_digest_is_comparable(b) && a->size == b->size &&
-           ph_digest_kind_allows(a, kind) && ph_digest_kind_allows(b, kind);
+           ph_digest_kind_allows(a, kind) && ph_digest_kind_allows(b, kind) &&
+           !ph_digest_algorithms_differ(a, b) && !ph_digest_revisions_differ(a, b);
 }
 
 /* Same contract as the public ph_hamming_distance_digest(), but always the scalar path,

@@ -88,15 +88,21 @@ void test_digest_hex_roundtrip() {
     }
 
     big.kind = PH_DIGEST_KIND_COEFFICIENTS; /* the longest kind name */
+    big.algorithm = PH_ALGO_COLOR_MOMENTS;  /* the longest algorithm name */
+    big.revision = 255;                     /* the longest revision */
     char big_hex[PH_DIGEST_HEX_BUFFER_SIZE];
     ASSERT_OK(ph_digest_to_hex(&big, big_hex, sizeof(big_hex)));
     ASSERT_INT_EQ(PH_DIGEST_HEX_BUFFER_SIZE - 1, (int)strlen(big_hex));
 
     ph_digest_t big2;
     ASSERT_OK(ph_digest_from_hex(big_hex, &big2));
-    ASSERT_INT_EQ(big.size, big2.size);
-    ASSERT(memcmp(big.data, big2.data, big.size) == 0);
-    ASSERT_INT_EQ((uint8_t)PH_DIGEST_KIND_COEFFICIENTS, big2.kind);
+    ASSERT_INT_EQ(0, memcmp(&big, &big2, sizeof(big)));
+
+    /* PH_DIGEST_HEX_BUFFER_SIZE holds every algorithm's name, not only the one above. */
+    for (int a = 0; a < PH_ALGORITHM_COUNT; a++) {
+        big.algorithm = (uint8_t)a;
+        ASSERT_OK(ph_digest_to_hex(&big, big_hex, sizeof(big_hex)));
+    }
 
     PASS("test_digest_hex_roundtrip");
 }
@@ -427,6 +433,8 @@ static void test_hex_output_buffer_bounds() {
         memset(&full, 0xAB, sizeof(full));
         full.size = PH_DIGEST_MAX_BYTES;
         full.kind = (uint8_t)kind;
+        full.algorithm = PH_ALGO_COLOR_MOMENTS; /* the longest name, with the longest revision */
+        full.revision = 255;
         char buf[PH_DIGEST_HEX_BUFFER_SIZE];
         ASSERT_OK(ph_digest_to_hex(&full, buf, sizeof(buf)));
     }
@@ -539,19 +547,18 @@ static void test_digest_hex_roundtrip_on_computed_digests() {
 
         char hex[PH_DIGEST_HEX_BUFFER_SIZE];
         ASSERT_OK(ph_digest_to_hex(&digests[i], hex, sizeof(hex)));
-        const char *digits = strchr(hex, ':');
+        const char *digits = strrchr(hex, ':');
         ASSERT_PTR_NOT_NULL((void *)digits);
         ASSERT_INT_EQ((int)(digests[i].size * 2), (int)strlen(digits + 1));
 
+        /* Every algorithm tags its digest with its kind, algorithm and revision, and the
+         * text carries all three: a digest read back from storage is the same struct, byte
+         * for byte, and protected exactly as the live one is. */
         ph_digest_t back;
         ASSERT_OK(ph_digest_from_hex(hex, &back));
-        ASSERT_INT_EQ(digests[i].size, back.size);
-        ASSERT_INT_EQ(0, memcmp(digests[i].data, back.data, digests[i].size));
-
-        /* Every algorithm tags its digest, and the text carries the tag: a digest read
-         * back from storage is protected by it exactly as the live one is. */
         ASSERT(digests[i].kind != PH_DIGEST_KIND_UNSPECIFIED);
-        ASSERT_INT_EQ(digests[i].kind, back.kind);
+        ASSERT(digests[i].revision != 0);
+        ASSERT_INT_EQ(0, memcmp(&digests[i], &back, sizeof(back)));
     }
 
     ph_free(ctx);
@@ -584,6 +591,159 @@ static void test_stored_digests_keep_their_protection() {
     ASSERT(pcc >= -1.0 && pcc <= 1.0);
 
     PASS("test_stored_digests_keep_their_protection");
+}
+
+/* The revision: every computed digest states its algorithm's, two digests of different
+ * revisions or algorithms are refused, and a digest that states none (revision 0, as a
+ * hand-built one or one saved by a 2.0 release holds) is compared by its kind alone. */
+static void test_digest_revisions() {
+    for (int a = 0; a < PH_ALGORITHM_COUNT; a++) {
+        ASSERT_INT_EQ(1, ph_algorithm_revision((ph_algorithm_t)a));
+    }
+    ASSERT_INT_EQ(0, ph_algorithm_revision((ph_algorithm_t)-1));
+    ASSERT_INT_EQ(0, ph_algorithm_revision((ph_algorithm_t)PH_ALGORITHM_COUNT));
+    ASSERT_INT_EQ(0, ph_algorithm_revision(PH_ALGO_FORCE_INT32_));
+
+    ph_context_t *ctx = NULL;
+    ASSERT_OK(ph_create(&ctx));
+    ASSERT_OK(ph_load_from_file(ctx, TEST_DATA_DIR "/photo.jpeg"));
+    ph_digest_t mh, radial, hist, moments;
+    ASSERT_OK(ph_compute_mhash(ctx, &mh));
+    ASSERT_OK(ph_compute_radial_hash(ctx, &radial));
+    ASSERT_OK(ph_compute_color_hash(ctx, &hist));
+    ASSERT_OK(ph_compute_color_moments_hash(ctx, &moments));
+    ph_free(ctx);
+    ASSERT_INT_EQ(PH_ALGO_MHASH, mh.algorithm);
+    ASSERT_INT_EQ(ph_algorithm_revision(PH_ALGO_MHASH), mh.revision);
+    ASSERT_INT_EQ(PH_ALGO_RADIAL, radial.algorithm);
+    ASSERT_INT_EQ(PH_ALGO_COLOR_HASH, hist.algorithm);
+    ASSERT_INT_EQ(PH_ALGO_COLOR_MOMENTS, moments.algorithm);
+
+    /* A different revision of the same algorithm: refused by every comparison, with
+     * PH_ERR_REVISION_MISMATCH where the function returns a ph_error_t. */
+    ph_digest_t mh2 = mh, radial2 = radial, hist2 = hist, moments2 = moments;
+    mh2.revision = radial2.revision = hist2.revision = moments2.revision = 2;
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&mh, &mh2));
+    ASSERT_FLOAT_EQ(-1.0, ph_similarity_digest(&mh2, &mh), 1e-9);
+    ASSERT_FLOAT_EQ(-1.0, ph_l2_distance(&moments, &moments2), 1e-9);
+    double score = -9.0;
+    ASSERT_INT_EQ(PH_ERR_REVISION_MISMATCH, ph_radial_similarity(&radial, &radial2, &score));
+    ASSERT_INT_EQ(PH_ERR_REVISION_MISMATCH, ph_histogram_intersection(&hist2, &hist, &score));
+    ASSERT_FLOAT_EQ(-9.0, score, 1e-9); /* untouched on refusal */
+    /* Also when the other revision has another size: the revision is what to act on. */
+    radial2.size = 20;
+    ASSERT_INT_EQ(PH_ERR_REVISION_MISMATCH, ph_radial_similarity(&radial, &radial2, &score));
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_radial_similarity(&radial, &radial2, NULL));
+    radial2.size = radial.size;
+
+    /* Another algorithm of the same kind and size is a wrong call, like another kind. */
+    ph_digest_t other = mh;
+    other.algorithm = PH_ALGO_BMH;
+    ASSERT_INT_EQ(-1, ph_hamming_distance_digest(&mh, &other));
+    ASSERT_FLOAT_EQ(-1.0, ph_similarity_digest(&other, &mh), 1e-9);
+    other = radial;
+    other.algorithm = PH_ALGO_MHASH;
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_radial_similarity(&radial, &other, &score));
+    other = hist;
+    other.algorithm = PH_ALGO_RADIAL;
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_histogram_intersection(&hist, &other, &score));
+
+    /* Revision 0 on either side states nothing, whatever the algorithm byte holds. */
+    ph_digest_t unstated = mh2;
+    unstated.revision = 0;
+    unstated.algorithm = 0xFF;
+    ASSERT_INT_EQ(0, ph_hamming_distance_digest(&mh, &unstated));
+    ASSERT_INT_EQ(0, ph_hamming_distance_digest(&unstated, &mh2));
+    ASSERT_FLOAT_EQ(1.0, ph_similarity_digest(&unstated, &unstated), 1e-9);
+    radial2.revision = 0;
+    ASSERT_OK(ph_radial_similarity(&radial, &radial2, &score));
+    ASSERT_FLOAT_EQ(1.0, score, 1e-9);
+    hist2.revision = 0;
+    ASSERT_OK(ph_histogram_intersection(&hist2, &hist, &score));
+    ASSERT_FLOAT_EQ(1.0, score, 1e-9);
+    moments2.revision = 0;
+    ASSERT_FLOAT_EQ(0.0, ph_l2_distance(&moments, &moments2), 1e-9);
+
+    PASS("test_digest_revisions");
+}
+
+/* The algorithm and revision part of the text form: present exactly when the digest
+ * states a revision, read back exactly, and refused when malformed. */
+static void test_digest_hex_revision_part() {
+    ph_digest_t d;
+    memset(&d, 0, sizeof(d));
+    d.size = 3;
+    d.data[0] = 0xAB;
+    d.data[1] = 0xCD;
+    d.data[2] = 0xEF;
+    d.kind = PH_DIGEST_KIND_COEFFICIENTS;
+    d.algorithm = PH_ALGO_RADIAL;
+    d.revision = 1;
+
+    /* "radial.1:coefficients:" + 6 digits + NUL = 29 bytes, and not one fewer. */
+    char text[29];
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_digest_to_hex(&d, text, sizeof(text) - 1));
+    ASSERT_OK(ph_digest_to_hex(&d, text, sizeof(text)));
+    ASSERT_STR_EQ("radial.1:coefficients:abcdef", text);
+    ph_digest_t back;
+    memset(&back, 0xEE, sizeof(back));
+    ASSERT_OK(ph_digest_from_hex(text, &back));
+    ASSERT_INT_EQ(0, memcmp(&d, &back, sizeof(d)));
+
+    d.algorithm = PH_ALGO_COLOR_MOMENTS;
+    d.revision = 255;
+    char longest[64];
+    ASSERT_OK(ph_digest_to_hex(&d, longest, sizeof(longest)));
+    ASSERT_STR_EQ("color_moments.255:coefficients:abcdef", longest);
+    ASSERT_OK(ph_digest_from_hex(longest, &back));
+    ASSERT_INT_EQ(0, memcmp(&d, &back, sizeof(d)));
+
+    /* Revision 0 states nothing: no part in the text, and none read back. The algorithm
+     * byte of such a digest means nothing and is not kept. */
+    d.algorithm = PH_ALGO_MHASH;
+    d.revision = 0;
+    ASSERT_OK(ph_digest_to_hex(&d, text, sizeof(text)));
+    ASSERT_STR_EQ("coefficients:abcdef", text);
+    ASSERT_OK(ph_digest_from_hex(text, &back));
+    ASSERT_INT_EQ(0, back.revision);
+    ASSERT_INT_EQ(0, back.algorithm);
+
+    /* A revision of something that is not an algorithm has no text form. */
+    d.revision = 1;
+    d.algorithm = PH_ALGORITHM_COUNT;
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_digest_to_hex(&d, longest, sizeof(longest)));
+    d.algorithm = 0xFF;
+    ASSERT_INT_EQ(PH_ERR_INVALID_ARGUMENT, ph_digest_to_hex(&d, longest, sizeof(longest)));
+
+    const char *bad[] = {
+        "mhash.0:bits:ff",            /* 0 is written as no part at all */
+        "mhash.01:bits:ff",           /* one text per digest: no leading zero */
+        "mhash.256:bits:ff",          /* more than a uint8_t */
+        "mhash.1000:bits:ff",         /* more than three digits */
+        "mhash.:bits:ff",             /* no revision */
+        "mhash.1x:bits:ff",           /* not a number */
+        "mhash.-1:bits:ff",           /* not a number */
+        ".1:bits:ff",                 /* no algorithm */
+        "MHASH.1:bits:ff",            /* names are lowercase */
+        "nohash.1:bits:ff",           /* not an algorithm */
+        "color_moments_ex.1:bits:ff", /* longer than any name */
+        "mhash.1:ff",                 /* no kind */
+        "mhash.1:",                   /* no kind */
+        "mhash.1",                    /* no kind, no colon */
+        "mhash.1:mhash.1:bits:ff",    /* the part only once */
+        "bits:mhash.1:ff",            /* and only first */
+    };
+    for (size_t i = 0; i < sizeof(bad) / sizeof(*bad); i++) {
+        memset(&back, 0x5A, sizeof(back));
+        ph_digest_t before = back;
+        if (ph_digest_from_hex(bad[i], &back) != PH_ERR_INVALID_ARGUMENT) {
+            fprintf(stderr, "[FAIL] ph_digest_from_hex accepted \"%s\"\n", bad[i]);
+            exit(1);
+        }
+        ASSERT_INT_EQ(0, memcmp(&before, &back, sizeof(back)));
+    }
+
+    PASS("test_digest_hex_revision_part");
 }
 
 /* ph_l2_distance()'s own negative paths: NULL on either side, and the metric's own
@@ -660,6 +820,8 @@ int main() {
     test_digest_from_hex_clears_the_whole_struct();
     test_digest_hex_roundtrip_on_computed_digests();
     test_stored_digests_keep_their_protection();
+    test_digest_revisions();
+    test_digest_hex_revision_part();
     test_l2_distance_contract();
     test_similarity_agrees_with_hamming();
     return 0;

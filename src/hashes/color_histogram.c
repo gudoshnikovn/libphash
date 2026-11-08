@@ -170,7 +170,13 @@ PH_API ph_error_t ph_compute_color_hash(ph_context_t *ctx, ph_digest_t *out_dige
 
 PH_API ph_error_t ph_histogram_intersection(const ph_digest_t *a, const ph_digest_t *b,
                                             double *out_similarity) {
-    if (!out_similarity || !ph_digests_comparable_as(a, b, PH_DIGEST_KIND_HISTOGRAM)) {
+    if (!out_similarity || !a || !b) {
+        return PH_ERR_INVALID_ARGUMENT;
+    }
+    if (ph_digest_revisions_differ(a, b)) {
+        return PH_ERR_REVISION_MISMATCH;
+    }
+    if (!ph_digests_comparable_as(a, b, PH_DIGEST_KIND_HISTOGRAM)) {
         return PH_ERR_INVALID_ARGUMENT;
     }
 

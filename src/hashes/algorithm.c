@@ -27,6 +27,23 @@ _Static_assert(sizeof(PH_ALGORITHM_NAMES) / sizeof(*PH_ALGORITHM_NAMES) == PH_AL
 _Static_assert(PH_ALGO_COLOR_MOMENTS + 1 == PH_ALGORITHM_COUNT,
                "PH_ALGORITHM_COUNT must follow the last algorithm");
 
+/* Each algorithm's revision, raised by any change to the values it computes and listed in
+ * CHANGELOG.md under "Hash changes". tests/src/test_golden_hashes.c stores the revision
+ * beside each golden value and fails on a changed value whose revision is the same. */
+static const uint8_t PH_ALGORITHM_REVISIONS[] = {
+    1, /* ahash */
+    1, /* dhash */
+    1, /* phash */
+    1, /* whash */
+    1, /* bmh */
+    1, /* mhash */
+    1, /* radial */
+    1, /* color_hash */
+    1, /* color_moments */
+};
+_Static_assert(sizeof(PH_ALGORITHM_REVISIONS) == PH_ALGORITHM_COUNT,
+               "every algorithm needs a revision");
+
 static int ph_algorithm_is_valid(ph_algorithm_t algo) {
     /* Through int: an enum's underlying type may be unsigned, which would make the first
      * comparison vacuous for a negative value passed in. */
@@ -83,6 +100,8 @@ void ph_digest_shape(const struct ph_context_config *config, ph_algorithm_t algo
 void ph_digest_begin(ph_digest_t *out, const ph_context_t *ctx, ph_algorithm_t algo) {
     memset(out, 0, sizeof(*out));
     ph_digest_shape(&ctx->config, algo, &out->size, &out->kind);
+    out->algorithm = (uint8_t)algo; /* a valid algorithm, below PH_ALGORITHM_COUNT */
+    out->revision = ph_algorithm_revision(algo);
 }
 
 PH_API ph_error_t ph_digest_info(const ph_context_t *ctx, ph_algorithm_t algo, size_t *out_size,
@@ -171,6 +190,10 @@ PH_API ph_error_t ph_compute_digest(ph_context_t *ctx, ph_algorithm_t algo,
         default:
             return PH_ERR_INVALID_ARGUMENT;
     }
+}
+
+PH_API uint8_t ph_algorithm_revision(ph_algorithm_t algo) {
+    return ph_algorithm_is_valid(algo) ? PH_ALGORITHM_REVISIONS[algo] : 0;
 }
 
 PH_API const char *ph_algorithm_name(ph_algorithm_t algo) {

@@ -23,6 +23,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CI checks every change against the latest release: the layout of every public struct
   and enum on Linux, macOS and Windows, and the shared library with `abidiff` on
   Linux (#17).
+- **Hash revisions: a stored hash tells which values of its algorithm it holds.**
+  `ph_algorithm_revision()` returns an algorithm's revision, 1 for every algorithm. A
+  patch release never changes the values an algorithm computes; a minor release that does
+  raises that algorithm's revision and lists the change in this changelog under "Hash
+  changes", so only that algorithm's stored hashes are recomputed. Every computed
+  `ph_digest_t` states its algorithm and revision in two of its reserved bytes, the new
+  fields `algorithm` and `revision`; the struct keeps its size and the offsets of its
+  other fields. The digest comparisons refuse two digests of different revisions,
+  `ph_radial_similarity()` and `ph_histogram_intersection()` with the new
+  `PH_ERR_REVISION_MISMATCH` and the distance and similarity functions with -1, and two
+  digests of different algorithms as they refuse two of different kinds. A digest whose
+  `revision` is 0, saved by 2.0 or built by hand, is compared as in 2.0. A `uint64_t`
+  hash carries no revision: store `ph_algorithm_revision()` next to it (#18).
+
+### Changed
+
+- **The text of a digest carries its algorithm and revision.** `ph_digest_to_hex()`
+  writes them in front of the kind for a digest that states them, as every computed one
+  does (`radial.1:coefficients:…`), and `ph_digest_from_hex()` reads them back; the text
+  of a digest with `revision` 0 is unchanged. 2.0's `ph_digest_from_hex()` refuses the
+  longer text. `PH_DIGEST_HEX_BUFFER_SIZE` is 288 instead of 270, for a hand-built digest
+  of the full 128 bytes; the text of every computed digest fits in 270 (#18).
 
 ## [2.0.3] - 2026-11-07
 

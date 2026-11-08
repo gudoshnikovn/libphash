@@ -43,7 +43,7 @@ The codes fall into four groups by what the caller does about them. A **mistake 
 call** is fixed in the code and is never retried. A **verdict on the input** is final for
 that input in that build and configuration: the same bytes fail the same way every time,
 so the input is skipped and reported. **Out of memory** is the one transient code. The
-last two codes report how a batch or a comparison ended, not a fault.
+last three codes report how a batch or a comparison ended, not a fault.
 
 | Code | Value | When | What the caller does |
 |---|---|---|---|
@@ -58,6 +58,7 @@ last two codes report how a batch or a comparison ended, not a fault.
 | [`PH_ERR_ALLOCATION_FAILED`](../api/errors.md#PH_ERR_ALLOCATION_FAILED) | -1 | anything that allocates: [`ph_create()`](../api/context.md#ph_create), loads, hashes, batches | retries later, or with less in flight: fewer batch threads, a lower `max_pixels` |
 | [`PH_ERR_CANCELLED`](../api/errors.md#PH_ERR_CANCELLED) | -12 | [`ph_hash_files_ex()`](../api/batch.md#ph_hash_files_ex), [`ph_hash_buffers_ex()`](../api/batch.md#ph_hash_buffers_ex): the `should_continue` callback stopped the batch | treats the items marked with it as not processed |
 | [`PH_ERR_NO_STRUCTURE`](../api/errors.md#PH_ERR_NO_STRUCTURE) | -13 | [`ph_radial_similarity()`](../api/compare.md#ph_radial_similarity): a digest is the all-zero Radial digest of an image with no angular structure | treats the pair as not comparable by Radial, and compares it by another hash |
+| [`PH_ERR_REVISION_MISMATCH`](../api/errors.md#PH_ERR_REVISION_MISMATCH) | -14 | [`ph_radial_similarity()`](../api/compare.md#ph_radial_similarity), [`ph_histogram_intersection()`](../api/compare.md#ph_histogram_intersection): the two digests state different revisions of their algorithm ([`ph_algorithm_revision()`](../api/algorithms.md#ph_algorithm_revision)) | recomputes the older digest from its image |
 
 The decision is the same whichever function returned the code. The
 [table under `ph_error_t`](../api/errors.md#ph_error_t) in the API reference lists, for

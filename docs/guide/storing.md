@@ -14,22 +14,26 @@ and indexes belong to the program, and the library has neither.
 
 ## What a hash does not record
 
-A `uint64_t` hash or a `ph_digest_t` holds the hash's bits and nothing about how they were
-computed. Two hashes are comparable only when four things are the same for both, and none
-of them can be read from the hash afterwards:
+A `uint64_t` hash holds the hash's bits and nothing about how they were computed; a
+`ph_digest_t` holds its bits, its kind, and the algorithm and revision that computed it.
+Two hashes are comparable only when four things are the same for both, and a 64-bit hash
+records none of them:
 
-- **The algorithm.** A digest's `kind` refuses a comparison across kinds, but six
-  algorithms produce `bits`, and the four 64-bit hashes have no `kind` at all: an aHash
-  compared with a pHash returns a distance like any other.
+- **The algorithm.** A digest states it, and the comparisons refuse two digests of
+  different algorithms; the four 64-bit hashes state nothing: an aHash compared with a
+  pHash returns a distance like any other.
   [`ph_algorithm_name()`](../api/algorithms.md#ph_algorithm_name) gives each algorithm a
   stable name to store, and
   [`ph_algorithm_from_name()`](../api/algorithms.md#ph_algorithm_from_name) reads it back.
 - **The settings that change the value**, every one except the size limit
   ([Configuring a context](configuring.md#settings-that-change-the-hash) lists them).
-- **The library version.** A release that changes what an algorithm computes says so in
-  the [changelog](../project/changelog.md), and names the algorithms whose stored hashes
-  are to be recomputed. [`ph_version_number()`](../api/build.md#ph_version_number) is
-  one integer to store.
+  No hash records them.
+- **The algorithm's revision.** A release that changes what an algorithm computes raises
+  its [revision](../api/algorithms.md#ph_algorithm_revision) and says so in the
+  [changelog](../project/changelog.md), so only that algorithm's stored hashes are to be
+  recomputed. A digest states its revision, and two digests of different revisions are
+  refused with `PH_ERR_REVISION_MISMATCH`; next to a 64-bit hash, store
+  `ph_algorithm_revision()`.
 - **The JPEG decoder.** libjpeg-turbo and stb_image decode a JPEG to slightly different
   pixels, and hashes from the two are compared by distance, never by equality
   ([Same hash on every machine](../theory/comparing.md#same-hash-on-every-machine)).
@@ -38,7 +42,7 @@ of them can be read from the hash afterwards:
 A collection computed in one run with one configuration stores these once, beside it,
 as the program of [Finding duplicate images](find-duplicate-images.md#the-program) prints
 them on its first line; a collection that grows over years
-of upgrades stores them with every hash, or at least the version.
+of upgrades stores them with every hash, or at least the revision.
 
 ## How each hash is stored
 
@@ -54,13 +58,16 @@ converting the value, as C leaves the conversion of a `uint64_t` above `INT64_MA
 significant first; two hashes are equal exactly when their texts are.
 
 **A digest** is stored as the text of
-[`ph_digest_to_hex()`](../api/text.md#ph_digest_to_hex), its kind followed by its bytes,
-and read back by [`ph_digest_from_hex()`](../api/text.md#ph_digest_from_hex) with the
-kind restored ([Hashes as text](../theory/comparing.md#hashes-as-text)). Stored as bytes
-instead, it takes two columns, the kind and the `size` bytes of `data`, not the whole
-struct: a `ph_digest_t` takes 136 bytes whatever its size. Reading the bytes back means
-filling a zeroed `ph_digest_t` and setting both `size` and `kind`; a digest whose `kind`
-is left at zero is compared with any other without the check.
+[`ph_digest_to_hex()`](../api/text.md#ph_digest_to_hex), its algorithm and revision,
+its kind and its bytes, and read back by
+[`ph_digest_from_hex()`](../api/text.md#ph_digest_from_hex) with all three restored
+([Hashes as text](../theory/comparing.md#hashes-as-text)). Stored as bytes instead, it
+takes columns for the algorithm, the revision, the kind and the `size` bytes of `data`,
+not the whole struct: a `ph_digest_t` takes 136 bytes whatever its size. Reading the
+bytes back means filling a zeroed `ph_digest_t` and setting `size`, `kind`, `algorithm`
+and `revision`; a digest whose `kind` is left at zero is compared with any other without
+the kind check, and one whose `revision` is left at zero without the algorithm and
+revision checks.
 
 ## Searching stored hashes
 

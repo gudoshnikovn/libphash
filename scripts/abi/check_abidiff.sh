@@ -41,6 +41,15 @@ cat >"$WORK_DIR/extensible.suppr" <<'EOF'
   has_data_member_inserted_at = end
   has_size_change = yes
 EOF
+# ph_digest_t gives two of its reserved bytes a meaning, algorithm and revision, which
+# abidiff reports as a changed member. Its size and the offset of every other field stay;
+# scripts/abi/check_abi_layout.py checks exactly that, on every platform.
+cat >>"$WORK_DIR/extensible.suppr" <<'EOF'
+
+[suppress_type]
+  type_kind = struct
+  name = ph_digest_t
+EOF
 
 lib() { find "$WORK_DIR/$1" -name 'libphash.so.*' -type f | head -n 1; }
 if ! abidiff --no-added-syms --suppressions "$WORK_DIR/extensible.suppr" \

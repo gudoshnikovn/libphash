@@ -416,7 +416,7 @@ int mode_scan(int argc, char **argv) {
         free(digests);
         return fail("out of memory", NULL);
     }
-    scan_t s = {scan_random(), hashes, {{0}, 0, 0, {0}}, digests};
+    scan_t s = {scan_random(), hashes, {{0}, 0, 0, 0, 0, {0}}, digests};
     for (size_t i = 0; i < SCAN_HASHES; i++) {
         hashes[i] = scan_random();
     }
