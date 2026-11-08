@@ -79,6 +79,7 @@ nav = [
     { "Security" = "project/security.md" },
     { "Compatibility and versioning" = "project/compatibility.md" },
     { "Photo corpus" = "project/corpus.md" },
+    { "Product-photo corpus" = "project/products.md" },
     { "Development" = "development.md" },
     { "Contributing" = "https://github.com/gudoshnikovn/libphash/blob/main/CONTRIBUTING.md" },
   ] },

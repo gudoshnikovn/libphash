@@ -43,6 +43,7 @@ docs/coverage/
 docs/api/
 docs/assets/generated/
 docs/project/corpus.md
+docs/project/products.md
 # Python's bytecode cache, beside the site's modules in tools/site/
 __pycache__/
 *.gcda

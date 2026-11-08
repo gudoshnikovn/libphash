@@ -29,6 +29,7 @@ scripts/site/site.sh
 |---|---|
 | `render.py` | The command line: every page's figures, then the shared charts (`--algo ahash,…` for some pages only) |
 | `fetch_corpus.py`, `corpus_photos.tsv` | The photo corpus: its manifest, the download into `~/.cache/libphash-site/` from the copy at a fixed commit of [libphash-site-corpus](https://github.com/gudoshnikovn/libphash-site-corpus), checked against each file's SHA-256, the attribution page (`fetch_corpus.py --help`) |
+| `fetch_products.py`, `corpus_products.tsv` | The product-photo corpus from Amazon Berkeley Objects (CC BY 4.0): the manifest of products, their images and the groups of one model in other colors, the same download, check and mirror as the photo corpus from its own cache folder (`~/.cache/libphash-site/products/`), the attribution page (`fetch_products.py --help`) |
 | `stages/` | `site_stages`, the measuring tool in C, linked against the library like the tests |
 | `measure/` | Running `site_stages`, the edits, the corpora, separability, the times, and the cache |
 | `draw/` | The two themes, the panels several pages draw, the robustness, corpus and edit charts, the Markdown tables |
@@ -173,6 +174,30 @@ build/release/site_stages measure a.png b.png …     # any images, by every alg
 
 `scripts/site/site.sh` creates the Python environment (`build/site-venv/`, pinned by
 `scripts/site/site-requirements.txt`) on first use.
+
+## The product-photo corpus
+
+`fetch_products.py` selects, downloads and describes a sample of Amazon Berkeley Objects
+(200 products, 2 or 3 catalog images each, about 475 in all, ABO's originals unchanged, CC BY 4.0).
+The images of one product are different views of it, not copies: the hash's job on them
+is the limit of what it can do, and they are measured as a case of their own. The
+selection rule and the rendition are in its docstring. Run by hand, in this order; the
+first step reads the image table and the first two listing shards (about 17 MB, cached
+under `~/.cache/libphash-site/products/metadata/`) and downloads the images (about 65 MB):
+
+```sh
+python3 tools/site/fetch_products.py manifest      # writes tools/site/corpus_products.tsv
+python3 tools/site/fetch_products.py fetch --strict # downloads and verifies from the manifest
+python3 tools/site/fetch_products.py mirror --out ../libphash-site-corpus
+                                                   # products/<sha256>.jpg and the manifest;
+                                                   # commit there, then set PRODUCTS_MIRROR_COMMIT
+python3 tools/site/fetch_products.py page --out docs/project/products.md
+```
+
+`manifest --shards 0 --products 15 --groups 3 --out /tmp/m.tsv --cache /tmp/c` builds a
+small manifest elsewhere to try the code; `fetch`, `page` and `mirror` take
+`--manifest FILE` for the same. A fetch that stops continues where it stopped, and a second
+one downloads nothing.
 
 ## Extending it
 

@@ -103,6 +103,8 @@ rm -rf build/site-generated
 sync_into build/site-generated docs/assets/generated
 "$PY" tools/site/fetch_corpus.py page --out build/site-corpus.md
 cmp -s build/site-corpus.md docs/project/corpus.md || cp build/site-corpus.md docs/project/corpus.md
+"$PY" tools/site/fetch_products.py page --out build/site-products.md
+cmp -s build/site-products.md docs/project/products.md || cp build/site-products.md docs/project/products.md
 
 python3 scripts/site/check_site_links.py
 
