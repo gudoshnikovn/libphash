@@ -19,9 +19,12 @@
  *
  * ABI: the shared library's soname carries only the major version, so everything a
  * compiled consumer depends on stays fixed for the whole 2.x series -- function signatures, the
- * size and field offsets of every public struct, and the width and values of every public enum. New
- * functions, enumerators and error codes may be added in a minor release; nothing existing is moved
- * or reused.
+ * size and field offsets of every public struct, and the width and values of every public enum. A
+ * minor release only adds: functions, types, macros, enumerators after the existing ones, fields
+ * at the end of a struct that starts with @c struct_size, and a meaning for a reserved field whose
+ * zero keeps its old one. A patch release changes nothing here but comments. Nothing existing is
+ * moved or reused, and deprecated API is removed only in a major release. See the "API and ABI
+ * compatibility" page of the documentation (docs/project/compatibility.md).
  *
  * Versions: a declaration's @c @@since names the release that added it; one without it is
  * part of 2.0.0. A later change of its contract and its deprecation follow in its doc

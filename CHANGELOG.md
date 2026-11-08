@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A call to a deprecated function draws a compiler warning** with what to use instead:
   such a function is declared `PH_DEPRECATED("...")`, which a consumer that has to keep
   calling it can define as nothing before including `libphash.h` (#16).
+- **A written API and ABI compatibility policy**, on the documentation site under
+  Project: what a patch, minor and major release may change, and what counts as a break.
+  CI checks every change against the latest release: the layout of every public struct
+  and enum on Linux, macOS and Windows, and the shared library with `abidiff` on
+  Linux (#17).
 
 ## [2.0.3] - 2026-11-07
 

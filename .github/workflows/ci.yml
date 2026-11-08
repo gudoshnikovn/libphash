@@ -241,6 +241,43 @@ jobs:
     - name: Run Tests
       run: ctest --preset release
 
+  # The working tree against the ABI of the latest release tag (docs/project/
+  # compatibility.md). The layout of every public struct and enum, compiled by each
+  # platform's own compiler, MSVC included; on Linux also abidiff, which adds function
+  # signatures and removed symbols. Both build stb_image only: the decoders are behind
+  # the API.
+  abi-compat:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    name: abi-compat (${{ matrix.os }})
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+        # The release tags: both checks compare with the latest one.
+        fetch-depth: 0
+
+    - uses: ./.github/actions/setup-build
+      with:
+        submodules: 'false'
+        apt-packages: cmake abigail-tools
+        brew-packages: ''
+
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      with:
+        python-version: '3.x'
+
+    - name: Struct and enum layout as in the latest release
+      run: python scripts/check_abi_layout.py
+
+    - name: abidiff against the latest release
+      if: runner.os == 'Linux'
+      run: ./scripts/check_abidiff.sh
+
   # Build options no other job turns: PHASH_ENABLE_THREADS=OFF (the batch API's
   # sequential path, for a platform without threads) and PHASH_ENABLE_MOCK_BACKEND=ON
   # (the test-only DE AD decoder, which no shipped build has, and the test branches
